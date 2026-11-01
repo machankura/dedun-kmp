@@ -161,6 +161,9 @@ class GroupLightningNode(
         data class Refused(val reason: String) : State()
     }
 
+    /** Tor is on and [chain]'s LSP has no onion address: the node will not leave Tor to reach it. */
+    class TorWithoutOnion(chain: Chain) : IllegalStateException("Tor is on, and the LSP has no onion address on ${chain.name}")
+
     private val _state = MutableStateFlow<State>(State.Stopped)
     val state: StateFlow<State> = _state
 
@@ -507,6 +510,32 @@ class GroupLightningNode(
         }
 
         /**
+         * [dropReason], with the cause the screen says it by (`docs/lsp-connection-status.md`, D4). lightning-kmp
+         * closes with no reason both when we disconnect and when the handshake fails or times out; the loop
+         * that asks this has cancelled itself before any disconnect of ours, so no reason here is the handshake.
+         */
+        internal fun drop(ours: Features, theirs: Features?, closed: Connection.CLOSED): LspDrop {
+            val mismatch = theirs != null && (
+                ours.activated.any { (feature, support) -> support == FeatureSupport.Mandatory && !theirs.hasFeature(feature) } ||
+                    theirs.unknown.any { it.bitIndex % 2 == 0 }
+                )
+            val cause = when {
+                mismatch -> LspDrop.Cause.FEATURE_MISMATCH
+                closed.reason is TcpSocket.IOException.ConnectionRefused -> LspDrop.Cause.UNREACHABLE
+                closed.reason == null && theirs == null -> LspDrop.Cause.HANDSHAKE
+                closed.reason is TcpSocket.IOException.ConnectionClosed -> LspDrop.Cause.CLOSED_BY_LSP
+                else -> LspDrop.Cause.OTHER
+            }
+            return LspDrop(cause, dropReason(ours, theirs, closed))
+        }
+
+        /** A dial that threw rather than failed: the Tor check, or something nobody expected. */
+        internal fun drop(error: Throwable): LspDrop = LspDrop(
+            if (error is TorWithoutOnion) LspDrop.Cause.TOR_WITHOUT_ONION else LspDrop.Cause.OTHER,
+            error.message ?: error::class.simpleName.orEmpty(),
+        )
+
+        /**
          * Phoenix's connect and handshake timeouts for the [attempt]th try in a row (`AppConnectionsDaemon`),
          * three times as long over Tor.
          */
@@ -604,7 +633,7 @@ class GroupLightningNode(
                 override suspend fun connect(attempt: Int): Boolean {
                     // As Phoenix refuses to: over Tor, a clearnet address would leave Tor for the one connection
                     // that says the most about the group's money.
-                    check(!tor || walletParams.trampolineNode.isOnion) { "Tor is on, and the LSP has no onion address on ${configuration.chain.name}" }
+                    if (tor && !walletParams.trampolineNode.isOnion) throw TorWithoutOnion(configuration.chain)
                     lspInit.value = null
                     val (connectTimeout, handshakeTimeout) = connectTimeouts(attempt, tor)
                     return peer.connect(connectTimeout = connectTimeout, handshakeTimeout = handshakeTimeout)
