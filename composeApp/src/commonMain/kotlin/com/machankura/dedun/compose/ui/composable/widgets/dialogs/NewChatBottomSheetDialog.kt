@@ -29,12 +29,12 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.close
-import bennu.composeapp.generated.resources.create_new_chat
-import bennu.composeapp.generated.resources.direct_message_via_npub
-import bennu.composeapp.generated.resources.start_a_group_chat
+import dedun.composeapp.generated.resources.close
+import dedun.composeapp.generated.resources.create_new_chat
+import dedun.composeapp.generated.resources.direct_message_via_npub
+import dedun.composeapp.generated.resources.start_a_group_chat
 
 
 @OptIn(ExperimentalMaterial3Api::class)

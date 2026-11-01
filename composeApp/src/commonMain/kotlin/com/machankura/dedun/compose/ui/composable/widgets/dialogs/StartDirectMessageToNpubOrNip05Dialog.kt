@@ -45,11 +45,11 @@ import com.machankura.dedun.compose.ui.theme.spacing
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.find_profile
-import bennu.composeapp.generated.resources.input_npub_or_nip05
-import bennu.composeapp.generated.resources.start_chat_via_npub_or_nip05
+import dedun.composeapp.generated.resources.find_profile
+import dedun.composeapp.generated.resources.input_npub_or_nip05
+import dedun.composeapp.generated.resources.start_chat_via_npub_or_nip05
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 

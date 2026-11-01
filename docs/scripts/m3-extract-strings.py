@@ -243,7 +243,7 @@ def main():
             for start, end, value in reversed(found):
                 src = src[:start] + f'stringResource(Res.string.{names[value]})' + src[end:]
             if changed:
-                for imp in ('import bennu.composeapp.generated.resources.Res',
+                for imp in ('import dedun.composeapp.generated.resources.Res',
                             'import org.jetbrains.compose.resources.stringResource'):
                     if not has_import(src, imp):
                         lines = src.split('\n')
@@ -256,7 +256,7 @@ def main():
                 lines = src.split('\n')
                 idx = max(i for i, l in enumerate(lines) if l.startswith('import '))
                 for nm in reversed(need):
-                    imp = f'import bennu.composeapp.generated.resources.{nm}'
+                    imp = f'import dedun.composeapp.generated.resources.{nm}'
                     if not has_import(src, imp):
                         lines.insert(idx + 1, imp)
                 src = '\n'.join(lines)

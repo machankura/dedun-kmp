@@ -15,9 +15,9 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.identity.Identity
 import kotlinx.coroutines.flow.StateFlow
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.this_is_the_last_thing_the_ceremony_needs
+import dedun.composeapp.generated.resources.this_is_the_last_thing_the_ceremony_needs
 
 /**
  * Asks whether to confirm the combined result.

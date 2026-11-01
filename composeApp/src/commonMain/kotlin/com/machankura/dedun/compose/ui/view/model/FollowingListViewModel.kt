@@ -31,11 +31,11 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.loading
-import bennu.composeapp.generated.resources.something_went_wrong
-import bennu.composeapp.generated.resources.not_following_anyone_yet
+import dedun.composeapp.generated.resources.loading
+import dedun.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.not_following_anyone_yet
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 

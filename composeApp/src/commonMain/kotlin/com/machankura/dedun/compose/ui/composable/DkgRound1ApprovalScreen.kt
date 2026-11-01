@@ -15,10 +15,10 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.identity.Identity
 import kotlinx.coroutines.flow.StateFlow
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.taking_part_with_these_members
-import bennu.composeapp.generated.resources.you
+import dedun.composeapp.generated.resources.taking_part_with_these_members
+import dedun.composeapp.generated.resources.you
 
 /**
  * Asks whether to contribute to the key itself.

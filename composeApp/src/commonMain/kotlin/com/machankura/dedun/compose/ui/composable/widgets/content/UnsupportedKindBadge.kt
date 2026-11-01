@@ -12,10 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.unsupported_event_kind
-import bennu.composeapp.generated.resources.unsupported_event_kind_2
+import dedun.composeapp.generated.resources.unsupported_event_kind
+import dedun.composeapp.generated.resources.unsupported_event_kind_2
 
 @Composable
 internal fun UnsupportedKindBadge(kind: Int?, style: TextStyle) {

@@ -24,11 +24,11 @@ import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.vitorpamplona.quartz.nip18Reposts.RepostEvent
 import kotlin.time.Instant
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.loading_author_information_2
-import bennu.composeapp.generated.resources.malformed_note
-import bennu.composeapp.generated.resources.reposted
+import dedun.composeapp.generated.resources.loading_author_information_2
+import dedun.composeapp.generated.resources.malformed_note
+import dedun.composeapp.generated.resources.reposted
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 
 @Composable

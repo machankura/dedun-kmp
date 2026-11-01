@@ -214,9 +214,9 @@ def main():
                 src = src[:start] + f'stringResource(Res.string.{names[fmt]}, {args})' + src[end:]
                 rewritten += 1
             need = sorted({names[fmt] for *_x, fmt in [(c[0], c[4]) for c in found]})
-            for imp in (['import bennu.composeapp.generated.resources.Res',
+            for imp in (['import dedun.composeapp.generated.resources.Res',
                          'import org.jetbrains.compose.resources.stringResource']
-                        + [f'import bennu.composeapp.generated.resources.{n}' for n in need]):
+                        + [f'import dedun.composeapp.generated.resources.{n}' for n in need]):
                 if not has_import(src, imp):
                     lines = src.split('\n')
                     idx = max(i for i, l in enumerate(lines) if l.startswith('import '))

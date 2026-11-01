@@ -1,16 +1,16 @@
 package com.machankura.dedun.compose.ui
 
 import kotlinx.coroutines.runBlocking
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.currently_no_messages_have_been_shared
-import bennu.composeapp.generated.resources.don_t_sign
-import bennu.composeapp.generated.resources.something_went_wrong
-import bennu.composeapp.generated.resources.recovered_of_still_unreadable
-import bennu.composeapp.generated.resources.sent_a_private_message_to
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.currently_no_messages_have_been_shared
+import dedun.composeapp.generated.resources.don_t_sign
+import dedun.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.recovered_of_still_unreadable
+import dedun.composeapp.generated.resources.sent_a_private_message_to
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.getPluralString
-import bennu.composeapp.generated.resources.about_n_hours
-import bennu.composeapp.generated.resources.n_blocks
+import dedun.composeapp.generated.resources.about_n_hours
+import dedun.composeapp.generated.resources.n_blocks
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

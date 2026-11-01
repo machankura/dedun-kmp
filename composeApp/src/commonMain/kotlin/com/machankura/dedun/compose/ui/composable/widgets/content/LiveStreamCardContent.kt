@@ -20,12 +20,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.ended
-import bennu.composeapp.generated.resources.live
-import bennu.composeapp.generated.resources.live_stream
-import bennu.composeapp.generated.resources.loading_stream
+import dedun.composeapp.generated.resources.ended
+import dedun.composeapp.generated.resources.live
+import dedun.composeapp.generated.resources.live_stream
+import dedun.composeapp.generated.resources.loading_stream
 
 @Composable
 internal fun LiveStreamCardContent(

@@ -1,4 +1,4 @@
-rootProject.name = "Bennu"
+rootProject.name = "Dedun"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

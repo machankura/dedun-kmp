@@ -31,10 +31,10 @@ import co.touchlab.kermit.Logger
 import coil3.compose.AsyncImage
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.nostr
-import bennu.composeapp.generated.resources.nostr_2
+import dedun.composeapp.generated.resources.nostr
+import dedun.composeapp.generated.resources.nostr_2
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 
 @Composable

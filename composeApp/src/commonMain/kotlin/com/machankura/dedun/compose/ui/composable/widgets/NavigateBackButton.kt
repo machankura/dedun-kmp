@@ -5,8 +5,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.back
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.back
 import org.jetbrains.compose.resources.stringResource
 
 /**

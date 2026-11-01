@@ -18,10 +18,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.create_a_new_profile
-import bennu.composeapp.generated.resources.sign_in_with_a_key
-import bennu.composeapp.generated.resources.the_profile_you_are_in_stays_on_this_device
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.create_a_new_profile
+import dedun.composeapp.generated.resources.sign_in_with_a_key
+import dedun.composeapp.generated.resources.the_profile_you_are_in_stays_on_this_device
 import org.jetbrains.compose.resources.stringResource
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.theme.spacing

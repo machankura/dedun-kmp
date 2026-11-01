@@ -7,10 +7,10 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.messages
-import bennu.composeapp.generated.resources.profile
-import bennu.composeapp.generated.resources.search
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.messages
+import dedun.composeapp.generated.resources.profile
+import dedun.composeapp.generated.resources.search
 import org.jetbrains.compose.resources.StringResource
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ActiveProfileRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute

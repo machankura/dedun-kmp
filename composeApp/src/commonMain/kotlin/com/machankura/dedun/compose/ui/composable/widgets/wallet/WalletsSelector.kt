@@ -49,9 +49,9 @@ import fr.acinq.phoenix.data.WalletId
 import fr.acinq.phoenix.utils.preferences.UserWalletMetadata
 import fr.acinq.phoenix.utils.preferences.getByWalletIdOrDefault
 import com.machankura.dedun.compose.extensions.hexToNpubHrp
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.read_only
-import bennu.composeapp.generated.resources.wallet
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.read_only
+import dedun.composeapp.generated.resources.wallet
 import org.jetbrains.compose.resources.stringResource
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.identity.StoredIdentity

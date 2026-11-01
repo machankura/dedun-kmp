@@ -35,16 +35,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.any_amount
-import bennu.composeapp.generated.resources.cancel
-import bennu.composeapp.generated.resources.expired
-import bennu.composeapp.generated.resources.failed
-import bennu.composeapp.generated.resources.lightning_invoice
-import bennu.composeapp.generated.resources.paid
-import bennu.composeapp.generated.resources.pay
-import bennu.composeapp.generated.resources.pay_now
+import dedun.composeapp.generated.resources.any_amount
+import dedun.composeapp.generated.resources.cancel
+import dedun.composeapp.generated.resources.expired
+import dedun.composeapp.generated.resources.failed
+import dedun.composeapp.generated.resources.lightning_invoice
+import dedun.composeapp.generated.resources.paid
+import dedun.composeapp.generated.resources.pay
+import dedun.composeapp.generated.resources.pay_now
 
 @Composable
 internal fun LightningInvoiceCard(

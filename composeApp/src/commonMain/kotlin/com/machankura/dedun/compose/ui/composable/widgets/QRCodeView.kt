@@ -21,8 +21,8 @@ import io.github.alexzhirkevich.qrose.options.QrLogoShape
 import io.github.alexzhirkevich.qrose.options.solid
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import org.jetbrains.compose.resources.painterResource
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.compose_multiplatform
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.compose_multiplatform
 
 class QRCodeBackgroundPainter(
     private val painter: Painter,

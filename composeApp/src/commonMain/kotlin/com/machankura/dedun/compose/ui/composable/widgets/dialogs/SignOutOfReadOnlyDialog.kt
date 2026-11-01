@@ -7,10 +7,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.cancel
-import bennu.composeapp.generated.resources.sign_out
-import bennu.composeapp.generated.resources.this_device_holds_no_key_for_s_so_there
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.cancel
+import dedun.composeapp.generated.resources.sign_out
+import dedun.composeapp.generated.resources.this_device_holds_no_key_for_s_so_there
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import com.machankura.dedun.compose.extensions.hexToNpubHrp

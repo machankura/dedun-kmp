@@ -43,12 +43,12 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.profile
-import bennu.composeapp.generated.resources.re_broadcast
-import bennu.composeapp.generated.resources.something_went_wrong
-import bennu.composeapp.generated.resources.we_couldn_t_find_the_local_profile_please
+import dedun.composeapp.generated.resources.profile
+import dedun.composeapp.generated.resources.re_broadcast
+import dedun.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.we_couldn_t_find_the_local_profile_please
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState

@@ -47,12 +47,12 @@ import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.be_the_first_to_comment
-import bennu.composeapp.generated.resources.post
-import bennu.composeapp.generated.resources.something_went_wrong
-import bennu.composeapp.generated.resources.reply_to
+import dedun.composeapp.generated.resources.be_the_first_to_comment
+import dedun.composeapp.generated.resources.post
+import dedun.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.reply_to
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState

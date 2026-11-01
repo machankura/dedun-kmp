@@ -32,18 +32,18 @@ import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.AddProfileRows
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.rememberProfilesOf
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.choose_a_profile
-import bennu.composeapp.generated.resources.could_not_load_the_profiles_on_this_device
-import bennu.composeapp.generated.resources.decrypting
-import bennu.composeapp.generated.resources.loading_preferences
-import bennu.composeapp.generated.resources.lock_prompt_coming_soon
-import bennu.composeapp.generated.resources.opening_profile
-import bennu.composeapp.generated.resources.preparing_profiles
-import bennu.composeapp.generated.resources.starting_wallet
-import bennu.composeapp.generated.resources.startup_error
-import bennu.composeapp.generated.resources.unlock_to_continue
+import dedun.composeapp.generated.resources.choose_a_profile
+import dedun.composeapp.generated.resources.could_not_load_the_profiles_on_this_device
+import dedun.composeapp.generated.resources.decrypting
+import dedun.composeapp.generated.resources.loading_preferences
+import dedun.composeapp.generated.resources.lock_prompt_coming_soon
+import dedun.composeapp.generated.resources.opening_profile
+import dedun.composeapp.generated.resources.preparing_profiles
+import dedun.composeapp.generated.resources.starting_wallet
+import dedun.composeapp.generated.resources.startup_error
+import dedun.composeapp.generated.resources.unlock_to_continue
 import com.machankura.dedun.compose.ui.view.state.StartupChoice
 
 @Composable

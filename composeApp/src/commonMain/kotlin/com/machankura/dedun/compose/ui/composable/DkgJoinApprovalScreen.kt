@@ -5,9 +5,9 @@ import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.database.model.subgroupWalletPolicy
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.the_subgroup_s_wallet_will_not_be_guarded
-import bennu.composeapp.generated.resources.the_subgroup_s_wallet_will_be_guarded
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.the_subgroup_s_wallet_will_not_be_guarded
+import dedun.composeapp.generated.resources.the_subgroup_s_wallet_will_be_guarded
+import dedun.composeapp.generated.resources.Res
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth

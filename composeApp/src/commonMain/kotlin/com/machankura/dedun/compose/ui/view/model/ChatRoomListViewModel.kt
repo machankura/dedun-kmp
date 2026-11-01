@@ -41,11 +41,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.loading
-import bennu.composeapp.generated.resources.no_messages_go_to_a_profile_and_send_them_a
-import bennu.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.loading
+import dedun.composeapp.generated.resources.no_messages_go_to_a_profile_and_send_them_a
+import dedun.composeapp.generated.resources.something_went_wrong
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 
 class ChatRoomListViewModel(

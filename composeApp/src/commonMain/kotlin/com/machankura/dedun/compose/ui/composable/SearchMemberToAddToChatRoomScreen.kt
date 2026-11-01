@@ -40,11 +40,11 @@ import com.machankura.dedun.compose.ui.view.model.SearchMemberToAddToChatRoomVie
 import com.machankura.dedun.compose.ui.view.state.SearchMemberToAddToChatRoomUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.currently_no_contacts_please_search_and_chat
-import bennu.composeapp.generated.resources.search_member_functionality
-import bennu.composeapp.generated.resources.search_message_functionality_will_be_here
+import dedun.composeapp.generated.resources.currently_no_contacts_please_search_and_chat
+import dedun.composeapp.generated.resources.search_member_functionality
+import dedun.composeapp.generated.resources.search_message_functionality_will_be_here
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton

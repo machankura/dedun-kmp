@@ -1,14 +1,14 @@
 package com.machankura.dedun.compose.ui.composable.widgets
 
 import androidx.compose.runtime.Composable
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.about_n_days
-import bennu.composeapp.generated.resources.about_n_hours
-import bennu.composeapp.generated.resources.about_n_minutes
-import bennu.composeapp.generated.resources.about_n_months
-import bennu.composeapp.generated.resources.about_n_years
-import bennu.composeapp.generated.resources.blocks_and_about
-import bennu.composeapp.generated.resources.n_blocks
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.about_n_days
+import dedun.composeapp.generated.resources.about_n_hours
+import dedun.composeapp.generated.resources.about_n_minutes
+import dedun.composeapp.generated.resources.about_n_months
+import dedun.composeapp.generated.resources.about_n_years
+import dedun.composeapp.generated.resources.blocks_and_about
+import dedun.composeapp.generated.resources.n_blocks
 import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.text.groupedBlocks
 import fr.acinq.bitcoin.Chain

@@ -23,9 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.something_went_wrong
-import bennu.composeapp.generated.resources.try_again
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.try_again
 import org.jetbrains.compose.resources.stringResource
 import com.machankura.dedun.compose.ui.theme.reducedMotion
 import com.machankura.dedun.compose.ui.theme.spacing

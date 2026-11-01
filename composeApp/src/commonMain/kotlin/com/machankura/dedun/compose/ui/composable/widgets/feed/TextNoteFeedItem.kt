@@ -25,10 +25,10 @@ import androidx.compose.ui.unit.dp
 import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.loading_author_information
-import bennu.composeapp.generated.resources.loading_information
+import dedun.composeapp.generated.resources.loading_author_information
+import dedun.composeapp.generated.resources.loading_information
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

@@ -33,11 +33,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.copy_url
-import bennu.composeapp.generated.resources.download
-import bennu.composeapp.generated.resources.tap_to_load
+import dedun.composeapp.generated.resources.copy_url
+import dedun.composeapp.generated.resources.download
+import dedun.composeapp.generated.resources.tap_to_load
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

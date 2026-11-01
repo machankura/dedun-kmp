@@ -13,9 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import bennu.composeapp.generated.resources.Res
-import bennu.composeapp.generated.resources.loading_profiles
-import bennu.composeapp.generated.resources.profiles
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.loading_profiles
+import dedun.composeapp.generated.resources.profiles
 import fr.acinq.phoenix.data.WalletId
 import org.jetbrains.compose.resources.stringResource
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState

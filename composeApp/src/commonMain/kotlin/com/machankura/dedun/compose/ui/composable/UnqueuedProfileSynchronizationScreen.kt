@@ -19,10 +19,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.we_are_looking_for_your_profile_on_as_many
-import bennu.composeapp.generated.resources.we_are_searching_the_internet_to_find_your
+import dedun.composeapp.generated.resources.we_are_looking_for_your_profile_on_as_many
+import dedun.composeapp.generated.resources.we_are_searching_the_internet_to_find_your
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.theme.readableContent

@@ -28,6 +28,8 @@ differently, this table says so.
 | phase | state |
 |---|---|
 | 0 | done. `DomainTagsPinnedTest` pins the eight tags that had no vector. Each vector was checked against a separate BIP340 tagged hash, computed in Python over the literal tag. Baseline at `4f1b4a43`: the audit reads 1090 `stringResource` sites and 191 `Icon(` sites with every budget met, and `jvmTest` runs 1650 tests: 2 skipped (the regtest runs), none failed |
+| 1 | done, `b00b50f5`. 896 files are recorded as renames. Git shows 24 very small files as delete-and-add, because the package line is most of their content. Room found the 35 schemas at the new directory and wrote no 36th. 1650 tests, none failing |
+| 2 | done. The generated package is `dedun.composeapp.generated.resources` (confirmed from the build output, not inferred). 86 files and the two extractors were rewritten. The audit still reads 1090 and 191 |
 
 ## What the name is attached to
 

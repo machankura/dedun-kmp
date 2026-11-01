@@ -63,10 +63,10 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.theme.spacing
-import bennu.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import bennu.composeapp.generated.resources.bennu
-import bennu.composeapp.generated.resources.new_chat
+import dedun.composeapp.generated.resources.bennu
+import dedun.composeapp.generated.resources.new_chat
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
@@ -79,9 +79,9 @@ import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.ui.theme.breakpoint
 import com.machankura.dedun.compose.ui.theme.listPaneWidthFor
 import com.machankura.dedun.compose.ui.theme.readableContent
-import bennu.composeapp.generated.resources.pick_a_conversation_to_read_it_here
-import bennu.composeapp.generated.resources.messages_need_the_secret_key_this_profile
-import bennu.composeapp.generated.resources.sign_in_with_the_nsec
+import dedun.composeapp.generated.resources.pick_a_conversation_to_read_it_here
+import dedun.composeapp.generated.resources.messages_need_the_secret_key_this_profile
+import dedun.composeapp.generated.resources.sign_in_with_the_nsec
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
