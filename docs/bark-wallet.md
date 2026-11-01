@@ -9,6 +9,19 @@ address, and paid into the same three ways. There are no channels and no inbound
 `7aaacadc`, and against the Bark FFI bindings `v0.26.1+bark-0.8.0`. Those bindings wrap
 `bark-ffi` `0.30.1`, which pins `bark` `0.8.0` and uniffi `0.31.1`.
 
+Where the build chose differently, phase by phase:
+
+| phase | what the plan said | what it turned out to be |
+|---|---|---|
+| 1 | `ArkConfig.kt` refuses with `Unavailable(TorOn)` | `ArkSetup.resolve` returns `Ready(ArkConfig)` or `Unavailable(reason)`, checking the gate, the seed, the platform, Tor and consent in that order. `ArkConfig` itself is only what Bark is opened with |
+| 1 | strings for each `ArkUnavailability` in Phase 1 | added in Phase 4 with the row that shows them, so the catalogue never holds a string nothing reads |
+| 1 | the warning threshold is "Bark's config" | `ArkExpiry.thresholdFor`: 144 blocks on mainnet and 12 elsewhere, which are `bark`'s own `network_default`s |
+| 2 | `expect fun openArkWallet(...)` | `expect object ArkPlatform { supported; open(...) }`, so the setup can ask whether the platform has a library without trying to open anything |
+| 2 | add `bark-android` | add it with JNA's jar excluded and `jna:5.15.0@aar` named. Bark's Gradle metadata asks for the jar, which has no `libjnidispatch.so`, so the first call would fail on a device. The debug APK now carries both libraries for every ABI |
+| 2 | R8 keep rules from spike 1 | none: release builds are not minified (`isMinifyEnabled = false`) |
+| 2 | the signet test pays itself from a second wallet | it cannot: there is no faucet API. It covers everything a wallet with no money can do, and the funded flows are Phase 12's |
+| 2 | the debug APK starts on an emulator | not done: the emulators on the build host belong to other work, and nothing calls the binding until Phase 3 |
+
 The headline: **a seed profile already holds the twelve words Bark needs. Bark's keys sit at
 `m/350'` and its onchain wallet at BIP86, so it can open those same words without touching a
 key the Phoenix node or the nostr identity uses. What is missing is the binding on every platform

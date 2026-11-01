@@ -68,6 +68,13 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
 
             implementation(libs.sqldelight.android.driver)
+
+            // The profile's Ark wallet (docs/bark-wallet.md, Phase 2). bark-android's Gradle metadata
+            // asks for JNA's jar, which carries no Android natives: without the aar, libjnidispatch.so
+            // is missing and the first Bark call fails at runtime. So the jar is excluded and the aar,
+            // same version, named here.
+            implementation(libs.bark.android.get().toString()) { exclude(group = "net.java.dev.jna", module = "jna") }
+            implementation("net.java.dev.jna:jna:5.15.0@aar")
         }
         commonMain.dependencies {
             implementation(libs.androidx.datastore)
@@ -150,7 +157,16 @@ kotlin {
 
             // The jvm counterpart to sqldelight-android-driver / -native-driver above.
             implementation(libs.sqldelight.sqlite.driver)
+
+            // Linux x86-64 only; ArkPlatform says so on the other desktops (docs/bark-wallet.md, D4).
+            implementation(libs.bark.jvm)
         }
+        // The Bark adapter, written once and compiled into both targets whose bindings are the
+        // same generated Kotlin: bark-android and bark-jvm. Not an intermediate source set, which
+        // would need one artifact both could resolve, and Bark publishes none.
+        val barkMain = "src/barkMain/kotlin"
+        androidMain.get().kotlin.srcDir(barkMain)
+        jvmMain.get().kotlin.srcDir(barkMain)
         // Only exists when the ios targets above were declared; the default hierarchy template
         // creates this source set from them.
         if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
@@ -326,6 +342,8 @@ tasks.named("check") { dependsOn(m3Audit) }
 // date, and asking for the run afterwards would replay the skip.
 tasks.withType<Test>().configureEach {
     inputs.property("dedunRegtest", providers.environmentVariable("DEDUN_REGTEST").orElse(""))
+    // The Ark wallet's signet run (docs/bark-wallet.md, Phase 2), for the same reason.
+    inputs.property("dedunArkSignet", providers.environmentVariable("DEDUN_ARK_SIGNET").orElse(""))
 }
 
 compose.desktop {
