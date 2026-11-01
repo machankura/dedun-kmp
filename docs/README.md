@@ -42,6 +42,7 @@ silent, or a decision that looked arbitrary and was not.
 | [lightning/README.md](./lightning/README.md) | the remediation plans for the review of the group Lightning wallet — seven findings, one phased plan each, and the order to build them in |
 | [../testing/regtest/README.md](../testing/regtest/README.md) | running the group Lightning wallet end to end on a regtest network of bitcoind, electrs and two eclair nodes — the prerequisites and ports, where the run's output and eclair's log end up, and what each failure means. Not part of `check` or CI |
 | [marmot-v2.md](./marmot-v2.md) | bringing the group layer onto the Marmot current profile after the quartz 1.15.2 bump — the nine rules that reach this app, why the room's id and the routing id have to become two values, nine phases from reading both profiles to publishing before applying, and the one fork the library cannot yet settle |
+| [dedun-rename.md](./dedun-rename.md) | renaming Bennu to Dedun under `com.machankura.dedun`: the twelve `bennu/` hash tags that stay, why a new application id is a new app with an empty sandbox, the history sentences a sweep would falsify, and eight phases that hold the store identities back until the owner decides what happens to existing installs |
 
 Start with the ceremony if you are new to this area; the Marmot notes all assume it.
 Read the skipped-keys note before debugging any "the other device never got it"
