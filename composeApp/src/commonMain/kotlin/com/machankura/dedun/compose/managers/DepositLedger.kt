@@ -82,6 +82,51 @@ object DepositLedger {
     }
 
     /**
+     * Files each swap-in coin a snapshot's splice-ins spent (`docs/group-lightning-swap-in.md`, Phase 5): a
+     * Lightning deposit of the coin less its share of the splice's fee (D5), shared by amount. The operator
+     * names the coin's depositor and address; this device derives that address and counts the coin to the
+     * member only when the script is theirs -- a coin named on another member's address is nobody's.
+     */
+    suspend fun recordSwapIns(database: DedunDatabase, chatRoomId: String, wallet: GroupLightningWalletManager.Wallet, payments: List<WalletWire.PaymentView>) {
+        val statement = wallet.statement
+        val keys = GroupWalletManager.thresholdKeyFor(database, chatRoomId)?.let { roomKey ->
+            GroupSwapInDerivation.lspSwapInXpub(statement.chain)?.let { xpub -> GroupSwapInDerivation.keys(roomKey, statement.chain, statement.wallet, statement.icebergKey, statement.nodeId, xpub) }
+        }
+        val depositors = Depositors.statementsIn(database, chatRoomId, statement.chain)
+        payments.filter { it.incoming && it.succeeded && it.swapIns.isNotEmpty() }.forEach { payment ->
+            val totalMsat = payment.swapIns.sumOf { it.amountSat * 1000 }
+            val shares = feeShares(payment.swapIns.map { it.amountSat * 1000 }, (totalMsat - payment.amountMsat).coerceAtLeast(0))
+            payment.swapIns.zip(shares).forEach { (coin, share) ->
+                val verified = keys?.let { k ->
+                    depositors[coin.member.lowercase()]?.let { d -> k.address(d.branch, coin.index).protocol.serializedPubkeyScript.toHex() == coin.script.lowercase() }
+                } == true
+                val (txid, vout) = coin.outPoint.split(':').let { it[0] to (it.getOrNull(1)?.toLongOrNull() ?: return@forEach) }
+                merge(
+                    database,
+                    DepositRow(
+                        chatRoomId = chatRoomId,
+                        chain = GroupWalletStatementEvent.chainName(statement.chain),
+                        depositKey = DepositAttributionEvent.DepositKey.SwapIn(txid.lowercase(), vout).text,
+                        source = DepositRow.LIGHTNING,
+                        amountMsat = coin.amountSat * 1000 - share,
+                        member = coin.member.lowercase().takeIf { verified },
+                        attributedBy = DepositRow.BY_SWAP_IN.takeIf { verified },
+                        confirmedAt = Clock.System.now(),
+                    ),
+                )
+            }
+        }
+    }
+
+    /** [feeMsat] shared over [amountsMsat] in proportion, the remainder on the last, so the shares add up to the fee. */
+    fun feeShares(amountsMsat: List<Long>, feeMsat: Long): List<Long> {
+        val total = amountsMsat.sum()
+        if (total == 0L) return amountsMsat.map { 0L }
+        val shares = amountsMsat.dropLast(1).map { feeMsat * it / total }
+        return shares + (feeMsat - shares.sum())
+    }
+
+    /**
      * Files [incoming] beside what is on record for its deposit: the first sighting is kept, a
      * confirmation once seen stays, and the attribution only ever grows surer -- a branch or a held
      * invoice is not overwritten by the operator's word, and nothing overwrites the group's own.

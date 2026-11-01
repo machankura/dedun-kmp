@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import fr.acinq.lightning.db.OnChainIncomingPayment
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.Flow
 import fr.acinq.lightning.blockchain.electrum.WalletState
@@ -582,7 +583,7 @@ class GroupLightningNode(
 
     companion object {
         /** A lightning-kmp payment as the room hears of it. */
-        internal fun paymentView(payment: WalletPayment, incoming: Boolean) = WalletWire.PaymentView(
+        internal fun paymentView(payment: WalletPayment, incoming: Boolean, swapIns: List<WalletWire.SwapInCredit> = emptyList()) = WalletWire.PaymentView(
             id = payment.id.toString(),
             incoming = incoming,
             amountMsat = payment.amount.msat,
@@ -591,6 +592,7 @@ class GroupLightningNode(
             description = ((payment as? LightningOutgoingPayment)?.details as? LightningOutgoingPayment.Details.Normal)?.paymentRequest?.description,
             completedAt = payment.completedAt,
             succeeded = payment.succeededAt != null,
+            swapIns = swapIns,
         )
 
         /** How long a signature may take the group. Phase 0 was to measure what the LSP tolerates; until it is, a minute. */
@@ -751,7 +753,11 @@ class GroupLightningNode(
                 nodeParams.nodeEvents.collect { event ->
                     when (event) {
                         is PeerConnected -> lspInit.value = event.theirInit
-                        is PaymentEvents.PaymentReceived -> payments += paymentView(event.payment, incoming = true)
+                        // A splice-in names the swap-in coins it spent: whose they were is what the ledger counts.
+                        is PaymentEvents.PaymentReceived -> payments += paymentView(
+                            event.payment, incoming = true,
+                            swapIns = (event.payment as? OnChainIncomingPayment)?.localInputs?.mapNotNull { configuration.transport.swapInCredit(it) }.orEmpty(),
+                        )
                         is PaymentEvents.PaymentSent -> payments += paymentView(event.payment, incoming = false)
                         else -> {}
                     }

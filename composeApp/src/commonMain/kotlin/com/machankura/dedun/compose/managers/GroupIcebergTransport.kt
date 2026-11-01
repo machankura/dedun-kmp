@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.wallet.lightning.WalletWire
 import kotlinx.coroutines.flow.StateFlow
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.bitcoin.Transaction
@@ -79,6 +80,12 @@ class GroupIcebergTransport private constructor(
 
     /** Each splice's context as its shared input was asked for, by txid: a swap-in input of it is asked for under the same. */
     private val spliceContexts = mutableMapOf<TxId, CoSigningWire.Context>()
+
+    /** Every swap-in coin a splice was asked to spend, as this device's swap-in wallet saw it: what its payment names. */
+    private val swapInCredits = mutableMapOf<OutPoint, WalletWire.SwapInCredit>()
+
+    /** The coin at [outPoint], if a splice this transport asked for spent it as a depositor's swap-in coin. */
+    fun swapInCredit(outPoint: OutPoint): WalletWire.SwapInCredit? = swapInCredits[outPoint]
     private val pool = mutableMapOf<Long, List<NonceContribution>>()
     private var nextCounter = 0L
     private var refresher: Job? = null
@@ -229,7 +236,11 @@ class GroupIcebergTransport private constructor(
         return tx.txIn.map { it.outPoint }.filter { it != funding }.mapNotNull { outPoint ->
             state.depositors.values.firstNotNullOfOrNull { depositor ->
                 depositor.state.utxos.firstOrNull { it.outPoint == outPoint }?.let { utxo ->
-                    (utxo.addressMeta as? WalletState.AddressMeta.Derived)?.let { CoSigningWire.SwapInCoin("${outPoint.txid}:${outPoint.index}", depositor.member, it.index.toLong()) }
+                    (utxo.addressMeta as? WalletState.AddressMeta.Derived)?.let { meta ->
+                        val text = "${outPoint.txid}:${outPoint.index}"
+                        swapInCredits[outPoint] = WalletWire.SwapInCredit(text, depositor.member, meta.index.toLong(), utxo.amount.sat, utxo.txOut.publicKeyScript.toHex())
+                        CoSigningWire.SwapInCoin(text, depositor.member, meta.index.toLong())
+                    }
                 }
             }
         }.takeIf { it.isNotEmpty() }
