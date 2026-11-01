@@ -8,7 +8,7 @@ occurrences of the old one, in 931 files, into three groups: the brand, which ch
 the protocol, which must not change; and the identity a store or an operating system
 holds the app by, which changes only after a decision about existing installs.
 
-**Being built, one commit per phase.** Written against `4f1b4a43` on `claude/bennu-dedun-rename-a9d7af`.
+**Built, but for Phase 7, which D5 made unnecessary.** Written against `4f1b4a43` on `claude/bennu-dedun-rename-a9d7af`.
 Read these first:
 
 - `git show e6aee792`. Its message records what the Curare rename found: a blanket sweep
@@ -34,6 +34,8 @@ differently, this table says so.
 | 4 | done. `ProfilePreviewScreenJvmTest` renders one of the changed strings and passes. The desktop window and launcher labels were not looked at on screen: no display was available to the build |
 | 5 | done. The merged debug manifest reads `com.machankura.dedun.android.debug`, with `DedunApplication` and `MainActivity` under `com.machankura.dedun.android`. `packageDeb` builds `com.machankura.dedun.desktop_1.0.0_amd64.deb`. No `upgradeUuid` was pinned, because under D5 there is no Bennu MSI to upgrade. The iOS bundle id was changed but not built, because this was a Linux machine. Registering the App ID is still the owner's to do. `versionCode` stays at 9: Play starts counting afresh for a new listing anyway |
 | 6 | done. One addition to the plan: Phase 3's sweep had turned HomeScreen's list of former themes into "`CurareTheme`, is `DedunTheme`", which drops Bennu. That is the falsified-history case from constraint 4, and it is fixed by hand. A link check over the docs found 50 targets missing. None was caused by this rename: `dead-code.md` and `long-running-sync.md` link from `docs/` without `../`, and the rest point at files deleted before `4f1b4a43`. Two of three full runs each had one timing failure (`IdentitySwitchJvmTest`, then `LiveSubscriptionReconcileTest`, the second from another test's write to a closed database). That is the flake `frost-session-resend.md:523` describes. Each test passed when run on its own, and the third full run passed |
+| 7 | not built (D5) |
+| 8 | done. The final search outside `docs/` finds only the twelve tags and the formulas in their doc comments, the history sentences and the note above `applicationId`. Inside `docs/` it finds the tags, two history sentences, and the `bennu-lightning` branch named in one plan's header. On a fresh `dedun-regtest` network, `GroupLightningRegtestJvmTest` passes: receive, buy liquidity, pay, close, sweep. That is the only check that runs the twelve tags against a real LSP. `LiquidityPurchaseRegtestJvmTest` passes alone on its own fresh network. Run straight after the group test on the same network, it timed out waiting for its on-the-fly channel. That combination was not tried on the tree before the rename. The test uses a stock node and none of the tags. Not checked: an iOS build, which needs a Mac, and the window and launcher labels on screen |
 
 ## What the name is attached to
 
