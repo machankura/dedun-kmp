@@ -941,4 +941,19 @@
     <string name="whose_deposit_is_this_question">Whose deposit is this?</string>
     <string name="the_group_s_own">The group's own</string>
     <string name="payout_destination_saved_the_group_is_asked_to_open_your_deposits">Payout destination saved. The group is asked to open your deposits.</string>
+    <string name="assign_coins">Assign coins</string>
+    <string name="before_deposits_were_attributed_or_from_a_closed_channel">Before deposits were attributed, or from a closed channel</string>
+    <string name="change_from_an_earlier_spend">Change from an earlier spend</string>
+    <string name="the_group_said_it_is_no_member_s">The group said it is no member's</string>
+    <string name="on_a_branch_this_device_can_t_place">On a branch this device can't place</string>
+    <string name="s_s_share">%1$s's share</string>
+    <string name="s_sats_left_to_assign">%1$s sats left to assign</string>
+    <string name="s_sats_too_many_assigned">%1$s sats more than the coin is assigned</string>
+    <string name="every_coin_is_somebody_s">Every coin in the group's wallet is somebody's.</string>
+    <string name="nobody_deposits_with_this_group_yet">Nobody deposits with this group yet, so there is nobody to give a coin to.</string>
+    <string name="a_share_is_at_least_s_sats">A share is at least %1$s sats, or nobody could be paid it.</string>
+    <string name="asked_the_group_to_assign_this_coin">Asked the group to assign this coin.</string>
+    <string name="not_anyone_s_yet_s_sats">Not anyone's yet: %1$s sats</string>
+    <string name="until_the_group_says_whose_it_is">Until the group says whose it is, nobody can be paid it.</string>
+    <string name="assign">Assign</string>
 </resources>

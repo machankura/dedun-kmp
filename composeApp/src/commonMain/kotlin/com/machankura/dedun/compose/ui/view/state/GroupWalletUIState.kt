@@ -72,6 +72,8 @@ sealed interface GroupWalletUIState {
         val deposits: DepositRepository.Standing = DepositRepository.Standing.CannotSign,
         /** Each member's name, for saying whose a coin is. */
         val memberNames: Map<HexKey, String> = emptyMap(),
+        /** What the wallet holds that nobody owns yet, and so nobody can be paid: `docs/payouts-only.md`. */
+        val unownedSat: Long = 0,
     ): GroupWalletUIState
 
     data class Error(

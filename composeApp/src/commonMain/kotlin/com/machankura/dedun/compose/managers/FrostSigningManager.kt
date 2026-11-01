@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.allows
@@ -621,6 +622,17 @@ object FrostSigningManager {
             if (rebuilt.kind != DepositAttributionEvent.KIND) return@forEach
             DepositLedger.refuseAttribution(database, rebuilt.pubKey, rebuilt)?.let { reason ->
                 logger.w("Signing proposal $sessionId carries an attribution that $reason; dropping")
+                return null
+            }
+        }
+
+        // An assignment says whose some of the group's coins are, which is whom a payout of
+        // them pays: each coin has to be one this device knows, for the amount it has, shared
+        // among members the group opened deposits for. docs/payouts-only.md, Phase 3.
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind != CoinAssignmentEvent.KIND) return@forEach
+            CoinAssignments.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a coin assignment that $reason; dropping")
                 return null
             }
         }

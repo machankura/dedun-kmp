@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.view.model
 
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.repository.DepositRepository
+import com.machankura.dedun.compose.repository.PayoutRepository
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.isDecided
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
@@ -65,6 +66,8 @@ class GroupWalletViewModel(
     private val watcher: GroupTransactionWatcher? = null,
     /** Who deposits with the group -- `docs/member-deposits.md`. The no-op hands nobody an address. */
     private val depositRepository: DepositRepository = DepositRepository.NO_OP,
+    /** Whose each coin is -- `docs/payouts-only.md`. The no-op says every coin is somebody's. */
+    private val payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
 ): ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -152,7 +155,8 @@ class GroupWalletViewModel(
                 ) { state, transactions, guardedWallets ->
                     Triple(state, transactions.map { rowOf(it) }, guardedWallets)
                 }.collect { (state, rows, guardedWallets) ->
-                    groupWalletUIState = loaded.copy(walletState = state, spends = rows, guardedWallets = guardedWallets)
+                    val unowned = payoutRepository.balances(chatRoomId, chain, state).unownedSat
+                    groupWalletUIState = loaded.copy(walletState = state, spends = rows, guardedWallets = guardedWallets, unownedSat = unowned)
                 }
             }
         }
@@ -376,6 +380,7 @@ class GroupWalletViewModel(
             wallets: GroupOnchainWallets,
             watcher: GroupTransactionWatcher? = null,
             depositRepository: DepositRepository = DepositRepository.NO_OP,
+            payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupWalletViewModel(
@@ -388,6 +393,7 @@ class GroupWalletViewModel(
                     wallets = wallets,
                     watcher = watcher,
                     depositRepository = depositRepository,
+                    payoutRepository = payoutRepository,
                 )
             }
         }

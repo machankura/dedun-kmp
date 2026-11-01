@@ -12,6 +12,11 @@ import dedun.composeapp.generated.resources.the_group_counts_what_you_put_in_onc
 import dedun.composeapp.generated.resources.your_deposit_address
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutDestinationRoute
 import com.machankura.dedun.compose.repository.DepositRepository
+import com.machankura.dedun.compose.repository.PayoutRepository
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupAssignCoinsRoute
+import dedun.composeapp.generated.resources.not_anyone_s_yet_s_sats
+import dedun.composeapp.generated.resources.until_the_group_says_whose_it_is
+import dedun.composeapp.generated.resources.assign
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import dedun.composeapp.generated.resources.a_group_below_s
 import dedun.composeapp.generated.resources.a_group_below_this_one
@@ -158,6 +163,7 @@ import com.machankura.dedun.compose.managers.GroupWalletDerivation
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.text.grouped
+import fr.acinq.bitcoin.Satoshi
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
@@ -205,6 +211,7 @@ fun GroupWalletScreen(
     wallets: GroupOnchainWallets,
     watcher: GroupTransactionWatcher? = null,
     depositRepository: DepositRepository = DepositRepository.NO_OP,
+    payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -219,6 +226,7 @@ fun GroupWalletScreen(
             wallets = wallets,
             watcher = watcher,
             depositRepository = depositRepository,
+            payoutRepository = payoutRepository,
         )
     )
 
@@ -407,6 +415,15 @@ fun GroupWalletScreen(
                             onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
                         },
                         onStartDepositing = { groupWalletViewModel.openMyDeposits(onSuccess = toSession, onFailure = { notify(couldNotOpenDeposits) }) },
+                        onAssignCoins = {
+                            onNavigateToRoute(
+                                GroupAssignCoinsRoute(
+                                    activeUserPublicKey = activeUserPublicKey,
+                                    chatRoomId = chatRoomId,
+                                    chain = GroupWalletStatementEvent.chainName(chain),
+                                )
+                            )
+                        },
                         onOpenSpend = toSession,
                         onSendAgain = if (watcher != null) {
                             { sessionId -> groupWalletViewModel.sendAgain(sessionId) { notify(sentAgain) } }
@@ -517,6 +534,7 @@ private fun OpenWallet(
     onOpenAddresses: () -> Unit,
     onSetDestination: () -> Unit,
     onStartDepositing: () -> Unit,
+    onAssignCoins: () -> Unit,
     onOpenSpend: (sessionId: String) -> Unit,
     onSendAgain: ((sessionId: String) -> Unit)?,
     onBump: ((sessionId: String) -> Unit)?,
@@ -585,6 +603,18 @@ private fun OpenWallet(
                         onSetDestination = onSetDestination,
                         onStartDepositing = onStartDepositing,
                     )
+                }
+
+                // A coin nobody owns can't be paid out until the group says whose it is.
+                // docs/payouts-only.md, Phase 3.
+                if (state.unownedSat > 0) {
+                    item {
+                        ListItem(
+                            headlineContent = { Text(stringResource(Res.string.not_anyone_s_yet_s_sats, Satoshi(state.unownedSat).grouped())) },
+                            supportingContent = { Text(stringResource(Res.string.until_the_group_says_whose_it_is)) },
+                            trailingContent = { TextButton(onClick = onAssignCoins) { Text(stringResource(Res.string.assign)) } },
+                        )
+                    }
                 }
 
                 item {
