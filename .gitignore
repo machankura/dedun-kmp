@@ -19,3 +19,7 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 gradle/gradle-daemon-jvm.properties
+
+# Bark libraries built for the desktop by docs/scripts/bark-natives.sh (docs/bark-wallet.md, Phase 11)
+composeApp/src/jvmMain/resources/darwin-*/
+composeApp/src/jvmMain/resources/win32-*/
