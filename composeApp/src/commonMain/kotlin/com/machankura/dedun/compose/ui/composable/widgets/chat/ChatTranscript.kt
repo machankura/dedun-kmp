@@ -944,6 +944,7 @@ private fun RitualNotice(
         // to be able to see that the first happened and the second did not.
         ChatMessage.TYPE_SUBGROUP_CERTIFIED -> Icons.Default.AccountTree
         ChatMessage.TYPE_MEMBER_WALLET_REQUESTED, ChatMessage.TYPE_MEMBER_WALLET_GUARDED -> Icons.Default.AccountBalanceWallet
+        ChatMessage.TYPE_PAYOUT_DESTINATION_SET, ChatMessage.TYPE_PAYOUT_DESTINATION_REMOVED -> Icons.Default.Payments
         ChatMessage.TYPE_MEMBER_INVITED -> Icons.Default.PersonAdd
         ChatMessage.TYPE_MEMBER_INVITE_SENT -> Icons.Default.Upload
         ChatMessage.TYPE_MEMBER_INVITE_FAILED -> Icons.Default.ErrorOutline

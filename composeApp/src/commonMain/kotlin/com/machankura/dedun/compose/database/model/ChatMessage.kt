@@ -26,6 +26,9 @@ import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.nostr.wallet.GroupKeyNoticeEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletCertificateEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletRequestEvent
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestinationRemoved
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
@@ -554,6 +557,17 @@ data class ChatMessage(
         const val TYPE_MEMBER_WALLET_POLICY = "memberWalletPolicy"
 
         /**
+         * A member said where this group pays them -- a `GroupPayoutDestinationEvent` this
+         * device checked. The line names the member and never the address: the member's row
+         * shows the address, and a line stays in the scrollback after it changes. See
+         * `docs/group-payout-destination.md`.
+         */
+        const val TYPE_PAYOUT_DESTINATION_SET = "payoutDestinationSet"
+
+        /** A member withdrew where this group pays them. */
+        const val TYPE_PAYOUT_DESTINATION_REMOVED = "payoutDestinationRemoved"
+
+        /**
          * Every line the group signed, for the one check the transcript
          * dispatches on. A type missing from here renders as a chat bubble,
          * silently, looking exactly like somebody having said it.
@@ -574,6 +588,8 @@ data class ChatMessage(
             TYPE_MEMBER_WALLET_REQUESTED,
             TYPE_MEMBER_WALLET_GUARDED,
             TYPE_MEMBER_WALLET_POLICY,
+            TYPE_PAYOUT_DESTINATION_SET,
+            TYPE_PAYOUT_DESTINATION_REMOVED,
         )
 
         /** The lines in [GROUP_IDENTITY_TYPES] about the Lightning wallet, which open its screen. */
@@ -1497,6 +1513,36 @@ data class ChatMessage(
                         chatRoomId = groupId,
                         createdAt = createdAt,
                         content = "This group now guards a wallet for @${memberName(database, verified.memberPublicKey)}",
+                    )
+                }
+
+                // A member saying where this group pays them, or that it should not.
+                // The inner event carries the signed statement whole; only one that
+                // checks out, was put here by its author and is about this room gets a
+                // line, and the line names nobody's address.
+                // docs/group-payout-destination.md.
+                GroupPayoutDestinationEvent.KIND -> {
+                    val signed = GroupPayoutDestinationEvent.carried(event) ?: return null
+                    val statement = GroupPayoutDestinationEvent.verified(signed) ?: return null
+                    if (!statement.chatRoomId.equals(groupId, ignoreCase = true)) return null
+                    val name = memberName(database, statement.member)
+
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = when (statement) {
+                            is GroupPayoutDestination -> TYPE_PAYOUT_DESTINATION_SET
+                            is PayoutDestinationRemoved -> TYPE_PAYOUT_DESTINATION_REMOVED
+                        },
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = when (statement) {
+                            is GroupPayoutDestination -> "@$name set where this group pays them"
+                            is PayoutDestinationRemoved -> "@$name removed where this group pays them"
+                        },
                     )
                 }
 
