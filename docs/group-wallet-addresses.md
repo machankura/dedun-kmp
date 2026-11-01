@@ -9,6 +9,12 @@ Read [group-chain-wallet.md](./group-chain-wallet.md) first, Phases 4 and 5 in
 particular: this list is a view over the same `ElectrumMiniWallet` state that
 picks the receive address, and it adds nothing to what the wallet watches.
 
+**Since [member-deposits.md](./member-deposits.md)**, the receive branch this note
+lists is legacy. No screen hands out an address on it any more: each member is
+handed one on their own deposit branch, and the addresses screen lists the
+profile's own, then other members' used ones, then the receive branch's used ones,
+copy only.
+
 **Built**, phases 1-5, one commit per phase. Written against the code as it stood
 at `707e1465`, with the `lightning-kmp-app` submodule at `e0d2b82`.
 `GroupWalletState.receiveAddresses` and `changeAddresses` are the entry points,

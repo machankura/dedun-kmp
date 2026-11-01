@@ -30,8 +30,37 @@ path and the seven signer checks), [group-wallet-addresses.md](./group-wallet-ad
 and 12 in [group-lightning-wallet.md](./group-lightning-wallet.md) (snapshots, the
 invoice request, the offer).
 
-**Planned.** Written against `088a33f5` (the payout destination, built), schema v35.
-Phase 0 is done: the three spikes have run, and their results are under each.
+**Built**, Phases 0-9, one commit each, written against `088a33f5` (the payout
+destination, built), schema v35 to v37. The three spikes ran first, and their
+results are under each. `DepositBranch`, `DepositorStatementEvent`,
+`DepositAttributionEvent`, `Depositors`, `DepositLedger` and `DepositsScreen` are
+the entry points. The phases below are kept as written. Where the build chose
+differently, the table says so.
+
+**The lightning-kmp change is not pushed.** The fork commit `3ae9302a` (on
+`dedun/answer-offer-requests` in `experimental/lightning-kmp`) and the
+`lightning-kmp-app` commit that bumps it, `5478993`, exist only in this worktree's
+submodules. Phase 7 moves this repository's pointer to `5478993`, so nobody else
+can check this branch out until both are pushed.
+
+| what the plan said | what it turned out to be |
+|---|---|
+| D2 and Phase 1: `GroupWalletDerivation.derive` already takes any branch | it didn't: `deriveBelow` required 0 or 1. It now also takes a member's branch, `DepositBranch.isMemberBranch`, which never includes a hardened one. A member's guarded wallet keeps 0 and 1 |
+| Phase 2: a signer accepts an input on a branch "a depositor statement this device holds names" | on any branch from 2 to 2³¹-1 whose derivation reproduces the coin. The coin is provably the group's either way, and a guardian walking a subgroup's coin holds no statement from that room. Change still goes only to branch 1 |
+| Phase 3: the key notice's answer carries the depositor statements too | not built. The chronicle carries both kinds now, and a member who joins late asks for it once |
+| Phase 4: a new statement adds a watcher without restarting the wallet | it does, at the next `walletFor(account, chatRoomId)`, which reads the room's statements every time it is asked. Spike C found no reason to watch any branch lazily |
+| Phase 5: four receive-card states | as planned, plus *Open deposits* on a member's row of the group page for a device that holds a share, because a member without a share can't propose their own statement. Coins on branch 0 read *Unattributed*: a parent group's funding isn't told apart from a legacy deposit until the group signs whose it is |
+| Phase 5: `receiveAddress` removed from `GroupWalletState`'s public surface | in one module `internal` hides nothing from a screen. `OnlyAttributedAddressesJvmTest` reads the composables' source instead, and exempts `MemberWalletScreen`, a member's own guarded wallet, which has one owner |
+| Phase 6: a refused reply is a line | it is a log line only. Requests without a depositor are never answered by a new operator, an old build's requests included |
+| Phase 6 and D6: the snapshot carries `requestId` | and `requester`, so a device that missed the request can attribute the payment on the operator's word, and say so |
+| Phase 7 and D7: a flag on `Peer` | on `NodeParams`, `answerOfferRequests`, read by `OfferManager`. `offer()` came out of `GroupLightningNode.PeerHandle`, and the regtest run derives the offer from the seed |
+| Phase 8: deposits are recorded "as they are learned" | onchain, whenever the wallet screen is open and its coins or used addresses change, not in the background. A deposit counts on the group page from the next time somebody opens the wallet. The room's own signed spends are left out by their txids |
+| Phase 8: *paid to them* | matches the outputs of confirmed spends against each member's *current* destination, so a payout to an address the member has since replaced is not counted. Over Lightning, it counts authorisations with a `payout` tag whose payment the node reports sent |
+| Phase 9 and D10: a signer accepts a deposit that is "unattributed or attributed the same way already" | a signer accepts a correction as well, since correcting is what a second attribution is for. It checks that the deposit exists, its amount, and that the member is a depositor. The screen attributes one deposit at a time: selecting several is not built |
+| Spike B: the run attributes its offer payments with a signed 30340 | it does, for the first payment, end to end on regtest |
+
+Still to do by hand: the four-emulator run in Phase 10, and pushing the two
+lightning-kmp commits.
 
 ---
 
