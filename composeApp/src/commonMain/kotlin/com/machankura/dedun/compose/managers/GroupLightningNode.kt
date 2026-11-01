@@ -147,6 +147,9 @@ class GroupLightningNode(
          * first, false. Only after `init` is a connection any use (`docs/lsp-connection-status.md`, D2).
          */
         suspend fun awaitInit(): Boolean
+
+        /** Starts splicing in the swap-in coins the node was handed; nothing for a handle without them. */
+        suspend fun startSwapIns() {}
         /** Each channel's local commitment number, by channel id: what the stopped message reports. */
         fun commitmentNumbers(): Map<String, Long>
         /** The node's channels, as a snapshot reports them. */
@@ -289,7 +292,8 @@ class GroupLightningNode(
         val term = operator!!.term
         _status.value = GroupLightningNodeStatus.Starting
 
-        val transport = GroupIcebergTransport.create(database, localChatRoom, userPublicKey, wallet, term, scope).also { it.start() }
+        val swapIn = swapIns?.invoke(roomId, wallet)
+        val transport = GroupIcebergTransport.create(database, localChatRoom, userPublicKey, wallet, term, scope, swapIn?.latest).also { it.start() }
         transport.provision(GroupLightningCoSigner.POOL_WINDOW)
         // Round one is served synchronously from the pool, so the pool has to be there before the LSP can
         // ask for anything: a channel that needs a label the pool lacks is aborted.
@@ -299,7 +303,6 @@ class GroupLightningNode(
         }
         val onchain = GroupWalletManager.walletFor(database, roomId, chain, wallet.statement.onchainAccount)
             ?: return enter(State.Refused(GroupLightningNodeStatus.Refusal.NO_ONCHAIN_WALLET))
-        val swapIn = swapIns?.invoke(roomId, wallet)
         val keyManager = GroupNodeKeyManager(
             delegate = GroupLightningCoSigner.keyManagerOf(ByteVector(seed.seed), chain),
             fundingSigner = RemoteIcebergFundingSigner(PublicKey.fromHex(wallet.statement.icebergKey), transport, SIGNING_DEADLINE),
@@ -319,6 +322,9 @@ class GroupLightningNode(
         linkReportedAt = null
         enter(State.Running(term))
         stayConnected(handle, runCatching { handle.connect(attempt = 1) })
+        // Co-signers answer a swap-in from here on (`docs/group-lightning-swap-in.md`, Phase 4), so the node
+        // splices each depositor's ready coins in. It waits for the LSP itself.
+        if (swapIn != null) scope.launch { runCatching { handle.startSwapIns() }.onFailure { logger.e("The group's node could not start swapping in", it) } }
         lastReported = null
         report(term, force = true)
         watchForHandover(term)
@@ -752,6 +758,7 @@ class GroupLightningNode(
                 }
             }
             object : PeerHandle {
+                override suspend fun startSwapIns() = peer.startWatchSwapInWallet()
                 override suspend fun connect(attempt: Int): Boolean {
                     // As Phoenix refuses to: over Tor, a clearnet address would leave Tor for the one connection
                     // that says the most about the group's money.

@@ -47,6 +47,13 @@ object GroupSwapInDerivation {
 
     private const val MAX_INDEX: Long = 0x7FFFFFFFL
 
+    /**
+     * The swap-in xpub the LSP of [Chain] publishes, or null where none does (regtest). One place, read by
+     * every device that derives the addresses and every co-signer that checks one; a test stands in an LSP
+     * whose key it holds.
+     */
+    internal var lspSwapInXpub: (Chain) -> String? = { chain -> runCatching { LSP.from(chain).swapInXpub }.getOrNull() }
+
     /** One address's refund key, and the cache a FROST session signs its leaf with (no TapTweak: it is the leaf). */
     class RefundKey internal constructor(val branch: Long, val index: Long, val publicKey: PublicKey, val cache: TweakCache)
 
@@ -88,7 +95,7 @@ object GroupSwapInDerivation {
 
     /**
      * @param thresholdPublicKey the room's FROST key, which the onchain wallet and the basepoints are too.
-     * @param lspSwapInXpub the LSP's published swap-in xpub; [LSP.from] knows it for mainnet and testnet3.
+     * @param lspSwapInXpub the LSP's published swap-in xpub: [GroupSwapInDerivation.lspSwapInXpub]'s, unless given.
      * @param nodeId the group node's id, from the wallet statement.
      */
     fun keys(
@@ -97,7 +104,7 @@ object GroupSwapInDerivation {
         wallet: Long,
         icebergKey: HexKey,
         nodeId: HexKey,
-        lspSwapInXpub: String = LSP.from(chain).swapInXpub,
+        lspSwapInXpub: String = GroupSwapInDerivation.lspSwapInXpub(chain) ?: throw IllegalArgumentException("no LSP publishes a swap-in key on $chain"),
         refundDelay: Int = DefaultSwapInParams.RefundDelay,
     ): Keys {
         require(wallet in 0L..MAX_INDEX) { "wallet $wallet is not an unhardened index" }

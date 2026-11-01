@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.managers
 
+import fr.acinq.bitcoin.TxOut
+import fr.acinq.lightning.transactions.SwapInProtocol
+import fr.acinq.lightning.crypto.SwapInSigner
 import com.machankura.dedun.compose.database.model.ChatMessage
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -196,6 +199,9 @@ object GroupLightningCoSigner {
     /** The context type of a splice's shared input. */
     const val SPLICE = "splice"
 
+    /** The purchase id of a splice output whose first commitment this device opened as a swap-in's. */
+    const val SWAP_IN_OPENING = "swap-in"
+
     private suspend fun handleRequest(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
         val request = CommonJson.decodeFromString(CoSigningWire.SigningRequest.serializer(), event.content)
         val roomId = localChatRoom.chatRoom.id
@@ -282,12 +288,21 @@ object GroupLightningCoSigner {
         val request = requestFor(database, localChatRoom.chatRoom.id, mine.requestId) ?: return
         val share = wallet.ceremony?.let(IcebergRitualManager::shareOf) ?: return
         val groupKey = PublicKey.fromHex(wallet.statement.icebergKey)
-        val remoteKey = PublicKey.fromHex(request.remoteFundingPubKey)
-        val sortedKeys = Scripts.sort(listOf(groupKey, remoteKey))
-        val tweak = Scripts.Taproot.musig2Aggregate(groupKey, remoteKey).tweak(Crypto.TaprootTweak.KeyPathTweak)
-        val cache = when (val c = KeyAggCache.create(sortedKeys).second.tweak(tweak, isXonly = true)) {
-            is Either.Right -> c.value.first
-            is Either.Left -> return
+        val cache = if (request.kind == CoSigningWire.SWAP_IN) {
+            // A swap-in's key path: [group, LSP] unsorted, tweaked by its refund leaf (spike 1 of the plan).
+            val protocol = swapInProtocolOf(database, localChatRoom.chatRoom.id, wallet.statement, request) ?: return
+            when (val c = SwapInSigner.keyAggCache(protocol)) {
+                is Either.Right -> c.value
+                is Either.Left -> return
+            }
+        } else {
+            val remoteKey = PublicKey.fromHex(request.remoteFundingPubKey)
+            val sortedKeys = Scripts.sort(listOf(groupKey, remoteKey))
+            val tweak = Scripts.Taproot.musig2Aggregate(groupKey, remoteKey).tweak(Crypto.TaprootTweak.KeyPathTweak)
+            when (val c = KeyAggCache.create(sortedKeys).second.tweak(tweak, isXonly = true)) {
+                is Either.Right -> c.value.first
+                is Either.Left -> return
+            }
         }
         val signatureShare = Iceberg.partialSign(
             share, null, ByteVector32(label), request.contributions.map { NonceContribution(it) }, groupKey, cache,
@@ -342,6 +357,8 @@ object GroupLightningCoSigner {
             if (ByteVector(c)[0].toInt() != indexOf(wallet, participant)) return "a contribution carries another participant's index"
         }
 
+        if (request.kind == CoSigningWire.SWAP_IN) return checkSwapInInput(database, roomId, wallet, request)
+
         // Check 3: the funding output is the group key with the counterparty's. A commitment or a close
         // spends it alone; a splice spends it once, beside the counterparty's own inputs.
         val tx = CoSigningWire.tx(request.tx)
@@ -390,12 +407,105 @@ object GroupLightningCoSigner {
         }
     }
 
+    /**
+     * The shared input of a swap-in splice (`docs/group-lightning-swap-in.md`, Phase 4, rules W1-W7): every
+     * other input is a depositor's swap-in coin, derived here from the depositor's statement; nothing is
+     * paid out and the LSP adds nothing; the group's fee is within its statement's cap; and the new output,
+     * and the group's balance on its first commitment, rise by exactly the coins less that fee. S2, S3's
+     * cap (W6) and S6 have been checked already.
+     */
+    private suspend fun checkSwapInSplice(
+        database: DedunDatabase,
+        wallet: GroupLightningWalletManager.Wallet,
+        request: CoSigningWire.SigningRequest,
+        context: CoSigningWire.Context,
+        tx: Transaction,
+        parentInput: Transactions.InputInfo,
+        newOutput: TxOut,
+        parent: IcebergChannelLedger,
+        child: IcebergChannelLedger,
+    ): String? {
+        val statement = wallet.statement
+        val roomId = request.wallet.substringBefore(':')
+        val local = context.localContributionSat ?: return "the splice does not say what the group adds"
+        val remote = context.remoteContributionSat ?: return "the splice does not say what the LSP adds"
+        // W4: a swap-in is the group's coins alone.
+        if (remote != 0L) return "the LSP adds $remote sats to a swap-in, which adds only the group's coins"
+        // W3: nothing paid out.
+        if (tx.txOut.size != 1) return "the swap-in pays out besides the new funding output"
+        // W1: every other input is a depositor's coin, on the address its context names.
+        val coins = context.swapIns ?: return "the splice names no swap-in coins"
+        val spent = CoSigningWire.spentOutputs(tx, parentInput, request.extraUtxos) ?: return "the request does not say what every input of the transaction spends"
+        val others = tx.txIn.mapIndexedNotNull { i, txIn -> (txIn.outPoint to spent[i]).takeIf { txIn.outPoint != parentInput.outPoint } }
+        if (others.isEmpty()) return "the swap-in spends no coin"
+        if (coins.map { it.outPoint }.toSet() != others.map { (o, _) -> "${o.txid}:${o.index}" }.toSet()) return "the splice's swap-in coins are not the inputs it spends"
+        for ((outPoint, txOut) in others) {
+            val coin = coins.first { it.outPoint == "${outPoint.txid}:${outPoint.index}" }
+            val protocol = swapInProtocolOf(database, roomId, statement, coin) ?: return "input ${coin.outPoint} names ${coin.member.take(8)}, who has no swap-in address here"
+            if (txOut.publicKeyScript != protocol.serializedPubkeyScript) return "input ${coin.outPoint} is not on ${coin.member.take(8)}'s swap-in address ${coin.index}"
+        }
+        // W5: the group's fee, within its cap.
+        val total = others.sumOf { (_, txOut) -> txOut.amount.sat }
+        val fee = total - local
+        if (fee < 0) return "the splice adds more than its coins hold"
+        if (fee > statement.policy.maxLiquidityFeeSat) return "the swap-in costs $fee sats, over the ${statement.policy.maxLiquidityFeeSat} the group agreed to"
+        // W4: the new output is the old one plus what the coins add.
+        if (newOutput.amount.sat != parentInput.txOut.amount.sat + local) return "the new funding output does not hold the old one plus the coins less the fee"
+        // W7: and the first commitment on it credits the group with exactly that.
+        val added = load(child.ledger).valueMsat - load(parent.ledger).valueMsat
+        if (added != local * 1000) return "the swap-in's first commitment gave the group $added msat, not the ${local * 1000} its coins add"
+        return null
+    }
+
+    /**
+     * A swap-in input of a splice: the coin its context names, on the depositor's address as derived here,
+     * signed with the LSP's swap-in key -- and the splice it belongs to passes the same checks the shared
+     * input did, run again on the same transaction, since a member signs nothing it has not checked.
+     */
+    private suspend fun checkSwapInInput(database: DedunDatabase, roomId: String, wallet: GroupLightningWalletManager.Wallet, request: CoSigningWire.SigningRequest): String? {
+        val tx = CoSigningWire.tx(request.tx)
+        val input = CoSigningWire.inputInfo(request.input)
+        if (tx.txIn.count { it.outPoint == input.outPoint } != 1) return "the transaction does not spend the swap-in coin once"
+        if (messageOf(request) == null) return "the request does not say what every input of the transaction spends"
+        val context = request.context ?: return "the operator did not say what this signs"
+        if (context.type != SPLICE || context.purchase != null) return "a swap-in coin is only ever spent by a swap-in splice"
+        val protocol = swapInProtocolOf(database, roomId, wallet.statement, request) ?: return "the coin is not one of the splice's swap-in coins"
+        if (input.txOut.publicKeyScript != protocol.serializedPubkeyScript) return "the coin is not on the swap-in address its context names"
+        if (request.remoteFundingPubKey != protocol.serverPublicKey.toString()) return "the swap-in is not co-signed with the LSP's swap-in key"
+        val parentInput = context.parentFunding?.let(CoSigningWire::inputInfo) ?: return "the splice does not say which funding output it spends"
+        val params = CoSigningWire.params(context.params)
+        val ledgers = database.icebergCoSigningDao().channelLedgers(request.wallet, params.channelId.toHex())
+        val parent = ledgers.firstOrNull { it.fundingOutPoint == outPointOf(parentInput) } ?: return "this device has signed for none of the splice's parent output"
+        // The shared input's view of the same transaction: its funding input, and every other input's output.
+        val asShared = request.copy(
+            input = CoSigningWire.input(parentInput),
+            extraUtxos = request.extraUtxos.filter { it.txid != parentInput.outPoint.txid.toString() || it.index != parentInput.outPoint.index } + request.input,
+        )
+        return checkSplice(database, wallet, asShared, context, tx, parent, ledgers)
+    }
+
+    /** The swap-in protocol of the coin a swap-in request signs for, from the depositor its context names. */
+    private suspend fun swapInProtocolOf(database: DedunDatabase, roomId: String, statement: com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent.Statement, request: CoSigningWire.SigningRequest): SwapInProtocol? {
+        val input = CoSigningWire.inputInfo(request.input)
+        val coin = request.context?.swapIns?.firstOrNull { it.outPoint == "${input.outPoint.txid}:${input.outPoint.index}" } ?: return null
+        return swapInProtocolOf(database, roomId, statement, coin)
+    }
+
+    /** The protocol of [coin]'s address, derived from its depositor's statement, or null for a member who is none. */
+    private suspend fun swapInProtocolOf(database: DedunDatabase, roomId: String, statement: com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent.Statement, coin: CoSigningWire.SwapInCoin): SwapInProtocol? {
+        val branch = Depositors.statementsIn(database, roomId, statement.chain)[coin.member.lowercase()]?.branch ?: return null
+        val xpub = GroupSwapInDerivation.lspSwapInXpub(statement.chain) ?: return null
+        val roomKey = GroupWalletManager.thresholdKeyFor(database, roomId) ?: return null
+        return GroupSwapInDerivation.keys(roomKey, statement.chain, statement.wallet, statement.icebergKey, statement.nodeId, xpub).address(branch, coin.index).protocol
+    }
+
     private fun outPointOf(input: Transactions.InputInfo) = "${input.outPoint.txid}:${input.outPoint.index}"
 
     /** The first commitment on a splice's new funding output: refused, or the ledger it opens. */
     private sealed class Opening {
         data class Refused(val reason: String) : Opening()
-        data class Opens(val parent: IcebergChannelLedger, val ledger: CoSignerPolicy.Ledger, val purchase: com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent.BuyLiquidity) : Opening()
+        /** [purchaseId] is the authorisation's id, or [SWAP_IN_OPENING] for a swap-in's. */
+        data class Opens(val parent: IcebergChannelLedger, val ledger: CoSignerPolicy.Ledger, val purchaseId: String) : Opening()
     }
 
     /**
@@ -426,13 +536,23 @@ object GroupLightningCoSigner {
         val commitIndex = context.commitIndex ?: return Opening.Refused("no commitment number")
         val spec = CoSigningWire.spec(context.spec ?: return Opening.Refused("no commitment spec"), params.channelId)
         val channelId = params.channelId.toHex()
+        // A first commitment that gives the group more than the channel did is a swap-in's: money only comes
+        // in, so it needs no authorisation, and the shared input's check holds the rise to the coins it adds
+        // (`docs/group-lightning-swap-in.md`, D4, W7).
+        val parentLedger = load(parent.ledger)
+        if (spec.toRemote.toLong() > parentLedger.oursMsat) {
+            return when (val verdict = CoSignerPolicy.openSwapIn(parentLedger, commitIndex, tx.txid.toString(), spec)) {
+                is CoSignerPolicy.Verdict.Sign -> Opening.Opens(parent, verdict.ledger, SWAP_IN_OPENING)
+                is CoSignerPolicy.Verdict.Refuse -> Opening.Refused(verdict.reason)
+            }
+        }
         val purchases = GroupLightningAuthorisations.liquidityPurchases(database, wallet).filter { it.channelId == channelId }
             .filter { buy -> ledgers.none { it.purchaseId == buy.id && it.parentOutPoint != parent.fundingOutPoint } }
         if (purchases.isEmpty()) return Opening.Refused("the group has not authorised buying liquidity for this channel")
         var refusal = "the group has not authorised buying liquidity for this channel"
         for (buy in purchases) {
             when (val verdict = CoSignerPolicy.openSplice(load(parent.ledger), commitIndex, tx.txid.toString(), spec, buy.maxFeeSat * 1000)) {
-                is CoSignerPolicy.Verdict.Sign -> return Opening.Opens(parent, verdict.ledger, buy)
+                is CoSignerPolicy.Verdict.Sign -> return Opening.Opens(parent, verdict.ledger, buy.id)
                 is CoSignerPolicy.Verdict.Refuse -> refusal = verdict.reason
             }
         }
@@ -472,6 +592,10 @@ object GroupLightningCoSigner {
         // S6: this device already approved the first commitment on that output, from this parent.
         val child = ledgers.firstOrNull { it.fundingOutPoint == "${tx.txid}:$index" } ?: return "this device has not signed the first commitment on the splice's new output"
         if (child.parentOutPoint != parent.fundingOutPoint || child.remoteFundingPubKey != newKey.toString()) return "the first commitment this device signed on that output came from another splice"
+        // A swap-in: no purchase, and a first commitment this device opened as a swap-in's.
+        if (context.purchase == null && child.purchaseId == SWAP_IN_OPENING) {
+            return checkSwapInSplice(database, wallet, request, context, tx, parentInput, newOutput, parent, child)
+        }
         // S1: the purchase the group authorised, for the amount it named.
         val purchase = context.purchase ?: return "the splice buys no liquidity, and the group authorised only buying it"
         val buy = GroupLightningAuthorisations.liquidityPurchases(database, wallet).firstOrNull { it.id == child.purchaseId } ?: return "the group's authorisation for this purchase is not open"
@@ -623,7 +747,7 @@ object GroupLightningCoSigner {
                 is Opening.Refused -> return
                 is Opening.Opens -> IcebergChannelLedger(
                     request.wallet, channelId, outPointOf(input), request.remoteFundingPubKey, store(opening.ledger),
-                    fundingTxIndex = context.fundingTxIndex, parentOutPoint = opening.parent.fundingOutPoint, purchaseId = opening.purchase.id,
+                    fundingTxIndex = context.fundingTxIndex, parentOutPoint = opening.parent.fundingOutPoint, purchaseId = opening.purchaseId,
                 )
             }
             else -> {

@@ -7,7 +7,6 @@ import com.machankura.dedun.compose.managers.GroupSwapInDerivation
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.wallet.GroupChainClients
-import fr.acinq.phoenixd.conf.LSP
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,7 +33,7 @@ class GroupSwapInWallets(
      */
     suspend fun walletFor(chatRoomId: String, wallet: GroupLightningWalletManager.Wallet): GroupSwapInWallet? {
         val statement = wallet.statement
-        val xpub = runCatching { LSP.from(statement.chain).swapInXpub }.getOrNull() ?: return null
+        val xpub = GroupSwapInDerivation.lspSwapInXpub(statement.chain) ?: return null
         val roomKey = GroupWalletManager.thresholdKeyFor(database, chatRoomId) ?: return null
         val swapIn = mutex.withLock {
             wallets.getOrPut("$chatRoomId:${GroupWalletStatementEvent.chainName(statement.chain)}:${statement.wallet}") {
