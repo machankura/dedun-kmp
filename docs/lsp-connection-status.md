@@ -86,6 +86,35 @@ logs:
 
 Results go under this heading, as in [member-deposits.md](./member-deposits.md).
 
+**Ran**, against regtest (`GroupLightningRegtestJvmTest`, eclair 0.14.4) and the
+lightning-kmp source. No mainnet operator logs were available on this machine.
+
+1. The order holds. `Peer.connect` sets `ESTABLISHED` and returns true once the
+   Noise handshake completes. `PeerConnected` is emitted when the LSP's `init`
+   arrives and passes `validateFeatureGraph` (`Peer.kt:1245-1254`). The run logs the
+   dial, then *peer is using features…*, then the node running. The log has no
+   timestamps, so the gap wasn't measured. **One correction to D2:** an LSP that
+   hangs up on our features sends its own `init` first, so `PeerConnected` fires
+   before that hangup, and *connected* can show for a moment before *can't reach*.
+   That is still more honest than the handshake. **No `INIT_DEADLINE`:** cutting a
+   connection that never sends `init` would change how the node connects, not only
+   what it shows. The link stays *connecting* until `init` arrives or the socket
+   closes.
+2. lightning-kmp gives four closing reasons:
+   - `ConnectionRefused`: every socket failure, including timeouts and DNS, wrapped
+     by `openSocket`;
+   - `ConnectionClosed`;
+   - `Unknown`;
+   - none: our own `disconnect`, a failed or timed-out handshake, or an invalid
+     feature graph.
+
+   The reconnect loop cancels itself before any disconnect of ours, so in the loop
+   *none* means the handshake. `ClosedByUs` becomes `HANDSHAKE`, and
+   `CLOSED_BY_LSP` is added for a connection the LSP ended with features agreed.
+   The Tor check now throws its own `TorWithoutOnion`, so it doesn't have to be
+   recognised by its message.
+3. Left to Phase 6, which drives it.
+
 ## Phase 1: the status, pure
 
 **One day.** Dark.
