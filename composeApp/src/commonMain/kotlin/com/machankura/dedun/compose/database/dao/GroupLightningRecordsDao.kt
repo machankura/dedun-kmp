@@ -25,9 +25,9 @@ interface GroupLightningRecordsDao {
     @Query("SELECT * FROM GroupLightningPaymentRow WHERE wallet = :wallet ORDER BY completedAt DESC")
     fun observePayments(wallet: String): Flow<List<GroupLightningPaymentRow>>
 
-    /** Every payment any wallet's snapshots reported: what a tally of payouts reads. */
-    @Query("SELECT * FROM GroupLightningPaymentRow")
-    suspend fun allPayments(): List<GroupLightningPaymentRow>
+    /** Every payment [wallet]'s snapshots reported: what a tally of payouts and a member's Lightning balance read. */
+    @Query("SELECT * FROM GroupLightningPaymentRow WHERE wallet = :wallet")
+    suspend fun payments(wallet: String): List<GroupLightningPaymentRow>
 
     @Upsert
     suspend fun upsertInvoice(row: GroupLightningInvoiceRow)

@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.text
 
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
@@ -197,6 +198,19 @@ object ProposedEvent {
                 detail = if (members.isEmpty()) "To the group itself" else "To " + members.joinToString { "@" + (nameOf(it) ?: it.take(8)) },
             )
         } ?: Summary(label = "Attribute deposits", detail = "An attribution this device cannot read")
+
+        // The group saying whose some of its coins are, so they can be paid out. Every signer
+        // checks each coin against its own wallet; the summary is the count, and who gets what.
+        // docs/payouts-only.md.
+        CoinAssignmentEvent.KIND -> CoinAssignmentEvent.read(event)?.let { signed ->
+            val owners = signed.coins.flatMap { it.shares.entries }.groupBy({ it.key }, { it.value }).mapValues { it.value.sum() }
+            Summary(
+                label = "Assign ${signed.coins.size} coin${if (signed.coins.size == 1) "" else "s"}",
+                detail = owners.entries.sortedByDescending { it.value }.joinToString { (member, sat) ->
+                    "@${nameOf(member) ?: member.take(8)} ${Satoshi(sat).grouped()} sats"
+                },
+            )
+        } ?: Summary(label = "Assign coins", detail = "An assignment this device cannot read")
 
         MemberWalletPolicyEvent.KIND -> Summary(
             label = "Members' guarded wallets",

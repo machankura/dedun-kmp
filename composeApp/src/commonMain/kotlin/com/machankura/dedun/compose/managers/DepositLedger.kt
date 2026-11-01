@@ -147,13 +147,14 @@ object DepositLedger {
     }
 
     /**
-     * What the group has paid each member: onchain, the outputs of its confirmed spends that pay a
-     * member's own signed payout address, matched on this device; over Lightning, the payments the
-     * group authorised for a member's destination that the node reports sent.
+     * What the group has paid each member: onchain, the outputs of its confirmed spends that pay an
+     * address the member signed -- any they ever signed, so a payout still counts after they give a
+     * new one; over Lightning, the payments the group signed for a member's destination that this
+     * room's wallet reports sent. `docs/payouts-only.md`, Phase 2.
      */
     private suspend fun paidOut(database: DedunDatabase, chatRoomId: String, chain: Chain): Map<HexKey, Long> {
         val paid = mutableMapOf<HexKey, Long>()
-        val destinations = GroupPayoutDestinations.destinationsIn(database, chatRoomId, chain).values
+        val destinations = GroupPayoutDestinations.everSignedIn(database, chatRoomId, chain)
         database.groupTransactionDao().getByChatRoomId(chatRoomId)
             .filter { it.confirmedAt != null && it.chain == GroupWalletStatementEvent.chainName(chain) }
             .mapNotNull { row -> row.signedTransaction?.let { runCatching { Transaction.read(it) }.getOrNull() } }
@@ -161,13 +162,35 @@ object DepositLedger {
                 val payees = GroupPayoutDestinations.payeesOf(tx.txOut.map { it.publicKeyScript }, destinations) { it }
                 tx.txOut.forEach { out -> payees[out.publicKeyScript.toHex()]?.let { member -> paid[member] = (paid[member] ?: 0) + out.amount.sat * 1000 } }
             }
-        val sent = database.groupLightningRecordsDao().allPayments().filter { !it.incoming && it.succeeded }.mapNotNull { it.paymentHash?.lowercase() }.toSet()
-        database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupLightningAuthorisationEvent.KIND)
-            .mapNotNull { GroupLightningAuthorisationEvent.read(it.toEvent().tags) }
-            .filter { it.chain == chain && it.payout != null && it.paymentHash.lowercase() in sent }
-            .forEach { pay -> paid[pay.payout!!.member] = (paid[pay.payout.member] ?: 0) + pay.amountMsat }
+        lightningPayouts(database, chatRoomId, chain).forEach { (pay, _) ->
+            paid[pay.payout!!.member] = (paid[pay.payout.member] ?: 0) + pay.amountMsat
+        }
         return paid
     }
+
+    /**
+     * Every payment the group signed for a member's destination on [chain] that the room's own
+     * wallet reports sent, with the fee it reports: a signed authorisation that verifies, matched by
+     * hash against the payments of the wallet it names -- never another room's.
+     */
+    suspend fun lightningPayouts(database: DedunDatabase, chatRoomId: String, chain: Chain): List<Pair<GroupLightningAuthorisationEvent.Pay, Long>> =
+        signedPayouts(database, chatRoomId, chain).mapNotNull { pay ->
+            sentFees(database, chatRoomId, chain, pay.wallet)[pay.paymentHash.lowercase()]?.let { pay to it }
+        }
+
+    /** Every payment authorisation for a member's destination on [chain] the room signed, verified. */
+    suspend fun signedPayouts(database: DedunDatabase, chatRoomId: String, chain: Chain): List<GroupLightningAuthorisationEvent.Pay> =
+        database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupLightningAuthorisationEvent.KIND)
+            .filter { it.verifies() }
+            .mapNotNull { GroupLightningAuthorisationEvent.read(it.toEvent().tags) }
+            .filter { it.chain == chain && it.payout != null }
+            .distinctBy { it.paymentHash.lowercase() }
+
+    /** The fee of each outgoing payment [wallet] of [chatRoomId] reports settled, by payment hash. */
+    suspend fun sentFees(database: DedunDatabase, chatRoomId: String, chain: Chain, wallet: Long): Map<String, Long> =
+        database.groupLightningRecordsDao().payments(GroupLightningCoSigner.walletKey(chatRoomId, chain, wallet))
+            .filter { !it.incoming && it.succeeded && it.paymentHash != null }
+            .associate { it.paymentHash!!.lowercase() to it.feesMsat }
 
     /**
      * Why a signer won't sign [proposed], a deposit attribution for [chatRoomId], or null when it will

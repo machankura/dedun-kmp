@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.chronicle
 
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import androidx.compose.runtime.Immutable
@@ -158,8 +159,12 @@ class ChronicleEvent(
          * what the newest does; an attribution is newest-wins by the group's own
          * timestamp, so an old one replayed never overrides a later correction. The
          * statement first: an attribution names depositors.
+         *
+         * A third for `docs/payouts-only.md`: every coin assignment, or a late joiner can't tell
+         * whose a legacy or change coin is, and refuses a payout everybody else signs. Newest-wins
+         * as an attribution is, so as safe to replay; after the statements, whose depositors it names.
          */
-        val KINDS: ChronicleKinds = ChronicleKinds(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND))
+        val KINDS: ChronicleKinds = ChronicleKinds(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, CoinAssignmentEvent.KIND))
 
         /** Every kind a chronicle may carry in this app. */
         val CHRONICLABLE_KINDS: Set<Kind> = KINDS.all
