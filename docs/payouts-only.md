@@ -24,8 +24,36 @@ seven checks a signer makes. This plan adds an eighth.
 [group-send-an-amount.md](./group-send-an-amount.md) is superseded: an amount is no
 longer something the group can send.
 
-**Planned**, written against `50c21a46` (schema v37, deposits built through Phase 9).
-Nothing is built yet.
+**Built**, Phases 0-6, one commit each, written against `50c21a46` (schema v37, deposits
+built through Phase 9), with no schema change. Both spikes ran first, and their results
+are under each. `CoinOwnership`, `CoinAssignmentEvent`, `PayoutRule`, `PayoutBuilder`,
+`MemberBalances`, `GroupLightningPayouts` and `GroupPayoutsScreen` are the entry points.
+The phases below are kept as written. Where the build chose differently, the table says
+so.
+
+| what the plan said | what it turned out to be |
+|---|---|
+| D3: signers check an assigned coin is unspent, against their own wallet | against what the device already holds: a deposit on its ledger, or an output of one of the room's own spends. `acceptProposal` has no wallet to ask, and an assignment of a coin already spent gives nobody anything. A deposit on a member's own branch is refused, since an assignment of it would be inert |
+| D3: shares for a closed channel's output prefilled from Lightning balances | every unowned coin is prefilled pro rata to each depositor's tally less what was paid to them. A coin's branch can't say whether it came from a close, a sweep or before deposits were attributed, and the card says *Before deposits were attributed, or from a closed channel* |
+| Phase 2: the key notice's answer carries 30341 | not changed: it carries no depositor statement either. The chronicle carries 30341, after 30339 and 30340 |
+| Phase 3: a rendered screen test of the assign form | the form's rules, read the fields and say what is left, are the view model's own functions, and are tested there |
+| Phase 4: a separate preview screen, `GroupPayoutScreen` | the preview is a card at the foot of the payouts screen: the members chosen, what arrives for each, the fee, the address checks and *Ask the group to pay out* |
+| D6: the approval screen says when this device sees coins left behind | not built: the approval screen has no wallet state to see them by. The payout's own lines say whose each input is and what each member gets |
+| Phase 4: the transcript names the members paid | as planned: *The group signed a payout of 119400 sats to @alice*, and *The group's payout confirmed* |
+| Phase 5: the approval line names the proposer, and the member's balance after | unchanged from the payout destination plan's *as the proposer resolved it*. The signing session already says who proposed it |
+| Phase 5: `min(available, wallet spendable)` | the wallet's spendable is the operator's last report of what its normal channels hold for the group. No reserve is subtracted: Spike B found none to subtract on regtest |
+| D8: the `lnurl` metadata is required | checked when present, and not required. It proves nothing a lying proposer couldn't forge, and an honest proposer always sends it. Refusing without it would have stranded authorisations proposed by Phase 5 builds that resolved no metadata |
+| Phase 6: refused on accept and on complete | and on approve too: a member approving a spend this device accepted before the rule, or before it learnt whose the coins are, declines it instead |
+| Phase 6: the subgroup's wallet says its parent can still spend | already said: a guarded wallet's screen lists each guardian and its delay (`guarded_the_groups_above_this_one_can_spend`) |
+| Phase 6: the regtest run pays out over Lightning, closes, assigns the close output and pays it out jointly | the run pays the depositor's Lightning balance out as a payout, and files its liquidity purchase as signed before the rule. Assigning the close output and paying it out onchain are covered by `CoinAssignmentsJvmTest` and `GroupSpendSigningJvmTest`, not on regtest |
+
+Tests that sent from the group's own wallet to an arbitrary address, funded a guarded
+wallet, sent an amount with change or bought liquidity were rewritten: to pay members out,
+to read a funding without proposing one, or to file what was signed before the rule as
+signed (`GroupLightningFixture.fileSignedAsRoom`). One was removed: send-an-amount's end
+to end, since change is no longer something the wallet makes.
+
+Still to do by hand: Phase 7's four-emulator walkthrough.
 
 ---
 
@@ -389,6 +417,14 @@ the fee the node reports, and uses `maxfee` only for an authorisation not yet se
 measured gap between members' balances and the channel is left to Phase 6's regtest
 case, which goes through deposits, a payout and a close in that order. That makes it
 the same run, once rather than twice.
+
+**Measured, 2026-11-01**, `GroupLightningRegtestJvmTest` after Phase 6. The depositor's
+96,900 sats arrived, net of the LSP's fee. 50,000 more arrived unattributed after a
+liquidity purchase that cost 2,521 sats. The payout was 20,000 sats with 84 in routing
+fees. The mutual close paid 124,295 sats to the onchain wallet, which is
+96,900 + 50,000 − 2,521 − 20,084 to the sat. The only gap between what members are owed
+and what the channel holds is the liquidity purchase, which D9 now refuses. There is no
+reserve to subtract.
 
 ---
 

@@ -37,6 +37,12 @@ results are under each. `DepositBranch`, `DepositorStatementEvent`,
 the entry points. The phases below are kept as written. Where the build chose
 differently, the table says so.
 
+**Since [payouts-only.md](./payouts-only.md):** whose a *coin* is, which is whom a payout
+of it pays, is read from its branch, the newest 30340 that names it, and a third kind,
+the coin assignment (30341), for coins on the receive and change branches. A 30341 moves
+no tally. The ledger's paid-out column now matches every address a member ever signed,
+reads only authorisations the room signed, and reads only this room's wallet.
+
 **The lightning-kmp change** is the fork commit `3ae9302a`, on
 `dedun/answer-offer-requests` in `kngako/lightning-kmp`, bumped by `5478993` on the
 same branch name in `kngako/lightning-kmp-app`. Phase 7 moves this repository's

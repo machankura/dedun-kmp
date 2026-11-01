@@ -52,6 +52,10 @@ written. Where the build chose differently, the table says so.
 
 Still to do by hand: the three-emulator run in Phase 8.
 
+**Since [payouts-only.md](./payouts-only.md):** Phase 7's *Pay* buttons open the payouts
+screen. A member is paid everything they own, never an amount typed on the sheet, and the
+`payout` tag is a check every signer makes rather than a label.
+
 ---
 
 ## What is already there

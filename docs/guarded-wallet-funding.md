@@ -24,6 +24,11 @@ the build changes no schema. `GroupWalletState.fundingAddress`,
 `GroupSendRoute.fundChatRoomId` are the entry points. The phases below are kept
 as written; where the build chose differently the table says so.
 
+**Since [payouts-only.md](./payouts-only.md):** a group's own wallet no longer funds a
+guarded wallet. A funding pays no member's payout address, so it is not a payout, and the
+wallet screen's *Fund* is gone. How a funding is read, by every device and in a bump, stays
+for the fundings signed before.
+
 | what the plan said | what it turned out to be |
 |---|---|
 | Phase 1 tests `claimedFundingIndices` | Phase 2 does: until the builder writes a claim there is no PSBT to read one from. Phase 1's watched-window test also counts the slots, eight, so the bound and the look-ahead cannot drift apart unnoticed |

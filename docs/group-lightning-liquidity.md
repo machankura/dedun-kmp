@@ -6,6 +6,11 @@ group's Lightning wallet the same button. The difference is who presses it. In P
 person decides and one key signs. Here the group decides, with a FROST-signed authorisation,
 and `2t-1` co-signers sign a splice that every one of them has checked.
 
+**Since [payouts-only.md](./payouts-only.md):** every signer refuses a new purchase. It pays
+the LSP and no member, and nobody's balance is charged with it until the group has a rule for
+sharing costs, so *Add liquidity* is hidden. A purchase signed before the rule is still made,
+and every co-signer still checks its splice.
+
 **Built, but for Phase 9, and on, on mainnet.** Written against `84984ca8` on `bennu-lightning`, with the
 `lightning-kmp-app` submodule at `6f3f792` and lightning-kmp at `bd78ed62` (branch
 `claude/group-lightning-wallet`). The library phases land on a new branch,
