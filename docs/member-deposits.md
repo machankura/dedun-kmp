@@ -31,7 +31,7 @@ and 12 in [group-lightning-wallet.md](./group-lightning-wallet.md) (snapshots, t
 invoice request, the offer).
 
 **Planned.** Written against `088a33f5` (the payout destination, built), schema v35.
-No phase is built.
+Phase 0 is done: the three spikes have run, and their results are under each.
 
 ---
 
@@ -270,6 +270,19 @@ place to drop an `invoice_request`: in `Peer`'s onion-message branch, before
 rather than paying, and that onion messages the node *sends* (paying an offer, if
 that is ever built) are untouched. Write down the commit.
 
+**Result.** The narrowest place is `OfferManager.receiveMessage`, which is where
+`Peer` hands every onion message: the branch that answers an `invoice_request`.
+It is a flag on `NodeParams` rather than on `Peer`, `answerOfferRequests`, true by
+default, so stock Phoenix and every existing construction keep their behaviour.
+When it is false, a valid request for the node's own default offer is dropped and
+`receiveMessage` returns nothing. The branch that receives the invoice answering
+the node's *own* request to pay an offer comes after it and is untouched.
+`OfferManagerTestsCommon` has a test for the drop, and all 11 of its tests pass.
+The fork commit is `3ae9302a` on `dedun/answer-offer-requests` in
+`experimental/lightning-kmp`, bumped by `5478993` in `lightning-kmp-app`.
+**Neither is pushed yet**, and this repository's submodule pointer moves to them
+in Phase 7.
+
 ### Spike B: receiving BOLT11 on regtest
 
 With BOLT12 off, the run has to pay a BOLT11 invoice. Against the regtest network:
@@ -286,6 +299,16 @@ With BOLT12 off, the run has to pay a BOLT11 invoice. Against the regtest networ
 
 Either way, the production node never answers offers.
 
+**Result: option 3.** The question is answered by the code, not by a run.
+`Peer.createInvoice` always adds one route hint, from the LSP to the wallet,
+over `ShortChannelId.peerId(nodeId)`, whether or not a channel exists. It never
+names a channel's alias. So public eclair can't route a BOLT11 payment to the
+group's node at any point, which is the failure group-lightning-wallet.md
+recorded. The regtest fixture builds the group's node with
+`answerOfferRequests = true`. The run's offer payments arrive unattributed, and
+the run attributes them with a signed 30340, which tests Phase 9 end to end. The
+BOLT11 request and reply are still checked in the run, as they are today.
+
 ### Spike C: one Electrum watcher per member
 
 Open a regtest group wallet with ten member branches (twelve watchers with
@@ -293,6 +316,12 @@ lookahead 10: about 120 subscriptions) on the node's client and on a
 `StandaloneElectrum`. Measure the time to first state and check that electrs
 doesn't throttle. If it does, the watchers are started lazily: your own branch at
 once, the others when the tallies screen or a spend needs them.
+
+**Result, 2026-11-01.** `MemberBranchesRegtestJvmTest`: 120 subscriptions, all
+sent at once on one connection to the regtest electrs, were answered in 76 ms.
+That is far inside what a wallet's start can afford, so every branch is watched
+from the start, and none lazily. The test stays, as Phase 4's regtest
+measurement.
 
 ---
 
