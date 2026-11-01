@@ -28,6 +28,7 @@ import com.machankura.dedun.compose.nostr.wallet.MemberWalletCertificateEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletRequestEvent
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
+import com.machankura.dedun.compose.managers.GroupPayoutDestinations
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestinationRemoved
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.GroupWalletManager
@@ -1522,6 +1523,8 @@ data class ChatMessage(
                 // line, and the line names nobody's address.
                 // docs/group-payout-destination.md.
                 GroupPayoutDestinationEvent.KIND -> {
+                    // Carried again for a member added since: filed, but no line (Phase 6).
+                    if (GroupPayoutDestinations.isResent(event)) return null
                     val signed = GroupPayoutDestinationEvent.carried(event) ?: return null
                     val statement = GroupPayoutDestinationEvent.verified(signed) ?: return null
                     if (!statement.chatRoomId.equals(groupId, ignoreCase = true)) return null

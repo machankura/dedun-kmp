@@ -275,6 +275,15 @@ object MarmotInboundManager {
         if ((disbanded || removedUs) && localChatRoom.chatRoom.leftGroupAt == null) {
             database.chatRoomDao().upsert(localChatRoom.chatRoom.copy(leftGroupAt = Clock.System.now()))
         }
+
+        // A member added since this profile said where the group pays it has never seen
+        // that: send it again, after the commit, so it goes out at the epoch they can read.
+        // docs/group-payout-destination.md, Phase 6.
+        if (newParticipants.isNotEmpty() && !disbanded && !removedUs) {
+            runCatching { GroupPayoutDestinations.resendOwn(database, localChatRoom.chatRoom.id, userPublicKey) }
+                .onSuccess { sent -> if (sent > 0) logger.i("Sent $sent payout destination(s) again for ${newParticipants.size} new member(s)") }
+                .onFailure { logger.e("Couldn't send this profile's payout destination again", it) }
+        }
     }
 
     private suspend fun memberName(database: DedunDatabase, publicKey: HexKey): String =

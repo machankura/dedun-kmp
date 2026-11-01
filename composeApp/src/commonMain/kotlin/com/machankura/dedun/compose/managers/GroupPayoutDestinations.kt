@@ -62,14 +62,25 @@ object GroupPayoutDestinations {
     ): GroupPayoutDestination? = destinationsIn(database, chatRoomId, chain, now)[member.lowercase()]
 
     /**
+     * The tag on an inner event that carries a statement again rather than for the first time
+     * (Phase 6). It makes no line on any device: the member it is for was not in the room when
+     * the statement was made, and a line now would date it to their arrival.
+     */
+    const val RESENT_TAG = "resent"
+
+    /** Whether [inner] carries its statement again, for a member added since. */
+    fun isResent(inner: Event): Boolean = inner.tags.any { it.isNotEmpty() && it[0] == RESENT_TAG }
+
+    /**
      * Puts [signed] into [chatRoomId], whole, as an inner event's content, and writes this device's
      * own line for it: a device never reads its own message back, so the line every other member's
-     * device writes on arrival is written here on the way out. Returns the inner event's id.
+     * device writes on arrival is written here on the way out. A [resent] statement gets the
+     * [RESENT_TAG] and no line anywhere. Returns the inner event's id.
      */
-    suspend fun publish(database: DedunDatabase, chatRoomId: String, signed: Event): HexKey {
+    suspend fun publish(database: DedunDatabase, chatRoomId: String, signed: Event, resent: Boolean = false): HexKey {
         require(signed.kind == GroupPayoutDestinationEvent.KIND) { "not a payout destination" }
         val createdAt = Clock.System.now()
-        val tags = arrayOf(arrayOf("h", chatRoomId.lowercase()))
+        val tags = listOfNotNull(arrayOf("h", chatRoomId.lowercase()), if (resent) arrayOf(RESENT_TAG) else null).toTypedArray()
         val content = signed.toJson()
         val id = MemberWalletManager.queue(
             database = database,
@@ -80,6 +91,7 @@ object GroupPayoutDestinations {
             kind = GroupPayoutDestinationEvent.KIND,
             createdAt = createdAt,
         )
+        if (resent) return id
         val inner = Event(id, signed.pubKey, createdAt.epochSeconds, GroupPayoutDestinationEvent.KIND, tags, content, "")
         ChatMessage.applyInnerEvent(
             database = database,
@@ -92,5 +104,31 @@ object GroupPayoutDestinations {
             createdAt = createdAt,
         )?.let { database.chatMessageDao().upsert(it) }
         return id
+    }
+
+    /**
+     * Sends [member]'s own newest destination in [chatRoomId] again, on every chain they have one,
+     * for the members a commit has just added: inner events are not chronicled, so a member added
+     * after Alice set hers would otherwise never see it (D8). Only the member's own device sends
+     * theirs, so nobody needs electing, and a removal is not sent -- a new member has nothing older
+     * to hide. The same signed statement each time, so a member who already holds it reads the same
+     * newest. Returns how many were sent.
+     */
+    suspend fun resendOwn(
+        database: DedunDatabase,
+        chatRoomId: String,
+        member: HexKey,
+        now: Long = Clock.System.now().epochSeconds,
+    ): Int {
+        val own = database.marmotInnerEventDao()
+            .getByChatRoomAndKinds(chatRoomId, listOf(GroupPayoutDestinationEvent.KIND))
+            .filter { it.publicKey.equals(member, ignoreCase = true) }
+            .mapNotNull { GroupPayoutDestinationEvent.carried(it.asEvent()) }
+            .mapNotNull { GroupPayoutDestinationEvent.verified(it) }
+            .filter { it.chatRoomId.equals(chatRoomId, ignoreCase = true) && it.createdAt <= now + GroupPayoutDestinationEvent.MAX_FUTURE_SECONDS }
+        val newestPerChain = own.groupBy { it.chain }.values.map { it.maxWith(GroupPayoutDestinationEvent.ORDER) }
+        val toSend = newestPerChain.filterIsInstance<GroupPayoutDestination>()
+        toSend.forEach { publish(database, chatRoomId, it.event, resent = true) }
+        return toSend.size
     }
 }
