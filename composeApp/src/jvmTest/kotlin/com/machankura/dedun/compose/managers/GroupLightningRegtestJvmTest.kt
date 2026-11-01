@@ -291,8 +291,16 @@ class GroupLightningRegtestJvmTest {
         assertEquals(wallet.statement.nodeId, invoice.nodeId.toString())
         // ...and the first payment, to the group's offer, opens the channel on the fly.
         receive(all, 100_000)
+        // The balance, not only the payment: lightning-kmp reports a payment received as it fulfils the HTLC,
+        // before the commitment that moves the amount to our side is signed, and a snapshot in between shows
+        // a Normal channel, a received payment and nothing of ours.
         val received = mineUntil("every member's snapshot of the channel") {
-            all.map { report(it) }.takeIf { reports -> reports.all { it?.snapshot?.channels?.singleOrNull()?.state == "Normal" && it.snapshot.payments.any { p -> p.incoming && p.succeeded } } }
+            all.map { report(it) }.takeIf { reports ->
+                reports.all {
+                    val channel = it?.snapshot?.channels?.singleOrNull()
+                    channel?.state == "Normal" && channel.oursMsat > 0 && it.snapshot.payments.any { p -> p.incoming && p.succeeded }
+                }
+            }
         }
         val channel = received.first()!!.snapshot.channels.single()
         println("REGTEST received: channel ${channel.channelId.take(16)} capacity ${channel.capacitySat}, ours ${channel.oursMsat} msat")
@@ -353,7 +361,8 @@ class GroupLightningRegtestJvmTest {
         // Sweep: a second channel, force-closed, whose delayed output the group sweeps.
         receive(all, 100_000)
         val second = mineUntil("the second channel") {
-            report(all[0])?.snapshot?.channels?.firstOrNull { it.channelId != channel.channelId && it.state == "Normal" }
+            // With the payment on our side of it, or the force close would publish it still in flight.
+            report(all[0])?.snapshot?.channels?.firstOrNull { it.channelId != channel.channelId && it.state == "Normal" && it.oursMsat > 0 }
         }
         signed(all, all[3], GroupLightningAuthorisations.proposeChannelAction(all[3].db, all[3].room, all[3].publicKey, wallet, second.channelId, force = true).id)
         val held = mineUntil("the force close's delayed output") { report(all[3])?.snapshot?.heldOutputs?.takeIf { it.isNotEmpty() } }
