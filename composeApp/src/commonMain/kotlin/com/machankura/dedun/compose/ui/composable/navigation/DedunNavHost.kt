@@ -193,6 +193,10 @@ import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.ark.ArkFiles
 import com.machankura.dedun.compose.wallet.ark.ArkProfile
 import com.machankura.dedun.compose.wallet.ark.IdentityArk
+import com.machankura.dedun.compose.ui.composable.ArkMovementScreen
+import com.machankura.dedun.compose.ui.composable.ArkWalletScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkMovementRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkWalletRoute
 import com.machankura.dedun.compose.AppVersion
 import com.machankura.dedun.compose.identity.StoredIdentity
 import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
@@ -1196,6 +1200,25 @@ fun DedunNavHost(
                     signOut = signOutOfReadOnlyIdentity,
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = groupOnchainWallets,
+                    identityArk = identityArk,
+                )
+            }
+            composable<ArkWalletRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<ArkWalletRoute>()
+                ArkWalletScreen(
+                    identityArk = identityArk,
+                    onOpenMovement = { movementId ->
+                        navController.navigate(route = ArkMovementRoute(activeUserPublicKey = route.activeUserPublicKey, movementId = movementId))
+                    },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<ArkMovementRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<ArkMovementRoute>()
+                ArkMovementScreen(
+                    identityArk = identityArk,
+                    movementId = route.movementId,
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<ShareProfileRoute> { backStackEntry ->

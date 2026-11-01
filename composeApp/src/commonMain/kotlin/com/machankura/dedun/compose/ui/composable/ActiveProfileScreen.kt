@@ -89,6 +89,13 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.wallet.ark.IdentityArk
+import com.machankura.dedun.compose.ui.view.model.ArkWalletViewModel
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkWalletRoute
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +116,9 @@ fun ActiveProfileScreen(
     // and tests, which compose the screen without an identity.
     memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
     wallets: GroupOnchainWallets? = null,
+    // The profile's own Ark wallet (docs/bark-wallet.md). Null where the screen is
+    // composed without the app around it -- previews, tests -- and then no row is drawn.
+    identityArk: IdentityArk? = null,
 ) {
 
     // Whether this identity can sign, which decides which rows below exist.
@@ -149,6 +159,15 @@ fun ActiveProfileScreen(
     )
     // Each time the profile is shown: a certificate can arrive while it is not.
     LaunchedEffect(true) { memberWalletsViewModel.refresh() }
+
+    val arkWalletViewModel: ArkWalletViewModel? = identityArk?.let { viewModel(factory = ArkWalletViewModel.factory(it)) }
+    var consentingToArk by remember { mutableStateOf(false) }
+    if (consentingToArk && arkWalletViewModel != null) {
+        ArkConsentSheet(
+            onTurnOn = { consentingToArk = false; arkWalletViewModel.turnOn() },
+            onDismiss = { consentingToArk = false },
+        )
+    }
 
     val activeProfileViewModel: ActiveProfileViewModel = viewModel(
         factory = ActiveProfileViewModel.factory(
@@ -290,6 +309,14 @@ fun ActiveProfileScreen(
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
+                            }
+
+                            arkWalletViewModel?.let { ark ->
+                                arkWalletItems(
+                                    state = ark.uiState,
+                                    onOpen = { onNavigateToRoute.invoke(ArkWalletRoute(activeUserPublicKey = activeUserPublicKey)) },
+                                    onTurnOn = { consentingToArk = true },
+                                )
                             }
 
                             memberWalletItems(

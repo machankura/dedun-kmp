@@ -26,6 +26,11 @@ Where the build chose differently, phase by phase:
 | 3 | `Recovering(status)`, and a retry that calls `recover_vtxos` on the failed ids | `Recovering` is shown while a datadir that did not exist is opened, because the scan runs inside `open`. The scan's outcome rides on `Open(wallet, recovery)` for the screen to state, and `retry()` reopens after a failed open. Re-scanning failed ids is left to Phase 9's advanced screen |
 | 3 | forget refuses with `ArkFundsOrExits` and deletes the datadirs | unchanged, because it cannot be reached: `ForgetIdentity` already refuses every profile with a seed (`WalletAttached`), and only those have an Ark wallet. Phase 13's nsec wallets are the first that forget will meet |
 | 3 | Tor read once | followed: the nav host collects the profile's Tor preference, so turning it on closes the wallet and turning it off reopens it |
+| 4 | *Receive* and *Send* on the wallet screen | an `actions` slot under the balance, filled by Phases 5 and 6 as each lands, so no button leads nowhere in between |
+| 4 | `ArkMovementScreen` reads one movement | it reuses `ArkWalletViewModel` on its own back-stack entry and finds the id in the history. Bark's history is one call, and a view model per movement would duplicate the event handling |
+| 4 | the row names the reason for every `Unavailable` | and only *Not turned on* acts: a *Turn on* button opens the sheet. Tor, this device and a profile without a phrase are rows that say why and do nothing, because nothing on this screen changes them |
+| 4 | a partial recovery is a retry | it is a card that says some coins could not be restored yet. A reopen would not rerun the scan (`recoveryStatus` is `NotRun` after the first open), so a retry would promise what it cannot do |
+| 4 | checked on Android and Linux desktop with a signet profile | checked in compose tests over every state, at phone width and at 1280 dp for the two panes. Not yet run in the app, because that would mean a passphrase and a profile in this host's real desktop data directory |
 
 The headline: **a seed profile already holds the twelve words Bark needs. Bark's keys sit at
 `m/350'` and its onchain wallet at BIP86, so it can open those same words without touching a

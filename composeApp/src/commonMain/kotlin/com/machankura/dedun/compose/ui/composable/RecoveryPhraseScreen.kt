@@ -61,6 +61,7 @@ import dedun.composeapp.generated.resources.unlocking_your_phrase
 import dedun.composeapp.generated.resources.word_position
 import dedun.composeapp.generated.resources.you_have_not_backed_up_your_recovery_phrase
 import org.jetbrains.compose.resources.stringResource
+import dedun.composeapp.generated.resources.ark_wallet_recovery_phrase_also
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
@@ -153,6 +154,15 @@ private fun RecoveryPhraseContent(
                         .fillMaxWidth()
                         .padding(vertical = MaterialTheme.spacing.containerPadding),
                     text = stringResource(Res.string.the_recovery_phrase_sometimes_called_a_seed),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            // The same words open the profile's Ark wallet: docs/bark-wallet.md, D1 and D11.
+            item {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(Res.string.ark_wallet_recovery_phrase_also),
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
