@@ -129,7 +129,7 @@
     <string name="lose_this_phone_before_you_do_and_the">Lose this phone before you do, and the profile goes with it.</string>
     <string name="lock_prompt_coming_soon">Lock prompt coming soon.</string>
     <string name="malformed_note">Malformed note</string>
-    <string name="bennu">Bennu</string>
+    <string name="dedun">Bennu</string>
     <string name="members">Members</string>
     <string name="members_2">members</string>
     <string name="name">Name</string>
@@ -416,7 +416,7 @@
     <string name="copy_nsec">Copy nsec</string>
     <string name="could_not_forget_the_key_please_try_again">Could not forget the key. Please try again.</string>
     <string name="could_not_unlock_your_key_please_try">Could not unlock your key. Please try again.</string>
-    <string name="bennu_will_delete_the_nsec_for_s_from_this">Bennu will delete the nsec for %1$s from this device. Anything not yet published is lost. The profile stays on the relays, and the key can be signed in again.</string>
+    <string name="dedun_will_delete_the_nsec_for_s_from_this">Bennu will delete the nsec for %1$s from this device. Anything not yet published is lost. The profile stays on the relays, and the key can be signed in again.</string>
     <string name="display_nostr_secret_key">Display nostr secret key</string>
     <string name="forget">Forget</string>
     <string name="forget_this_key">Forget this key</string>
@@ -461,7 +461,7 @@
     <string name="start_new_chat">Start new chat</string>
     <string name="you_already_have_a_chat_with_s">You already have a chat with %1$s.</string>
     <string name="checking_whether_s_can_receive_messages_here">Checking whether %1$s can receive messages here.</string>
-    <string name="s_hasn_t_set_up_messaging_on_bennu_yet">%1$s hasn't set up messaging on Bennu yet. Try again later, or ask them to open Bennu.</string>
+    <string name="s_hasn_t_set_up_messaging_on_dedun_yet">%1$s hasn't set up messaging on Bennu yet. Try again later, or ask them to open Bennu.</string>
     <!-- The group's on-chain wallet. -->
     <string name="group_wallet">Group onchain wallet</string>
     <!-- The group's on-chain wallet, named for its group: "Treasury onchain wallet". -->

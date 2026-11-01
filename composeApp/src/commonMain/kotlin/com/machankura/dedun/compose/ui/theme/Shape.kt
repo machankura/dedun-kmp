@@ -38,4 +38,4 @@ import androidx.compose.material3.Shapes
  * Declared explicitly rather than left to `MaterialTheme`'s default so that every slot of
  * the theme has a named home, and so this note has somewhere to live.
  */
-val BennuShapes = Shapes()
+val DedunShapes = Shapes()

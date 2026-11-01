@@ -49,7 +49,7 @@ import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.SelectChatRoomTypeViewModel
 import com.machankura.dedun.compose.ui.view.state.SelectChatRoomTypeUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -483,7 +483,7 @@ private fun QuorumPicker(
 @ConformancePreviews
 @Composable
 private fun SelectChatRoomTypeScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

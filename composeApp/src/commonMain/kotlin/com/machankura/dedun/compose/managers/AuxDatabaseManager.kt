@@ -1,12 +1,12 @@
 package com.machankura.dedun.compose.managers
 
 class AuxDatabaseManager(
-    bennuGlobal: com.machankura.dedun.compose.BennuGlobal
+    dedunGlobal: com.machankura.dedun.compose.DedunGlobal
 ) {
     val auxDatabase by lazy {
         com.machankura.dedun.compose.database.builder.getRoomDatabase(
             com.machankura.dedun.compose.database.builder.PlatformDatabaseBuilder.getDatabaseBuilder(
-                bennuGlobal.platformContext
+                dedunGlobal.platformContext
             )
         )
     }
@@ -19,7 +19,7 @@ class AuxDatabaseManager(
     val inMemoryAuxDatabase by lazy {
         com.machankura.dedun.compose.database.builder.getRoomDatabase(
             com.machankura.dedun.compose.database.builder.PlatformDatabaseBuilder.getInMemoryDatabaseBuilder(
-                bennuGlobal.platformContext
+                dedunGlobal.platformContext
             )
         )
     }

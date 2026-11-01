@@ -120,7 +120,7 @@ fun QuotedNote(
 @ConformancePreviews
 @Composable
 private fun QuotedNotePreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

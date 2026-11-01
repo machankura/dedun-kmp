@@ -59,7 +59,7 @@ enum class Breakpoint(val minWidth: Dp) {
          * them.
          *
          * Total, including for a width below [Compact.minWidth]. This is called from
-         * [BennuTheme] on every composition, and a desktop window reports a zero size for
+         * [DedunTheme] on every composition, and a desktop window reports a zero size for
          * the frame before its first layout pass; throwing there would take the app down
          * on a resize rather than on anything a user did.
          */
@@ -71,7 +71,7 @@ enum class Breakpoint(val minWidth: Dp) {
 /**
  * The breakpoint the current window is in.
  *
- * Provided by [BennuTheme] as [LocalBreakpoint], so screens read
+ * Provided by [DedunTheme] as [LocalBreakpoint], so screens read
  * `MaterialTheme.breakpoint` rather than calling this. It is public because the two
  * entry points that compose above the theme -- the desktop passphrase gate, and any
  * future splash -- have nowhere else to get it.
@@ -79,7 +79,7 @@ enum class Breakpoint(val minWidth: Dp) {
  * **Why the window size and not `currentWindowAdaptiveInfo()`.** The latter also computes
  * a [androidx.compose.material3.adaptive.Posture] from the platform's fold state, which
  * on android means reaching for `WindowInfoTracker` and an `Activity`. This is called
- * from [BennuTheme], which wraps every `@Preview` in the tree, and a preview context is
+ * from [DedunTheme], which wraps every `@Preview` in the tree, and a preview context is
  * not an activity. `currentWindowDpSize()` is `LocalWindowInfo` and `LocalDensity` and
  * nothing else, so it answers everywhere. The pane scaffolds ask for posture themselves,
  * where a fold genuinely changes the answer.
@@ -90,7 +90,7 @@ fun currentBreakpoint(): Breakpoint = Breakpoint.ofWidth(currentWindowDpSize().w
 
 /**
  * Defaults to [Breakpoint.Compact] rather than throwing, because that is the layout every
- * screen in this app was written against: a composable that never reaches a [BennuTheme]
+ * screen in this app was written against: a composable that never reaches a [DedunTheme]
  * should render as it did before breakpoints existed, not fail.
  */
 val LocalBreakpoint = staticCompositionLocalOf { Breakpoint.Compact }

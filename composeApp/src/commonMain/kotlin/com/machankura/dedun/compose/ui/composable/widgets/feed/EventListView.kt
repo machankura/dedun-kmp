@@ -129,7 +129,7 @@ fun com.machankura.dedun.compose.database.model.intermdiate.LocalNostrEvent.List
 @ConformancePreviews
 @Composable
 private fun EventListViewRepostedPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {
@@ -180,7 +180,7 @@ private fun EventListViewRepostedPreview() {
 @ConformancePreviews
 @Composable
 private fun EventListViewInReplyPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

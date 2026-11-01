@@ -89,7 +89,7 @@ class ProfilePreviewViewModel(
         relaysHadTheirTime = false
         when (val state = profilePreviewUIState) {
             is ProfilePreviewUIState.Loaded -> {
-                if (state.readiness == Readiness.NotYetOnBennu) {
+                if (state.readiness == Readiness.NotYetOnDedun) {
                     profilePreviewUIState = state.copy(readiness = Readiness.Checking)
                 }
                 askTheRelays(profileToo = false)
@@ -135,7 +135,7 @@ class ProfilePreviewViewModel(
         val readiness = when {
             existingRoom != null -> existingRoom
             keyPackage != null -> Readiness.CanStartChat
-            relaysHadTheirTime -> Readiness.NotYetOnBennu
+            relaysHadTheirTime -> Readiness.NotYetOnDedun
             else -> Readiness.Checking
         }
         // The clock stops only when there is nothing left to wait for. A profile on its
@@ -153,7 +153,7 @@ class ProfilePreviewViewModel(
                 ProfilePreviewUIState.Loading -> profilePreviewUIState = ProfilePreviewUIState.NotFound
                 is ProfilePreviewUIState.Loaded ->
                     if (state.readiness == Readiness.Checking) {
-                        profilePreviewUIState = state.copy(readiness = Readiness.NotYetOnBennu)
+                        profilePreviewUIState = state.copy(readiness = Readiness.NotYetOnDedun)
                     }
                 else -> Unit
             }

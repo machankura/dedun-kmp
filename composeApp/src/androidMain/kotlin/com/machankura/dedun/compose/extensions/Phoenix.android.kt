@@ -1,6 +1,6 @@
 package com.machankura.dedun.compose.extensions
 
-import com.machankura.dedun.android.BennuApplication
+import com.machankura.dedun.android.DedunApplication
 import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.BusinessManager
 import fr.acinq.phoenix.android.services.ChannelsWatcher
@@ -23,11 +23,11 @@ actual fun schedulePlatformLogic(phoenixGlobal: PhoenixGlobal) {
     ContactsPhotoCleaner.schedule(phoenixGlobal.ctx.applicationContext)
 }
 actual fun getShowIntroFlow(phoenixGlobal: PhoenixGlobal): Flow<Boolean> {
-    val machankuraApplication = phoenixGlobal.ctx.applicationContext as BennuApplication
+    val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication
     return machankuraApplication.getGlobalPrefs().getShowIntro
 }
 
 actual fun getGlobalPrefs(phoenixGlobal: PhoenixGlobal): GlobalPrefs {
-    val machankuraApplication = phoenixGlobal.ctx.applicationContext as BennuApplication
+    val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication
     return machankuraApplication.getGlobalPrefs()
 }

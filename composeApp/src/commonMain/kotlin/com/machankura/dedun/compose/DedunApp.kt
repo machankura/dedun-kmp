@@ -10,9 +10,9 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
 import com.machankura.dedun.compose.network.platformHttpClientEngineFactory
-import com.machankura.dedun.compose.ui.composable.navigation.BennuNavHost
+import com.machankura.dedun.compose.ui.composable.navigation.DedunNavHost
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import fr.acinq.phoenix.PhoenixGlobal
 
 /**
@@ -24,9 +24,9 @@ import fr.acinq.phoenix.PhoenixGlobal
 private val imageHttpClient by lazy { HttpClient(platformHttpClientEngineFactory()) }
 
 @Composable
-fun BennuApp(
+fun DedunApp(
     navController: NavHostController,
-    bennuGlobal: BennuGlobal,
+    dedunGlobal: DedunGlobal,
     phoenixGlobal: PhoenixGlobal
 ) {
     setSingletonImageLoaderFactory { context ->
@@ -37,7 +37,7 @@ fun BennuApp(
             .build()
     }
 
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -47,8 +47,8 @@ fun BennuApp(
             // outcome does not have to be handed a state through the parameter list of
             // every composable between it and the Scaffold.
             ProvideSnackbarHost {
-                BennuNavHost(
-                    bennuGlobal = bennuGlobal,
+                DedunNavHost(
+                    dedunGlobal = dedunGlobal,
                     phoenixGlobal = phoenixGlobal,
                     navController = navController
                 )

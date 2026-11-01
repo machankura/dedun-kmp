@@ -21,7 +21,7 @@ import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.model.QuotedRelation
 import com.machankura.dedun.compose.ui.composable.widgets.content.RichContent
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 
 data class LocalQuotedNostrEvent(
@@ -113,7 +113,7 @@ data class LocalQuotedNostrEvent(
 @ConformancePreviews
 @Composable
 private fun LocalQuotedNostrEventPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.padding(20.dp)
         ) {

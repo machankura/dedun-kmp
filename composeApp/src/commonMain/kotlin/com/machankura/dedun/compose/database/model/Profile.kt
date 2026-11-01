@@ -23,7 +23,7 @@ import com.vitorpamplona.quartz.nip51Lists.relayLists.RelayFeedsListEvent
 import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrEventDetailRoute
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileColor
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.database.GENESIS_AT
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -189,7 +189,7 @@ fun ProfileRenderAsListItemPreview() {
         about = "I am the stone that the builder refused.",
         nostrEventId = "nostrEventId"
     )
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.padding(20.dp)
         ) {

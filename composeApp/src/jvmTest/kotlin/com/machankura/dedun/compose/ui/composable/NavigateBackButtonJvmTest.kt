@@ -14,7 +14,7 @@ import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ChatRoomMessagingUIState
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -71,7 +71,7 @@ class NavigateBackButtonJvmTest {
 
     @Composable
     private fun Chat(onNavigateBack: (() -> Unit)?) {
-        BennuTheme {
+        DedunTheme {
             ProvideSnackbarHost {
                 ChatRoomMessagingScreen(
                     activeUserPublicKey = "a".repeat(64),
@@ -104,7 +104,7 @@ class NavigateBackButtonJvmTest {
 
     @Composable
     private fun Placeholder(onNavigateBack: (() -> Unit)?) {
-        BennuTheme {
+        DedunTheme {
             ProvideSnackbarHost {
                 ImplementationPendingScreen(text = "Learn more", onNavigateBack = onNavigateBack)
             }

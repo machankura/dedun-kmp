@@ -32,7 +32,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomMess
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ProfilePreviewUIState
 import com.machankura.dedun.compose.ui.view.state.ProfilePreviewUIState.Readiness
 import kotlin.test.Test
@@ -131,7 +131,7 @@ class ProfilePreviewScreenJvmTest {
 
     @Test
     fun `a person not yet on Bennu cannot be written to, and the reason is under the button`() = render(
-        ProfilePreviewUIState.Loaded(profile = alice, readiness = Readiness.NotYetOnBennu)
+        ProfilePreviewUIState.Loaded(profile = alice, readiness = Readiness.NotYetOnDedun)
     ) {
         onNodeWithText("Start new chat").assertIsNotEnabled()
         onNodeWithText("Alice hasn't set up messaging on Bennu yet. Try again later, or ask them to open Bennu.").assertIsDisplayed()
@@ -204,7 +204,7 @@ class ProfilePreviewScreenJvmTest {
         assertions: ComposeUiTest.() -> Unit,
     ) = runDesktopComposeUiTest(width = 400, height = 1200) {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 ProvideSnackbarHost {
                     CompositionLocalProvider(LocalCanSign provides canSign) {
                         Box(modifier = Modifier.fillMaxSize()) {

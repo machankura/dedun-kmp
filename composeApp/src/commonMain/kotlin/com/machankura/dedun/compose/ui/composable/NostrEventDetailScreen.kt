@@ -24,7 +24,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.detail.MetadataEventDetail
 import com.machankura.dedun.compose.ui.composable.widgets.detail.TextNoteEventDetail
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.NostrEventDetailViewModel
 import com.machankura.dedun.compose.ui.view.state.NostrEventDetailUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -173,7 +173,7 @@ fun NostrEventDetailScreen(
 @ConformancePreviews
 @Composable
 private fun NostrEventDetailScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

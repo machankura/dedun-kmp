@@ -52,7 +52,7 @@ import dedun.composeapp.generated.resources.copied_the_nsec
 import dedun.composeapp.generated.resources.copy_nsec
 import dedun.composeapp.generated.resources.could_not_forget_the_key_please_try_again
 import dedun.composeapp.generated.resources.could_not_unlock_your_key_please_try
-import dedun.composeapp.generated.resources.bennu_will_delete_the_nsec_for_s_from_this
+import dedun.composeapp.generated.resources.dedun_will_delete_the_nsec_for_s_from_this
 import dedun.composeapp.generated.resources.display_nostr_secret_key
 import dedun.composeapp.generated.resources.forget
 import dedun.composeapp.generated.resources.forget_this_key
@@ -184,7 +184,7 @@ private fun NostrSecretContent(
             onDismissRequest = onCancelForget,
             icon = { Icon(Icons.Default.DeleteForever, contentDescription = Decorative) },
             title = { Text(stringResource(Res.string.forget_this_key_question)) },
-            text = { Text(stringResource(Res.string.bennu_will_delete_the_nsec_for_s_from_this, npub ?: "")) },
+            text = { Text(stringResource(Res.string.dedun_will_delete_the_nsec_for_s_from_this, npub ?: "")) },
             confirmButton = {
                 TextButton(onClick = onForget) { Text(stringResource(Res.string.forget)) }
             },
@@ -457,7 +457,7 @@ private fun BackupCheckbox(
 @ConformancePreviews
 @Composable
 private fun NostrSecretScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             NostrSecretContent(
                 uiState = NostrSecretUIState.Revealed("nsec1" + "q".repeat(58)),

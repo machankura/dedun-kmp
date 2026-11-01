@@ -35,7 +35,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.AddMemberToC
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.SearchMemberToAddToChatRoomViewModel
 import com.machankura.dedun.compose.ui.view.state.SearchMemberToAddToChatRoomUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -229,7 +229,7 @@ fun SearchMemberToAddToChatRoomScreen(
 @ConformancePreviews
 @Composable
 private fun ChatRoomDetailScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

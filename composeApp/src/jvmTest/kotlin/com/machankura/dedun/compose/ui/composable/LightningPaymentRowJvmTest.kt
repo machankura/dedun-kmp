@@ -6,7 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.machankura.dedun.compose.database.model.GroupLightningPaymentRow
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import kotlin.test.Test
 
 /**
@@ -24,7 +24,7 @@ class LightningPaymentRowJvmTest {
     @Test
     fun `a payment sent is what reached the recipient, and a close is said as a close`() = runDesktopComposeUiTest {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 Column {
                     PaymentRow(row("in", incoming = true, amountMsat = 96_900_000, feesMsat = 0, paymentHash = "aa".repeat(32), succeeded = true))
                     PaymentRow(row("out", incoming = false, amountMsat = 20_084_000, feesMsat = 84_000, paymentHash = "bb".repeat(32), succeeded = true))
@@ -42,7 +42,7 @@ class LightningPaymentRowJvmTest {
     @Test
     fun `bought liquidity is room to be paid, with what it cost, never money sent`() = runDesktopComposeUiTest {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 PaymentRow(GroupLightningPaymentRow("w", "liquidity:t", incoming = false, amountMsat = 2_521_000, feesMsat = 2_521_000, paymentHash = null, description = null, completedAt = null, succeeded = true, liquiditySat = 200_000))
             }
         }
@@ -52,7 +52,7 @@ class LightningPaymentRowJvmTest {
     @Test
     fun `why liquidity cannot be asked for is said in words`() = runDesktopComposeUiTest {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 Column {
                     androidx.compose.material3.Text(unavailableBecause(com.machankura.dedun.compose.wallet.lightning.LiquidityPrice.Availability.NoChannel))
                     androidx.compose.material3.Text(unavailableBecause(com.machankura.dedun.compose.wallet.lightning.LiquidityPrice.Availability.AtTheCap))

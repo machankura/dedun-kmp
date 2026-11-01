@@ -52,7 +52,7 @@ import com.machankura.dedun.compose.ui.theme.Breakpoint
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun BennuNavigationSuite(
+fun DedunNavigationSuite(
     navController: NavHostController,
     breakpoint: Breakpoint,
     activeUserPublicKey: String?,

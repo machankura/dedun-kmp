@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
  * The room's transcript, newest first -- the order the feed's `reverseLayout` draws from the
  * bottom up, so the first row is the line sitting above the composer.
  *
- * `id DESC` is not decoration. [com.machankura.dedun.compose.database.converters.BennuConverters]
+ * `id DESC` is not decoration. [com.machankura.dedun.compose.database.converters.DedunConverters]
  * stores an `Instant` as epoch seconds, so lines written inside one second tie: a ceremony
  * puts a dozen into a room faster than that, and a request with the answer it triggers
  * routinely lands inside one. `createdAt DESC` alone left those to whatever order the sorter

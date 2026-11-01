@@ -33,7 +33,7 @@ import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupSendRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.GroupWalletUIState
 import com.machankura.dedun.compose.ui.view.state.GuardedWalletRow
 import com.machankura.dedun.compose.wallet.GroupWalletState
@@ -122,7 +122,7 @@ class GuardedWalletCardJvmTest {
     private fun render(state: GroupWalletUIState, fontScale: Float = 1f, width: Int = 400, onRoute: (Route) -> Unit = {}, assertions: ComposeUiTest.() -> Unit) =
         runDesktopComposeUiTest(width = width, height = 2400) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ProvideSnackbarHost {
                         CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
                             Box(modifier = Modifier.fillMaxSize()) {

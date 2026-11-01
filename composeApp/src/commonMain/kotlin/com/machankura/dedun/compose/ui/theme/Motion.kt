@@ -17,7 +17,7 @@ import androidx.navigation.NavBackStackEntry
 /**
  * Whether the platform has been asked to keep motion to a minimum.
  *
- * Provided by [BennuTheme] as [LocalReducedMotion]; the transitions below read it, so a
+ * Provided by [DedunTheme] as [LocalReducedMotion]; the transitions below read it, so a
  * call site does not have to remember to. Reading it directly is for a screen animating
  * something the shared helpers do not cover.
  *

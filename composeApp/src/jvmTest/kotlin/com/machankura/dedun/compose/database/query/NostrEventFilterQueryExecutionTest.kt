@@ -22,7 +22,7 @@ import kotlin.time.Instant
  *
  * That last one is worth spelling out, because it spans two files that nothing forces to
  * agree. [NostrEventFilterQuery] binds `since`/`until` as `epochSeconds`;
- * `BennuConverters.instantToTimestamp` writes the `createdAt` column as `epochSeconds`. Change
+ * `DedunConverters.instantToTimestamp` writes the `createdAt` column as `epochSeconds`. Change
  * either one to milliseconds and the filter silently selects nothing, or everything.
  *
  * The stakes are the same as for the builder test: negentropy reconciles our set against the

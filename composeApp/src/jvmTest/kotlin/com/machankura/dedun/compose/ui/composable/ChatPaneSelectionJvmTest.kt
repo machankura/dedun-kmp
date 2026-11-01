@@ -28,7 +28,7 @@ import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.HomeScreenUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
@@ -121,7 +121,7 @@ class ChatPaneSelectionJvmTest {
 
     @Composable
     private fun Home() {
-        BennuTheme {
+        DedunTheme {
             ProvideSnackbarHost {
                 HomeScreen(
                     activeUserPublicKey = publicKey,

@@ -47,6 +47,6 @@ sealed interface ProfilePreviewUIState {
         data object Checking : Readiness
 
         /** The relays have had their time and no key package came. */
-        data object NotYetOnBennu : Readiness
+        data object NotYetOnDedun : Readiness
     }
 }

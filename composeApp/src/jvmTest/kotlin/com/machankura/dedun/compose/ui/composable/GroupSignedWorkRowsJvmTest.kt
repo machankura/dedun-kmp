@@ -23,7 +23,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightni
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.wallet.GroupWalletRollout
@@ -164,7 +164,7 @@ class GroupSignedWorkRowsJvmTest {
         assertions: ComposeUiTest.() -> Unit
     ) = runDesktopComposeUiTest(width = 400, height = 4000) {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 ProvideSnackbarHost {
                     Box(modifier = Modifier.fillMaxSize()) {
                         ChatRoomDetailScreen(

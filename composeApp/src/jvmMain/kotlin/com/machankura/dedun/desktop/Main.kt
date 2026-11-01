@@ -36,11 +36,11 @@ import fr.acinq.phoenix.security.JvmKeyStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.machankura.dedun.compose.BennuApp
-import com.machankura.dedun.compose.BennuGlobal
+import com.machankura.dedun.compose.DedunApp
+import com.machankura.dedun.compose.DedunGlobal
 import com.machankura.dedun.compose.PlatformContext
-import com.machankura.dedun.compose.defaultBennuDir
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.defaultDedunDir
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import java.awt.Dimension
 import java.io.File
 
@@ -56,7 +56,7 @@ import java.io.File
  *    keeps a single place on disk rather than two named after different projects.
  */
 fun main() = application {
-    val appDir = remember { defaultBennuDir().apply { mkdirs() } }
+    val appDir = remember { defaultDedunDir().apply { mkdirs() } }
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -80,21 +80,21 @@ fun main() = application {
         // 400x600 is the narrowest window the phase's acceptance widths name.
         LaunchedEffect(window) { window.minimumSize = Dimension(400, 600) }
 
-        // BennuTheme wraps both branches, not just the app. PassphraseGate used to sit
-        // beside BennuApp -- which applies the theme itself -- so it composed under the
+        // DedunTheme wraps both branches, not just the app. PassphraseGate used to sit
+        // beside DedunApp -- which applies the theme itself -- so it composed under the
         // default MaterialTheme and its colorScheme and typography were baseline M3
         // rather than this app's. It is the first screen a desktop user sees.
         //
-        // BennuApp still applies BennuTheme, so the unlocked branch is wrapped twice.
-        // That is deliberate: android and ios enter through BennuApp and would lose the
+        // DedunApp still applies DedunTheme, so the unlocked branch is wrapped twice.
+        // That is deliberate: android and ios enter through DedunApp and would lose the
         // theme entirely if it moved out, and a second application of the same values
         // costs one composition of a CompositionLocalProvider.
-        BennuTheme {
+        DedunTheme {
             if (unlocked) {
                 val navController = rememberNavController()
-                BennuApp(
+                DedunApp(
                     navController = navController,
-                    bennuGlobal = BennuGlobal(platformContext = PlatformContext(appDir)),
+                    dedunGlobal = DedunGlobal(platformContext = PlatformContext(appDir)),
                     phoenixGlobal = PhoenixGlobal(
                         ctx = fr.acinq.phoenix.utils.PlatformContext(applicationDir = appDir),
                     ),

@@ -8,7 +8,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runDesktopComposeUiTest
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import kotlin.test.Test
 
 /** Stand-ins for a screen's UI state: two classes, and data that changes within one. */
@@ -39,7 +39,7 @@ class ScreenStateTransitionJvmTest {
         runDesktopComposeUiTest(400, 600) {
             var state by mutableStateOf<Fixture>(Fixture.Loading)
             mainClock.autoAdvance = false
-            setContent { BennuTheme { ScreenStateTransition(state) { Render(it) } } }
+            setContent { DedunTheme { ScreenStateTransition(state) { Render(it) } } }
 
             mainClock.advanceTimeBy(16)
             onNodeWithText("loading").assertIsDisplayed()
@@ -61,7 +61,7 @@ class ScreenStateTransitionJvmTest {
     fun `data changing inside one state does not animate`() = runDesktopComposeUiTest(400, 600) {
         var state by mutableStateOf<Fixture>(Fixture.Loaded("first"))
         mainClock.autoAdvance = false
-        setContent { BennuTheme { ScreenStateTransition(state) { Render(it) } } }
+        setContent { DedunTheme { ScreenStateTransition(state) { Render(it) } } }
 
         mainClock.advanceTimeBy(16)
         onNodeWithText("first").assertIsDisplayed()

@@ -1,6 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
-import com.machankura.dedun.android.BennuApplication
+import com.machankura.dedun.android.DedunApplication
 import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.BusinessManager
 import fr.acinq.phoenix.data.DecryptSeedResult
@@ -24,12 +24,12 @@ actual fun loadAndDecryptSeed(phoenixGlobal: PhoenixGlobal): DecryptSeedResult {
 }
 
 actual fun getAvailableWalletsMeta(phoenixGlobal: PhoenixGlobal): Flow<Map<WalletId, UserWalletMetadata>> {
-    val machankuraApplication = phoenixGlobal.ctx.applicationContext as BennuApplication
+    val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication
     return machankuraApplication.getGlobalPrefs().getAvailableWalletsMeta
 }
 
 actual suspend fun saveAvailableWalletMeta(phoenixGlobal: PhoenixGlobal, metadata: UserWalletMetadata) {
-    val machankuraApplication = phoenixGlobal.ctx.applicationContext as BennuApplication
+    val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication
     machankuraApplication.getGlobalPrefs().saveAvailableWalletMeta(metadata)
 }
 
@@ -40,7 +40,7 @@ actual suspend fun saveAvailableWalletMeta(
     avatar: String,
     isHidden: Boolean
 ) {
-    val machankuraApplication = phoenixGlobal.ctx.applicationContext as BennuApplication
+    val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication
     machankuraApplication.getGlobalPrefs().saveAvailableWalletMeta(
         walletId = walletId,
         name = name,

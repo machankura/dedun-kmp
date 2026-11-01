@@ -78,7 +78,7 @@ class ReadableContentLayoutJvmTest {
             var margin: Dp? = null
             runDesktopComposeUiTest(width = windowWidth, height = 900) {
                 setContent {
-                    BennuTheme {
+                    DedunTheme {
                         seen = MaterialTheme.breakpoint
                         margin = MaterialTheme.spacing.screenMargin
                     }
@@ -109,7 +109,7 @@ class ReadableContentLayoutJvmTest {
 
     @Composable
     private fun TaggedContent() {
-        BennuTheme {
+        DedunTheme {
             Box(Modifier.readableContent()) {
                 Box(Modifier.fillMaxWidth().height(8.dp).testTag(Content))
             }

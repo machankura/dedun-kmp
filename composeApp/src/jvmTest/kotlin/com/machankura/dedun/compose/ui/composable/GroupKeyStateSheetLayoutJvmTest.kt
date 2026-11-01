@@ -18,7 +18,7 @@ import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 
 /**
  * The one thing about this sheet that reading it does not settle.
@@ -78,7 +78,7 @@ class GroupKeyStateSheetLayoutJvmTest {
     fun `the signed event wraps inside the sheet rather than running off it`() =
         runDesktopComposeUiTest(width = 800, height = 2400) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     // The sheet reports a copy through the snackbar host, so it
                     // needs one in scope the way every screen does.
                     ProvideSnackbarHost {
@@ -105,7 +105,7 @@ class GroupKeyStateSheetLayoutJvmTest {
     fun `a device holding no signed event still renders the state`() =
         runDesktopComposeUiTest(width = 800, height = 2400) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ProvideSnackbarHost {
                         Box(modifier = Modifier.width(phoneWidth).testTag(SHEET)) {
                             GroupKeyStateSheetContent(

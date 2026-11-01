@@ -325,7 +325,7 @@ private fun problemMessage(problem: CredentialProblem): String = stringResource(
 @ConformancePreviews
 @Composable
 private fun SignInToProfileScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

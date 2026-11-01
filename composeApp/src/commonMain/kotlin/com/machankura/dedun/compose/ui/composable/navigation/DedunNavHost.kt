@@ -50,7 +50,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.toRoute
-import com.machankura.dedun.compose.BennuGlobal
+import com.machankura.dedun.compose.DedunGlobal
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.repository.DatabaseDkgRepository
 import com.machankura.dedun.compose.database.repository.DatabaseFrostSigningRepository
@@ -182,12 +182,12 @@ import com.machankura.dedun.compose.ui.composable.FrostSigningScreen
 import com.machankura.dedun.compose.ui.composable.ProposalListScreen
 
 @Composable
-fun BennuNavHost(
-    bennuGlobal: BennuGlobal,
+fun DedunNavHost(
+    dedunGlobal: DedunGlobal,
     phoenixGlobal: PhoenixGlobal,
     navController: NavHostController
 ) {
-    val logger = Logger.withTag("BennuNavHost")
+    val logger = Logger.withTag("DedunNavHost")
 
     val exceptionHandler = remember {
         CoroutineExceptionHandler { _, throwable ->
@@ -201,7 +201,7 @@ fun BennuNavHost(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val auxDatabaseManager = remember {
-        AuxDatabaseManager(bennuGlobal)
+        AuxDatabaseManager(dedunGlobal)
     }
 
     // Before the repositories: the nostr repository stamps every fetch request it queues
@@ -562,7 +562,7 @@ fun BennuNavHost(
     // Once, above every screen: what a read-only identity may not be offered is decided
     // where the control is drawn, and this is how the control finds out.
     ProvideSigningCapability(sovereignWalletViewModel.activeIdentity) {
-    BennuNavigationSuite(
+    DedunNavigationSuite(
         navController = navController,
         breakpoint = MaterialTheme.breakpoint,
         activeUserPublicKey = activeUserPublicKey,

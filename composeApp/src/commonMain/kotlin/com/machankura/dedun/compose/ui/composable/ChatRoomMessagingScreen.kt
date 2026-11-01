@@ -56,7 +56,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposalList
 import com.machankura.dedun.compose.ui.composable.navigation.routes.proposalDestination
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.ChatRoomMessagingViewModel
 import com.machankura.dedun.compose.ui.view.state.ChatRoomMessagingUIState
 import com.machankura.dedun.compose.ui.view.state.ProposalFilter
@@ -489,7 +489,7 @@ fun ChatRoomMessagingScreen(
 @ConformancePreviews
 @Composable
 private fun ChatRoomMessagingScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

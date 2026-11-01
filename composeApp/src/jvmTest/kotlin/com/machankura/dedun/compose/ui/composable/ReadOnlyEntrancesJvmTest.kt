@@ -42,7 +42,7 @@ import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ActiveProfileUIState
 import com.machankura.dedun.compose.ui.view.state.HomeScreenUIState
 import com.machankura.dedun.compose.ui.view.state.ProfilePreviewUIState
@@ -262,7 +262,7 @@ class ReadOnlyEntrancesJvmTest {
 
     @Composable
     private fun AsIdentity(canSign: Boolean, content: @Composable () -> Unit) {
-        BennuTheme {
+        DedunTheme {
             ProvideSnackbarHost {
                 CompositionLocalProvider(LocalCanSign provides canSign) {
                     content()

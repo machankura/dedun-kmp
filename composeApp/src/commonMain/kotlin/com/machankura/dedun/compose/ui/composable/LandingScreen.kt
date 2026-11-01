@@ -25,7 +25,7 @@ import dedun.composeapp.generated.resources.create_profile
 import dedun.composeapp.generated.resources.if_you_are_new_to_torch_or_just_want_to
 import dedun.composeapp.generated.resources.keep_the_feed_alive
 import dedun.composeapp.generated.resources.learn_more
-import dedun.composeapp.generated.resources.bennu
+import dedun.composeapp.generated.resources.dedun
 import dedun.composeapp.generated.resources.sign_in
 import dedun.composeapp.generated.resources.sign_in_with_a_recovery_phrase_an_nsec_or
 import androidx.compose.material3.SnackbarHost
@@ -50,7 +50,7 @@ fun LandingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = stringResource(Res.string.bennu),
+                    text = stringResource(Res.string.dedun),
                     style = MaterialTheme.typography.headlineLarge
                 )
 
@@ -115,7 +115,7 @@ fun LandingScreen(
 @ConformancePreviews
 @Composable
 private fun LandingScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

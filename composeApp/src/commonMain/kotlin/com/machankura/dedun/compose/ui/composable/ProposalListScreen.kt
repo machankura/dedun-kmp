@@ -56,7 +56,7 @@ import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.text.ProposedEvent
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.ProposalListViewModel
 import com.machankura.dedun.compose.ui.view.state.ProposalFilter
 import com.machankura.dedun.compose.ui.view.state.ProposalListUIState
@@ -819,7 +819,7 @@ private fun ProposalListScreenPreview() {
         signerId = 1
     )
 
-    BennuTheme {
+    DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             ProposalListScreen(
                 activeUserPublicKey = "u".repeat(64),

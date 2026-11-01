@@ -341,7 +341,7 @@ private fun KeyRecoveryOption(
 @ConformancePreviews
 @Composable
 private fun KeyRecoveryScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

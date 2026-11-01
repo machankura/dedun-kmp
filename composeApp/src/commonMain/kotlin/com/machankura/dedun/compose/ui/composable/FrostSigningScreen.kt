@@ -90,7 +90,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
@@ -661,7 +661,7 @@ private fun statusOf(session: FrostSigningSession, declined: Int): String {
 @ConformancePreviews
 @Composable
 private fun FrostSigningScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             FrostSigningScreen(
                 activeUserPublicKey = "",

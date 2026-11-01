@@ -71,7 +71,7 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileColor
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgJoinApprovalRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SelectSubgroupAdminsRoute
@@ -860,7 +860,7 @@ private fun RitualStep(
 @ConformancePreviews
 @Composable
 private fun DkgRitualScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             DkgRitualScreen(
                 activeUserPublicKey = "",

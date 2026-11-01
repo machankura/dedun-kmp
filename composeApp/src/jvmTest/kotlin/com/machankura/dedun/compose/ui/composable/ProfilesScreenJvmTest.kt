@@ -32,7 +32,7 @@ import com.machankura.dedun.compose.identity.IdentityKind
 import com.machankura.dedun.compose.identity.StoredIdentity
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.ProfilesViewModel
 import java.nio.file.Files
 import kotlin.test.Test
@@ -98,7 +98,7 @@ class ProfilesScreenJvmTest {
 
     @Composable
     private fun Screen(viewModel: ProfilesViewModel, onRetry: () -> Unit = {}) {
-        BennuTheme {
+        DedunTheme {
             ProvideSnackbarHost {
                 ProfilesScreen(
                     viewModel = viewModel,

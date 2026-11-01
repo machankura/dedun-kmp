@@ -305,7 +305,7 @@ private fun NotFound(
 @ConformancePreviews
 @Composable
 private fun UnsyncedProfileScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

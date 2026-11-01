@@ -13,7 +13,7 @@ import java.util.Locale
  * directory to both so one install keeps one place on disk.
  */
 actual class PlatformContext(
-    val applicationDir: File = defaultBennuDir(),
+    val applicationDir: File = defaultDedunDir(),
 )
 
 /**
@@ -23,7 +23,7 @@ actual class PlatformContext(
  * behind a TODO: most systems clear it on reboot, and the chat history and marmot group
  * state live here.
  */
-internal fun defaultBennuDir(): File {
+internal fun defaultDedunDir(): File {
     val home = File(System.getProperty("user.home"))
     val os = System.getProperty("os.name").orEmpty().lowercase(Locale.ROOT)
     return when {

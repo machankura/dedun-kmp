@@ -54,7 +54,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.SignInRoute
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.dialogs.NewChatBottomSheetDialog
 import com.machankura.dedun.compose.ui.composable.widgets.dialogs.StartDirectMessageToNpubOrNip05Dialog
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.ChatRoomListViewModel
 import com.machankura.dedun.compose.ui.view.model.HomeScreenType
 import com.machankura.dedun.compose.ui.view.model.HomeViewModel
@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
-import dedun.composeapp.generated.resources.bennu
+import dedun.composeapp.generated.resources.dedun
 import dedun.composeapp.generated.resources.new_chat
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import androidx.compose.material3.SnackbarHost
@@ -173,8 +173,8 @@ fun HomeScreen(
                                 // the wire, as the `client` tag on a published relay list. The three
                                 // brands before it are gone from live code too -- what was
                                 // `TorchTheme`, then `CuratedTheme`, then `CurareTheme`, is
-                                // `BennuTheme`, and no error string names any of them.
-                                Text(stringResource(Res.string.bennu))
+                                // `DedunTheme`, and no error string names any of them.
+                                Text(stringResource(Res.string.dedun))
                             },
                             // No navigation icon and no actions. The avatar in the leading
                             // slot and the search icon in the trailing one were the app's only
@@ -411,7 +411,7 @@ fun HomeScreen(
 @ConformancePreviews
 @Composable
 private fun HomeScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

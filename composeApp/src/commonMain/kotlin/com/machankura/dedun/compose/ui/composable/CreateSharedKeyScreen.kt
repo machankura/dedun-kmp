@@ -62,7 +62,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
@@ -278,7 +278,7 @@ private fun SharedKeyQuorumStepper(
 @ConformancePreviews
 @Composable
 private fun CreateSharedKeyScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             CreateSharedKeyScreen(
                 activeUserPublicKey = "",

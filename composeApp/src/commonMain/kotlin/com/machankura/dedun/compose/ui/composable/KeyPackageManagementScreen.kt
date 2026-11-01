@@ -240,7 +240,7 @@ fun KeyPackageManagementScreen(
 @ConformancePreviews
 @Composable
 private fun UnannouncedProfileScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

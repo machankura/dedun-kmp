@@ -32,7 +32,7 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.AddMemberToChatRoomConfirmationViewModel
 import com.machankura.dedun.compose.ui.view.state.AddMemberToChatRoomConfirmationUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -211,7 +211,7 @@ fun AddMemberToChatRoomConfirmationScreen(
 @ConformancePreviews
 @Composable
 private fun ChatRoomDetailScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

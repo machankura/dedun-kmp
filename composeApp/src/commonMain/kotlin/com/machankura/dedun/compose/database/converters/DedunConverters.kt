@@ -6,8 +6,8 @@ import co.touchlab.kermit.Logger
 import kotlinx.serialization.json.Json
 import kotlin.time.Instant
 
-class BennuConverters {
-    val logger = Logger.withTag("BennuConverters")
+class DedunConverters {
+    val logger = Logger.withTag("DedunConverters")
 
     @ColumnTypeConverter
     fun fromTimestamp(value: Long?): Instant? {

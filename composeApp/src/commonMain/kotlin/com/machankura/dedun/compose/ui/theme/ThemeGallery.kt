@@ -44,7 +44,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 @Preview(name = "Six schemes", group = "schemes", widthDp = 1200, heightDp = 900)
 @Composable
 private fun ThemeGalleryPreview() {
-    // One render holding all six, not six renders. The contrast step is a `BennuTheme`
+    // One render holding all six, not six renders. The contrast step is a `DedunTheme`
     // parameter and no preview annotation can set it, so the combinations have to be laid
     // out in the body -- and laying them out side by side is what makes them comparable,
     // which is the only reason to look at them at all.
@@ -70,7 +70,7 @@ private fun ThemeGalleryPreview() {
  */
 @Composable
 fun ThemeGallery(darkTheme: Boolean, contrast: ThemeContrast) {
-    BennuTheme(darkTheme = darkTheme, contrast = contrast, dynamicColor = false) {
+    DedunTheme(darkTheme = darkTheme, contrast = contrast, dynamicColor = false) {
         Surface {
             Column(
                 modifier = Modifier.padding(MaterialTheme.spacing.compactPadding),

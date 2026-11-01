@@ -13,7 +13,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.Implementati
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilePreviewRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -95,7 +95,7 @@ class StartDirectMessageToNpubOrNip05DialogJvmTest {
         assertions: ComposeUiTest.() -> Unit,
     ) = runDesktopComposeUiTest(width = 400, height = 800) {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 ProvideSnackbarHost {
                     StartDirectMessageToNpubOrNip05Dialog(
                         activeUserPublicKey = activeUserPublicKey,

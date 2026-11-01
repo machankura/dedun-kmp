@@ -9,8 +9,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.rememberNavController
 import fr.acinq.phoenix.NFCActivity
 import com.machankura.dedun.compose.PlatformContext
-import com.machankura.dedun.compose.BennuApp
-import com.machankura.dedun.compose.BennuGlobal
+import com.machankura.dedun.compose.DedunApp
+import com.machankura.dedun.compose.DedunGlobal
 import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.services.HceService
 
@@ -25,9 +25,9 @@ class MainActivity : ComponentActivity(), NFCActivity {
         setContent {
             val navController = rememberNavController()
 
-            BennuApp(
+            DedunApp(
                 navController = navController,
-                bennuGlobal = BennuGlobal(
+                dedunGlobal = DedunGlobal(
                     platformContext = PlatformContext(
                         applicationContext = applicationContext
                     )

@@ -1,5 +1,5 @@
 package com.machankura.dedun.compose
 
-class BennuGlobal(
+class DedunGlobal(
     val platformContext: PlatformContext
 )

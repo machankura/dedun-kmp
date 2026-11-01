@@ -36,7 +36,7 @@ import com.machankura.dedun.compose.identity.CredentialParser
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilePreviewRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.phoenix.utils.Parser
 import kotlinx.coroutines.CoroutineScope
@@ -193,7 +193,7 @@ fun StartDirectMessageToNpubOrNip05Dialog(
 @ConformancePreviews
 @Composable
 private fun StartDirectMessageToNpubOrNip05DialogPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

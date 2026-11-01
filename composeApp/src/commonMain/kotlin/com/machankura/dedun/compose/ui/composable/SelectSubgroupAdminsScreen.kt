@@ -83,7 +83,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.SelectSubgroupAdminsViewModel
@@ -469,7 +469,7 @@ private fun WalletPolicyRow(
 @ConformancePreviews
 @Composable
 private fun SelectSubgroupAdminsScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             SelectSubgroupAdminsScreen(
                 activeUserPublicKey = "a".repeat(64),

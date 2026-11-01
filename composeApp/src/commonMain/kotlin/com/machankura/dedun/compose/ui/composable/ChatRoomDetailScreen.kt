@@ -118,7 +118,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.dialogs.ModalBottomSheet
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.ChatRoomDetailViewModel
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -1419,7 +1419,7 @@ private fun ReindexMarmotGroupEventsButton(
 @ConformancePreviews
 @Composable
 private fun ChatRoomMessagingScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

@@ -19,7 +19,7 @@ import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.HomeScreenUIState
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import kotlin.test.Test
@@ -84,7 +84,7 @@ class ChatPaneLayoutJvmTest {
 
     @androidx.compose.runtime.Composable
     private fun Home() {
-        BennuTheme {
+        DedunTheme {
             // Required, and deliberately so: `LocalSnackbarHostState` throws rather than
             // defaulting, because a default would make every `notify` on a screen that
             // forgot the host a silent no-op.

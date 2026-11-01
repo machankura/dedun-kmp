@@ -69,7 +69,7 @@ fun LoadingDataIndicator(
 @ConformancePreviews
 @Composable
 private fun TransferHistoryScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             LoadingDataIndicator(
                 text = "Starting up"

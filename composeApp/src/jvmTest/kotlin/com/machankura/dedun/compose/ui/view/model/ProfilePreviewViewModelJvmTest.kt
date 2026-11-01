@@ -253,7 +253,7 @@ class ProfilePreviewViewModelJvmTest {
 
         viewModel.initiate()
         await { viewModel.profilePreviewUIState == loaded(Readiness.Checking) }
-        await { viewModel.profilePreviewUIState == loaded(Readiness.NotYetOnBennu) }
+        await { viewModel.profilePreviewUIState == loaded(Readiness.NotYetOnDedun) }
 
         rooms.keyPackage.value = keyPackage(alice)
         await { viewModel.profilePreviewUIState == loaded(Readiness.CanStartChat) }
@@ -266,7 +266,7 @@ class ProfilePreviewViewModelJvmTest {
         val viewModel = viewModel(recorder, Rooms())
 
         viewModel.initiate()
-        await { viewModel.profilePreviewUIState == loaded(Readiness.NotYetOnBennu) }
+        await { viewModel.profilePreviewUIState == loaded(Readiness.NotYetOnDedun) }
         assertEquals(bothAsks, recorder.effects)
 
         viewModel.retry()
@@ -274,7 +274,7 @@ class ProfilePreviewViewModelJvmTest {
         await { recorder.effects.size == 3 }
         assertEquals(bothAsks + chatAsk, recorder.effects)
 
-        await { viewModel.profilePreviewUIState == loaded(Readiness.NotYetOnBennu) }
+        await { viewModel.profilePreviewUIState == loaded(Readiness.NotYetOnDedun) }
     }
 
     // --- fixtures -----------------------------------------------------------------------

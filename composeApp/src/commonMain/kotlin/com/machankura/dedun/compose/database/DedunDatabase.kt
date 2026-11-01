@@ -27,7 +27,7 @@ import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import androidx.room3.immediateTransaction
 import androidx.room3.useWriterConnection
-import com.machankura.dedun.compose.database.converters.BennuConverters
+import com.machankura.dedun.compose.database.converters.DedunConverters
 import com.machankura.dedun.compose.database.dao.BroadcastNostrEventReceiptDao
 import com.machankura.dedun.compose.database.dao.BroadcastNostrEventRequestDao
 import com.machankura.dedun.compose.database.dao.ChatMessageBroadcastNostrEventReceiptRelationDao
@@ -423,7 +423,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
-@ColumnTypeConverters(BennuConverters::class)
+@ColumnTypeConverters(DedunConverters::class)
 abstract class DedunDatabase: RoomDatabase() {
     /**
      * The Marmot engine for this database's current-profile rooms, made on first use

@@ -7,9 +7,9 @@ import fr.acinq.phoenix.PhoenixGlobal
 fun MainViewController() = ComposeUIViewController {
     val navController = rememberNavController()
 
-    BennuApp(
+    DedunApp(
         navController = navController,
-        bennuGlobal = BennuGlobal(
+        dedunGlobal = DedunGlobal(
             platformContext = PlatformContext()
         ),
         phoenixGlobal = PhoenixGlobal(

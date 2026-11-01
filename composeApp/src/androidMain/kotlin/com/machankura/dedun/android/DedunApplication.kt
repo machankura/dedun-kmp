@@ -14,7 +14,7 @@ import fr.acinq.phoenix.utils.preferences.GlobalPrefs
 /** This datastore persists preferences across node ids. */
 val Context.globalPrefs: DataStore<Preferences> by preferencesDataStore(name = "globalprefs")
 
-class BennuApplication: Application(), LightningApplication {
+class DedunApplication: Application(), LightningApplication {
     private lateinit var globalPrefs: GlobalPrefs
     private lateinit var phoenixGlobal: PhoenixGlobal
 

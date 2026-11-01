@@ -13,7 +13,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -38,7 +38,7 @@ class ExtendedFabJvmTest {
     fun `the button is found by its label in the merged tree, with the icon beside it`() =
         runDesktopComposeUiTest(400, 200) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ExtendedFab(
                         label = "Propose post",
                         icon = { Icon(Icons.Default.Add, contentDescription = "Propose post icon") },
@@ -61,7 +61,7 @@ class ExtendedFabJvmTest {
     fun `a decorative icon leaves the label as the button's only name, which is enough`() =
         runDesktopComposeUiTest(400, 200) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ExtendedFab(
                         label = "Broadcast all",
                         icon = { Icon(Icons.Default.Add, contentDescription = Decorative) },
@@ -79,7 +79,7 @@ class ExtendedFabJvmTest {
 
         runDesktopComposeUiTest(400, 200) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ExtendedFab(
                         label = "Propose post",
                         icon = { Icon(Icons.Default.Add, contentDescription = Decorative) },
@@ -95,7 +95,7 @@ class ExtendedFabJvmTest {
 
         runDesktopComposeUiTest(400, 200) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ExtendedFab(
                         label = "Propose post",
                         icon = { Icon(Icons.Default.Add, contentDescription = Decorative) },

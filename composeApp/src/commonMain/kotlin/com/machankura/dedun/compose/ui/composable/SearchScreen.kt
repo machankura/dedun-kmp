@@ -58,7 +58,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchResultRoute
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileColor
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.SearchViewModel
 import com.machankura.dedun.compose.ui.view.state.SearchUIState
 import com.machankura.dedun.compose.ui.theme.spacing
@@ -426,7 +426,7 @@ fun SearchScreen(
 @ConformancePreviews
 @Composable
 private fun SearchScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

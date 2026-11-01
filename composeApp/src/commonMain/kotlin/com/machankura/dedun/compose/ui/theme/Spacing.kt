@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
  * M3's spacing scale, and the semantic names layered over it.
  *
  * `MaterialTheme` has no spacing slot, so this rides a composition local beside it, the
- * same way [ExtendedColors] does. [BennuTheme] provides it.
+ * same way [ExtendedColors] does. [DedunTheme] provides it.
  *
  * **The scale** is M3's own, an 8dp system where `space100 = 8dp`, including the sub-8
  * nested units Material defines because its components need them. Numbers are from

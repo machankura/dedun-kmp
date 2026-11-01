@@ -384,7 +384,7 @@ fun TextNoteEventDetail(
 @Composable
 private fun TextNoteEventDetailPreview() {
 
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

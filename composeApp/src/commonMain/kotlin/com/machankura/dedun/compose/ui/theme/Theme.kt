@@ -393,7 +393,7 @@ val unspecified_scheme = ColorFamily(
  * Brand colours that are not part of the generated scheme.
  *
  * `ColorScheme` has no slot for them -- M3 calls them extended colours and expects them to
- * ride alongside -- so they travel on their own composition local, provided by [BennuTheme]
+ * ride alongside -- so they travel on their own composition local, provided by [DedunTheme]
  * from the same `darkTheme` the scheme is chosen with. Reading `isSystemInDarkTheme()` at
  * the call site instead would be subtly wrong: it would ignore a caller who passed
  * `darkTheme` explicitly, and a preview forcing dark would show light pills.
@@ -408,7 +408,7 @@ data class ExtendedColors(
  * The extended colours for the current theme.
  *
  * Defaults to the light families rather than to `unspecified_scheme` so that anything
- * composing outside [BennuTheme] renders a real colour instead of nothing. That should not
+ * composing outside [DedunTheme] renders a real colour instead of nothing. That should not
  * happen -- as of this commit nothing in the tree does -- but an invisible button is a worse
  * way to find out than a light-themed one.
  */
@@ -484,7 +484,7 @@ internal fun appColorScheme(darkTheme: Boolean, contrast: ThemeContrast): ColorS
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun BennuTheme(
+fun DedunTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     contrast: ThemeContrast = platformThemeContrast(),
     // Dynamic color is available on Android 12+
@@ -531,7 +531,7 @@ fun BennuTheme(
             // `tween`, so that the whole app's feel is one decision. Nothing reads it yet;
             // the motion phase is what puts it to work.
             motionScheme = MotionScheme.expressive(),
-            shapes = BennuShapes,
+            shapes = DedunShapes,
             typography = AuxTypography,
             content = content
         )

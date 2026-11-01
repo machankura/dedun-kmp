@@ -53,7 +53,7 @@ import dedun.composeapp.generated.resources.checking_whether_s_can_receive_messa
 import dedun.composeapp.generated.resources.looking_for_this_profile_on_the_relays
 import dedun.composeapp.generated.resources.open_chat
 import dedun.composeapp.generated.resources.profile
-import dedun.composeapp.generated.resources.s_hasn_t_set_up_messaging_on_bennu_yet
+import dedun.composeapp.generated.resources.s_hasn_t_set_up_messaging_on_dedun_yet
 import dedun.composeapp.generated.resources.start_new_chat
 import dedun.composeapp.generated.resources.try_again
 import dedun.composeapp.generated.resources.we_could_not_find_a_profile_for_this_key
@@ -75,7 +75,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.ProfilePreviewViewModel
@@ -433,9 +433,9 @@ private fun ReadinessLine(
         is Readiness.ExistingChat -> SupportingLine(stringResource(Res.string.you_already_have_a_chat_with_s, name))
         Readiness.CanStartChat -> Unit
         Readiness.Checking -> SupportingLine(stringResource(Res.string.checking_whether_s_can_receive_messages_here, name))
-        Readiness.NotYetOnBennu -> {
+        Readiness.NotYetOnDedun -> {
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
-                SupportingLine(stringResource(Res.string.s_hasn_t_set_up_messaging_on_bennu_yet, name))
+                SupportingLine(stringResource(Res.string.s_hasn_t_set_up_messaging_on_dedun_yet, name))
                 TextButton(onClick = onRetry) {
                     Text(stringResource(Res.string.try_again))
                 }
@@ -456,7 +456,7 @@ private fun SupportingLine(text: String) {
 @ConformancePreviews
 @Composable
 private fun ProfilePreviewScreenPreview() {
-    BennuTheme {
+    DedunTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             ProfilePreviewScreen(
                 activeUserPublicKey = "a".repeat(64),

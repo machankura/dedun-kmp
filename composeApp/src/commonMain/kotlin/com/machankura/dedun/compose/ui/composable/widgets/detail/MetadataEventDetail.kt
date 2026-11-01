@@ -48,7 +48,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomMess
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.model.MetadataEventDetailType
 import com.machankura.dedun.compose.ui.view.model.MetadataEventDetailViewModel
 import com.machankura.dedun.compose.ui.view.state.MetadataEventDetailUIState
@@ -328,7 +328,7 @@ fun MetadataEventDetail(
 @Composable
 private fun MetadataEventEventDetailPreview() {
 
-    BennuTheme {
+    DedunTheme {
         Surface(
             modifier = Modifier.padding(MaterialTheme.spacing.space250)
         ) {

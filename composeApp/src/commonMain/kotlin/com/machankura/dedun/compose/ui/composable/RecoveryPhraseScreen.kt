@@ -448,7 +448,7 @@ private fun RecoveryPhraseCheckbox(
 @ConformancePreviews
 @Composable
 private fun RecoveryPhraseScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -475,7 +475,7 @@ private fun RecoveryPhraseScreenPreview() {
 @ConformancePreviews
 @Composable
 private fun RecoveryPhraseScreenHiddenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {

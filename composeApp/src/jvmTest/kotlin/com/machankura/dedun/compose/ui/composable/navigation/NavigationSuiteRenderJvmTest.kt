@@ -19,7 +19,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomMess
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchRoute
 import com.machankura.dedun.compose.ui.theme.Breakpoint
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import kotlin.test.Test
 
 /**
@@ -122,7 +122,7 @@ class NavigationSuiteRenderJvmTest {
     /**
      * The three top-level routes and one pushed route, each rendering only its own name.
      *
-     * A stand-in for the app's graph rather than the graph itself: `BennuNavHost` builds
+     * A stand-in for the app's graph rather than the graph itself: `DedunNavHost` builds
      * a database, six repositories and four view models on the way to its first screen,
      * and none of that decides whether the navigation component appears.
      */
@@ -131,8 +131,8 @@ class NavigationSuiteRenderJvmTest {
         profileNostrEventId: String?,
         navController: NavHostController = rememberNavController(),
     ) {
-        BennuTheme {
-            BennuNavigationSuite(
+        DedunTheme {
+            DedunNavigationSuite(
                 navController = navController,
                 breakpoint = Breakpoint.Large,
                 activeUserPublicKey = publicKey,

@@ -26,7 +26,7 @@ import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.active
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRoomId
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ProposalFilter
 import com.machankura.dedun.compose.ui.view.state.ProposalListUIState
 import kotlin.test.Test
@@ -655,7 +655,7 @@ class ProposalListScreenJvmTest {
         assertions: ComposeUiTest.() -> Unit
     ) = runDesktopComposeUiTest(width = 500, height = 1600) {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 ProvideSnackbarHost {
                     Box(modifier = Modifier.fillMaxSize()) {
                         ProposalListScreen(

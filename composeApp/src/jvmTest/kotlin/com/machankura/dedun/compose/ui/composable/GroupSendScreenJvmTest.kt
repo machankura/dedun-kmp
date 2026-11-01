@@ -32,7 +32,7 @@ import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.GroupSendUIState
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import fr.acinq.bitcoin.ByteVector
@@ -194,7 +194,7 @@ class GroupSendScreenJvmTest {
     private fun render(chain: Chain, funded: Boolean = false, assertions: ComposeUiTest.() -> Unit) =
         runDesktopComposeUiTest(width = 400, height = 1200) {
             setContent {
-                BennuTheme {
+                DedunTheme {
                     ProvideSnackbarHost {
                         Box(modifier = Modifier.fillMaxSize()) {
                             GroupSendScreen(

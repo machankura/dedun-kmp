@@ -9,7 +9,7 @@ import com.machankura.dedun.compose.identity.NewProfileWriter
 import com.machankura.dedun.compose.repository.MarmotRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
-import com.machankura.dedun.compose.ui.theme.BennuTheme
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.CreateProfileUIState
 import kotlin.test.Test
 
@@ -27,7 +27,7 @@ class CreateProfileScreenJvmTest {
     @Test
     fun `the screen that adds a profile cannot wipe the others`() = runDesktopComposeUiTest(400, 900) {
         setContent {
-            BennuTheme {
+            DedunTheme {
                 ProvideSnackbarHost {
                     CreateProfileScreen(
                         initialCreateProfileUIState = CreateProfileUIState.ProfileReady(

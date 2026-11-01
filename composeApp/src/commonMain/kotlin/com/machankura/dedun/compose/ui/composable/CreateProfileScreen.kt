@@ -386,7 +386,7 @@ fun CreateProfileScreen(
 @ConformancePreviews
 @Composable
 fun CreateAccountScreenPreview() {
-    com.machankura.dedun.compose.ui.theme.BennuTheme {
+    com.machankura.dedun.compose.ui.theme.DedunTheme {
         Surface(
             modifier = Modifier.fillMaxSize()
         ) {
