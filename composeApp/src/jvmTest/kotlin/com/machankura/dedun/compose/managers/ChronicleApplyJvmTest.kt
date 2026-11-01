@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import androidx.room3.Room
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
@@ -858,31 +860,28 @@ class ChronicleApplyJvmTest {
     /**
      * The decision itself, pinned. Adding a kind back is meant to be made on
      * purpose, with the reason it is safe to replay, and this is the line that
-     * has to change when it is.
+     * has to change when it is. It changed for docs/member-deposits.md: the
+     * depositor statement and the deposit attribution, in that order.
      */
     @Test
-    fun `the app's own list carries nothing`() {
-        assertTrue(ChronicleEvent.KINDS.isEmpty())
-        assertTrue(ChronicleEvent.CHRONICLABLE_KINDS.isEmpty())
+    fun `the app's own list carries the two deposit kinds, and nothing else`() {
+        assertEquals(setOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND), ChronicleEvent.CHRONICLABLE_KINDS)
+        assertTrue(ChronicleEvent.KINDS.applyRank(DepositorStatementEvent.KIND)!! < ChronicleEvent.KINDS.applyRank(DepositAttributionEvent.KIND)!!)
     }
 
     /**
-     * Asking while nothing could answer would put a request on the wire and a
-     * line in the transcript on every room a member opens, for a reply that can
-     * only ever be silence.
+     * Now that something could answer, a member with no history asks: once, with
+     * the request on the wire and the stamp that holds back a second.
      */
     @Test
-    fun `under the app's own list a device asks for nothing`() = runBlocking {
+    fun `under the app's own list a device with no history asks once`() = runBlocking {
         seedRoom(receiver, newMember)
 
-        assertFalse(ChronicleManager.requestIfEmpty(receiver, chatRoomId, newMember))
+        assertTrue(ChronicleManager.requestIfEmpty(receiver, chatRoomId, newMember))
+        assertEquals(1, queued(receiver, ChronicleRequestEvent.KIND).size)
+        assertNotNull(receiver.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.chronicleRequestedAt)
 
-        assertEquals(0, queued(receiver, ChronicleRequestEvent.KIND).size)
-        assertNull(
-            receiver.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.chronicleRequestedAt,
-            "a stamp would hold back a real request on the day the list grows"
-        )
-        assertEquals(emptyList(), lines(receiver))
+        assertFalse(ChronicleManager.requestIfEmpty(receiver, chatRoomId, newMember), "not twice")
     }
 
     /**

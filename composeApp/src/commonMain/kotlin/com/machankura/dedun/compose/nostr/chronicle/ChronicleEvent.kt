@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.nostr.chronicle
 
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import androidx.compose.runtime.Immutable
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -143,12 +145,21 @@ class ChronicleEvent(
          *    replay -- see [ChronicleKinds];
          *  - wallet statements have their own way to a member who joins late.
          *
-         * So the machinery stays and carries nothing: with an empty list a device
+         * So the machinery stayed and carried nothing: with an empty list a device
          * asks for no chronicle, sends none, and applies nothing from one that an
          * older build sends -- see `ChronicleManager`. Adding a kind back is a
          * decision that belongs here, with the reason it is safe to replay.
+         *
+         * Two are back, for `docs/member-deposits.md`: a member who joins late has to
+         * find every depositor's branch, a former member's included, or their coins go
+         * missing from that member's balance, and every signed attribution, or their
+         * tallies disagree with everybody else's. Both are safe to replay. A depositor
+         * statement is write-once and the first per member counts, so an old copy says
+         * what the newest does; an attribution is newest-wins by the group's own
+         * timestamp, so an old one replayed never overrides a later correction. The
+         * statement first: an attribution names depositors.
          */
-        val KINDS: ChronicleKinds = ChronicleKinds.NONE
+        val KINDS: ChronicleKinds = ChronicleKinds(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND))
 
         /** Every kind a chronicle may carry in this app. */
         val CHRONICLABLE_KINDS: Set<Kind> = KINDS.all

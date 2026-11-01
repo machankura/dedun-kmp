@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.allows
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import fr.acinq.bitcoin.OutPoint
@@ -597,6 +598,17 @@ object FrostSigningManager {
                 ?: if (thresholdPublicKey == null) "cannot be checked without the group's key" else null
             reason?.let {
                 logger.w("Signing proposal $sessionId carries a member wallet certificate that $it; dropping")
+                return null
+            }
+        }
+
+        // A depositor statement gives one member a branch of the group's wallet, for good:
+        // it has to be a member, a branch nobody else has, and the member's own current
+        // destination. docs/member-deposits.md, Phase 3.
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind != DepositorStatementEvent.KIND) return@forEach
+            Depositors.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a depositor statement that $reason; dropping")
                 return null
             }
         }
