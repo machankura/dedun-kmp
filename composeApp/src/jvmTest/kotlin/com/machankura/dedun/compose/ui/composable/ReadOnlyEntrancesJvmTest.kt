@@ -136,6 +136,20 @@ class ReadOnlyEntrancesJvmTest {
         onNodeWithText("Switch profile", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    // --- Profile: deposit addresses only where there is a node (docs/personal-swap-in-wallet.md, Phase 3) ---
+
+    @Test
+    fun `a profile with a node is offered its onchain deposits`() = runDesktopComposeUiTest(400, 1200) {
+        setContent { AsIdentity(canSign = true) { ActiveProfile(hasNode = true) } }
+        onNodeWithText("Onchain deposits", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a profile without a node is not, even one that can sign`() = runDesktopComposeUiTest(400, 1200) {
+        setContent { AsIdentity(canSign = true) { ActiveProfile(hasNode = false) } }
+        onNodeWithText("Onchain deposits", useUnmergedTree = true).assertDoesNotExist()
+    }
+
     // --- Profile: sign out is real for a read-only identity, and confirms first ---
 
     @Test
@@ -305,7 +319,7 @@ class ReadOnlyEntrancesJvmTest {
     }
 
     @Composable
-    private fun ActiveProfile(signOut: SignOutDependencies? = null) {
+    private fun ActiveProfile(signOut: SignOutDependencies? = null, hasNode: Boolean = false) {
         ActiveProfileScreen(
             initialActiveProfileUIState = ActiveProfileUIState.Loaded(
                 localNostrEvent = LocalNostrEvent(nostrEvent = metadataEvent, profile = profile.profile),
@@ -316,6 +330,7 @@ class ReadOnlyEntrancesJvmTest {
             onNavigateToRoute = {},
             nostrRepository = FixedProfile,
             signOut = signOut,
+            hasNode = hasNode,
         )
     }
 

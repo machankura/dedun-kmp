@@ -1,11 +1,15 @@
 package com.machankura.dedun.compose.wallet
 
 import fr.acinq.bitcoin.OutPoint
+import fr.acinq.bitcoin.Satoshi
 import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.blockchain.electrum.SwapInManager
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.channel.states.PersistedChannelState
+import fr.acinq.lightning.payment.LiquidityPolicy
+import fr.acinq.lightning.utils.sat
 import fr.acinq.phoenix.managers.PeerManager
+import fr.acinq.phoenix.utils.extensions.isTerminated
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -25,6 +29,12 @@ data class SwapInSnapshot(
     val reserved: Set<OutPoint>,
     val params: SwapInParams,
     val legacyAddress: String,
+    /** Whether the node has a channel that is not closed: a deposit then splices in, rather than opening one. */
+    val hasChannel: Boolean = false,
+    /** What opening a first channel with a deposit costs at today's fees; see [SwapInWalletView.openingFee]. */
+    val openingFee: Satoshi? = null,
+    /** The node's liquidity policy, which every swap-in's fee is checked against. */
+    val policy: LiquidityPolicy? = null,
 )
 
 /** Where the swap-in screen's snapshots come from: the personal node, or a test's fake. */
@@ -46,13 +56,23 @@ class PeerSwapInSource(private val peerManager: PeerManager) : SwapInSource {
         // The live channels are empty until the LSP has answered; until then the ones read from the
         // database say which coins a funding attempt holds, as PeerManager's own channels flow does.
         val channels = combine(peer.bootChannelsFlow, peer.channelsFlow) { boot, live -> live.ifEmpty { boot.orEmpty() } }
-        combine(wallet.wallet.walletStateFlow, peer.currentTipFlow, channels) { state, tip, current ->
+        // Every swap-in address has the same shape, so any one of them prices the channel a deposit opens.
+        val swapInScript = peer.nodeParams.keyManager.swapInOnChainWallet.getSwapInProtocol(0).serializedPubkeyScript
+        val pricing = combine(peer.remoteFundingRates, peer.peerFeeratesFlow, peer.nodeParams.liquidityPolicy) { rates, feerates, policy ->
+            val target = (policy as? LiquidityPolicy.Auto)?.inboundLiquidityTarget ?: 1.sat
+            val fee = if (rates != null && feerates != null) SwapInWalletView.openingFee(swapInScript, rates, feerates.fundingFeerate, target) else null
+            fee to policy
+        }
+        combine(wallet.wallet.walletStateFlow, peer.currentTipFlow, channels, pricing) { state, tip, current, (openingFee, policy) ->
             SwapInSnapshot(
                 state = state,
                 tip = tip,
                 reserved = SwapInManager.reservedWalletInputs(current.values.filterIsInstance<PersistedChannelState>()),
                 params = peer.walletParams.swapInParams,
                 legacyAddress = wallet.legacySwapInAddress,
+                hasChannel = current.values.any { !it.isTerminated() },
+                openingFee = openingFee,
+                policy = policy,
             )
         }
     }

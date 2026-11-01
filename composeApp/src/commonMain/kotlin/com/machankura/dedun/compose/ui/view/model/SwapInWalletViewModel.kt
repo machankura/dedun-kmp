@@ -62,6 +62,8 @@ class SwapInWalletViewModel(
                 current = current,
                 used = addresses.filter { it.status == SwapInAddress.Status.USED },
                 coins = SwapInWalletView.coins(snapshot.state, tip, snapshot.params, snapshot.reserved),
+                minConfirmations = snapshot.params.minConfirmations,
+                firstDeposit = SwapInWalletView.firstDeposit(snapshot.hasChannel, snapshot.openingFee, snapshot.policy),
             )
         }
 

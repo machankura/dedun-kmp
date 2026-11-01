@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.wallet.FirstDeposit
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
 
@@ -20,5 +21,9 @@ sealed interface SwapInWalletUIState {
         val used: List<SwapInAddress>,
         /** Every coin on them, the mempool first. Empty is the screen's empty state. */
         val coins: List<SwapInCoin>,
+        /** How many confirmations a deposit waits for before it swaps in. */
+        val minConfirmations: Int,
+        /** What a first deposit costs, while the node has no channel; see [FirstDeposit]. */
+        val firstDeposit: FirstDeposit? = null,
     ) : SwapInWalletUIState
 }

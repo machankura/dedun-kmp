@@ -1,11 +1,25 @@
 package com.machankura.dedun.compose.wallet
 
+import fr.acinq.bitcoin.ByteVector
+import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.OutPoint
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.Script
+import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxId
+import fr.acinq.bitcoin.TxIn
+import fr.acinq.bitcoin.TxOut
+import fr.acinq.bitcoin.byteVector
 import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.blockchain.electrum.WalletState
+import fr.acinq.lightning.blockchain.fee.FeeratePerKw
+import fr.acinq.lightning.channel.FundingContributions
+import fr.acinq.lightning.payment.LiquidityPolicy
+import fr.acinq.lightning.transactions.Scripts
+import fr.acinq.lightning.transactions.Transactions
 import fr.acinq.lightning.utils.sum
+import fr.acinq.lightning.wire.LiquidityAds
 
 /**
  * One address of the personal node's swap-in wallet, as the swap-in screen lists it
@@ -135,5 +149,55 @@ object SwapInWalletView {
         else -> SwapInCoin.Status.Refundable
     }
 
+    /**
+     * What opening the node's first channel with a swap-in would cost, worked out the way `Peer` works
+     * it out for a node with no channel (`AddWalletInputsToChannel`, docs/personal-swap-in-wallet.md,
+     * Phase 0): our mining fee for one coin on [swapInScript] and our share of the funding transaction,
+     * plus the LSP's mining and service fees for the liquidity the node buys alongside. Null when the LSP
+     * offers no rate for that purchase, which `Peer` also gives up on.
+     *
+     * The fee does not depend on the coin's amount, only on its script, so one placeholder coin stands in.
+     */
+    fun openingFee(swapInScript: ByteVector, rates: LiquidityAds.WillFundRates, feerate: FeeratePerKw, inboundLiquidityTarget: Satoshi): Satoshi? {
+        val rate = rates.findRate(inboundLiquidityTarget) ?: return null
+        val coinTx = Transaction(2, listOf(TxIn(OutPoint(TxId(ByteVector32.Zeroes), 0), 0)), listOf(TxOut(Satoshi(100_000), swapInScript)), 0)
+        val coin = WalletState.Utxo(coinTx.txid, 0, 0, coinTx, WalletState.AddressMeta.Derived(0))
+        val ours = Transactions.weight2fee(feerate, FundingContributions.computeWeightPaid(isInitiator = true, null, PLACEHOLDER_FUNDING_SCRIPT, listOf(coin), emptyList()))
+        val theirs = LiquidityAds.RequestFunding(inboundLiquidityTarget, rate, LiquidityAds.PaymentDetails.FromChannelBalance).fees(feerate, isChannelCreation = true)
+        return ours + theirs.total
+    }
+
+    /** A 2-of-2 the length of a funding script: only its length reaches the weight. */
+    private val PLACEHOLDER_FUNDING_SCRIPT: ByteVector = PrivateKey(ByteVector32.One).publicKey().let { key ->
+        Script.write(Scripts.multiSig2of2(key, key)).byteVector()
+    }
+
+    /**
+     * What the receive section says about a first deposit, given what opening its channel costs and the
+     * node's liquidity policy -- or null when there is nothing to say: the node already has a channel
+     * (a later deposit is a splice and pays mining fees only), the cost is not known yet, or the policy
+     * refuses every swap, which Phase 4 says on its own.
+     */
+    fun firstDeposit(hasChannel: Boolean, openingFee: Satoshi?, policy: LiquidityPolicy?): FirstDeposit? {
+        if (hasChannel || openingFee == null) return null
+        val auto = policy as? LiquidityPolicy.Auto ?: return null
+        if (!auto.skipAbsoluteFeeCheck && openingFee > auto.maxAbsoluteFee) return FirstDeposit(openingFee, minimum = null, overLimit = auto.maxAbsoluteFee)
+        // The relative cap is a fraction of the amount, so it sets the smallest deposit that passes;
+        // and `Peer` refuses one that leaves less than dust once the fee is paid.
+        val relative = (openingFee.toLong() * 10_000 + auto.maxRelativeFeeBasisPoints - 1) / auto.maxRelativeFeeBasisPoints
+        return FirstDeposit(openingFee, minimum = maxOf(Satoshi(relative), openingFee + DUST_LIMIT), overLimit = null)
+    }
+
+    /** `NodeParams.dustLimit`, which a channel-opening swap-in must clear once its fee is paid. */
+    private val DUST_LIMIT = Satoshi(546)
+
     private val WalletState.AddressState.balance: Satoshi get() = utxos.map { it.amount }.sum()
 }
+
+/**
+ * A node with no channel opens one with its first swap-in, and pays for it.
+ *
+ * [overLimit] is the node's fee limit when [fee] is above it: no deposit of any size swaps in until fees
+ * fall or the limit is raised. Otherwise [minimum] is the smallest deposit the limit lets through.
+ */
+data class FirstDeposit(val fee: Satoshi, val minimum: Satoshi?, val overLimit: Satoshi?)

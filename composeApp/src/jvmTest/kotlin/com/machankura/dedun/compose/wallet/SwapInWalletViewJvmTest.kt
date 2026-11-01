@@ -12,6 +12,14 @@ import fr.acinq.lightning.Lightning.randomBytes32
 import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.blockchain.electrum.WalletState.AddressMeta
+import fr.acinq.bitcoin.Chain
+import fr.acinq.lightning.blockchain.fee.FeeratePerKw
+import fr.acinq.lightning.crypto.LocalKeyManager
+import fr.acinq.lightning.payment.LiquidityPolicy
+import fr.acinq.lightning.utils.msat
+import fr.acinq.lightning.utils.sat
+import fr.acinq.lightning.wire.LiquidityAds
+import fr.acinq.phoenixd.conf.LSP
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -135,5 +143,51 @@ class SwapInWalletViewJvmTest {
         assertEquals(listOf(Satoshi(2), Satoshi(3), Satoshi(1)), coins.map { it.amount })
         assertEquals(listOf(1, null, 0), coins.map { it.index })
         assertEquals(listOf(0, 1, 100), coins.map { it.confirmations })
+    }
+
+    // ---- what a first deposit costs ----
+
+    /** ACINQ's first funding rate, as the LSP sent it on 2026-11-01 (Phase 0 outcomes). */
+    private val acinqRates = LiquidityAds.WillFundRates(
+        fundingRates = listOf(LiquidityAds.FundingRate(1.sat, 250_000.sat, 542, 100, 0.sat, 1_000.sat)),
+        paymentTypes = setOf(LiquidityAds.PaymentType.FromChannelBalance),
+    )
+    private val swapInScript = LocalKeyManager(randomBytes32(), Chain.Mainnet, LSP.from(Chain.Mainnet).swapInXpub)
+        .swapInOnChainWallet.getSwapInProtocol(0).serializedPubkeyScript
+
+    private fun policy(maxFee: Long, bps: Int = 50_00) = LiquidityPolicy.Auto(null, maxFee.sat, bps, skipAbsoluteFeeCheck = false, maxAllowedFeeCredit = 0.msat)
+
+    @Test
+    fun `a first channel costs what the spike measured on mainnet`() {
+        assertEquals(1_287.sat, SwapInWalletView.openingFee(swapInScript, acinqRates, FeeratePerKw(253.sat), 1.sat))
+    }
+
+    @Test
+    fun `no rate for the purchase is no price`() {
+        val tooSmall = acinqRates.copy(fundingRates = listOf(LiquidityAds.FundingRate(10_000.sat, 250_000.sat, 542, 100, 0.sat, 1_000.sat)))
+        assertNull(SwapInWalletView.openingFee(swapInScript, tooSmall, FeeratePerKw(253.sat), 1.sat))
+    }
+
+    @Test
+    fun `under the limit a first deposit names the smallest amount that passes`() {
+        assertEquals(FirstDeposit(1_287.sat, 2_574.sat, null), SwapInWalletView.firstDeposit(hasChannel = false, openingFee = 1_287.sat, policy = policy(5_000)))
+    }
+
+    @Test
+    fun `the smallest deposit also leaves more than dust once the fee is paid`() {
+        // At a 100 % cap the relative rule allows a deposit the size of the fee, which would open nothing.
+        assertEquals(FirstDeposit(1_287.sat, 1_833.sat, null), SwapInWalletView.firstDeposit(false, 1_287.sat, policy(5_000, bps = 100_00)))
+    }
+
+    @Test
+    fun `over the limit no deposit of any size goes through`() {
+        assertEquals(FirstDeposit(6_200.sat, null, 5_000.sat), SwapInWalletView.firstDeposit(false, 6_200.sat, policy(5_000)))
+    }
+
+    @Test
+    fun `a node with a channel, an unknown price, or deposits turned off says nothing about a first deposit`() {
+        assertNull(SwapInWalletView.firstDeposit(hasChannel = true, openingFee = 1_287.sat, policy = policy(5_000)))
+        assertNull(SwapInWalletView.firstDeposit(hasChannel = false, openingFee = null, policy = policy(5_000)))
+        assertNull(SwapInWalletView.firstDeposit(hasChannel = false, openingFee = 1_287.sat, policy = LiquidityPolicy.Disable))
     }
 }

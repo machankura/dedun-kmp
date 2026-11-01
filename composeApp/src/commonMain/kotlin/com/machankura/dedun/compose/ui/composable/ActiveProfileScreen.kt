@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -48,6 +49,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyPackageMa
 import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyRecoveryRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ShareProfileRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.SwapInWalletRoute
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
@@ -59,6 +61,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
+import dedun.composeapp.generated.resources.onchain_deposits
 import dedun.composeapp.generated.resources.edit_profile
 import dedun.composeapp.generated.resources.key_package_management
 import dedun.composeapp.generated.resources.network_relays
@@ -109,6 +112,9 @@ fun ActiveProfileScreen(
     // and tests, which compose the screen without an identity.
     memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
     wallets: GroupOnchainWallets? = null,
+    // Whether this profile runs a node: only a profile with a seed does, and only its node has
+    // deposit addresses (docs/personal-swap-in-wallet.md, Phase 3).
+    hasNode: Boolean = false,
 ) {
 
     // Whether this identity can sign, which decides which rows below exist.
@@ -302,6 +308,25 @@ fun ActiveProfileScreen(
                                     { onNavigateToRoute.invoke(NewMemberWalletRoute(activeUserPublicKey = activeUserPublicKey)) }
                                 } else null,
                             )
+
+                            if (hasNode) item {
+                                TextButton(
+                                    onClick = {
+                                        onNavigateToRoute.invoke(SwapInWalletRoute)
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Savings,
+                                        contentDescription = Decorative
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.width(MaterialTheme.spacing.space125)
+                                    )
+
+                                    Text(stringResource(Res.string.onchain_deposits))
+                                }
+                            }
 
                             // Key packages are signed, and there is nothing to recover for
                             // an identity the device holds no secret for: neither row for a
