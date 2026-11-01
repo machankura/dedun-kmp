@@ -1018,4 +1018,12 @@
     <string name="copy_transaction">Copy transaction</string>
     <string name="transaction_copied">Transaction copied</string>
     <string name="show_details">Show details</string>
+    <string name="waiting_for_your_node_to_connect_to_the_lsp">Waiting for your node to connect to the LSP.</string>
+    <string name="waiting_the_fee_is_over_your_limit">Waiting: moving these coins costs about %1$s sats, more than your limit of %2$s sats.</string>
+    <string name="waiting_the_fee_is_over_your_share">Waiting: moving these coins costs about %1$s sats, more than %2$s of the %3$s sats being moved.</string>
+    <string name="moving_deposits_into_lightning_is_turned_off">Moving deposits into Lightning is turned off.</string>
+    <string name="waiting_the_lsp_couldn_t_take_them_yet">Waiting: the LSP couldn't take these coins yet. Your node will try again at the next block.</string>
+    <string name="waiting_for_your_node_to_move_them">Waiting for your node to move them.</string>
+    <string name="moving_s_sats_into_lightning">Moving %1$s sats into Lightning</string>
+    <string name="s_sats_added_to_your_lightning_balance">%1$s sats added to your Lightning balance</string>
 </resources>

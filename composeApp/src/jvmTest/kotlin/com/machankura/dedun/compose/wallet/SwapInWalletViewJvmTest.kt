@@ -13,6 +13,10 @@ import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.blockchain.electrum.WalletState.AddressMeta
 import fr.acinq.bitcoin.Chain
+import fr.acinq.lightning.LiquidityEvents
+import fr.acinq.lightning.MilliSatoshi
+import fr.acinq.lightning.utils.UUID
+import fr.acinq.phoenix.data.Notification
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.crypto.LocalKeyManager
 import fr.acinq.lightning.payment.LiquidityPolicy
@@ -189,5 +193,44 @@ class SwapInWalletViewJvmTest {
         assertNull(SwapInWalletView.firstDeposit(hasChannel = true, openingFee = 1_287.sat, policy = policy(5_000)))
         assertNull(SwapInWalletView.firstDeposit(hasChannel = false, openingFee = null, policy = policy(5_000)))
         assertNull(SwapInWalletView.firstDeposit(hasChannel = false, openingFee = 1_287.sat, policy = LiquidityPolicy.Disable))
+    }
+
+    // ---- why ready coins wait ----
+
+    private fun coinIn(status: SwapInCoin.Status) = SwapInCoin(OutPoint(TxId(randomBytes32()), 0), Satoshi(10_000), 0, 10, status)
+    private val overLimit = SwapInRefusal.OverLimit(6_200.sat, 5_000.sat)
+
+    @Test
+    fun `only a ready coin has anything to wait for`() {
+        assertNull(SwapInWaiting.of(listOf(coinIn(SwapInCoin.Status.Confirming(1, 3)), coinIn(SwapInCoin.Status.Swapping)), connected = false, refusal = overLimit))
+        assertEquals(SwapInWaiting.ForNode, SwapInWaiting.of(listOf(coinIn(SwapInCoin.Status.ExpiringSoon(10))), connected = true, refusal = null))
+    }
+
+    @Test
+    fun `a node off the LSP waits for the LSP, whatever it was last refused`() {
+        assertEquals(SwapInWaiting.NotConnected, SwapInWaiting.of(listOf(coinIn(SwapInCoin.Status.Ready)), connected = false, refusal = overLimit))
+    }
+
+    @Test
+    fun `a connected node that refused says why`() {
+        assertEquals(SwapInWaiting.Refused(overLimit), SwapInWaiting.of(listOf(coinIn(SwapInCoin.Status.Ready)), connected = true, refusal = overLimit))
+    }
+
+    @Test
+    fun `each of the node's reasons maps to a refusal, in sats`() {
+        val amount = MilliSatoshi(50_000_000)
+        val fee = MilliSatoshi(6_200_500)
+        assertEquals(SwapInRefusal.OverLimit(6_200.sat, 5_000.sat), SwapInRefusal.of(LiquidityEvents.Rejected.Reason.TooExpensive.OverAbsoluteFee(5_000.sat), amount, fee))
+        assertEquals(SwapInRefusal.OverShare(6_200.sat, 50_000.sat, 50_00), SwapInRefusal.of(LiquidityEvents.Rejected.Reason.TooExpensive.OverRelativeFee(50_00), amount, fee))
+        assertEquals(SwapInRefusal.Disabled, SwapInRefusal.of(LiquidityEvents.Rejected.Reason.PolicySetToDisabled, amount, fee))
+        assertEquals(SwapInRefusal.Other, SwapInRefusal.of(LiquidityEvents.Rejected.Reason.NoMatchingFundingRate, amount, fee))
+    }
+
+    @Test
+    fun `a filed notification reads as the event it was filed for`() {
+        val filed = Notification.OverAbsoluteFee(UUID.randomUUID(), 0, null, MilliSatoshi(50_000_000), MilliSatoshi(6_200_000), LiquidityEvents.Source.OnChainWallet, 5_000.sat)
+        assertEquals(SwapInRefusal.OverLimit(6_200.sat, 5_000.sat), SwapInRefusal.of(filed))
+        val disabled = Notification.FeePolicyDisabled(UUID.randomUUID(), 0, null, MilliSatoshi(50_000_000), LiquidityEvents.Source.OnChainWallet)
+        assertEquals(SwapInRefusal.Disabled, SwapInRefusal.of(disabled))
     }
 }

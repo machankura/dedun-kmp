@@ -8,6 +8,14 @@ import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.channel.states.PersistedChannelState
 import fr.acinq.lightning.payment.LiquidityPolicy
 import fr.acinq.lightning.utils.sat
+import fr.acinq.lightning.LiquidityEvents
+import fr.acinq.lightning.PaymentEvents
+import fr.acinq.lightning.SwapInEvents
+import fr.acinq.lightning.db.OnChainIncomingPayment
+import fr.acinq.lightning.utils.Connection
+import fr.acinq.lightning.utils.sum
+import fr.acinq.phoenix.data.Notification
+import fr.acinq.phoenix.managers.NotificationsManager
 import fr.acinq.phoenix.managers.PeerManager
 import fr.acinq.phoenix.utils.extensions.isTerminated
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,6 +24,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.scan
 
 /**
  * Everything the swap-in screen reads off the node, at one moment.
@@ -35,11 +45,26 @@ data class SwapInSnapshot(
     val openingFee: Satoshi? = null,
     /** The node's liquidity policy, which every swap-in's fee is checked against. */
     val policy: LiquidityPolicy? = null,
+    /** Whether the node is connected to the LSP, without which no coin moves. */
+    val connected: Boolean = true,
+    /** Why the node last refused to move the ready coins, or null since it last asked to move them. */
+    val refusal: SwapInRefusal? = null,
 )
+
+/** Something the node just did with the deposits, worth a snackbar (docs/personal-swap-in-wallet.md, Phase 4). */
+sealed interface SwapInNotice {
+    /** The node asked the LSP to move [amount] into Lightning. */
+    data class Moving(val amount: Satoshi) : SwapInNotice
+
+    /** The splice or channel confirmed, and [amount] is now Lightning balance. */
+    data class Received(val amount: Satoshi) : SwapInNotice
+}
 
 /** Where the swap-in screen's snapshots come from: the personal node, or a test's fake. */
 fun interface SwapInSource {
     fun snapshots(): Flow<SwapInSnapshot>
+
+    fun notices(): Flow<SwapInNotice> = emptyFlow()
 }
 
 /**
@@ -49,7 +74,11 @@ fun interface SwapInSource {
  * `GroupLightningNode.PeerHandle`, and its swap-in wallet pays a 2-of-2 with a key nobody serves. It must
  * never be listed (docs/personal-swap-in-wallet.md, D1), and this type cannot be built from it.
  */
-class PeerSwapInSource(private val peerManager: PeerManager) : SwapInSource {
+class PeerSwapInSource(
+    private val peerManager: PeerManager,
+    /** Where `PeerManager` files each refusal: the one that came before the screen opened is read back from it. */
+    private val notificationsManager: NotificationsManager,
+) : SwapInSource {
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun snapshots(): Flow<SwapInSnapshot> = peerManager.peerState.filterNotNull().flatMapLatest { peer ->
         val wallet = peer.swapInWallet ?: return@flatMapLatest emptyFlow()
@@ -63,7 +92,19 @@ class PeerSwapInSource(private val peerManager: PeerManager) : SwapInSource {
             val fee = if (rates != null && feerates != null) SwapInWalletView.openingFee(swapInScript, rates, feerates.fundingFeerate, target) else null
             fee to policy
         }
-        combine(wallet.wallet.walletStateFlow, peer.currentTipFlow, channels, pricing) { state, tip, current, (openingFee, policy) ->
+        // The node's events are not replayed, so the refusal starts from the last one filed, if any; each
+        // new refusal replaces it, and a request to move the coins clears it.
+        val refusal = peer.nodeParams.nodeEvents
+            .mapNotNull { event ->
+                when (event) {
+                    is LiquidityEvents.Rejected -> event.takeIf { it.source == LiquidityEvents.Source.OnChainWallet }?.let { listOf(SwapInRefusal.of(it.reason, it.amount, it.fee)) }
+                    is SwapInEvents.Requested -> listOf(null)
+                    else -> null
+                }
+            }
+            .scan(lastFiledRefusal()) { _, update -> update.single() }
+        val link = combine(peer.connectionState, refusal) { connection, last -> (connection is Connection.ESTABLISHED) to last }
+        combine(wallet.wallet.walletStateFlow, peer.currentTipFlow, channels, pricing, link) { state, tip, current, (openingFee, policy), (connected, last) ->
             SwapInSnapshot(
                 state = state,
                 tip = tip,
@@ -73,7 +114,28 @@ class PeerSwapInSource(private val peerManager: PeerManager) : SwapInSource {
                 hasChannel = current.values.any { !it.isTerminated() },
                 openingFee = openingFee,
                 policy = policy,
+                connected = connected,
+                refusal = last,
             )
         }
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun notices(): Flow<SwapInNotice> = peerManager.peerState.filterNotNull().flatMapLatest { peer ->
+        peer.nodeParams.nodeEvents.mapNotNull { event ->
+            when (event) {
+                is SwapInEvents.Requested -> SwapInNotice.Moving(event.walletInputs.map { it.amount }.sum())
+                is PaymentEvents.PaymentReceived -> (event.payment as? OnChainIncomingPayment)?.let { SwapInNotice.Received(it.amountReceived.truncateToSatoshi()) }
+                else -> null
+            }
+        }
+    }
+
+    /** The newest refusal of a deposit `PeerManager` has filed and nobody has read, if any. */
+    private fun lastFiledRefusal(): SwapInRefusal? = notificationsManager.notifications.value
+        .map { it.second }
+        .filterIsInstance<Notification.PaymentRejected>()
+        .filter { it.source == LiquidityEvents.Source.OnChainWallet }
+        .maxByOrNull { it.createdAt }
+        ?.let(SwapInRefusal::of)
 }

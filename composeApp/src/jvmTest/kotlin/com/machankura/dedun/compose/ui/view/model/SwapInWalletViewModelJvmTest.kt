@@ -5,7 +5,10 @@ import com.machankura.dedun.compose.wallet.lightning.GroupLightningNodes
 import com.machankura.dedun.compose.ui.view.state.SwapInWalletUIState
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
+import com.machankura.dedun.compose.wallet.SwapInNotice
+import com.machankura.dedun.compose.wallet.SwapInRefusal
 import com.machankura.dedun.compose.wallet.SwapInSnapshot
+import com.machankura.dedun.compose.wallet.SwapInWaiting
 import com.machankura.dedun.compose.wallet.SwapInSource
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.OutPoint
@@ -22,7 +25,12 @@ import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.blockchain.electrum.WalletState.AddressMeta
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -126,6 +134,31 @@ class SwapInWalletViewModelJvmTest {
         fail = false
         viewModel.initiate()
         assertIs<SwapInWalletUIState.Loaded>(viewModel.uiState)
+    }
+
+    @Test
+    fun `a ready coin the node refused to move says why`() {
+        val mined = utxo(50_000, 0, blockHeight = 100)
+        val refusal = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000))
+        val node = MutableStateFlow(snapshot(used(0, mined), unused(1), tip = 110).copy(refusal = refusal))
+        val viewModel = SwapInWalletViewModel(SwapInSource { node }).also { it.initiate() }
+        assertEquals(SwapInWaiting.Refused(refusal), assertIs<SwapInWalletUIState.Loaded>(viewModel.uiState).waiting)
+
+        node.value = node.value.copy(connected = false)
+        assertEquals(SwapInWaiting.NotConnected, assertIs<SwapInWalletUIState.Loaded>(viewModel.uiState).waiting)
+    }
+
+    @Test
+    fun `what the node does with the deposits reaches the screen once each`() = runBlocking {
+        val events = MutableSharedFlow<SwapInNotice>(extraBufferCapacity = 4)
+        val source = object : SwapInSource {
+            override fun snapshots() = MutableStateFlow(snapshot(unused(0), unused(1)))
+            override fun notices() = events
+        }
+        val viewModel = SwapInWalletViewModel(source).also { it.initiate() }
+        events.emit(SwapInNotice.Moving(Satoshi(50_000)))
+        events.emit(SwapInNotice.Received(Satoshi(48_713)))
+        assertEquals(listOf(SwapInNotice.Moving(Satoshi(50_000)), SwapInNotice.Received(Satoshi(48_713))), withTimeout(5_000) { viewModel.notices.take(2).toList() })
     }
 
     /**

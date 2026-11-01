@@ -11,6 +11,8 @@ import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
 import fr.acinq.bitcoin.byteVector
+import fr.acinq.lightning.LiquidityEvents
+import fr.acinq.lightning.MilliSatoshi
 import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
@@ -20,6 +22,7 @@ import fr.acinq.lightning.transactions.Scripts
 import fr.acinq.lightning.transactions.Transactions
 import fr.acinq.lightning.utils.sum
 import fr.acinq.lightning.wire.LiquidityAds
+import fr.acinq.phoenix.data.Notification
 
 /**
  * One address of the personal node's swap-in wallet, as the swap-in screen lists it
@@ -201,3 +204,62 @@ object SwapInWalletView {
  * fall or the limit is raised. Otherwise [minimum] is the smallest deposit the limit lets through.
  */
 data class FirstDeposit(val fee: Satoshi, val minimum: Satoshi?, val overLimit: Satoshi?)
+
+/**
+ * Why the node refused to move the ready coins, from lightning-kmp's `LiquidityEvents.Rejected` or the
+ * notification `PeerManager` filed for one (docs/personal-swap-in-wallet.md, Phase 4).
+ */
+sealed interface SwapInRefusal {
+    /** The fee was over the policy's absolute cap. */
+    data class OverLimit(val fee: Satoshi, val limit: Satoshi) : SwapInRefusal
+
+    /** The fee was more than the policy's share of the [amount] being moved. */
+    data class OverShare(val fee: Satoshi, val amount: Satoshi, val basisPoints: Int) : SwapInRefusal
+
+    /** The policy turns every swap-in down. */
+    data object Disabled : SwapInRefusal
+
+    /** Anything else the node gives as a reason: it will try again at the next block. */
+    data object Other : SwapInRefusal
+
+    companion object {
+        fun of(reason: LiquidityEvents.Rejected.Reason, amount: MilliSatoshi, fee: MilliSatoshi): SwapInRefusal = when (reason) {
+            is LiquidityEvents.Rejected.Reason.TooExpensive.OverAbsoluteFee -> OverLimit(fee.truncateToSatoshi(), reason.maxAbsoluteFee)
+            is LiquidityEvents.Rejected.Reason.TooExpensive.OverRelativeFee -> OverShare(fee.truncateToSatoshi(), amount.truncateToSatoshi(), reason.maxRelativeFeeBasisPoints)
+            LiquidityEvents.Rejected.Reason.PolicySetToDisabled -> Disabled
+            else -> Other
+        }
+
+        fun of(notification: Notification.PaymentRejected): SwapInRefusal = when (notification) {
+            is Notification.OverAbsoluteFee -> OverLimit(notification.fee.truncateToSatoshi(), notification.maxAbsoluteFee)
+            is Notification.OverRelativeFee -> OverShare(notification.fee.truncateToSatoshi(), notification.amount.truncateToSatoshi(), notification.maxRelativeFeeBasisPoints)
+            is Notification.FeePolicyDisabled -> Disabled
+            else -> Other
+        }
+    }
+}
+
+/** Why coins that are ready have not moved yet: what the deposits section says above them. */
+sealed interface SwapInWaiting {
+    /** The node is not connected to the LSP. */
+    data object NotConnected : SwapInWaiting
+
+    /** The node asked, and turned its own request down. */
+    data class Refused(val refusal: SwapInRefusal) : SwapInWaiting
+
+    /** Connected, with nothing said yet: the node asks at the next block, or any moment. */
+    data object ForNode : SwapInWaiting
+
+    companion object {
+        /**
+         * Null unless a coin is ready to move, since only a ready coin has anything to wait for. The
+         * connection comes first: a refusal filed before the node lost the LSP is not why it waits now.
+         */
+        fun of(coins: List<SwapInCoin>, connected: Boolean, refusal: SwapInRefusal?): SwapInWaiting? = when {
+            coins.none { it.status == SwapInCoin.Status.Ready || it.status is SwapInCoin.Status.ExpiringSoon } -> null
+            !connected -> NotConnected
+            refusal != null -> Refused(refusal)
+            else -> ForNode
+        }
+    }
+}

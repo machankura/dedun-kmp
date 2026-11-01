@@ -58,8 +58,19 @@ import com.machankura.dedun.compose.ui.view.state.SwapInWalletUIState
 import com.machankura.dedun.compose.wallet.FirstDeposit
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
+import com.machankura.dedun.compose.wallet.SwapInNotice
+import com.machankura.dedun.compose.wallet.SwapInRefusal
+import com.machankura.dedun.compose.wallet.SwapInWaiting
 import com.machankura.dedun.compose.wallet.bip21Uri
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.s_sats_added_to_your_lightning_balance
+import dedun.composeapp.generated.resources.moving_s_sats_into_lightning
+import dedun.composeapp.generated.resources.waiting_for_your_node_to_move_them
+import dedun.composeapp.generated.resources.waiting_the_lsp_couldn_t_take_them_yet
+import dedun.composeapp.generated.resources.moving_deposits_into_lightning_is_turned_off
+import dedun.composeapp.generated.resources.waiting_the_fee_is_over_your_share
+import dedun.composeapp.generated.resources.waiting_the_fee_is_over_your_limit
+import dedun.composeapp.generated.resources.waiting_for_your_node_to_connect_to_the_lsp
 import dedun.composeapp.generated.resources.address_copied
 import dedun.composeapp.generated.resources.can_be_refunded_in_s
 import dedun.composeapp.generated.resources.can_be_refunded_now
@@ -90,6 +101,7 @@ import dedun.composeapp.generated.resources.transaction_copied
 import dedun.composeapp.generated.resources.used_addresses
 import dedun.composeapp.generated.resources.waiting_for_its_first_confirmation
 import fr.acinq.bitcoin.Satoshi
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -109,6 +121,19 @@ fun SwapInWalletScreen(
 ) {
     val swapInViewModel: SwapInWalletViewModel = viewModel(factory = SwapInWalletViewModel.factory(identity))
     LaunchedEffect(true) { swapInViewModel.initiate() }
+
+    // In the screen's scope rather than a handler's: the notice is read as the node acts, not on a tap.
+    val notify = rememberNotifier(rememberCoroutineScope())
+    LaunchedEffect(swapInViewModel) {
+        swapInViewModel.notices.collect { notice ->
+            notify(
+                when (notice) {
+                    is SwapInNotice.Moving -> getString(Res.string.moving_s_sats_into_lightning, notice.amount.grouped())
+                    is SwapInNotice.Received -> getString(Res.string.s_sats_added_to_your_lightning_balance, notice.amount.grouped())
+                }
+            )
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
@@ -185,6 +210,9 @@ private fun SwapInWalletList(
         item(key = "deposits") {
             SectionHeading(stringResource(Res.string.deposits))
         }
+        state.waiting?.let { waiting ->
+            item(key = "waiting") { WaitingLine(waiting) }
+        }
         if (state.coins.isEmpty()) {
             item(key = "no-deposits") { EmptyState(message = stringResource(Res.string.nothing_has_been_sent_to_your_deposit_addresses_yet)) }
         }
@@ -254,6 +282,37 @@ private fun ReceiveSection(state: SwapInWalletUIState.Loaded, onCopy: () -> Unit
 private fun FirstDeposit.sentence(): String = when (val limit = overLimit) {
     null -> stringResource(Res.string.first_deposit_opens_a_channel, fee.grouped(), (minimum ?: fee).grouped())
     else -> stringResource(Res.string.first_deposit_over_your_limit, fee.grouped(), limit.grouped())
+}
+
+/**
+ * Why the ready coins have not moved (docs/personal-swap-in-wallet.md, Phase 4). One line for all of
+ * them, since the node moves every ready coin in one request and refuses them together.
+ */
+@Composable
+private fun WaitingLine(waiting: SwapInWaiting) {
+    val refused = waiting is SwapInWaiting.Refused && waiting.refusal != SwapInRefusal.Other
+    Text(
+        text = waiting.sentence(),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (refused) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun SwapInWaiting.sentence(): String = when (this) {
+    SwapInWaiting.NotConnected -> stringResource(Res.string.waiting_for_your_node_to_connect_to_the_lsp)
+    SwapInWaiting.ForNode -> stringResource(Res.string.waiting_for_your_node_to_move_them)
+    is SwapInWaiting.Refused -> when (val refusal = refusal) {
+        is SwapInRefusal.OverLimit -> stringResource(Res.string.waiting_the_fee_is_over_your_limit, refusal.fee.grouped(), refusal.limit.grouped())
+        is SwapInRefusal.OverShare -> stringResource(
+            Res.string.waiting_the_fee_is_over_your_share,
+            refusal.fee.grouped(),
+            "${refusal.basisPoints / 100}%",
+            refusal.amount.grouped(),
+        )
+        SwapInRefusal.Disabled -> stringResource(Res.string.moving_deposits_into_lightning_is_turned_off)
+        SwapInRefusal.Other -> stringResource(Res.string.waiting_the_lsp_couldn_t_take_them_yet)
+    }
 }
 
 /** One coin: its amount, and where it is on its way into Lightning. A tap shows its transaction. */

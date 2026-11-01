@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.ui.view.state
 import com.machankura.dedun.compose.wallet.FirstDeposit
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
+import com.machankura.dedun.compose.wallet.SwapInWaiting
 
 sealed interface SwapInWalletUIState {
     /** Until Electrum has said which addresses are used and the node has heard of a block. */
@@ -25,5 +26,7 @@ sealed interface SwapInWalletUIState {
         val minConfirmations: Int,
         /** What a first deposit costs, while the node has no channel; see [FirstDeposit]. */
         val firstDeposit: FirstDeposit? = null,
+        /** Why the ready coins have not moved, or null when none is ready; see [SwapInWaiting]. */
+        val waiting: SwapInWaiting? = null,
     ) : SwapInWalletUIState
 }

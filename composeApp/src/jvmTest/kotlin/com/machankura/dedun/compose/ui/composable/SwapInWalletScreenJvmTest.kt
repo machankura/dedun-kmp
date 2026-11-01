@@ -11,6 +11,11 @@ import com.machankura.dedun.compose.ui.view.state.SwapInWalletUIState
 import com.machankura.dedun.compose.wallet.FirstDeposit
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
+import com.machankura.dedun.compose.wallet.SwapInRefusal
+import com.machankura.dedun.compose.wallet.SwapInWaiting
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.TxId
@@ -30,8 +35,8 @@ class SwapInWalletScreenJvmTest {
     private fun coin(amount: Long, status: SwapInCoin.Status, confirmations: Int = 0) =
         SwapInCoin(OutPoint(TxId(randomBytes32()), 0), Satoshi(amount), 0, confirmations, status)
 
-    private fun loaded(coins: List<SwapInCoin> = emptyList(), used: List<SwapInAddress> = emptyList(), firstDeposit: FirstDeposit? = null) =
-        SwapInWalletUIState.Loaded(current = current, used = used, coins = coins, minConfirmations = 3, firstDeposit = firstDeposit)
+    private fun loaded(coins: List<SwapInCoin> = emptyList(), used: List<SwapInAddress> = emptyList(), firstDeposit: FirstDeposit? = null, waiting: SwapInWaiting? = null) =
+        SwapInWalletUIState.Loaded(current = current, used = used, coins = coins, minConfirmations = 3, firstDeposit = firstDeposit, waiting = waiting)
 
     @Test
     fun `a fresh wallet shows its address, what a deposit does, and that nothing has come yet`() = runDesktopComposeUiTest(400, 1400) {
@@ -83,6 +88,26 @@ class SwapInWalletScreenJvmTest {
         onNodeWithText("Must move into Lightning within about 3 days").assertIsDisplayed()
         onNodeWithText("Too old to move into Lightning. Can be refunded in about 1 month").assertIsDisplayed()
         onNodeWithText("Too old to move into Lightning. Can be refunded now").assertIsDisplayed()
+    }
+
+    @Test
+    fun `ready coins that have not moved say why, once for all of them`() = runDesktopComposeUiTest(400, 1400) {
+        val ready = listOf(coin(3_000, SwapInCoin.Status.Ready, 10), coin(4_000, SwapInCoin.Status.Ready, 12))
+        var waiting by mutableStateOf<SwapInWaiting>(SwapInWaiting.NotConnected)
+        setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = ready, waiting = waiting), onRetry = {}) } } }
+        onNodeWithText("Waiting for your node to connect to the LSP.").assertIsDisplayed()
+
+        waiting = SwapInWaiting.Refused(SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000)))
+        onNodeWithText("Waiting: moving these coins costs about 6,200 sats, more than your limit of 5,000 sats.").assertIsDisplayed()
+
+        waiting = SwapInWaiting.Refused(SwapInRefusal.OverShare(Satoshi(6_200), Satoshi(7_000), 50_00))
+        onNodeWithText("Waiting: moving these coins costs about 6,200 sats, more than 50% of the 7,000 sats being moved.").assertIsDisplayed()
+
+        waiting = SwapInWaiting.Refused(SwapInRefusal.Disabled)
+        onNodeWithText("Moving deposits into Lightning is turned off.").assertIsDisplayed()
+
+        waiting = SwapInWaiting.ForNode
+        onNodeWithText("Waiting for your node to move them.").assertIsDisplayed()
     }
 
     @Test
