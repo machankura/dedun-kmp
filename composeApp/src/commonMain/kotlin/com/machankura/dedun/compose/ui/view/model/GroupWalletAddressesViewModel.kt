@@ -25,6 +25,8 @@ import kotlinx.coroutines.withContext
  * address is current.
  */
 class GroupWalletAddressesViewModel(
+    /** Whose deposit addresses are offered to be paid: this profile's, and nobody else's. */
+    val activeUserPublicKey: String,
     val chatRoomId: String,
     val chain: Chain,
     initialUIState: GroupWalletAddressesUIState,
@@ -63,10 +65,25 @@ class GroupWalletAddressesViewModel(
                 return@launch
             }
 
+            val names = chatRepository.getChatRoomByIdentifier(chatRoomId)?.localParticipants.orEmpty().associate { participant ->
+                participant.participant.participantPublicKey.lowercase() to
+                    (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
+            }
+            val me = activeUserPublicKey.lowercase()
+
             uiState = GroupWalletAddressesUIState.Loaded(receive = null)
             wallets.walletFor(wallet.account, chatRoomId).state.collect { state ->
-                val receive = state.receiveAddresses
-                uiState = GroupWalletAddressesUIState.Loaded(receive = receive, change = state.changeAddresses.orEmpty())
+                val receive = state.depositAddressesOf(me)
+                uiState = GroupWalletAddressesUIState.Loaded(
+                    receive = receive,
+                    change = state.changeAddresses.orEmpty(),
+                    isDepositor = me in state.members,
+                    others = state.members.keys.filter { it != me }.sorted().mapNotNull { member ->
+                        state.depositAddressesOf(member)?.filter { it.status == GroupAddress.Status.USED }?.takeIf { it.isNotEmpty() }
+                            ?.let { (names[member] ?: member.take(8)) to it }
+                    },
+                    legacy = state.receiveAddresses.orEmpty().filter { it.status == GroupAddress.Status.USED },
+                )
 
                 val index = shown ?: return@collect
                 val status = receive?.firstOrNull { it.derivation.index == index }?.status ?: return@collect
@@ -83,6 +100,7 @@ class GroupWalletAddressesViewModel(
 
     companion object {
         fun factory(
+            activeUserPublicKey: String,
             chatRoomId: String,
             chain: Chain,
             initialUIState: GroupWalletAddressesUIState = GroupWalletAddressesUIState.Loading,
@@ -91,6 +109,7 @@ class GroupWalletAddressesViewModel(
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupWalletAddressesViewModel(
+                    activeUserPublicKey = activeUserPublicKey,
                     chatRoomId = chatRoomId,
                     chain = chain,
                     initialUIState = initialUIState,

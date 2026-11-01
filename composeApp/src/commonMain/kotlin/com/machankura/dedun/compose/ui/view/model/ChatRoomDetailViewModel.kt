@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.nostr.MarmotProfile
@@ -47,6 +48,8 @@ class ChatRoomDetailViewModel(
     val memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
     /** Where this group pays its members -- `docs/group-payout-destination.md`. The no-op has no section. */
     val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    /** Who deposits with the group -- `docs/member-deposits.md`. The no-op opens nobody. */
+    val depositRepository: DepositRepository = DepositRepository.NO_OP,
 ): ViewModel() {
 
     var chatRoomDetailUIState: ChatRoomDetailUIState by mutableStateOf(initialChatRoomDetailUIState)
@@ -137,7 +140,29 @@ class ChatRoomDetailViewModel(
                     showsMemberWalletPolicy = !isDisbanded && couldGuard,
                     payouts = payouts,
                     payoutDestinations = if (payouts != null) payoutDestinationRepository.destinationsIn(chatRoomId, NodeParamsManager.chain) else emptyMap(),
+                    openableDepositors = if (payouts != null && canSign) {
+                        localChatRoom.localParticipants.map { it.participant.participantPublicKey.lowercase() }
+                            .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }
+                            .toSet()
+                    } else emptySet(),
                 )
+            }
+        }
+    }
+
+    /**
+     * Asks the group to open [member]'s deposits, as this device, which holds a share: a signing
+     * session over their depositor statement. `docs/member-deposits.md`, Phase 5.
+     */
+    fun openDeposits(member: HexKey, onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val loaded = chatRoomDetailUIState as? ChatRoomDetailUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { depositRepository.open(loaded.localChatRoom, NodeParamsManager.chain, member) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
             }
         }
     }
@@ -300,6 +325,7 @@ class ChatRoomDetailViewModel(
             chatRepository: ChatRepository,
             memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
             payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+            depositRepository: DepositRepository = DepositRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ChatRoomDetailViewModel(
@@ -311,6 +337,7 @@ class ChatRoomDetailViewModel(
                     chatRepository = chatRepository,
                     memberWalletRepository = memberWalletRepository,
                     payoutDestinationRepository = payoutDestinationRepository,
+                    depositRepository = depositRepository,
                 )
             }
         }

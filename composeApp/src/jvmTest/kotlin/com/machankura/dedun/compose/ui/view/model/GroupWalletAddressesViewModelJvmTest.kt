@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.wallet.GroupChainClients
+import com.machankura.dedun.compose.managers.DepositBranch
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.managers.GroupWalletDerivation
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
@@ -73,8 +75,16 @@ class GroupWalletAddressesViewModelJvmTest {
             override suspend fun groupWallet(chatRoomId: String, chain: Chain): GroupWallet? = opened
         }
 
-    private fun viewModel(opened: GroupWallet?, wallets: GroupOnchainWallets = GroupOnchainWallets(FakeElectrum(), scope)) =
+    /** This profile, a depositor: its addresses are the ones offered (docs/member-deposits.md, Phase 5). */
+    private val me = "a1".repeat(32)
+    private val myBranch = DepositBranch.of(chatRoomId, me)
+
+    private fun walletsOn(electrum: FakeElectrum, depositors: Map<String, Long> = mapOf(me to myBranch)) =
+        GroupOnchainWallets(GroupChainClients.single(electrum), scope) { _, _ -> depositors }
+
+    private fun viewModel(opened: GroupWallet?, wallets: GroupOnchainWallets = walletsOn(FakeElectrum())) =
         GroupWalletAddressesViewModel(
+            activeUserPublicKey = me,
             chatRoomId = chatRoomId,
             chain = Chain.Regtest,
             initialUIState = GroupWalletAddressesUIState.Loading,
@@ -90,7 +100,19 @@ class GroupWalletAddressesViewModelJvmTest {
             }
         }
 
-    private fun receive(index: Long) = GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, index)
+    private fun receive(index: Long) = GroupWalletDerivation.derive(account, myBranch, index)
+    private fun legacy(index: Long) = GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, index)
+
+    @Test
+    fun `a profile the group has not opened deposits for is offered no address, and sees what was paid before`() {
+        val electrum = FakeElectrum()
+        val addresses = viewModel(opened = wallet, wallets = walletsOn(electrum, depositors = emptyMap()))
+        runBlocking { electrum.pay(legacy(0).pubkeyScript, Satoshi(5_000)) }
+        val state = addresses.until { (it as? GroupWalletAddressesUIState.Loaded)?.legacy?.isNotEmpty() == true } as GroupWalletAddressesUIState.Loaded
+        assertNull(state.receive)
+        assertEquals(false, state.isDepositor)
+        assertEquals(listOf(GroupAddress.Status.USED), state.legacy.map { it.status })
+    }
 
     @Test
     fun `a room with no wallet has no addresses to list`() {
@@ -100,7 +122,7 @@ class GroupWalletAddressesViewModelJvmTest {
     @Test
     fun `the list follows a payment while the screen is open`() {
         val electrum = FakeElectrum()
-        val addresses = viewModel(opened = wallet, wallets = GroupOnchainWallets(electrum, scope))
+        val addresses = viewModel(opened = wallet, wallets = walletsOn(electrum))
 
         addresses.until { (it as? GroupWalletAddressesUIState.Loaded)?.receive != null }
         runBlocking { electrum.pay(receive(0).pubkeyScript, Satoshi(25_000)) }
@@ -119,7 +141,7 @@ class GroupWalletAddressesViewModelJvmTest {
     @Test
     fun `the sheet closes once when the address it shows is paid`() {
         val electrum = FakeElectrum()
-        val addresses = viewModel(opened = wallet, wallets = GroupOnchainWallets(electrum, scope))
+        val addresses = viewModel(opened = wallet, wallets = walletsOn(electrum))
         addresses.untilListed(1L, GroupAddress.Status.NEXT)
 
         var paid = 0
@@ -135,7 +157,7 @@ class GroupWalletAddressesViewModelJvmTest {
     @Test
     fun `the sheet stays open when some other address is paid`() {
         val electrum = FakeElectrum()
-        val addresses = viewModel(opened = wallet, wallets = GroupOnchainWallets(electrum, scope))
+        val addresses = viewModel(opened = wallet, wallets = walletsOn(electrum))
         addresses.untilListed(1L, GroupAddress.Status.NEXT)
 
         var paid = 0

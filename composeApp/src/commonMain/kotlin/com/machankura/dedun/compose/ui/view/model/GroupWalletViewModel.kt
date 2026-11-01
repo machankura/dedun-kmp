@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.isDecided
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
@@ -61,6 +62,8 @@ class GroupWalletViewModel(
     val frostSigningRepository: FrostSigningRepository,
     private val wallets: GroupOnchainWallets,
     private val watcher: GroupTransactionWatcher? = null,
+    /** Who deposits with the group -- `docs/member-deposits.md`. The no-op hands nobody an address. */
+    private val depositRepository: DepositRepository = DepositRepository.NO_OP,
 ): ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -126,6 +129,11 @@ class GroupWalletViewModel(
                 guardedWallets = guardedRows,
                 shareable = shareable,
                 guardianNames = namesOf(wallet.account.guardians),
+                deposits = depositRepository.standing(chatRoomId, chain, canPropose = canSign),
+                memberNames = localChatRoom.localParticipants.associate { participant ->
+                    participant.participant.participantPublicKey.lowercase() to
+                        (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
+                },
             )
             groupWalletUIState = loaded
 
@@ -316,6 +324,25 @@ class GroupWalletViewModel(
         }
     }
 
+    /**
+     * Asks the group to open the active profile's deposits: a signing session over its
+     * depositor statement, which proposing counts as approving. `docs/member-deposits.md`.
+     */
+    fun openMyDeposits(onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val loaded = groupWalletUIState as? GroupWalletUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { depositRepository.open(loaded.localChatRoom, chain, activeUserPublicKey) }
+                .onFailure { logger.e("Couldn't propose opening deposits in $chatRoomId", it) }
+                .getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "GroupWalletViewModel"
 
@@ -328,6 +355,7 @@ class GroupWalletViewModel(
             frostSigningRepository: FrostSigningRepository,
             wallets: GroupOnchainWallets,
             watcher: GroupTransactionWatcher? = null,
+            depositRepository: DepositRepository = DepositRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupWalletViewModel(
@@ -339,6 +367,7 @@ class GroupWalletViewModel(
                     frostSigningRepository = frostSigningRepository,
                     wallets = wallets,
                     watcher = watcher,
+                    depositRepository = depositRepository,
                 )
             }
         }

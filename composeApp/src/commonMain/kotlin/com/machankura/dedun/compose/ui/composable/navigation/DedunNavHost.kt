@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.database.repository.DatabaseDepositRepository
 import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import fr.acinq.phoenixd.conf.LSP
@@ -254,6 +255,14 @@ fun DedunNavHost(
 
     val databaseMemberWalletRepository = remember {
         DatabaseMemberWalletRepository(
+            database = auxDatabaseManager.auxDatabase,
+            activeIdentity = sovereignWalletViewModel.activeIdentity,
+        )
+    }
+
+    // Who deposits with each group: docs/member-deposits.md.
+    val databaseDepositRepository = remember {
+        DatabaseDepositRepository(
             database = auxDatabaseManager.auxDatabase,
             activeIdentity = sovereignWalletViewModel.activeIdentity,
         )
@@ -1285,6 +1294,7 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     memberWalletRepository = databaseMemberWalletRepository,
                     payoutDestinationRepository = databasePayoutDestinationRepository,
+                    depositRepository = databaseDepositRepository,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(
                             route = actionRoute
@@ -1361,6 +1371,7 @@ fun DedunNavHost(
                     frostSigningRepository = databaseFrostSigningRepository,
                     wallets = wallets,
                     watcher = groupTransactionWatcher,
+                    depositRepository = databaseDepositRepository,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },
@@ -1448,6 +1459,7 @@ fun DedunNavHost(
                 val wallets = groupOnchainWallets ?: return@composable
 
                 GroupWalletAddressesScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
                     chatRepository = databaseChatRepository,

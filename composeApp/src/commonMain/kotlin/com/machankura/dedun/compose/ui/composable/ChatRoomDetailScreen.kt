@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_their_deposits
+import dedun.composeapp.generated.resources.open_deposits
+import androidx.compose.material.icons.filled.Savings
+import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.material.icons.filled.Bolt
 import dedun.composeapp.generated.resources.lightning_wallet
 import dedun.composeapp.generated.resources.lightning_needs_an_onchain_wallet
@@ -236,6 +240,7 @@ fun ChatRoomDetailScreen(
     chatRepository: ChatRepository,
     memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
     payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    depositRepository: DepositRepository = DepositRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit,
     onPopBackToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
@@ -250,8 +255,10 @@ fun ChatRoomDetailScreen(
             activeUserPublicKey = activeUserPublicKey,
             memberWalletRepository = memberWalletRepository,
             payoutDestinationRepository = payoutDestinationRepository,
+            depositRepository = depositRepository,
         )
     )
+    val couldNotOpenDeposits = stringResource(Res.string.couldn_t_ask_the_group_to_open_their_deposits)
     val couldNotPutToGroup = stringResource(Res.string.couldn_t_put_it_to_the_group)
 
     // Read outside the click handlers: stringResource and rememberNotifier are both
@@ -857,6 +864,28 @@ fun ChatRoomDetailScreen(
                                                             }
                                                         } else null,
                                                     )
+                                                    // A member with a destination whose deposits are not open yet,
+                                                    // opened by a device that holds a share. docs/member-deposits.md.
+                                                    if (memberPublicKey.lowercase() in chatRoomDetailUIState.openableDepositors) {
+                                                        TextButton(
+                                                            enabled = !chatRoomDetailViewModel.isActionPending.value,
+                                                            onClick = {
+                                                                chatRoomDetailViewModel.openDeposits(
+                                                                    member = memberPublicKey,
+                                                                    onSuccess = { sessionId ->
+                                                                        onNavigateToRoute.invoke(
+                                                                            FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId)
+                                                                        )
+                                                                    },
+                                                                    onFailure = { notify(couldNotOpenDeposits) },
+                                                                )
+                                                            },
+                                                        ) {
+                                                            Icon(Icons.Default.Savings, contentDescription = Decorative)
+                                                            Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+                                                            Text(stringResource(Res.string.open_deposits))
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }

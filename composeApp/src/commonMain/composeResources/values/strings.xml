@@ -910,4 +910,21 @@
     <string name="that_address_answered_with_an_invoice_for_something_else">That address answered with an invoice for something else.</string>
     <string name="paid_before_ask_s_for_a_new_address">Paid before. Ask %1$s for a new address.</string>
     <string name="s_payout_address">%1$s's payout address</string>
+    <!-- Whose deposit it is: docs/member-deposits.md -->
+    <string name="your_deposit_address">Your deposit address</string>
+    <string name="the_group_counts_what_you_put_in_once_it_knows_where_to_pay_you">The group counts what you put in once it knows where to pay you back.</string>
+    <string name="set_where_this_group_pays_you_first">Set where this group pays you first</string>
+    <string name="the_group_opens_your_deposits_once_signing_a_branch_of_its_wallet_that_is_yours">The group opens your deposits once, by signing a branch of its wallet that is yours alone.</string>
+    <string name="start_depositing">Start depositing</string>
+    <string name="a_member_who_holds_a_share_of_the_group_s_key_can_open_your_deposits">A member who holds a share of the group's key can open your deposits.</string>
+    <string name="everything_paid_here_is_counted_as_yours">Everything paid to your addresses is counted as yours.</string>
+    <string name="from_s">From %1$s</string>
+    <string name="unattributed">Unattributed</string>
+    <string name="couldn_t_ask_the_group_to_open_your_deposits">Couldn't ask the group to open your deposits.</string>
+    <string name="your_deposit_addresses">Your deposit addresses</string>
+    <string name="you_have_no_deposit_addresses_yet">You have no deposit addresses yet.</string>
+    <string name="s_deposit_addresses">%1$s's deposit addresses</string>
+    <string name="before_deposits_were_attributed">Before deposits were attributed</string>
+    <string name="open_deposits">Open deposits</string>
+    <string name="couldn_t_ask_the_group_to_open_their_deposits">Couldn't ask the group to open their deposits.</string>
 </resources>

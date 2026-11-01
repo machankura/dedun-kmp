@@ -122,6 +122,11 @@ sealed interface ChatRoomDetailUIState {
         val payouts: PayoutDestinationRepository.Standing? = null,
         /** Where this group pays each member who has said, by public key; read only when [payouts] is shown. */
         val payoutDestinations: Map<HexKey, GroupPayoutDestination> = emptyMap(),
+        /**
+         * Members with a destination whose deposits the group has not opened, for a device that
+         * holds a share to open: `docs/member-deposits.md`, Phase 5.
+         */
+        val openableDepositors: Set<HexKey> = emptySet(),
     ): ChatRoomDetailUIState
 
     data class Error(
