@@ -148,8 +148,6 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.SelectSubgro
 import com.machankura.dedun.compose.ui.composable.SelectSubgroupAdminsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SelectChatRoomTypeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ShareProfileRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.SwapInWalletRoute
-import com.machankura.dedun.compose.ui.composable.SwapInWalletScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SignInRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SocialPreconditionRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SovereignWalletStartupRoute
@@ -1164,15 +1162,6 @@ fun DedunNavHost(
                     signOut = signOutOfReadOnlyIdentity,
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = groupOnchainWallets,
-                    hasNode = activeIdentityForWallets?.business != null,
-                )
-            }
-            composable<SwapInWalletRoute> {
-                SwapInWalletScreen(
-                    identity = activeIdentityForWallets,
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    },
                 )
             }
             composable<ShareProfileRoute> { backStackEntry ->
