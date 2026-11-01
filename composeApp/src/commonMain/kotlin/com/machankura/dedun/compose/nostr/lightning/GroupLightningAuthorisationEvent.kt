@@ -30,6 +30,8 @@ object GroupLightningAuthorisationEvent {
     private const val MAX_FEE_TAG = "maxfee"
     private const val HASH_TAG = "hash"
     private const val EXPIRES_TAG = "expires"
+    /** Whose payout destination a payment is for, on the proposer's word: a label, never a check. */
+    private const val PAYOUT_TAG = "payout"
 
     private const val CHANNEL_TAG = "channel"
     private const val ID_TAG = "id"
@@ -54,9 +56,18 @@ object GroupLightningAuthorisationEvent {
         val maxFeeMsat: Long,
         val paymentHash: String,
         val expiresAt: Long,
+        /**
+         * The member whose payout destination the proposer resolved this invoice from, and that
+         * destination's event: `docs/group-payout-destination.md`, Phase 7. Nobody can check that a
+         * Lightning address's server issued the invoice for that member, so this names the payment
+         * and decides nothing -- no co-signer rule reads it, and a build without it ignores the tag.
+         */
+        val payout: Payout? = null,
     ) {
         val budgetMsat: Long get() = amountMsat + maxFeeMsat
     }
+
+    data class Payout(val member: String, val destinationEventId: String)
 
     fun template(pay: Pay, createdAt: Long = Clock.System.now().epochSeconds): EventTemplate<*> =
         EventTemplate<Nothing>(
@@ -70,6 +81,7 @@ object GroupLightningAuthorisationEvent {
                 arrayOf(MAX_FEE_TAG, pay.maxFeeMsat.toString()),
                 arrayOf(HASH_TAG, pay.paymentHash),
                 arrayOf(EXPIRES_TAG, pay.expiresAt.toString()),
+                *listOfNotNull(pay.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) }).toTypedArray(),
             ),
             content = "",
         )
@@ -97,7 +109,8 @@ object GroupLightningAuthorisationEvent {
         if (parts[2] != hash || invoice.paymentHash.toHex() != hash) return null
         if (invoice.amount != null && invoice.amount!!.msat != amount) return null
         if (expires > invoice.timestampSeconds + (invoice.expirySeconds ?: Bolt11Invoice.DEFAULT_EXPIRY_SECONDS.toLong())) return null
-        return Pay(chain, wallet, bolt11, amount, maxFee, hash, expires)
+        val payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout(it[1].lowercase(), it[2].lowercase()) }
+        return Pay(chain, wallet, bolt11, amount, maxFee, hash, expires, payout)
     }
 
     /** A [CLOSE] or [FORCE_CLOSE] of [channelId], open until [expiresAt] (epoch seconds). */

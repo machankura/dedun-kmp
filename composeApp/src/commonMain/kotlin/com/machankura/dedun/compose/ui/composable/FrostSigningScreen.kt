@@ -82,6 +82,8 @@ import com.machankura.dedun.compose.database.model.types.FrostSigningSubject
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import dedun.composeapp.generated.resources.s_payout_address
 import com.machankura.dedun.compose.text.ProposedEvent
 import com.machankura.dedun.compose.text.ProposedSpend
 import com.machankura.dedun.compose.text.grouped
@@ -123,6 +125,7 @@ fun FrostSigningScreen(
     initialFrostSigningUIState: FrostSigningUIState = FrostSigningUIState.Loading,
     chatRepository: ChatRepository,
     frostSigningRepository: FrostSigningRepository,
+    payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
     onNavigateBack: () -> Unit,
 ) {
     val frostSigningViewModel: FrostSigningViewModel = viewModel(
@@ -132,7 +135,8 @@ fun FrostSigningScreen(
             activeUserPublicKey = activeUserPublicKey,
             initialFrostSigningUIState = initialFrostSigningUIState,
             chatRepository = chatRepository,
-            frostSigningRepository = frostSigningRepository
+            frostSigningRepository = frostSigningRepository,
+            payoutDestinationRepository = payoutDestinationRepository,
         )
     )
 
@@ -225,9 +229,13 @@ fun FrostSigningScreen(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space200)
                 ) {
                     when {
-                        isSpend -> WhatIsBeingSpent(state.spend)
+                        isSpend -> WhatIsBeingSpent(state.spend, state.payees)
                         isSweep -> WhatIsBeingSwept(state.sweep)
-                        else -> WhatIsBeingSigned(proposed, state.items.size)
+                        else -> WhatIsBeingSigned(proposed, state.items.size) { member ->
+                            state.localChatRoom.localParticipants
+                                .firstOrNull { it.participant.participantPublicKey.equals(member, ignoreCase = true) }
+                                ?.profile?.humanReadableNameOrPubkey()
+                        }
                     }
 
                     HorizontalDivider()
@@ -485,7 +493,7 @@ private fun Loading(padding: androidx.compose.foundation.layout.PaddingValues) {
  * sign something they cannot check.
  */
 @Composable
-private fun WhatIsBeingSigned(events: List<Event>, expected: Int) {
+private fun WhatIsBeingSigned(events: List<Event>, expected: Int, nameOf: (HexKey) -> String? = { null }) {
     if (expected == 0 || events.size != expected) {
         Text(
             text = if (expected <= 1) {
@@ -511,7 +519,7 @@ private fun WhatIsBeingSigned(events: List<Event>, expected: Int) {
         events.forEachIndexed { index, event ->
             if (index > 0) HorizontalDivider()
 
-            OneThingBeingSigned(event)
+            OneThingBeingSigned(event, nameOf)
         }
 
         Text(
@@ -555,7 +563,7 @@ private fun WhatIsBeingSwept(sweep: GroupSweep.Checked?) {
 }
 
 @Composable
-private fun WhatIsBeingSpent(spend: GroupSpend.Checked?) {
+private fun WhatIsBeingSpent(spend: GroupSpend.Checked?, payees: Map<String, String> = emptyMap()) {
     if (spend == null) {
         Text(
             text = stringResource(Res.string.this_spend_could_not_be_checked),
@@ -576,6 +584,15 @@ private fun WhatIsBeingSpent(spend: GroupSpend.Checked?) {
                     text = ProposedSpend.addressOf(output.txOut.publicKeyScript, spend.account.chain),
                     style = MaterialTheme.typography.titleMedium
                 )
+                // A member's own signed payout address, matched on this device.
+                // docs/group-payout-destination.md, Phase 7.
+                payees[output.txOut.publicKeyScript.toHex()]?.takeIf { !output.isChange }?.let { name ->
+                    Text(
+                        text = stringResource(Res.string.s_payout_address, "@$name"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
                     text = if (output.isChange) {
                         stringResource(Res.string.s_sats_back_to_the_group_as_change, output.txOut.amount.grouped())
@@ -612,8 +629,8 @@ private fun WhatIsBeingSpent(spend: GroupSpend.Checked?) {
 
 /** One event of the batch, described as the thing it is. */
 @Composable
-private fun OneThingBeingSigned(event: Event) {
-    val summary = ProposedEvent.summarize(event)
+private fun OneThingBeingSigned(event: Event, nameOf: (HexKey) -> String? = { null }) {
+    val summary = ProposedEvent.summarize(event, nameOf)
 
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space50)) {
         Text(text = summary.label, style = MaterialTheme.typography.labelMedium)

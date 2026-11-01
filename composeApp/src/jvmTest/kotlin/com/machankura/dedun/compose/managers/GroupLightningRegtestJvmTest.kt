@@ -185,12 +185,14 @@ class GroupLightningRegtestJvmTest {
 
     /**
      * The payer pays the group [sats], and the channel the LSP opens on the fly for it confirms. It pays the
-     * offer a member's snapshot carries rather than a Bolt11 invoice: an invoice reaches the group's node
-     * through a route hint naming it by a peer-id short channel id, which ACINQ's LSP resolves and public
-     * eclair does not, while an offer's blinded path names the node as a wallet, which eclair funds.
+     * node's offer rather than a Bolt11 invoice: an invoice reaches the group's node through a route hint
+     * naming it by a peer-id short channel id, which ACINQ's LSP resolves and public eclair does not, while
+     * an offer's blinded path names the node as a wallet, which eclair funds. The app's node never answers
+     * an offer (docs/member-deposits.md, D7), so this fixture's is built to, and the offer is derived from
+     * the seed here since no snapshot carries one: Spike B.
      */
     private suspend fun receive(all: List<GroupLightningFixture.Device>, sats: Long) {
-        val offer = mineUntil("a member's copy of the group's offer", 1.minutes) { report(all[3])?.snapshot?.offer }
+        val offer = GroupLightningReports.offerOf(GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!)!!
         val paid = payer("payoffer", mapOf("offer" to offer, "amountMsat" to (sats * 1000).toString()))
         val paymentId = (paid as? JsonObject)?.get("paymentId")?.jsonPrimitive?.content ?: paid.jsonPrimitive.content
         mineUntil("the payer's payment of $sats sats") {
@@ -256,6 +258,8 @@ class GroupLightningRegtestJvmTest {
             walletParamsFor = { _, _ -> walletParams },
             loggerFactory = loggerFactory,
             scope = scope,
+            // Fixture only: public eclair can pay the node's offer and not its BOLT11 route hint (Spike B).
+            answerOfferRequests = true,
         )
         heardFromRoom(operator)
         val node = GroupLightningNode(operator.db, operator.room, operator.publicKey, wallet, scope, { c -> real(c).also { handles += it } }, handoverCheck = 1.seconds, reportEvery = 5.seconds)
@@ -264,7 +268,8 @@ class GroupLightningRegtestJvmTest {
             lsp("peers").jsonArray.firstOrNull { it.jsonObject["nodeId"]?.jsonPrimitive?.content == wallet.statement.nodeId && it.jsonObject["state"]?.jsonPrimitive?.content == "CONNECTED" }
         }
 
-        // Receive: a member's Bolt11 request comes back as an invoice for the group's node...
+        // Receive: a depositor's Bolt11 request comes back as an invoice for the group's node...
+        fixture.openDeposits(all, all[3])
         val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 100_000_000, "first")
         val invoice = Bolt11Invoice.read(mineUntil("the operator's invoice", 1.minutes) { all[3].db.groupLightningRecordsDao().invoice(key, requestId)?.bolt11 }).get()
         assertEquals(wallet.statement.nodeId, invoice.nodeId.toString())
@@ -277,6 +282,17 @@ class GroupLightningRegtestJvmTest {
         println("REGTEST received: channel ${channel.channelId.take(16)} capacity ${channel.capacitySat}, ours ${channel.oursMsat} msat")
         assertTrue(channel.oursMsat in 90_000_000..100_000_000, "the group holds the payment, less the LSP's fee: ${channel.oursMsat}")
         assertTrue(received.count { it!!.checks.single().agrees == true } >= 2, "the members who co-signed agree with the operator")
+
+        // The offer's payment is nobody's deposit -- no invoice of a depositor's explains it -- until the
+        // group signs whose it is (docs/member-deposits.md, Spike B and Phase 9).
+        val offerPaid = mineUntil("the offer's payment on file as a deposit") {
+            DepositLedger.depositsIn(all[0].db, fixture.roomId, fixture.chain).singleOrNull { it.source == com.machankura.dedun.compose.database.model.DepositRow.LIGHTNING }
+        }
+        assertEquals(null, offerPaid.member, "an offer's payment is nobody's")
+        signed(all, all[0], DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(offerPaid.depositKey to all[3].publicKey)).id)
+        all.forEach { d ->
+            assertEquals(offerPaid.amountMsat, DepositLedger.tallies(d.db, fixture.roomId, fixture.chain).members[all[3].publicKey]?.lightningMsat, "device ${d.index}'s tally")
+        }
 
         // Buy liquidity (docs/group-lightning-liquidity.md, Phase 8): a member prices 200,000 sats of inbound
         // from the operator's snapshot, the group authorises it, the operator's node splices, and every

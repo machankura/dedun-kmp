@@ -9,6 +9,11 @@ Read [shared-key-derivation.md](./shared-key-derivation.md) first. The property
 this whole design rests on -- that a room's id *is* the key it signs with -- is
 stated there, and everything cheap about what follows is downstream of it.
 
+**Built, and carrying two kinds again** since [member-deposits.md](./member-deposits.md):
+the depositor statement (30339) and the deposit attribution (30340), so a member who
+joins late finds every depositor's branch and agrees about every tally. The paragraph
+below is how it stood before that.
+
 **Built, and carrying nothing at the moment.** The document kinds it was built
 for were removed with their screens ([ceremony-creation.md](./ceremony-creation.md),
 Phase 7), and nothing else the group signs is safe or useful to replay. What a

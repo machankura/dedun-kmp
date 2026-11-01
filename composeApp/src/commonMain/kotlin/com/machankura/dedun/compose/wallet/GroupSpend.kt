@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.wallet
 
 import com.machankura.dedun.compose.managers.FrostSigningManager
+import com.machankura.dedun.compose.managers.DepositBranch
 import com.machankura.dedun.compose.managers.GroupWalletDerivation
 import com.machankura.dedun.compose.managers.GuardianManager
 import com.machankura.dedun.compose.managers.GuardianDerivation
@@ -273,7 +274,10 @@ object GroupSpend {
             if (input.unknown.isNotEmpty()) return Result.Refused("input $index carries fields this wallet does not sign with")
             if (input.taprootKeySignature != null) return Result.Refused("input $index is already signed")
 
-            val derivation = claimedDerivation(input.taprootDerivationPaths, account)
+            // A coin may be on a member's deposit branch as well as on receive or change: it
+            // is the group's all the same, since its derivation has to reproduce the coin
+            // below. docs/member-deposits.md, Phase 2.
+            val derivation = claimedDerivation(input.taprootDerivationPaths, account, memberBranches = true)
                 ?: return Result.Refused("input $index does not name a place under this wallet's account")
             if (derivation.pubkeyScript != witness.txOut.publicKeyScript) {
                 return Result.Refused("input $index claims ${derivation.change}/${derivation.index}, which is not the coin it spends")
@@ -379,17 +383,24 @@ object GroupSpend {
      *
      * Keyed by internal key in the PSBT, per BIP371; the key is checked against
      * the derivation rather than trusted, since it is the proposer's word.
+     *
+     * Receive and change, and -- with [memberBranches], for a coin being spent -- a
+     * member's deposit branch (`DepositBranch`). Never for an output: change goes to
+     * the change branch, and a member's branch is for what members pay in.
      */
     private fun claimedDerivation(
         paths: Map<fr.acinq.bitcoin.XonlyPublicKey, TaprootBip32DerivationPath>,
         account: GroupWalletDerivation.Account,
+        memberBranches: Boolean = false,
     ): GroupWalletDerivation.Derived? {
         val (internalKey, path) = paths.entries.singleOrNull { isOurs(it.value, account) }
             ?.toPair()
             ?: return null
         if (path.leaves.isNotEmpty()) return null
         val (change, index) = path.keyPath.path.takeIf { it.size == 2 } ?: return null
-        if (change != GroupWalletDerivation.RECEIVE && change != GroupWalletDerivation.CHANGE) return null
+        val known = change == GroupWalletDerivation.RECEIVE || change == GroupWalletDerivation.CHANGE ||
+            (memberBranches && DepositBranch.isMemberBranch(change))
+        if (!known) return null
         if (index !in 0L..MAX_ADDRESS_INDEX) return null
 
         return GroupWalletDerivation.derive(account, change, index).takeIf { it.internalKey == internalKey }

@@ -20,4 +20,6 @@ data class GroupSendRoute(
     val fundChatRoomId: String? = null,
     /** The wallet's network, as `GroupWalletStatementEvent.chainName` spells it; null for the node's own. */
     val chain: String? = null,
+    /** An address to start the form with: a member's payout address (`docs/group-payout-destination.md`, Phase 7). */
+    val address: String? = null,
 ): Route()

@@ -136,6 +136,7 @@ fun GroupSendScreen(
     wallets: GroupOnchainWallets,
     guardedChatRoomId: String? = null,
     fundChatRoomId: String? = null,
+    initialAddress: String? = null,
     onNavigateToRouteAndPopUpInclusive: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -150,6 +151,7 @@ fun GroupSendScreen(
             wallets = wallets,
             guardedChatRoomId = guardedChatRoomId,
             fundChatRoomId = fundChatRoomId,
+            initialAddress = initialAddress,
         )
     )
 

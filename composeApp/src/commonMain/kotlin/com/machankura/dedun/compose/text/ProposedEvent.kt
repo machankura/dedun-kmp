@@ -1,6 +1,8 @@
 package com.machankura.dedun.compose.text
 
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -137,7 +139,13 @@ object ProposedEvent {
             Summary(
                 label = "Pay ${Satoshi(pay.amountMsat / 1000).grouped()} sats",
                 detail = buildString {
-                    append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeMsat / 1000).grouped()} sats")
+                    // A member's payout destination, on the proposer's word: the Lightning address's
+                    // server signs nothing, so the node key stays beside the name.
+                    // docs/group-payout-destination.md, Phase 7.
+                    pay.payout?.let { payout ->
+                        append("To @${nameOf(payout.member) ?: payout.member.take(8)}'s Lightning address, as the proposer resolved it: ")
+                    }
+                    append("${if (pay.payout != null) "node" else "To"} ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeMsat / 1000).grouped()} sats")
                     invoice?.description?.takeIf { it.isNotBlank() }?.let { append(", for \"$it\"") }
                 },
             )
@@ -169,6 +177,27 @@ object ProposedEvent {
         // delay. A signer weighs the delay, and that it reaches only wallets
         // asked for from now on; closing leaves every guarded wallet guarded.
         // docs/member-wallet-delay.md.
+        // A member starting to deposit with the group. A signer weighs who, and where
+        // their money goes back to: the destination the statement carries, signed by them.
+        // docs/member-deposits.md.
+        DepositorStatementEvent.KIND -> DepositorStatementEvent.read(event, event.pubKey)?.let { depositor ->
+            Summary(
+                label = "Open deposits for @${nameOf(depositor.member) ?: depositor.member.take(8)}",
+                detail = "On ${GroupWalletStatementEvent.chainName(depositor.chain)} · paid back to ${depositor.destination.lightningAddress}" +
+                    (depositor.destination.onchainAddress?.let { " or $it" } ?: ""),
+            )
+        } ?: Summary(label = "Open deposits for a member", detail = "A depositor statement this device cannot read")
+
+        // The group saying whose some deposits are. Every signer checks each against its own
+        // ledger before signing; the summary is the count and the total.
+        DepositAttributionEvent.KIND -> DepositAttributionEvent.read(event)?.let { signed ->
+            val members = signed.attributions.mapNotNull { it.member }.toSet()
+            Summary(
+                label = "Attribute ${signed.attributions.size} deposit${if (signed.attributions.size == 1) "" else "s"}",
+                detail = if (members.isEmpty()) "To the group itself" else "To " + members.joinToString { "@" + (nameOf(it) ?: it.take(8)) },
+            )
+        } ?: Summary(label = "Attribute deposits", detail = "An attribution this device cannot read")
+
         MemberWalletPolicyEvent.KIND -> Summary(
             label = "Members' guarded wallets",
             detail = when (val policy = MemberWalletPolicyEvent.read(event)) {

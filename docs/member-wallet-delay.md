@@ -130,7 +130,8 @@ why the leaf has the delay it has.
 ### D1. A group-signed event, not the birth certificate
 
 **Decided.** Kind 30337, the next free number after the key
-notice at 30336.
+notice at 30336. The next, 30338, has since gone to a member's payout
+destination ([group-payout-destination.md](./group-payout-destination.md)).
 
 ### D2. Can the group change it?
 

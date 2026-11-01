@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.database.model
 
 import androidx.room3.Entity
+import androidx.room3.Index
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -37,11 +38,17 @@ data class GroupLightningPaymentRow(
     val liquiditySat: Long? = null,
 )
 
-/** An invoice the operator made for a member's request. */
-@Entity(primaryKeys = ["wallet", "requestId"])
+/**
+ * An invoice the operator made for a member's request: [requester] is whose deposit it is and
+ * [paymentHash] what joins a payment to it (`docs/member-deposits.md`, Phase 6). Null on rows from
+ * before deposits were attributed.
+ */
+@Entity(primaryKeys = ["wallet", "requestId"], indices = [Index(value = ["wallet", "paymentHash"])])
 data class GroupLightningInvoiceRow(
     val wallet: String,
     val requestId: String,
     val bolt11: String,
     val receivedAt: Instant = Clock.System.now(),
+    val requester: String? = null,
+    val paymentHash: String? = null,
 )

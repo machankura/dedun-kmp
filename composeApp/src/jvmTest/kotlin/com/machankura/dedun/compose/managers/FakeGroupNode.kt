@@ -59,8 +59,6 @@ class FakeGroupNode(private val configuration: GroupLightningNode.NodeConfigurat
     override suspend fun close(channelId: String, scriptPubKey: ByteVector) { closed += channelId to scriptPubKey }
     override suspend fun forceClose(channelId: String) { forceClosed += channelId }
     override fun heldOutputs(): List<GroupSweep.Input> = heldOutputs
-    override fun offer(): String =
-        OfferManager.deterministicOffer(configuration.chain.chainHash, configuration.keyManager.nodeKeys.nodeKey.privateKey, configuration.lspNodeId, null, null, null).offer.encode()
     override fun fundingRates(): WalletWire.FundingRates? = rates
     override fun feeratePerByte(): Long? = feerate
     override suspend fun buyLiquidity(id: String, channelId: String, amountSat: Long, maxFeeSat: Long): WalletWire.LiquidityPurchase {

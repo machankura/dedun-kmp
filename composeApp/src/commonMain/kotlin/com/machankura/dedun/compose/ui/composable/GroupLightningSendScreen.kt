@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -87,11 +88,13 @@ fun GroupLightningSendScreen(
     chatRoomId: String,
     chatRepository: ChatRepository,
     lightningRepository: GroupLightningRepository,
+    initialInvoice: String? = null,
+    payout: GroupLightningAuthorisationEvent.Payout? = null,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupLightningSendViewModel = viewModel(
-        factory = GroupLightningSendViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository)
+        factory = GroupLightningSendViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository, initialInvoice, payout)
     )
     LaunchedEffect(true) { viewModel.initiate() }
 

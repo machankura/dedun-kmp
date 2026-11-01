@@ -131,6 +131,9 @@ kotlin {
             // runBlocking in a common source set — so anything worth asserting about them
             // needs a coroutine, and a scheduler, to assert it in.
             implementation(libs.kotlinx.coroutinesTest)
+            // MockEngine: the Lightning address resolver's every answer, a redirect and an
+            // oversized body included, without a server (docs/group-payout-destination.md, Phase 3).
+            implementation(libs.ktor.client.mock)
         }
         jvmTest.dependencies {
             // A layout modifier cannot be asserted by reading it. `readableContent()` is

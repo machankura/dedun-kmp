@@ -1,5 +1,17 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_your_deposits
+import dedun.composeapp.generated.resources.unattributed
+import dedun.composeapp.generated.resources.from_s
+import dedun.composeapp.generated.resources.everything_paid_here_is_counted_as_yours
+import dedun.composeapp.generated.resources.a_member_who_holds_a_share_of_the_group_s_key_can_open_your_deposits
+import dedun.composeapp.generated.resources.start_depositing
+import dedun.composeapp.generated.resources.the_group_opens_your_deposits_once_signing_a_branch_of_its_wallet_that_is_yours
+import dedun.composeapp.generated.resources.set_where_this_group_pays_you_first
+import dedun.composeapp.generated.resources.the_group_counts_what_you_put_in_once_it_knows_where_to_pay_you
+import dedun.composeapp.generated.resources.your_deposit_address
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutDestinationRoute
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import dedun.composeapp.generated.resources.a_group_below_s
 import dedun.composeapp.generated.resources.a_group_below_this_one
@@ -192,6 +204,7 @@ fun GroupWalletScreen(
     frostSigningRepository: FrostSigningRepository,
     wallets: GroupOnchainWallets,
     watcher: GroupTransactionWatcher? = null,
+    depositRepository: DepositRepository = DepositRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -205,6 +218,7 @@ fun GroupWalletScreen(
             frostSigningRepository = frostSigningRepository,
             wallets = wallets,
             watcher = watcher,
+            depositRepository = depositRepository,
         )
     )
 
@@ -213,6 +227,7 @@ fun GroupWalletScreen(
             groupWalletViewModel.initiate()
         }
     }
+    val couldNotOpenDeposits = stringResource(Res.string.couldn_t_ask_the_group_to_open_your_deposits)
 
     val notify = rememberNotifier(rememberCoroutineScope())
     val couldNotOpen = stringResource(Res.string.couldn_t_ask_the_group_to_open_a_wallet)
@@ -388,6 +403,10 @@ fun GroupWalletScreen(
                                 )
                             )
                         },
+                        onSetDestination = {
+                            onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
+                        },
+                        onStartDepositing = { groupWalletViewModel.openMyDeposits(onSuccess = toSession, onFailure = { notify(couldNotOpenDeposits) }) },
                         onOpenSpend = toSession,
                         onSendAgain = if (watcher != null) {
                             { sessionId -> groupWalletViewModel.sendAgain(sessionId) { notify(sentAgain) } }
@@ -496,6 +515,8 @@ private fun OpenWallet(
     notify: (String) -> Unit,
     onSend: (() -> Unit)?,
     onOpenAddresses: () -> Unit,
+    onSetDestination: () -> Unit,
+    onStartDepositing: () -> Unit,
     onOpenSpend: (sessionId: String) -> Unit,
     onSendAgain: ((sessionId: String) -> Unit)?,
     onBump: ((sessionId: String) -> Unit)?,
@@ -541,7 +562,7 @@ private fun OpenWallet(
         }
 
         when {
-            walletState?.receiveAddress == null -> item {
+            walletState == null -> item {
                 LoadingDataIndicator(
                     fillScreen = false,
                     text = stringResource(Res.string.finding_the_group_s_coins)
@@ -549,43 +570,21 @@ private fun OpenWallet(
             }
 
             else -> {
-                val address = walletState.receiveAddress!!
-
+                // Only an address that is somebody's: the member's own, on their own branch.
+                // docs/member-deposits.md, Phase 5.
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(MaterialTheme.spacing.containerPadding),
-                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.receive_address),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            // BIP21, so a scanning wallet knows what the text is.
-                            QRCodeView(bip21Uri(address))
-                            SelectionContainer {
-                                Text(text = address, style = MaterialTheme.typography.bodyMedium)
-                            }
-                            TextButton(
-                                onClick = {
-                                    clipboardManager.setText(buildAnnotatedString { append(address) })
-                                    notify(addressCopied)
-                                }
-                            ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = Decorative)
-                                Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                                Text(stringResource(Res.string.copy_address))
-                            }
-                            // In the card because it answers the question the card
-                            // raises: which address to give, when somebody else in
-                            // the group may be giving this one.
-                            TextButton(onClick = onOpenAddresses) {
-                                Icon(Icons.Default.FormatListNumbered, contentDescription = Decorative)
-                                Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                                Text(stringResource(Res.string.all_addresses))
-                            }
-                        }
-                    }
+                    DepositCard(
+                        standing = state.deposits,
+                        address = (state.deposits as? DepositRepository.Standing.Open)?.let { walletState.depositAddressOf(it.depositor.member) },
+                        isPending = isPending,
+                        onCopy = { address ->
+                            clipboardManager.setText(buildAnnotatedString { append(address) })
+                            notify(addressCopied)
+                        },
+                        onOpenAddresses = onOpenAddresses,
+                        onSetDestination = onSetDestination,
+                        onStartDepositing = onStartDepositing,
+                    )
                 }
 
                 item {
@@ -601,7 +600,12 @@ private fun OpenWallet(
                     }
                 } else {
                     items(walletState.utxos, key = { it.utxo.outPoint.toString() }) { utxo ->
-                        CoinRow(utxo = utxo, confirmations = walletState.confirmations(utxo))
+                        val member = walletState.memberOfBranch(utxo.derivation.change)
+                        CoinRow(
+                            utxo = utxo,
+                            confirmations = walletState.confirmations(utxo),
+                            from = member?.let { state.memberNames[it] ?: it.take(8) },
+                        )
                     }
                 }
             }
@@ -994,15 +998,98 @@ internal fun BalanceCard(walletState: GroupWalletState?) {
     }
 }
 
+/**
+ * Whether the active profile is handed a deposit address, and the address when it is: their own,
+ * on their branch, or the step that comes first -- a payout destination, then the group opening
+ * their deposits. A profile that can't sign is handed nothing. `docs/member-deposits.md`, Phase 5.
+ */
 @Composable
-internal fun CoinRow(utxo: GroupUtxo, confirmations: Int) {
+internal fun DepositCard(
+    standing: DepositRepository.Standing,
+    address: String?,
+    isPending: Boolean,
+    onCopy: (String) -> Unit,
+    onOpenAddresses: () -> Unit,
+    onSetDestination: () -> Unit,
+    onStartDepositing: () -> Unit,
+) {
+    if (standing == DepositRepository.Standing.CannotSign) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.containerPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)
+        ) {
+            Text(text = stringResource(Res.string.your_deposit_address), style = MaterialTheme.typography.titleMedium)
+            when (standing) {
+                DepositRepository.Standing.CannotSign -> Unit
+                DepositRepository.Standing.NeedsDestination -> {
+                    Text(
+                        text = stringResource(Res.string.the_group_counts_what_you_put_in_once_it_knows_where_to_pay_you),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = onSetDestination) { Text(stringResource(Res.string.set_where_this_group_pays_you_first)) }
+                }
+                is DepositRepository.Standing.CanOpen -> {
+                    Text(
+                        text = stringResource(Res.string.the_group_opens_your_deposits_once_signing_a_branch_of_its_wallet_that_is_yours),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (standing.canPropose) {
+                        Button(onClick = onStartDepositing, enabled = !isPending) { Text(stringResource(Res.string.start_depositing)) }
+                    } else {
+                        Text(
+                            text = stringResource(Res.string.a_member_who_holds_a_share_of_the_group_s_key_can_open_your_deposits),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                is DepositRepository.Standing.Open -> if (address == null) {
+                    LoadingDataIndicator(fillScreen = false, text = stringResource(Res.string.finding_the_group_s_coins))
+                } else {
+                    // BIP21, so a scanning wallet knows what the text is.
+                    QRCodeView(bip21Uri(address))
+                    SelectionContainer {
+                        Text(text = address, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(
+                        text = stringResource(Res.string.everything_paid_here_is_counted_as_yours),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = { onCopy(address) }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = Decorative)
+                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                        Text(stringResource(Res.string.copy_address))
+                    }
+                    TextButton(onClick = onOpenAddresses) {
+                        Icon(Icons.Default.FormatListNumbered, contentDescription = Decorative)
+                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                        Text(stringResource(Res.string.all_addresses))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One coin: how much, whose -- [from] for a member's deposit branch, *Change*, or *Unattributed*
+ * for the legacy receive branch -- and how deep. `docs/member-deposits.md`, Phase 5.
+ */
+@Composable
+internal fun CoinRow(utxo: GroupUtxo, confirmations: Int, from: String? = null) {
     ListItem(
         leadingContent = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = Decorative) },
         headlineContent = { Text(stringResource(Res.string.s_sats, utxo.amount.grouped())) },
         supportingContent = {
-            val branch = stringResource(
-                if (utxo.derivation.change == GroupWalletDerivation.CHANGE) Res.string.change else Res.string.received
-            )
+            val branch = when {
+                utxo.derivation.change == GroupWalletDerivation.CHANGE -> stringResource(Res.string.change)
+                from != null -> stringResource(Res.string.from_s, "@$from")
+                else -> stringResource(Res.string.unattributed)
+            }
             val depth = if (confirmations == 0) {
                 stringResource(Res.string.waiting_for_a_confirmation)
             } else {

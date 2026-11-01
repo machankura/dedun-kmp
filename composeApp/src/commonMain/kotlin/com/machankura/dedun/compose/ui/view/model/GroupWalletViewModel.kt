@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.wallet.GroupWalletState
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.isDecided
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
@@ -61,6 +63,8 @@ class GroupWalletViewModel(
     val frostSigningRepository: FrostSigningRepository,
     private val wallets: GroupOnchainWallets,
     private val watcher: GroupTransactionWatcher? = null,
+    /** Who deposits with the group -- `docs/member-deposits.md`. The no-op hands nobody an address. */
+    private val depositRepository: DepositRepository = DepositRepository.NO_OP,
 ): ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -126,14 +130,20 @@ class GroupWalletViewModel(
                 guardedWallets = guardedRows,
                 shareable = shareable,
                 guardianNames = namesOf(wallet.account.guardians),
+                deposits = depositRepository.standing(chatRoomId, chain, canPropose = canSign),
+                memberNames = localChatRoom.localParticipants.associate { participant ->
+                    participant.participant.participantPublicKey.lowercase() to
+                        (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
+                },
             )
             groupWalletUIState = loaded
 
             // The chain, the room's spends and the wallets it guards, as one
             // state: any of them changing redraws the screen, and none may
             // overwrite another.
-            val chainState = wallets.walletFor(wallet.account).state
+            val chainState = wallets.walletFor(wallet.account, chatRoomId).state
             noticeGuardianSpends(wallet.account)
+            recordDeposits(chainState)
             watching = viewModelScope.launch(Dispatchers.IO) {
                 combine(
                     chainState,
@@ -168,6 +178,24 @@ class GroupWalletViewModel(
     }
 
     private var noticing: Job? = null
+    private var recording: Job? = null
+
+    /**
+     * Each time the coins or the used addresses change, files every output that has paid the
+     * receive and deposit branches -- so a deposit counts in its member's tally, and keeps counting
+     * once the group spends it. `docs/member-deposits.md`, Phase 8.
+     */
+    private fun recordDeposits(states: Flow<GroupWalletState>) {
+        recording?.cancel()
+        recording = viewModelScope.launch(Dispatchers.IO) {
+            states
+                .distinctUntilChangedBy { state ->
+                    state.utxos.map { it.utxo.outPoint }.toSet() to
+                        (listOf(state.receive) + state.members.values.map { it.state }).sumOf { branch -> branch.addresses.values.count { it.alreadyUsed } }
+                }
+                .collect { state -> depositRepository.recordOnchain(chatRoomId, chain, wallets.depositsIn(state)) }
+        }
+    }
 
     /**
      * For a guarded wallet: each time its coins change, reads the chain for
@@ -316,6 +344,25 @@ class GroupWalletViewModel(
         }
     }
 
+    /**
+     * Asks the group to open the active profile's deposits: a signing session over its
+     * depositor statement, which proposing counts as approving. `docs/member-deposits.md`.
+     */
+    fun openMyDeposits(onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val loaded = groupWalletUIState as? GroupWalletUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { depositRepository.open(loaded.localChatRoom, chain, activeUserPublicKey) }
+                .onFailure { logger.e("Couldn't propose opening deposits in $chatRoomId", it) }
+                .getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "GroupWalletViewModel"
 
@@ -328,6 +375,7 @@ class GroupWalletViewModel(
             frostSigningRepository: FrostSigningRepository,
             wallets: GroupOnchainWallets,
             watcher: GroupTransactionWatcher? = null,
+            depositRepository: DepositRepository = DepositRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupWalletViewModel(
@@ -339,6 +387,7 @@ class GroupWalletViewModel(
                     frostSigningRepository = frostSigningRepository,
                     wallets = wallets,
                     watcher = watcher,
+                    depositRepository = depositRepository,
                 )
             }
         }

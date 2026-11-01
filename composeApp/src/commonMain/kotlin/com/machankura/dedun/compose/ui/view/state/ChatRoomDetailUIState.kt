@@ -9,6 +9,9 @@ import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import com.machankura.dedun.compose.managers.DepositLedger
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 
 sealed interface ChatRoomDetailUIState {
     data class Loaded(
@@ -113,6 +116,20 @@ sealed interface ChatRoomDetailUIState {
         val memberWalletPolicy: MemberWalletPolicyEvent.Policy? = null,
         /** Whether to show that at all: a Marmot group, still going. */
         val showsMemberWalletPolicy: Boolean = false,
+        /**
+         * Where this group pays the active profile, and whether it can say: null, or not a group,
+         * for no *Payouts* section at all. `docs/group-payout-destination.md`.
+         */
+        val payouts: PayoutDestinationRepository.Standing? = null,
+        /** Where this group pays each member who has said, by public key; read only when [payouts] is shown. */
+        val payoutDestinations: Map<HexKey, GroupPayoutDestination> = emptyMap(),
+        /**
+         * Members with a destination whose deposits the group has not opened, for a device that
+         * holds a share to open: `docs/member-deposits.md`, Phase 5.
+         */
+        val openableDepositors: Set<HexKey> = emptySet(),
+        /** What each member has put in, the unattributed and the total: `docs/member-deposits.md`, Phase 8. */
+        val tallies: DepositLedger.Tallies? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

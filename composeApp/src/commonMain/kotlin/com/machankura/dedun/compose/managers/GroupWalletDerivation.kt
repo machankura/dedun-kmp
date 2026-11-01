@@ -277,7 +277,12 @@ object GroupWalletDerivation {
         index: Long,
         tree: ScriptTree? = null,
     ): Derived {
-        require(change == RECEIVE || change == CHANGE) { "change must be $RECEIVE or $CHANGE, not $change" }
+        // Receive, change, or a member's deposit branch (docs/member-deposits.md, D3): any
+        // unhardened step is a public tweak like these two, but nothing else is a place this
+        // wallet hands out.
+        require(change == RECEIVE || change == CHANGE || DepositBranch.isMemberBranch(change)) {
+            "change must be $RECEIVE, $CHANGE or a member's deposit branch, not $change"
+        }
         require(index in 0L..MAX_INDEX) { "index $index is not an unhardened index" }
         require(accountCache.tweakedPublicKey == accountKey.publicKey.xOnly()) { "the cache does not sign as this account key" }
 

@@ -58,13 +58,15 @@ class GroupSendViewModel(
     val guardedChatRoomId: String? = null,
     /** The descendant whose guarded wallet this form pays, or null for a payment to a typed address. */
     val fundChatRoomId: String? = null,
+    /** An address to start the form with: a member's payout address. */
+    initialAddress: String? = null,
 ): ViewModel() {
     private val logger = Logger.withTag(TAG)
 
     var groupSendUIState: GroupSendUIState by mutableStateOf(initialGroupSendUIState)
         private set
 
-    val addressField = TextFieldState()
+    val addressField = TextFieldState(initialAddress.orEmpty())
     val amountField = TextFieldState()
     val feerateField = TextFieldState()
     val sendEverything: MutableState<Boolean> = mutableStateOf(false)
@@ -125,7 +127,9 @@ class GroupSendViewModel(
                 }
             }
 
-            follow(ready, wallets.walletFor(wallet.account).state, funded?.let { wallets.walletFor(it.account).state })
+            // The room's own wallet watches its depositors' branches too, so their coins can be spent.
+            val own = if (guardedChatRoomId == null) wallets.walletFor(wallet.account, chatRoomId) else wallets.walletFor(wallet.account)
+            follow(ready, own.state, funded?.let { wallets.walletFor(it.account).state })
         }
     }
 
@@ -287,11 +291,12 @@ class GroupSendViewModel(
             wallets: GroupOnchainWallets,
             guardedChatRoomId: String? = null,
             fundChatRoomId: String? = null,
+            initialAddress: String? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupSendViewModel(
                     activeUserPublicKey, chatRoomId, chain, initialGroupSendUIState,
-                    chatRepository, frostSigningRepository, wallets, guardedChatRoomId, fundChatRoomId,
+                    chatRepository, frostSigningRepository, wallets, guardedChatRoomId, fundChatRoomId, initialAddress,
                 )
             }
         }

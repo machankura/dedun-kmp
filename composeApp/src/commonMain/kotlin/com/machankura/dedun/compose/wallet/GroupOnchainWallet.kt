@@ -15,9 +15,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
 
 /**
  * A group's wallet on chain: the counterpart of Phoenix's `FinalWallet`, watching
@@ -32,12 +38,17 @@ import kotlinx.coroutines.launch
  * In memory, as Phoenix's is. Everything it knows is fetched again from Electrum
  * when it starts, and nothing about the wallet is stored -- the addresses are a
  * derivation, and the coins are on chain.
+ *
+ * And one more watcher per depositor: each member the group has opened deposits for
+ * has a branch of their own (`docs/member-deposits.md`), added with [watchMembers] as
+ * the group's statements become known, and never taken away -- a member who leaves
+ * still has coins there.
  */
 class GroupOnchainWallet(
     val account: GroupWalletDerivation.Account,
-    electrum: IElectrumClient,
-    scope: CoroutineScope,
-    logger: Logger = Logger.withTag("GroupOnchainWallet"),
+    private val electrum: IElectrumClient,
+    private val scope: CoroutineScope,
+    private val logger: Logger = Logger.withTag("GroupOnchainWallet"),
 ) {
     private val receive = ElectrumMiniWallet(account.chain.chainHash, electrum, scope, logger, lookAhead = RECEIVE_LOOKAHEAD)
     private val change = ElectrumMiniWallet(account.chain.chainHash, electrum, scope, logger, lookAhead = CHANGE_LOOKAHEAD)
@@ -65,15 +76,45 @@ class GroupOnchainWallet(
         }
     }
 
-    /** Both branches and the tip, as one value. */
+    /** Each depositor's watcher, by member, with the branch it watches. */
+    private val members = MutableStateFlow<Map<HexKey, Pair<Long, ElectrumMiniWallet>>>(emptyMap())
+
+    /**
+     * Starts watching each of [branches] -- a depositor's branch, by member -- that this
+     * wallet does not watch yet. A member already watched keeps their watcher: a statement
+     * is write-once, so their branch never moves.
+     */
+    fun watchMembers(branches: Map<HexKey, Long>) {
+        members.update { watched ->
+            val added = branches.filterKeys { it.lowercase() !in watched }.mapKeys { it.key.lowercase() }.mapValues { (member, branch) ->
+                logger.d { "watching ${member.take(8)}'s deposits on branch $branch" }
+                val wallet = ElectrumMiniWallet(account.chain.chainHash, electrum, scope, logger, lookAhead = RECEIVE_LOOKAHEAD)
+                wallet.addAddressGenerator { index -> addressAt(branch, index) }
+                branch to wallet
+            }
+            if (added.isEmpty()) watched else watched + added
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val memberStates: Flow<Map<HexKey, MemberBranch>> = members.flatMapLatest { watched ->
+        if (watched.isEmpty()) {
+            flowOf(emptyMap())
+        } else {
+            combine(watched.map { (member, pair) -> pair.second.walletStateFlow.map { member to MemberBranch(pair.first, it) } }) { it.toMap() }
+        }
+    }
+
+    /** Every branch and the tip, as one value. */
     val state: Flow<GroupWalletState> =
-        combine(receive.walletStateFlow, change.walletStateFlow, tip) { receiveState, changeState, height ->
-            GroupWalletState(account, receiveState, changeState, height)
+        combine(receive.walletStateFlow, change.walletStateFlow, tip, memberStates) { receiveState, changeState, height, memberBranches ->
+            GroupWalletState(account, receiveState, changeState, height, memberBranches)
         }
 
     fun stop() {
         receive.stop()
         change.stop()
+        members.value.values.forEach { it.second.stop() }
     }
 
     private fun addressAt(change: Long, index: Int): String =
@@ -142,8 +183,11 @@ data class GroupUtxo(
     val isConfirmed: Boolean get() = utxo.blockHeight > 0
 }
 
+/** One depositor's branch, and what Electrum says about it. */
+data class MemberBranch(val branch: Long, val state: WalletState)
+
 /**
- * The group's wallet at one moment: both branches' coins, the next addresses to
+ * The group's wallet at one moment: every branch's coins, the next addresses to
  * use, and how deep each coin is.
  */
 data class GroupWalletState(
@@ -151,10 +195,18 @@ data class GroupWalletState(
     val receive: WalletState,
     val change: WalletState,
     val tipHeight: Int?,
+    /** Each depositor's branch, by member: `docs/member-deposits.md`. */
+    val members: Map<HexKey, MemberBranch> = emptyMap(),
 ) {
-    /** Every coin, receive and change alike, with the derivation that spends it. */
+    /** Every branch this wallet watches, with what Electrum says of it: receive, change, then each member's. */
+    private val branches: List<Pair<Long, WalletState>> by lazy {
+        listOf(GroupWalletDerivation.RECEIVE to receive, GroupWalletDerivation.CHANGE to change) +
+            members.values.map { it.branch to it.state }
+    }
+
+    /** Every coin, on every branch, with the derivation that spends it. */
     val utxos: List<GroupUtxo> by lazy {
-        listOf(GroupWalletDerivation.RECEIVE to receive, GroupWalletDerivation.CHANGE to change).flatMap { (branch, state) ->
+        branches.flatMap { (branch, state) ->
             state.utxos.mapNotNull { utxo ->
                 val index = utxo.addressMeta.indexOrNull ?: return@mapNotNull null
                 GroupUtxo(utxo, GroupWalletDerivation.derive(account, branch, index.toLong()))
@@ -175,6 +227,25 @@ data class GroupWalletState(
      * fifty times would be address reuse with a straight face.
      */
     val receiveAddress: String? get() = receive.firstUnusedDerivedAddress?.first
+
+    /**
+     * The deposit address to hand [member]: the lowest unused one on their branch, or null
+     * while the group has not opened their deposits or Electrum has not answered.
+     */
+    fun depositAddressOf(member: HexKey): String? = members[member.lowercase()]?.state?.firstUnusedDerivedAddress?.first
+
+    /**
+     * [member]'s deposit addresses worth listing, newest first, as [receiveAddresses] lists the
+     * receive branch's -- or null while there is no branch, or no answer yet.
+     */
+    fun depositAddressesOf(member: HexKey): List<GroupAddress>? {
+        val branch = members[member.lowercase()] ?: return null
+        val current = branch.state.firstUnusedDerivedAddress?.second?.index ?: return null
+        return listed(branch.branch, branch.state, current)
+    }
+
+    /** The member whose deposit branch [branch] is, or null for receive, change or a branch nobody has. */
+    fun memberOfBranch(branch: Long): HexKey? = members.entries.firstOrNull { it.value.branch == branch }?.key
 
     /**
      * The receive addresses worth listing, newest first: every one paid, the one
@@ -292,7 +363,7 @@ data class GroupWalletState(
      * will vouch for.
      */
     fun derivationOf(script: ByteVector): GroupWalletDerivation.Derived? =
-        listOf(GroupWalletDerivation.RECEIVE to receive, GroupWalletDerivation.CHANGE to change)
+        branches
             .asSequence()
             .flatMap { (branch, state) ->
                 state.addresses.values.asSequence().mapNotNull { it.meta.indexOrNull }.map { branch to it.toLong() }

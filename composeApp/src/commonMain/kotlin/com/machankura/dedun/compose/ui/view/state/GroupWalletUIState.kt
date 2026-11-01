@@ -14,6 +14,7 @@ import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.database.model.GroupTransaction
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.repository.DepositRepository
 
 sealed interface GroupWalletUIState {
     /**
@@ -67,6 +68,10 @@ sealed interface GroupWalletUIState {
         val shareable: List<GuardianManager.Shareable> = emptyList(),
         /** What this device calls each guardian's room, by room id, for the ones it holds. */
         val guardianNames: Map<String, String> = emptyMap(),
+        /** Whether the active profile is handed a deposit address, and why not: `docs/member-deposits.md`. */
+        val deposits: DepositRepository.Standing = DepositRepository.Standing.CannotSign,
+        /** Each member's name, for saying whose a coin is. */
+        val memberNames: Map<HexKey, String> = emptyMap(),
     ): GroupWalletUIState
 
     data class Error(

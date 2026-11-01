@@ -1,5 +1,13 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
+import dedun.composeapp.generated.resources.all_deposits
+import dedun.composeapp.generated.resources.deposits
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DepositsRoute
+import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_their_deposits
+import dedun.composeapp.generated.resources.open_deposits
+import androidx.compose.material.icons.filled.Savings
+import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.material.icons.filled.Bolt
 import dedun.composeapp.generated.resources.lightning_wallet
 import dedun.composeapp.generated.resources.lightning_needs_an_onchain_wallet
@@ -9,9 +17,15 @@ import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import dedun.composeapp.generated.resources.change
+import dedun.composeapp.generated.resources.not_set
+import dedun.composeapp.generated.resources.payouts
+import dedun.composeapp.generated.resources.set
+import dedun.composeapp.generated.resources.where_this_group_pays_you
 import dedun.composeapp.generated.resources.guard_members_wallets
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.ui.composable.navigation.routes.MemberWalletPolicyRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutDestinationRoute
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import dedun.composeapp.generated.resources.guarded_wallet_after
 import com.machankura.dedun.compose.ui.composable.widgets.delayText
 import com.machankura.dedun.compose.managers.MemberWalletManager
@@ -59,6 +73,52 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
+import dedun.composeapp.generated.resources.amount_in_sats
+import dedun.composeapp.generated.resources.couldn_t_check_the_address
+import dedun.composeapp.generated.resources.couldn_t_reach_that_address_s_server
+import dedun.composeapp.generated.resources.get_an_invoice
+import dedun.composeapp.generated.resources.how_much_to_pay_s_question
+import dedun.composeapp.generated.resources.paid_before_ask_s_for_a_new_address
+import dedun.composeapp.generated.resources.pay_onchain
+import dedun.composeapp.generated.resources.pay_over_lightning
+import dedun.composeapp.generated.resources.something_went_wrong
+import dedun.composeapp.generated.resources.that_address_answered_with_an_invoice_for_something_else
+import dedun.composeapp.generated.resources.that_address_s_server_answered_with_something_that_can_t_be_paid
+import dedun.composeapp.generated.resources.that_address_s_server_refused
+import dedun.composeapp.generated.resources.that_address_s_server_said_s
+import dedun.composeapp.generated.resources.that_invoice_is_for_another_network
+import dedun.composeapp.generated.resources.their_address_takes_s_to_s_sats
+import dedun.composeapp.generated.resources.tor_is_on_and_this_device_can_t_reach_the_address_s_server
+import com.machankura.dedun.compose.network.LightningAddressResolver
+import com.machankura.dedun.compose.text.GroupedSats
+import com.machankura.dedun.compose.text.SatsInput
+import com.machankura.dedun.compose.text.parseSats
+import com.machankura.dedun.compose.text.grouped
+import dedun.composeapp.generated.resources.cancel
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningSendRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupSendRoute
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.runtime.remember
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import dedun.composeapp.generated.resources.checking
+import dedun.composeapp.generated.resources.copied
+import dedun.composeapp.generated.resources.copy_the_lightning_address
+import dedun.composeapp.generated.resources.copy_the_onchain_address
+import dedun.composeapp.generated.resources.couldn_t_check
+import dedun.composeapp.generated.resources.hasn_t_said_where_to_be_paid
+import dedun.composeapp.generated.resources.lightning_address
+import dedun.composeapp.generated.resources.onchain_address
+import dedun.composeapp.generated.resources.paid_before_ask_for_a_new_one
+import dedun.composeapp.generated.resources.set_on
+import dedun.composeapp.generated.resources.unused
+import dedun.composeapp.generated.resources.where_s_is_paid
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.PersonRemove
@@ -183,6 +243,8 @@ fun ChatRoomDetailScreen(
     nostrRepository: NostrRepository,
     chatRepository: ChatRepository,
     memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
+    payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    depositRepository: DepositRepository = DepositRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit,
     onPopBackToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
@@ -196,8 +258,11 @@ fun ChatRoomDetailScreen(
             chatRepository = chatRepository,
             activeUserPublicKey = activeUserPublicKey,
             memberWalletRepository = memberWalletRepository,
+            payoutDestinationRepository = payoutDestinationRepository,
+            depositRepository = depositRepository,
         )
     )
+    val couldNotOpenDeposits = stringResource(Res.string.couldn_t_ask_the_group_to_open_their_deposits)
     val couldNotPutToGroup = stringResource(Res.string.couldn_t_put_it_to_the_group)
 
     // Read outside the click handlers: stringResource and rememberNotifier are both
@@ -237,6 +302,8 @@ fun ChatRoomDetailScreen(
                         modifier = Modifier.padding(innerPadding).readableContent().fillMaxSize()
                     ) {
                         var isShowingGroupKeyState by rememberSaveable { mutableStateOf(false) }
+                        // The member whose payout sheet is open, by public key.
+                        var showingPayoutOf by rememberSaveable { mutableStateOf<String?>(null) }
 
                         LazyColumn(
                             modifier = Modifier.weight(1f).fillMaxWidth().padding(MaterialTheme.spacing.space250),
@@ -577,6 +644,67 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
+                            // Where the group pays this profile, above the members it
+                            // will pay. docs/group-payout-destination.md, Phase 4.
+                            chatRoomDetailUIState.payouts?.let { payouts ->
+                                item { HorizontalDivider() }
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.payouts),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                // What this profile has put in, under where it is paid back.
+                                chatRoomDetailUIState.tallies?.members?.get(activeUserPublicKey.lowercase())?.takeIf { it.depositedMsat > 0 }?.let { mine ->
+                                    item {
+                                        Text(
+                                            text = stringResource(Res.string.you_ve_put_in_s_sats, sats(mine.depositedMsat)),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                }
+                                item {
+                                    PayoutDestinationRow(
+                                        standing = payouts,
+                                        onChange = if (payouts.canSet) {
+                                            {
+                                                onNavigateToRoute.invoke(
+                                                    GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
+                                                )
+                                            }
+                                        } else null,
+                                    )
+                                }
+                            }
+
+                            // What every member has put in, and how the total adds up.
+                            // docs/member-deposits.md, Phase 8.
+                            chatRoomDetailUIState.tallies?.let { tallies ->
+                                item { HorizontalDivider() }
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.deposits),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                item {
+                                    Tallies(
+                                        tallies = tallies,
+                                        names = chatRoomDetailUIState.localChatRoom.localParticipants.associate { participant ->
+                                            participant.participant.participantPublicKey.lowercase() to
+                                                (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
+                                        },
+                                    )
+                                }
+                                item {
+                                    TextButton(onClick = { onNavigateToRoute.invoke(DepositsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)) }) {
+                                        Icon(Icons.Default.Savings, contentDescription = Decorative)
+                                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+                                        Text(stringResource(Res.string.all_deposits))
+                                    }
+                                }
+                            }
+
                             item {
                                 HorizontalDivider()
                             }
@@ -754,10 +882,52 @@ fun ChatRoomDetailScreen(
                                             )
                                         },
                                         supportingContent = {
-                                            localParticipant.profile?.about?.let {
-                                                Text(
-                                                    text = it
-                                                )
+                                            val memberPublicKey = localParticipant.participant.participantPublicKey
+                                            Column {
+                                                localParticipant.profile?.about?.let {
+                                                    Text(
+                                                        text = it
+                                                    )
+                                                }
+                                                // Where the group pays this member: theirs to set on
+                                                // their own row, everybody else's to read and copy.
+                                                // docs/group-payout-destination.md, Phase 5.
+                                                chatRoomDetailUIState.payouts?.let { payouts ->
+                                                    MemberPayoutLine(
+                                                        destination = chatRoomDetailUIState.payoutDestinations[memberPublicKey.lowercase()],
+                                                        isMe = memberPublicKey.equals(activeUserPublicKey, ignoreCase = true),
+                                                        onOpen = { showingPayoutOf = memberPublicKey.lowercase() },
+                                                        onSetMine = if (payouts.canSet) {
+                                                            {
+                                                                onNavigateToRoute.invoke(
+                                                                    GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
+                                                                )
+                                                            }
+                                                        } else null,
+                                                    )
+                                                    // A member with a destination whose deposits are not open yet,
+                                                    // opened by a device that holds a share. docs/member-deposits.md.
+                                                    if (memberPublicKey.lowercase() in chatRoomDetailUIState.openableDepositors) {
+                                                        TextButton(
+                                                            enabled = !chatRoomDetailViewModel.isActionPending.value,
+                                                            onClick = {
+                                                                chatRoomDetailViewModel.openDeposits(
+                                                                    member = memberPublicKey,
+                                                                    onSuccess = { sessionId ->
+                                                                        onNavigateToRoute.invoke(
+                                                                            FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId)
+                                                                        )
+                                                                    },
+                                                                    onFailure = { notify(couldNotOpenDeposits) },
+                                                                )
+                                                            },
+                                                        ) {
+                                                            Icon(Icons.Default.Savings, contentDescription = Decorative)
+                                                            Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+                                                            Text(stringResource(Res.string.open_deposits))
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -921,6 +1091,81 @@ fun ChatRoomDetailScreen(
                                     ReindexMarmotGroupEventsButton(
                                         reindexState = chatRoomDetailViewModel.reindexState,
                                         onReindex = chatRoomDetailViewModel::reindexMarmotGroupEvents
+                                    )
+                                }
+                            }
+                        }
+
+                        showingPayoutOf?.let { member ->
+                            chatRoomDetailUIState.payoutDestinations[member]?.let { destination ->
+                                val name = chatRoomDetailUIState.localChatRoom.localParticipants
+                                    .firstOrNull { it.participant.participantPublicKey.equals(member, ignoreCase = true) }
+                                    ?.profile?.humanReadableNameOrPubkey() ?: member.take(8)
+                                var usage by remember(destination.event.id) { mutableStateOf<UnusedAddressCheck.Usage?>(null) }
+                                LaunchedEffect(destination.event.id) {
+                                    chatRoomDetailViewModel.usageOf(destination) { usage = it }
+                                }
+                                var askingAmount by remember(destination.event.id) { mutableStateOf(false) }
+                                var payoutProblem by remember(destination.event.id) { mutableStateOf<PayoutProblem?>(null) }
+                                // Paying needs a device that can put a spend to the group.
+                                val canPay = chatRoomDetailUIState.canSponsor
+                                ModalBottomSheet(onDismiss = { showingPayoutOf = null }) {
+                                    PayoutDestinationSheetContent(
+                                        name = name,
+                                        destination = destination,
+                                        usage = usage,
+                                        onPayLightning = if (canPay) { { askingAmount = true } } else null,
+                                        onPayOnchain = if (canPay && destination.onchainAddress != null) {
+                                            {
+                                                // Asked again: an address paid since the sheet opened is used now.
+                                                chatRoomDetailViewModel.usageOf(destination) { now ->
+                                                    usage = now
+                                                    when (now) {
+                                                        UnusedAddressCheck.Usage.Unused -> {
+                                                            showingPayoutOf = null
+                                                            onNavigateToRoute.invoke(
+                                                                GroupSendRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = null, address = destination.onchainAddress)
+                                                            )
+                                                        }
+                                                        UnusedAddressCheck.Usage.Unknown -> payoutProblem = PayoutProblem.CouldNotCheck
+                                                        else -> payoutProblem = PayoutProblem.PaidBefore(name)
+                                                    }
+                                                }
+                                            }
+                                        } else null,
+                                    )
+                                }
+                                payoutProblem?.let { problem ->
+                                    val text = payoutProblemText(problem)
+                                    LaunchedEffect(problem) {
+                                        notify(text)
+                                        payoutProblem = null
+                                    }
+                                }
+                                if (askingAmount) {
+                                    PayoutAmountDialog(
+                                        name = name,
+                                        onDismiss = { askingAmount = false },
+                                        onAmount = { sats ->
+                                            chatRoomDetailViewModel.invoiceFor(destination, sats) { answer ->
+                                                when (answer) {
+                                                    is LightningAddressResolver.PayoutInvoice.Ready -> {
+                                                        askingAmount = false
+                                                        showingPayoutOf = null
+                                                        onNavigateToRoute.invoke(
+                                                            GroupLightningSendRoute(
+                                                                activeUserPublicKey = activeUserPublicKey,
+                                                                chatRoomId = chatRoomId,
+                                                                invoice = answer.bolt11,
+                                                                payoutMember = destination.member,
+                                                                payoutDestination = destination.event.id,
+                                                            )
+                                                        )
+                                                    }
+                                                    else -> payoutProblem = PayoutProblem.NoInvoice(answer)
+                                                }
+                                            }
+                                        },
                                     )
                                 }
                             }
@@ -1262,6 +1507,216 @@ private fun SubgroupCard(
                 }
             }
         )
+    }
+}
+
+/**
+ * A member row's line about where the group pays them: the active profile's own leads to
+ * setting it, anybody else's Lightning address opens their sheet, and a member who has not
+ * said is told so. `docs/group-payout-destination.md`, Phase 5.
+ */
+@Composable
+private fun MemberPayoutLine(
+    destination: GroupPayoutDestination?,
+    isMe: Boolean,
+    onOpen: () -> Unit,
+    onSetMine: (() -> Unit)?,
+) {
+    when {
+        isMe && onSetMine != null -> TextButton(onClick = onSetMine) {
+            Icon(Icons.Default.Payments, contentDescription = Decorative)
+            Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+            Text(stringResource(Res.string.where_this_group_pays_you))
+        }
+        destination != null -> TextButton(onClick = onOpen) {
+            Icon(Icons.Default.Payments, contentDescription = Decorative)
+            Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+            Text(destination.lightningAddress.toString())
+        }
+        else -> Text(
+            text = stringResource(Res.string.hasn_t_said_where_to_be_paid),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * One member's payout destination, whole: the Lightning address and the range it said it
+ * takes, the onchain address and whether it has been paid since -- asked when the sheet opens,
+ * [usage] null until it answers -- and when it was set. Copy only: an address paid before is
+ * never offered as a QR code. Split out from the sheet so it can be rendered on its own.
+ */
+@Composable
+internal fun PayoutDestinationSheetContent(
+    name: String,
+    destination: GroupPayoutDestination,
+    usage: UnusedAddressCheck.Usage?,
+    onPayLightning: (() -> Unit)? = null,
+    onPayOnchain: (() -> Unit)? = null,
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val notify = rememberNotifier(rememberCoroutineScope())
+    val copied = stringResource(Res.string.copied)
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+    ) {
+        Text(text = stringResource(Res.string.where_s_is_paid, name), style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(MaterialTheme.spacing.relatedGap))
+
+        PayoutAddressField(
+            label = stringResource(Res.string.lightning_address),
+            value = destination.lightningAddress.toString(),
+            copyDescription = stringResource(Res.string.copy_the_lightning_address),
+            onCopy = {
+                clipboardManager.setText(AnnotatedString(destination.lightningAddress.toString()))
+                notify(copied)
+            },
+        )
+        destination.sendable?.let {
+            Text(text = sendableText(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        destination.onchainAddress?.let { onchain ->
+            Spacer(modifier = Modifier.height(MaterialTheme.spacing.relatedGap))
+            PayoutAddressField(
+                label = stringResource(Res.string.onchain_address),
+                value = onchain,
+                copyDescription = stringResource(Res.string.copy_the_onchain_address),
+                onCopy = {
+                    clipboardManager.setText(AnnotatedString(onchain))
+                    notify(copied)
+                },
+            )
+            Text(
+                text = stringResource(
+                    when (usage) {
+                        null -> Res.string.checking
+                        UnusedAddressCheck.Usage.Unused -> Res.string.unused
+                        UnusedAddressCheck.Usage.Used, UnusedAddressCheck.Usage.TheGroups -> Res.string.paid_before_ask_for_a_new_one
+                        UnusedAddressCheck.Usage.Unknown -> Res.string.couldn_t_check
+                    }
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (usage == UnusedAddressCheck.Usage.Used) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(MaterialTheme.spacing.relatedGap))
+        GroupKeyStateField(
+            label = stringResource(Res.string.set_on),
+            value = Instant.fromEpochSeconds(destination.createdAt).toFormattedTimeAndDateString(),
+            isMonospaced = false,
+        )
+
+        if (onPayLightning != null || onPayOnchain != null) {
+            Spacer(modifier = Modifier.height(MaterialTheme.spacing.itemGap))
+            onPayLightning?.let { pay ->
+                Button(onClick = pay, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.pay_over_lightning)) }
+            }
+            onPayOnchain?.let { pay ->
+                OutlinedButton(onClick = pay, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.pay_onchain)) }
+            }
+        }
+    }
+}
+
+/** How much to pay a member over Lightning, in whole sats, before their address is asked for an invoice. */
+@Composable
+private fun PayoutAmountDialog(name: String, onDismiss: () -> Unit, onAmount: (Long) -> Unit) {
+    val amount = remember { TextFieldState() }
+    val sats = (parseSats(amount.text) as? SatsInput.Sats)?.amount?.sat?.takeIf { it > 0 }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.how_much_to_pay_s_question, name)) },
+        text = {
+            OutlinedTextField(
+                state = amount,
+                outputTransformation = GroupedSats,
+                lineLimits = TextFieldLineLimits.SingleLine,
+                label = { Text(stringResource(Res.string.amount_in_sats)) },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { sats?.let(onAmount) }, enabled = sats != null) { Text(stringResource(Res.string.get_an_invoice)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
+        },
+    )
+}
+
+/** Why paying a member from their sheet went no further: `docs/group-payout-destination.md`, Phase 7. */
+private sealed interface PayoutProblem {
+    data class NoInvoice(val answer: LightningAddressResolver.PayoutInvoice) : PayoutProblem
+    data class PaidBefore(val name: String) : PayoutProblem
+    data object CouldNotCheck : PayoutProblem
+}
+
+@Composable
+private fun payoutProblemText(problem: PayoutProblem): String = when (problem) {
+    PayoutProblem.CouldNotCheck -> stringResource(Res.string.couldn_t_check_the_address)
+    is PayoutProblem.PaidBefore -> stringResource(Res.string.paid_before_ask_s_for_a_new_address, "@" + problem.name)
+    is PayoutProblem.NoInvoice -> when (val answer = problem.answer) {
+        // A ready invoice is never a problem; it opens the send form.
+        is LightningAddressResolver.PayoutInvoice.Ready -> stringResource(Res.string.something_went_wrong)
+        LightningAddressResolver.PayoutInvoice.NotCheckedTor -> stringResource(Res.string.tor_is_on_and_this_device_can_t_reach_the_address_s_server)
+        LightningAddressResolver.PayoutInvoice.Unreachable -> stringResource(Res.string.couldn_t_reach_that_address_s_server)
+        is LightningAddressResolver.PayoutInvoice.Refused -> answer.reason?.takeIf { it.isNotBlank() }
+            ?.let { stringResource(Res.string.that_address_s_server_said_s, it) }
+            ?: stringResource(Res.string.that_address_s_server_refused)
+        LightningAddressResolver.PayoutInvoice.OtherNetwork ->
+            stringResource(Res.string.that_invoice_is_for_another_network, GroupWalletStatementEvent.chainName(GroupLightningRollout.NETWORK))
+        LightningAddressResolver.PayoutInvoice.Mismatched -> stringResource(Res.string.that_address_answered_with_an_invoice_for_something_else)
+        LightningAddressResolver.PayoutInvoice.Malformed -> stringResource(Res.string.that_address_s_server_answered_with_something_that_can_t_be_paid)
+        is LightningAddressResolver.PayoutInvoice.OutOfRange -> stringResource(
+            Res.string.their_address_takes_s_to_s_sats,
+            answer.sendable.min.truncateToSatoshi().grouped(),
+            answer.sendable.max.truncateToSatoshi().grouped(),
+        )
+    }
+}
+
+/** A labelled address with a copy button beside it. */
+@Composable
+private fun PayoutAddressField(label: String, value: String, copyDescription: String, onCopy: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = value, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+        }
+        IconButton(onClick = onCopy) {
+            Icon(Icons.Default.ContentCopy, contentDescription = copyDescription)
+        }
+    }
+}
+
+/**
+ * *Where this group pays you*, and the Lightning address it pays -- or *Not set* -- with
+ * *Change* or *Set* for a profile that can sign one. `docs/group-payout-destination.md`.
+ */
+@Composable
+private fun PayoutDestinationRow(standing: PayoutDestinationRepository.Standing, onChange: (() -> Unit)?) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(text = stringResource(Res.string.where_this_group_pays_you), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = standing.current?.lightningAddress?.toString() ?: stringResource(Res.string.not_set),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        onChange?.let { change ->
+            TextButton(onClick = change) {
+                Text(stringResource(if (standing.current != null) Res.string.change else Res.string.set))
+            }
+        }
     }
 }
 

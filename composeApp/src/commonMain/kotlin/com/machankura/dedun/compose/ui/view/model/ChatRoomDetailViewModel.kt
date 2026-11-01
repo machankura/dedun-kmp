@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.nostr.MarmotProfile
@@ -27,6 +28,13 @@ import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.repository.MemberWalletRepository
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.wallet.PayoutAddress
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import com.machankura.dedun.compose.network.LightningAddressResolver
+import fr.acinq.lightning.MilliSatoshi
+import kotlinx.coroutines.withContext
 import com.vitorpamplona.quartz.nip01Core.core.Event
 
 class ChatRoomDetailViewModel(
@@ -38,6 +46,10 @@ class ChatRoomDetailViewModel(
     val chatRepository: ChatRepository,
     /** The member wallets this group guards -- `docs/member-guarded-wallets.md`. The no-op lists none. */
     val memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
+    /** Where this group pays its members -- `docs/group-payout-destination.md`. The no-op has no section. */
+    val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    /** Who deposits with the group -- `docs/member-deposits.md`. The no-op opens nobody. */
+    val depositRepository: DepositRepository = DepositRepository.NO_OP,
 ): ViewModel() {
 
     var chatRoomDetailUIState: ChatRoomDetailUIState by mutableStateOf(initialChatRoomDetailUIState)
@@ -97,6 +109,10 @@ class ChatRoomDetailViewModel(
                 // docs/member-wallet-delay.md.
                 val couldGuard = memberWalletRepository.couldGuard(chatRoomId)
 
+                // docs/group-payout-destination.md: a group still going has a Payouts
+                // section, and every member row says where that member is paid.
+                val payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup }
+
                 ChatRoomDetailUIState.Loaded(
                     localChatRoom = localChatRoom,
                     groupKeyState = chatRepository.groupKeyState(chatRoomId),
@@ -122,8 +138,58 @@ class ChatRoomDetailViewModel(
                     // Everybody in a Marmot group sees whether it guards members'
                     // wallets; only a signer is offered to change it.
                     showsMemberWalletPolicy = !isDisbanded && couldGuard,
+                    payouts = payouts,
+                    payoutDestinations = if (payouts != null) payoutDestinationRepository.destinationsIn(chatRoomId, NodeParamsManager.chain) else emptyMap(),
+                    tallies = if (payouts != null) depositRepository.tallies(chatRoomId, NodeParamsManager.chain) else null,
+                    openableDepositors = if (payouts != null && canSign) {
+                        localChatRoom.localParticipants.map { it.participant.participantPublicKey.lowercase() }
+                            .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }
+                            .toSet()
+                    } else emptySet(),
                 )
             }
+        }
+    }
+
+    /**
+     * Asks the group to open [member]'s deposits, as this device, which holds a share: a signing
+     * session over their depositor statement. `docs/member-deposits.md`, Phase 5.
+     */
+    fun openDeposits(member: HexKey, onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val loaded = chatRoomDetailUIState as? ChatRoomDetailUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { depositRepository.open(loaded.localChatRoom, NodeParamsManager.chain, member) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
+            }
+        }
+    }
+
+    /**
+     * Whether [destination]'s onchain address has been paid since it was set, asked when its
+     * sheet opens -- an address the group has paid once is used, and the payer should ask for a
+     * new one. `docs/group-payout-destination.md`, Phase 5.
+     */
+    fun usageOf(destination: GroupPayoutDestination, onResult: (UnusedAddressCheck.Usage) -> Unit) {
+        val script = destination.onchainAddress?.let { PayoutAddress.parseOrNull(destination.chain, it) }?.script ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val usage = payoutDestinationRepository.usageOf(chatRoomId, destination.chain, script)
+            withContext(Dispatchers.Main) { onResult(usage) }
+        }
+    }
+
+    /**
+     * An invoice of [amountSat] from [destination]'s Lightning address, for the group's Lightning
+     * wallet: what *Pay over Lightning* on a member's sheet fills the send form with.
+     * `docs/group-payout-destination.md`, Phase 7.
+     */
+    fun invoiceFor(destination: GroupPayoutDestination, amountSat: Long, onResult: (LightningAddressResolver.PayoutInvoice) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountSat * 1000), GroupLightningRollout.NETWORK)
+            withContext(Dispatchers.Main) { onResult(invoice) }
         }
     }
 
@@ -259,6 +325,8 @@ class ChatRoomDetailViewModel(
             nostrRepository: NostrRepository,
             chatRepository: ChatRepository,
             memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
+            payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+            depositRepository: DepositRepository = DepositRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ChatRoomDetailViewModel(
@@ -269,6 +337,8 @@ class ChatRoomDetailViewModel(
                     nostrRepository = nostrRepository,
                     chatRepository = chatRepository,
                     memberWalletRepository = memberWalletRepository,
+                    payoutDestinationRepository = payoutDestinationRepository,
+                    depositRepository = depositRepository,
                 )
             }
         }

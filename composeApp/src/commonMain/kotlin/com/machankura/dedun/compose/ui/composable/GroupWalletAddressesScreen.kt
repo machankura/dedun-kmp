@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
+import dedun.composeapp.generated.resources.before_deposits_were_attributed
+import dedun.composeapp.generated.resources.s_deposit_addresses
+import dedun.composeapp.generated.resources.you_have_no_deposit_addresses_yet
+import dedun.composeapp.generated.resources.your_deposit_addresses
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -90,6 +95,7 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupWalletAddressesScreen(
+    activeUserPublicKey: String,
     chatRoomId: String,
     chain: Chain,
     initialUIState: GroupWalletAddressesUIState = GroupWalletAddressesUIState.Loading,
@@ -99,6 +105,7 @@ fun GroupWalletAddressesScreen(
 ) {
     val addressesViewModel: GroupWalletAddressesViewModel = viewModel(
         factory = GroupWalletAddressesViewModel.factory(
+            activeUserPublicKey = activeUserPublicKey,
             chatRoomId = chatRoomId,
             chain = chain,
             initialUIState = initialUIState,
@@ -147,7 +154,7 @@ fun GroupWalletAddressesScreen(
 
                 is GroupWalletAddressesUIState.Loaded -> {
                     val receive = state.receive
-                    if (receive == null) {
+                    if (receive == null && state.isDepositor) {
                         LoadingDataIndicator(
                             modifier = Modifier.fillMaxWidth().padding(padding),
                             text = stringResource(Res.string.finding_the_group_s_coins)
@@ -155,13 +162,16 @@ fun GroupWalletAddressesScreen(
                     } else {
                         AddressList(
                             modifier = Modifier.padding(padding),
-                            receive = receive,
+                            receive = receive.orEmpty(),
+                            isDepositor = state.isDepositor,
+                            others = state.others,
+                            legacy = state.legacy,
                             change = state.change,
                             notify = notify,
                             onShow = { index, paid -> addressesViewModel.show(index) { notify(paid) } },
                         )
 
-                        val shown = addressesViewModel.shown?.let { index -> receive.firstOrNull { it.derivation.index == index } }
+                        val shown = addressesViewModel.shown?.let { index -> receive?.firstOrNull { it.derivation.index == index } }
                         if (shown != null) {
                             AddressSheet(
                                 address = shown,
@@ -180,6 +190,9 @@ fun GroupWalletAddressesScreen(
 private fun AddressList(
     modifier: Modifier,
     receive: List<GroupAddress>,
+    isDepositor: Boolean,
+    others: List<Pair<String, List<GroupAddress>>>,
+    legacy: List<GroupAddress>,
     change: List<GroupAddress>,
     notify: (String) -> Unit,
     onShow: (index: Long, paidMessage: String) -> Unit,
@@ -206,6 +219,17 @@ private fun AddressList(
             )
         }
 
+        // Only the profile's own addresses are offered to be paid: everything paid there is
+        // theirs. docs/member-deposits.md, Phase 5.
+        item {
+            Text(
+                text = stringResource(Res.string.your_deposit_addresses),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        if (!isDepositor) {
+            item { EmptyState(message = stringResource(Res.string.you_have_no_deposit_addresses_yet)) }
+        }
         items(receive, key = key) { address ->
             // Read here rather than in the click: the index is the row's, and a
             // click handler is not composable.
@@ -219,6 +243,33 @@ private fun AddressList(
                     { onShow(address.derivation.index, paid) }
                 } else null,
             )
+        }
+
+        // Somebody else's, and the ones from before deposits were attributed: there to
+        // check against, copied, never handed out.
+        others.forEach { (name, addresses) ->
+            item(key = "member-$name") {
+                Text(
+                    text = stringResource(Res.string.s_deposit_addresses, "@$name"),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = MaterialTheme.spacing.sectionGap),
+                )
+            }
+            items(addresses, key = key) { address ->
+                AddressRow(address = address, onCopy = { copy(address) }, onShow = null)
+            }
+        }
+        if (legacy.isNotEmpty()) {
+            item {
+                Text(
+                    text = stringResource(Res.string.before_deposits_were_attributed),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = MaterialTheme.spacing.sectionGap),
+                )
+            }
+            items(legacy, key = key) { address ->
+                AddressRow(address = address, onCopy = { copy(address) }, onShow = null)
+            }
         }
 
         // The group's money too, and what a watch-only import will show beside

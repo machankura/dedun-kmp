@@ -1,5 +1,18 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.ask_again
+import dedun.composeapp.generated.resources.no_reply_from_the_operator_s_device_yet
+import dedun.composeapp.generated.resources.a_member_who_holds_a_share_of_the_group_s_key_can_open_your_deposits
+import dedun.composeapp.generated.resources.start_depositing
+import dedun.composeapp.generated.resources.the_group_opens_your_deposits_once_signing_a_branch_of_its_wallet_that_is_yours
+import dedun.composeapp.generated.resources.set_where_this_group_pays_you_first
+import dedun.composeapp.generated.resources.the_group_counts_what_you_put_in_once_it_knows_where_to_pay_you
+import dedun.composeapp.generated.resources.this_profile_can_t_say_where_to_be_paid
+import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_your_deposits
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutDestinationRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
+import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -39,21 +52,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.amount_in_sats
-import dedun.composeapp.generated.resources.anyone_can_pay_this_offer
 import dedun.composeapp.generated.resources.ask_for_an_invoice
 import dedun.composeapp.generated.resources.copy_invoice
-import dedun.composeapp.generated.resources.copy_offer
 import dedun.composeapp.generated.resources.couldn_t_ask_for_an_invoice
 import dedun.composeapp.generated.resources.invoice_copied
 import dedun.composeapp.generated.resources.leave_the_amount_empty_to_let_the_payer_choose
 import dedun.composeapp.generated.resources.nobody_runs_this_wallet_to_make_an_invoice
-import dedun.composeapp.generated.resources.offer_copied
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.sats
 import dedun.composeapp.generated.resources.sats_are_whole_numbers
 import dedun.composeapp.generated.resources.that_is_more_sats_than_there_will_ever_be
 import dedun.composeapp.generated.resources.that_isn_t_an_amount_in_sats
-import dedun.composeapp.generated.resources.the_group_s_offer
 import dedun.composeapp.generated.resources.this_invoice_pays_the_group_s_node
 import dedun.composeapp.generated.resources.waiting_for_the_operator_s_device
 import dedun.composeapp.generated.resources.what_it_is_for
@@ -90,17 +99,19 @@ fun GroupLightningReceiveScreen(
     chatRoomId: String,
     chatRepository: ChatRepository,
     lightningRepository: GroupLightningRepository,
+    depositRepository: DepositRepository = DepositRepository.NO_OP,
+    onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupLightningReceiveViewModel = viewModel(
-        factory = GroupLightningReceiveViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository)
+        factory = GroupLightningReceiveViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository, depositRepository)
     )
+    val couldNotOpenDeposits = stringResource(Res.string.couldn_t_ask_the_group_to_open_your_deposits)
     LaunchedEffect(true) { viewModel.initiate() }
 
     val notify = rememberNotifier(rememberCoroutineScope())
     val couldNotAsk = stringResource(Res.string.couldn_t_ask_for_an_invoice)
     val copied = stringResource(Res.string.invoice_copied)
-    val offerCopied = stringResource(Res.string.offer_copied)
     val clipboardManager = LocalClipboardManager.current
 
     Scaffold(
@@ -161,22 +172,56 @@ fun GroupLightningReceiveScreen(
                             Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
                             Text(stringResource(Res.string.ask_for_an_invoice))
                         }
-                        // The offer needs no operator online to ask: the node answers payers itself.
-                        state.offer?.let { offer ->
-                            HorizontalDivider()
-                            Text(stringResource(Res.string.the_group_s_offer), style = MaterialTheme.typography.titleSmall)
-                            Text(stringResource(Res.string.anyone_can_pay_this_offer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            SelectionContainer { Text(offer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                            TextButton(onClick = {
-                                clipboardManager.setText(buildAnnotatedString { append(offer) })
-                                notify(offerCopied)
-                            }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = Decorative)
-                                Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                                Text(stringResource(Res.string.copy_offer))
+                    }
+                }
+
+                // Only a depositor is issued an invoice: the step before it, as the onchain card has it.
+                // docs/member-deposits.md, Phase 6.
+                is GroupLightningReceiveUIState.NotDepositor -> Column(
+                    modifier = Modifier.padding(padding).readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+                ) {
+                    when (val standing = state.standing) {
+                        DepositRepository.Standing.CannotSign -> Text(
+                            stringResource(Res.string.this_profile_can_t_say_where_to_be_paid),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        DepositRepository.Standing.NeedsDestination -> {
+                            Text(stringResource(Res.string.the_group_counts_what_you_put_in_once_it_knows_where_to_pay_you), style = MaterialTheme.typography.bodyLarge)
+                            Button(onClick = { onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)) }) {
+                                Text(stringResource(Res.string.set_where_this_group_pays_you_first))
                             }
                         }
+                        is DepositRepository.Standing.CanOpen -> {
+                            Text(stringResource(Res.string.the_group_opens_your_deposits_once_signing_a_branch_of_its_wallet_that_is_yours), style = MaterialTheme.typography.bodyLarge)
+                            if (standing.canPropose) {
+                                Button(
+                                    enabled = !viewModel.isActionPending.value,
+                                    onClick = {
+                                        viewModel.openMyDeposits(
+                                            onSuccess = { sessionId -> onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId)) },
+                                            onFailure = { notify(couldNotOpenDeposits) },
+                                        )
+                                    },
+                                ) { Text(stringResource(Res.string.start_depositing)) }
+                            } else {
+                                Text(
+                                    stringResource(Res.string.a_member_who_holds_a_share_of_the_group_s_key_can_open_your_deposits),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        is DepositRepository.Standing.Open -> Unit
                     }
+                }
+
+                is GroupLightningReceiveUIState.NoReply -> Column(
+                    modifier = Modifier.padding(padding).readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+                ) {
+                    Text(stringResource(Res.string.no_reply_from_the_operator_s_device_yet), style = MaterialTheme.typography.bodyLarge)
+                    Button(onClick = viewModel::askAgain) { Text(stringResource(Res.string.ask_again)) }
                 }
 
                 is GroupLightningReceiveUIState.Waiting -> Column(

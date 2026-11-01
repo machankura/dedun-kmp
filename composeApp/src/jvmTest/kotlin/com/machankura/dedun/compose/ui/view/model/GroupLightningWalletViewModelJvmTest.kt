@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.GroupLightningInvoiceRow
@@ -208,18 +209,37 @@ class GroupLightningWalletViewModelJvmTest {
         assertIs<GroupLightningReceiveUIState.Unavailable>(receiving(Lightning(completed = key, wallet = wallet)).uiState, "nobody runs the node")
 
         val lightning = Lightning(completed = key, wallet = wallet, operator = operator("b".repeat(64)), invoice = GroupLightningInvoiceRow("w", "r1", "lnbcrt1"))
+        // Only a depositor is issued an invoice: docs/member-deposits.md, Phase 6.
+        assertIs<GroupLightningReceiveUIState.NotDepositor>(receiving(lightning, DepositRepository.Standing.NeedsDestination).uiState)
+
         val viewModel = receiving(lightning)
         assertIs<GroupLightningReceiveUIState.Form>(viewModel.uiState)
+        assertTrue(viewModel.descriptionField.text.startsWith("Deposit from @"), "the payer reads whose deposit it is")
         viewModel.amountField.edit { append("2,100") }
-        viewModel.descriptionField.edit { append(" lunch ") }
+        viewModel.descriptionField.edit { replace(0, length, " lunch ") }
         viewModel.request(onFailure = { error("the request failed") })
         val shown = runBlocking { withTimeout(5_000) { while (viewModel.uiState !is GroupLightningReceiveUIState.Invoice) delay(10); viewModel.uiState } }
         assertEquals("lnbcrt1", assertIs<GroupLightningReceiveUIState.Invoice>(shown).bolt11)
         assertEquals(listOf<Pair<Long?, String>>(2_100_000L to "lunch"), lightning.requests.toList())
     }
 
-    private fun receiving(lightning: GroupLightningRepository): GroupLightningReceiveViewModel {
-        val viewModel = GroupLightningReceiveViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningReceiveUIState.Loading, chat, lightning)
+    /** A depositor's standing, as the group would have signed it for this profile. */
+    private val depositor: DepositRepository.Standing = run {
+        val member = fr.acinq.bitcoin.PrivateKey(fr.acinq.bitcoin.ByteVector32(fr.acinq.secp256k1.Hex.decode("a11ce".padStart(64, '0'))))
+        val destination = com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent.verified(
+            com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent.build(
+                member, chatRoomId, Chain.Testnet3, com.machankura.dedun.compose.text.LightningAddress("me", "example.com"), createdAt = 1_700_000_000,
+            )
+        ) as com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+        val event = com.vitorpamplona.quartz.nip01Core.core.Event("00".repeat(32), chatRoomId, 1_700_000_100, 30339, emptyArray(), "", "")
+        DepositRepository.Standing.Open(com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent.Depositor(destination.member, Chain.Testnet3, 2, 0, destination, event))
+    }
+
+    private fun receiving(lightning: GroupLightningRepository, standing: DepositRepository.Standing = depositor): GroupLightningReceiveViewModel {
+        val deposits = object : DepositRepository by DepositRepository.NO_OP {
+            override suspend fun standing(chatRoomId: String, chain: Chain, canPropose: Boolean) = standing
+        }
+        val viewModel = GroupLightningReceiveViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningReceiveUIState.Loading, chat, lightning, deposits)
         viewModel.initiate()
         runBlocking { withTimeout(5_000) { while (viewModel.uiState == GroupLightningReceiveUIState.Loading) delay(10) } }
         return viewModel

@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -35,6 +40,8 @@ class GroupLightningReceiveViewModel(
     initialUIState: GroupLightningReceiveUIState,
     private val chatRepository: ChatRepository,
     private val lightningRepository: GroupLightningRepository,
+    /** Whether this profile is a depositor: only a depositor is issued an invoice (`docs/member-deposits.md`). */
+    private val depositRepository: DepositRepository = DepositRepository.NO_OP,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -50,8 +57,26 @@ class GroupLightningReceiveViewModel(
             val localChatRoom = chatRepository.getChatRoomByIdentifier(chatRoomId)
                 ?: return@launch run { uiState = GroupLightningReceiveUIState.Error("Couldn't find the group") }
             val wallet = lightningRepository.lightningWallet(chatRoomId, chain)
-            uiState = if (wallet == null || lightningRepository.operator(chatRoomId, chain, wallet.statement.wallet)?.publicKey == null) GroupLightningReceiveUIState.Unavailable
-            else GroupLightningReceiveUIState.Form(localChatRoom, wallet, lightningRepository.observeReport(chatRoomId, chain, wallet.statement.wallet).first()?.snapshot?.offer)
+            if (wallet == null || lightningRepository.operator(chatRoomId, chain, wallet.statement.wallet)?.publicKey == null) {
+                uiState = GroupLightningReceiveUIState.Unavailable
+                return@launch
+            }
+            val canPropose = localChatRoom.chatRoom.mlsGroupState != null && chatRepository.canSign(chatRoomId)
+            val standing = depositRepository.standing(chatRoomId, wallet.statement.chain, canPropose)
+            if (standing !is DepositRepository.Standing.Open) {
+                uiState = GroupLightningReceiveUIState.NotDepositor(localChatRoom, standing)
+                return@launch
+            }
+            // Whose deposit it is, where the payer will read it: on their own wallet's screen.
+            val me = localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.equals(activeUserPublicKey, ignoreCase = true) }
+                ?.profile?.humanReadableNameOrPubkey() ?: activeUserPublicKey.take(8)
+            val group = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
+            withContext(Dispatchers.Main) {
+                if (descriptionField.text.isEmpty()) {
+                    descriptionField.setTextAndPlaceCursorAtEnd(if (group != null) "Deposit from @$me to $group" else "Deposit from @$me")
+                }
+            }
+            uiState = GroupLightningReceiveUIState.Form(localChatRoom, wallet)
         }
     }
 
@@ -74,13 +99,38 @@ class GroupLightningReceiveViewModel(
             isActionPending.value = false
             if (requestId == null) return@launch withContext(Dispatchers.Main) { onFailure() }
             uiState = GroupLightningReceiveUIState.Waiting(requestId)
-            val invoice = lightningRepository.observeInvoice(chatRoomId, chain, form.wallet.statement.wallet, requestId).filterNotNull().first()
-            uiState = GroupLightningReceiveUIState.Invoice(invoice.bolt11)
+            val invoice = withTimeoutOrNull(REPLY_WAIT) {
+                lightningRepository.observeInvoice(chatRoomId, chain, form.wallet.statement.wallet, requestId).filterNotNull().first()
+            }
+            uiState = if (invoice != null) GroupLightningReceiveUIState.Invoice(invoice.bolt11) else GroupLightningReceiveUIState.NoReply(requestId)
+        }
+    }
+
+    /** Back to the form after no reply, to ask again. */
+    fun askAgain() {
+        if (uiState is GroupLightningReceiveUIState.NoReply) initiate()
+    }
+
+    /** Asks the group to open this profile's deposits, from the step before the form. */
+    fun openMyDeposits(onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val state = uiState as? GroupLightningReceiveUIState.NotDepositor ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { depositRepository.open(state.localChatRoom, chain, activeUserPublicKey) }
+                .onFailure { logger.e("Couldn't propose opening deposits in $chatRoomId", it) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
+            }
         }
     }
 
     companion object {
         private const val TAG = "GroupLightningReceiveViewModel"
+
+        /** How long the screen waits for the operator's device to answer before saying it hasn't. */
+        val REPLY_WAIT: Duration = 60.seconds
 
         fun factory(
             activeUserPublicKey: HexKey,
@@ -88,9 +138,10 @@ class GroupLightningReceiveViewModel(
             chain: Chain,
             chatRepository: ChatRepository,
             lightningRepository: GroupLightningRepository,
+            depositRepository: DepositRepository = DepositRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                GroupLightningReceiveViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningReceiveUIState.Loading, chatRepository, lightningRepository)
+                GroupLightningReceiveViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningReceiveUIState.Loading, chatRepository, lightningRepository, depositRepository)
             }
         }
     }

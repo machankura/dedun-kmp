@@ -39,6 +39,14 @@ object WalletWire {
         /** [PAYMENT], or [LIQUIDITY] for inbound bought: then [amountMsat] is its fee, as in Phoenix, and [liquiditySat] what it bought. */
         val kind: String = PAYMENT,
         val liquiditySat: Long? = null,
+        /**
+         * For an incoming payment, the invoice request it paid, as the operator's node joined them by
+         * hash: the operator's word, which a device holding the request and its reply checks for
+         * itself. `docs/member-deposits.md`, D6.
+         */
+        val requestId: String? = null,
+        /** Who asked for that invoice, as the operator's node recorded it: so a device that missed the request can attribute it, saying whose word it is. */
+        val requester: String? = null,
     )
 
     const val PAYMENT = "payment"
@@ -100,11 +108,18 @@ object WalletWire {
         val inboundMsat: Long get() = channels.sumOf { it.theirsMsat }
     }
 
-    /** Kind 30364: a member asks the operator for an invoice. */
+    /**
+     * Kind 30364: a member asks the operator for an invoice. [depositor] is the id of the group's
+     * depositor statement for the member who asks, which an invoice is issued against: no statement,
+     * no invoice. `docs/member-deposits.md`, D5.
+     */
     @Serializable
-    data class InvoiceRequest(val wallet: String, val requestId: String, val amountMsat: Long? = null, val description: String)
+    data class InvoiceRequest(val wallet: String, val requestId: String, val amountMsat: Long? = null, val description: String, val depositor: String? = null)
 
-    /** Kind 30365: the operator's answer, addressed to the whole room by [requestId]. */
+    /**
+     * Kind 30365: the operator's answer, addressed to the whole room by [requestId], naming whose
+     * request it answers and the hash it is paid by, so a device needn't parse the invoice to join it.
+     */
     @Serializable
-    data class InvoiceReply(val wallet: String, val requestId: String, val bolt11: String)
+    data class InvoiceReply(val wallet: String, val requestId: String, val bolt11: String, val requester: String? = null, val paymentHash: String? = null)
 }

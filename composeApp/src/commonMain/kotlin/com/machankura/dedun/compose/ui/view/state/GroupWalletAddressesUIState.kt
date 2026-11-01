@@ -11,9 +11,20 @@ sealed interface GroupWalletAddressesUIState {
      * wrong about a group paid there before.
      */
     data class Loaded(
+        /**
+         * The active profile's own deposit addresses, on their branch -- the only ones this
+         * screen offers to be paid -- or null until Electrum has answered, or while the group
+         * has not opened their deposits ([isDepositor]). `docs/member-deposits.md`, Phase 5.
+         */
         val receive: List<GroupAddress>?,
         /** The change addresses that have been used, newest first: empty for a wallet that has never sent. */
         val change: List<GroupAddress> = emptyList(),
+        /** Whether the active profile has a branch of its own. */
+        val isDepositor: Boolean = false,
+        /** Every other depositor's used addresses, by name: there to check, never to hand out. */
+        val others: List<Pair<String, List<GroupAddress>>> = emptyList(),
+        /** The receive branch's used addresses, from before deposits were attributed. */
+        val legacy: List<GroupAddress> = emptyList(),
     ): GroupWalletAddressesUIState
 
     data class Error(

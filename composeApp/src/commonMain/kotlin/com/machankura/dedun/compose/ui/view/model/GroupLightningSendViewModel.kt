@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,10 @@ class GroupLightningSendViewModel(
     initialUIState: GroupLightningSendUIState,
     private val chatRepository: ChatRepository,
     private val lightningRepository: GroupLightningRepository,
+    /** An invoice to start the form with, fetched from a member's Lightning address. */
+    private val initialInvoice: String? = null,
+    /** Whose payout destination [initialInvoice] came from, named on the proposal. */
+    private val payout: GroupLightningAuthorisationEvent.Payout? = null,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -55,6 +60,9 @@ class GroupLightningSendViewModel(
             val wallet = lightningRepository.lightningWallet(chatRoomId, chain)
             uiState = if (wallet == null || lightningRepository.operator(chatRoomId, chain, wallet.statement.wallet)?.publicKey == null) GroupLightningSendUIState.Unavailable
             else GroupLightningSendUIState.Form(localChatRoom, wallet)
+            initialInvoice?.let { invoice ->
+                withContext(Dispatchers.Main) { if (invoiceField.text.isEmpty()) invoiceField.setTextAndPlaceCursorAtEnd(invoice) }
+            }
         }
     }
 
@@ -80,7 +88,9 @@ class GroupLightningSendViewModel(
             is SatsInput.Sats -> fee.amount.sat * 1000
             else -> return null
         }
-        return Result.success(pay.copy(maxFeeMsat = maxFeeMsat))
+        // The label goes only on the invoice it came with: an invoice typed over it is somebody else's.
+        val label = payout?.takeIf { invoiceField.text.toString().trim() == initialInvoice?.trim() }
+        return Result.success(pay.copy(maxFeeMsat = maxFeeMsat, payout = label))
     }
 
     fun propose(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
@@ -106,9 +116,11 @@ class GroupLightningSendViewModel(
             chain: Chain,
             chatRepository: ChatRepository,
             lightningRepository: GroupLightningRepository,
+            initialInvoice: String? = null,
+            payout: GroupLightningAuthorisationEvent.Payout? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                GroupLightningSendViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningSendUIState.Loading, chatRepository, lightningRepository)
+                GroupLightningSendViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningSendUIState.Loading, chatRepository, lightningRepository, initialInvoice, payout)
             }
         }
     }
