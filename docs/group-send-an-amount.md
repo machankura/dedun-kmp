@@ -9,6 +9,10 @@ Read [group-chain-wallet.md](./group-chain-wallet.md) first, Phases 8 and 10 in
 particular. This plan is that note's third rollout gate, and it starts from the
 code as it stands at `96055da5`.
 
+**Superseded by [payouts-only.md](./payouts-only.md)**: the group's own wallet now signs
+only payouts, which have no change, so an amount is no longer something it sends. The
+builder below still serves a guardian's spend from a descendant's wallet.
+
 **Built, Phases 1-6**, except Phase 6's by-hand walkthrough on regtest; Phase 7
 is the first release. Written against `GroupSendScreen`, `GroupSendViewModel`,
 `GroupSpendBuilder`, `GroupSpend` and `GroupWalletRollout` as they were at that

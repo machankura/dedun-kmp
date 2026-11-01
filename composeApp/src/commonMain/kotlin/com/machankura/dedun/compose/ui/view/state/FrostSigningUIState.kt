@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.wallet.GroupSpend
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -74,6 +75,14 @@ sealed interface FrostSigningUIState {
          * checked rather than the proposer's word. `docs/group-payout-destination.md`, Phase 7.
          */
         val payees: Map<String, String> = emptyMap(),
+        /**
+         * [spend] read as a payout on this device -- whose each coin is, and what each member it
+         * pays is owed -- or why it is not one, or null where it was not asked: a guardian's spend,
+         * a sweep. `docs/payouts-only.md`, Phase 4.
+         */
+        val payout: PayoutRule.Result? = null,
+        /** Each member's name, by public key, for saying whose a coin is. */
+        val names: Map<HexKey, String> = emptyMap(),
     ): FrostSigningUIState {
         /**
          * The members the session can be answered by, as rows to draw.

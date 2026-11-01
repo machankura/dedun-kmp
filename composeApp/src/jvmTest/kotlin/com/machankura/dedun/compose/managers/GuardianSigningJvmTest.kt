@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import kotlin.test.assertFailsWith
 import com.machankura.dedun.compose.ui.view.state.GuardedWalletRow
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
@@ -718,8 +719,12 @@ class GuardianSigningJvmTest {
     private fun fundingTo(guarded: GuardianManager.GuardedWallet, index: Long) =
         GroupSpendBuilder.Destination.Funding(guarded.account, GroupWalletDerivation.derive(guarded.account, GroupWalletDerivation.RECEIVE, index))
 
+    // A funding pays a descendant's guarded wallet, which is not a member's payout address: the
+    // group's own wallet no longer signs one (docs/payouts-only.md, D9). How one is read stays, for
+    // the fundings signed before -- a spend row, a bump, a summary -- and is checked without proposing.
+
     @Test
-    fun `a funding is read as one by every device holding the wallet, and its address is held`(): Unit = runBlocking {
+    fun `a funding is read as one by a device holding the wallet, and is bumped as one, but is never proposed`(): Unit = runBlocking {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
         val statement = guardedStatement()
@@ -731,13 +736,11 @@ class GuardianSigningJvmTest {
         val built = assertIs<GroupSpendBuilder.Result.Built>(
             GroupSpendBuilder.send(ownState(own), fundingTo(guarded, 2), Satoshi(30_000), 2, emptySet())
         )
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, built.psbt, chain)
-        pump(proposer, other)
-
-        val seen = assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id))
-        val funding = seen.fundings.single()
+        val checked = assertIs<GroupSpend.Result.Ok>(GroupSpend.check(built.psbt, own)).checked
+        val funding = assertIs<GroupSpend.FundingReading.Ok>(GroupSpend.fundingsOf(checked, listOf(guarded))).fundings.single()
         assertEquals(guardedChildRoomId, funding.wallet.descendantChatRoomId)
         assertEquals(2L, funding.derived.index)
+        val seen = checked.copy(fundings = listOf(funding))
         assertEquals(
             com.machankura.dedun.compose.text.ProposedEvent.Summary(
                 "Fund Translation team's guarded wallet",
@@ -745,23 +748,22 @@ class GuardianSigningJvmTest {
             ),
             com.machankura.dedun.compose.text.ProposedSpend.summarize(seen, chain),
         )
-        assertEquals(setOf(2L), FrostSigningManager.reservedFundingIndices(other.db, roomId, guarded.account))
 
         // A bump keeps the claim, or it would read as a payment to a bare address.
         val bumped = assertIs<GroupSpendBuilder.Result.Built>(GroupSpendBuilder.bump(seen, 5))
         assertEquals(setOf(2L), GroupSpend.claimedFundingIndices(bumped.psbt, guarded.account))
         assertEquals(2L, bumped.funded?.derived?.index)
 
-        // Abandoned, it lets the address go.
-        other.db.frostSigningSessionDao().upsert(other.session(session.id)!!.copy(stage = FrostSigningStage.FAILED))
-        assertEquals(emptySet(), FrostSigningManager.reservedFundingIndices(other.db, roomId, guarded.account))
+        val refused = assertFailsWith<IllegalArgumentException> {
+            FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, built.psbt, chain)
+        }
+        assertTrue(refused.message!!.contains("not a payout"), refused.message)
     }
 
     @Test
-    fun `a funding claiming an address it does not pay is refused by every device that can tell`(): Unit = runBlocking {
+    fun `a funding claiming an address it does not pay is refused by a device that can tell`(): Unit = runBlocking {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
-        // Only the other device holds the wallet, so only it can check the claim.
         tell(other, guardedStatement())
         val own = openOwnWallet(proposer, other)
 
@@ -782,10 +784,7 @@ class GuardianSigningJvmTest {
         assertIs<GroupSpend.FundingReading.Refused>(
             GroupSpend.fundingsOf(assertIs<GroupSpend.Result.Ok>(GroupSpend.check(lying, own)).checked, listOf(guarded))
         )
-
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, lying, chain)
-        pump(proposer, other)
-        assertNull(other.session(session.id), "the device that holds the wallet never puts it to the member")
+        assertFailsWith<IllegalArgumentException> { FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, lying, chain) }
     }
 
     @Test
@@ -800,15 +799,11 @@ class GuardianSigningJvmTest {
         val built = assertIs<GroupSpendBuilder.Result.Built>(
             GroupSpendBuilder.send(ownState(own), destination, Satoshi(30_000), 2, emptySet())
         )
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, built.psbt, chain)
-        pump(proposer, other)
-
-        val seen = assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id), "accepted: the address is the truth")
-        assertEquals(emptyList(), seen.fundings)
+        val seen = assertIs<GroupSpend.Result.Ok>(GroupSpend.check(built.psbt, own)).checked
+        assertEquals(emptyList(), assertIs<GroupSpend.FundingReading.Ok>(GroupSpend.fundingsOf(seen, emptyList())).fundings)
         assertEquals(
             "Send 30,000 sats to ${destination.derived.address(chain)}",
             com.machankura.dedun.compose.text.ProposedSpend.summarize(seen, chain).detail,
         )
-        assertEquals(1, assertNotNull(FrostSigningManager.checkedSpend(proposer.db, session.id)).fundings.size, "and the proposer's own device still names it")
     }
 }

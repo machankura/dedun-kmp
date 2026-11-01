@@ -248,7 +248,9 @@ abstract class GroupLightningSpliceCases(chain: Chain) {
     private suspend fun authorise(group: Group, channel: Channel, amountSat: Long = 200_000, maxFeeSat: Long = 5_000): GroupLightningAuthorisationEvent.BuyLiquidity {
         val buy = GroupLightningAuthorisationEvent.BuyLiquidity(fixture.chain, 0, channel.params.channelId.toHex(), amountSat, maxFeeSat, (Clock.System.now() + 1.hours).epochSeconds, Random.nextBytes(8).toHexKey())
         val template = GroupLightningAuthorisationEvent.template(buy)
-        fixture.sign(group.all, group.all[2], template.kind, template.tags, template.content)
+        // Signed before the wallet paid only members, which every signer refuses now: filed as signed.
+        // docs/payouts-only.md, D9.
+        fixture.fileSignedAsRoom(group.all, template.kind, template.tags, template.content)
         return buy
     }
 
@@ -307,6 +309,7 @@ abstract class GroupLightningSpliceCases(chain: Chain) {
         val preimage = Random.nextBytes(32).byteVector32()
         val invoice = fr.acinq.lightning.payment.Bolt11Invoice.create(fixture.chain, 40_000_000.msat, Crypto.sha256(preimage).byteVector32(), key(), Either.Left("coffee"), CltvExpiryDelta(144), INVOICE_FEATURES)
         val pay = GroupLightningAuthorisations.prepare(group.wallet, invoice.write(), null, 1_000_000).getOrThrow()
+            .copy(payout = fixture.payoutFor(group.all, group.all[0]))
         fixture.signSession(group.all, group.all[3], GroupLightningAuthorisations.propose(group.all[3].db, group.all[3].room, group.all[3].publicKey, pay).id)
         val onion = OnionRoutingPacket(0, ByteVector(ByteArray(33) { if (it == 0) 2 else 0 }), ByteVector.empty, ByteVector32.Zeroes)
         val htlc = IncomingHtlc(UpdateAddHtlc(channel.params.channelId, 0, 40_000_000.msat, ByteVector32(pay.paymentHash), CltvExpiry(800_000), onion))

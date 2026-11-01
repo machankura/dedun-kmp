@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.your_device_signs_only_payouts
+import dedun.composeapp.generated.resources.pay_out
+import dedun.composeapp.generated.resources.members_balances_and_payouts
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_your_deposits
 import dedun.composeapp.generated.resources.unattributed
 import dedun.composeapp.generated.resources.from_s
@@ -12,6 +16,11 @@ import dedun.composeapp.generated.resources.the_group_counts_what_you_put_in_onc
 import dedun.composeapp.generated.resources.your_deposit_address
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutDestinationRoute
 import com.machankura.dedun.compose.repository.DepositRepository
+import com.machankura.dedun.compose.repository.PayoutRepository
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupAssignCoinsRoute
+import dedun.composeapp.generated.resources.not_anyone_s_yet_s_sats
+import dedun.composeapp.generated.resources.until_the_group_says_whose_it_is
+import dedun.composeapp.generated.resources.assign
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import dedun.composeapp.generated.resources.a_group_below_s
 import dedun.composeapp.generated.resources.a_group_below_this_one
@@ -158,6 +167,7 @@ import com.machankura.dedun.compose.managers.GroupWalletDerivation
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.text.grouped
+import fr.acinq.bitcoin.Satoshi
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
@@ -205,6 +215,7 @@ fun GroupWalletScreen(
     wallets: GroupOnchainWallets,
     watcher: GroupTransactionWatcher? = null,
     depositRepository: DepositRepository = DepositRepository.NO_OP,
+    payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -219,6 +230,7 @@ fun GroupWalletScreen(
             wallets = wallets,
             watcher = watcher,
             depositRepository = depositRepository,
+            payoutRepository = payoutRepository,
         )
     )
 
@@ -244,18 +256,6 @@ fun GroupWalletScreen(
                 chatRoomId = chatRoomId,
                 relayHint = null,
                 guardedChatRoomId = row.wallet.descendantChatRoomId,
-            )
-        )
-    }
-    // Behind the room's own send's gates, since a funding is one: a share to
-    // propose with, and a node to see this group's coins with.
-    val toGuardianFund = { row: GuardedWalletRow ->
-        onNavigateToRoute(
-            GroupSendRoute(
-                activeUserPublicKey = activeUserPublicKey,
-                chatRoomId = chatRoomId,
-                relayHint = null,
-                fundChatRoomId = row.wallet.descendantChatRoomId,
             )
         )
     }
@@ -380,16 +380,15 @@ fun GroupWalletScreen(
                         modifier = Modifier.padding(padding),
                         state = state,
                         notify = notify,
-                        // Behind both gates: a share to propose with, and a node to
-                        // see the coins with -- a spend built blind is not one.
+                        // The group's own wallet pays only its members, from the payouts
+                        // screen, behind a share to propose with. docs/payouts-only.md, Phase 6.
                         onSend = if (state.canSign) {
                             {
                                 onNavigateToRoute(
-                                    GroupSendRoute(
+                                    GroupPayoutsRoute(
                                         activeUserPublicKey = activeUserPublicKey,
                                         chatRoomId = chatRoomId,
-                                        relayHint = null,
-                                        chain = GroupWalletStatementEvent.chainName(chain)
+                                        chain = GroupWalletStatementEvent.chainName(chain),
                                     )
                                 )
                             }
@@ -407,6 +406,24 @@ fun GroupWalletScreen(
                             onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
                         },
                         onStartDepositing = { groupWalletViewModel.openMyDeposits(onSuccess = toSession, onFailure = { notify(couldNotOpenDeposits) }) },
+                        onOpenPayouts = {
+                            onNavigateToRoute(
+                                GroupPayoutsRoute(
+                                    activeUserPublicKey = activeUserPublicKey,
+                                    chatRoomId = chatRoomId,
+                                    chain = GroupWalletStatementEvent.chainName(chain),
+                                )
+                            )
+                        },
+                        onAssignCoins = {
+                            onNavigateToRoute(
+                                GroupAssignCoinsRoute(
+                                    activeUserPublicKey = activeUserPublicKey,
+                                    chatRoomId = chatRoomId,
+                                    chain = GroupWalletStatementEvent.chainName(chain),
+                                )
+                            )
+                        },
                         onOpenSpend = toSession,
                         onSendAgain = if (watcher != null) {
                             { sessionId -> groupWalletViewModel.sendAgain(sessionId) { notify(sentAgain) } }
@@ -419,7 +436,9 @@ fun GroupWalletScreen(
                         isPending = groupWalletViewModel.isActionPending.value,
                         onShare = onShare,
                         onSpend = if (state.canSign) toGuardianSpend else null,
-                        onFund = if (state.canSign) toGuardianFund else null,
+                        // A funding pays a guarded wallet, not a member: not a payout, and so
+                        // nothing the group's own wallet signs. docs/payouts-only.md, D9.
+                        onFund = null,
                         onOpenPerson = toPerson,
                     )
                 }
@@ -517,6 +536,8 @@ private fun OpenWallet(
     onOpenAddresses: () -> Unit,
     onSetDestination: () -> Unit,
     onStartDepositing: () -> Unit,
+    onOpenPayouts: () -> Unit,
+    onAssignCoins: () -> Unit,
     onOpenSpend: (sessionId: String) -> Unit,
     onSendAgain: ((sessionId: String) -> Unit)?,
     onBump: ((sessionId: String) -> Unit)?,
@@ -538,6 +559,11 @@ private fun OpenWallet(
     ) {
         item { BalanceCard(walletState) }
 
+        // Every member's balance and destination, and paying them out: docs/payouts-only.md.
+        item {
+            OutlinedButton(onClick = onOpenPayouts) { Text(stringResource(Res.string.members_balances_and_payouts)) }
+        }
+
         if (state.wallet.account.isGuarded) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
@@ -556,9 +582,18 @@ private fun OpenWallet(
                 Button(onClick = send) {
                     Icon(Icons.Default.Send, contentDescription = Decorative)
                     Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                    Text(stringResource(Res.string.send))
+                    Text(stringResource(Res.string.pay_out))
                 }
             }
+        }
+
+        // What this device will sign from here, said once: docs/payouts-only.md, D12.
+        item {
+            Text(
+                text = stringResource(Res.string.your_device_signs_only_payouts),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         when {
@@ -585,6 +620,18 @@ private fun OpenWallet(
                         onSetDestination = onSetDestination,
                         onStartDepositing = onStartDepositing,
                     )
+                }
+
+                // A coin nobody owns can't be paid out until the group says whose it is.
+                // docs/payouts-only.md, Phase 3.
+                if (state.unownedSat > 0) {
+                    item {
+                        ListItem(
+                            headlineContent = { Text(stringResource(Res.string.not_anyone_s_yet_s_sats, Satoshi(state.unownedSat).grouped())) },
+                            supportingContent = { Text(stringResource(Res.string.until_the_group_says_whose_it_is)) },
+                            trailingContent = { TextButton(onClick = onAssignCoins) { Text(stringResource(Res.string.assign)) } },
+                        )
+                    }
                 }
 
                 item {
@@ -625,6 +672,7 @@ private fun OpenWallet(
                 SpendRowCard(
                     row = row,
                     chain = state.wallet.chain,
+                    memberNames = state.memberNames,
                     onOpen = { onOpenSpend(row.transaction.frostSigningSessionId) },
                     onSendAgain = onSendAgain?.takeIf { row.canSendAgain }?.let { { it(row.transaction.frostSigningSessionId) } },
                     onBump = onBump?.takeIf { row.canBump }?.let { { it(row.transaction.frostSigningSessionId) } },
@@ -676,6 +724,7 @@ private fun OpenWallet(
 private fun SpendRowCard(
     row: SpendRow,
     chain: Chain,
+    memberNames: Map<HexKey, String> = emptyMap(),
     onOpen: () -> Unit,
     onSendAgain: (() -> Unit)?,
     onBump: (() -> Unit)?,
@@ -684,7 +733,7 @@ private fun SpendRowCard(
         ListItem(
             headlineContent = {
                 Text(
-                    text = (row.spend?.let { ProposedSpend.summarize(it, chain) } ?: row.sweep?.let(ProposedSpend::summarize) ?: ProposedSpend.UNREADABLE).detail,
+                    text = (row.spend?.let { ProposedSpend.summarize(it, chain, row.payout, memberNames::get) } ?: row.sweep?.let(ProposedSpend::summarize) ?: ProposedSpend.UNREADABLE).detail,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

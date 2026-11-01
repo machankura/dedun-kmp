@@ -62,8 +62,14 @@ class GroupLightningPaymentsJvmTest {
         return all to GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
     }
 
-    private suspend fun authorise(all: List<GroupLightningFixture.Device>, pay: GroupLightningAuthorisationEvent.Pay, proposer: GroupLightningFixture.Device = all[3]) {
-        fixture.signSession(all, proposer, GroupLightningAuthorisations.propose(proposer.db, proposer.room, proposer.publicKey, pay).id)
+    /**
+     * [pay] as the group signs it: a payout of a member's Lightning balance, the one payment its
+     * wallet authorises (`docs/payouts-only.md`, Phase 6). The payment as signed.
+     */
+    private suspend fun authorise(all: List<GroupLightningFixture.Device>, pay: GroupLightningAuthorisationEvent.Pay, proposer: GroupLightningFixture.Device = all[3]): GroupLightningAuthorisationEvent.Pay {
+        val payout = pay.copy(payout = fixture.payoutFor(all, all[0]))
+        fixture.signSession(all, proposer, GroupLightningAuthorisations.propose(proposer.db, proposer.room, proposer.publicKey, payout).id)
+        return payout
     }
 
     @Test
@@ -104,8 +110,7 @@ class GroupLightningPaymentsJvmTest {
     fun `once the group signs, every co-signer has the budget, and an expired one is closed`() = runBlocking<Unit> {
         val (all, wallet) = opened()
         assertTrue(GroupLightningAuthorisations.budgets(all[2].db, wallet).isEmpty(), "nothing is authorised yet")
-        val pay = GroupLightningAuthorisations.prepare(wallet, invoice().write(), null, 1_000_000).getOrThrow()
-        authorise(all, pay)
+        val pay = authorise(all, GroupLightningAuthorisations.prepare(wallet, invoice().write(), null, 1_000_000).getOrThrow())
         all.forEach { d ->
             val mine = GroupLightningWalletManager.walletFor(d.db, fixture.roomId, fixture.chain)!!
             assertEquals(mapOf(pay.paymentHash to 13_000_000L), GroupLightningAuthorisations.budgets(d.db, mine), "device ${d.index}")
@@ -117,6 +122,20 @@ class GroupLightningPaymentsJvmTest {
         assertTrue(GroupLightningAuthorisations.toPay(all[2].db, wallet, later).isEmpty())
         // Still a budget: an HTLC that left before the expiry settles against it.
         assertEquals(13_000_000L, GroupLightningAuthorisations.budgets(all[2].db, wallet)[pay.paymentHash])
+    }
+
+    @Test
+    fun `a payment the group signed without naming a member is no budget, and nothing the node pays`() = runBlocking<Unit> {
+        // Signed by a quorum of older builds, or before the wallet paid only members: the co-signers
+        // and the operator's node pass it over. docs/payouts-only.md, D8.
+        val (all, wallet) = opened()
+        val pay = GroupLightningAuthorisations.prepare(wallet, invoice().write(), null, 1_000_000).getOrThrow()
+        fixture.fileSignedAsRoom(all, GroupLightningAuthorisationEvent.KIND, GroupLightningAuthorisationEvent.template(pay).tags)
+        all.forEach { d ->
+            val mine = GroupLightningWalletManager.walletFor(d.db, fixture.roomId, fixture.chain)!!
+            assertTrue(GroupLightningAuthorisations.budgets(d.db, mine).isEmpty(), "device ${d.index}")
+            assertTrue(GroupLightningAuthorisations.toPay(d.db, mine).isEmpty(), "device ${d.index}")
+        }
     }
 
     @Test

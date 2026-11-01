@@ -946,7 +946,7 @@ private fun RitualNotice(
         ChatMessage.TYPE_SUBGROUP_CERTIFIED -> Icons.Default.AccountTree
         ChatMessage.TYPE_MEMBER_WALLET_REQUESTED, ChatMessage.TYPE_MEMBER_WALLET_GUARDED -> Icons.Default.AccountBalanceWallet
         ChatMessage.TYPE_PAYOUT_DESTINATION_SET, ChatMessage.TYPE_PAYOUT_DESTINATION_REMOVED -> Icons.Default.Payments
-        ChatMessage.TYPE_DEPOSITS_OPENED, ChatMessage.TYPE_DEPOSITS_ATTRIBUTED -> Icons.Default.Savings
+        ChatMessage.TYPE_DEPOSITS_OPENED, ChatMessage.TYPE_DEPOSITS_ATTRIBUTED, ChatMessage.TYPE_COINS_ASSIGNED -> Icons.Default.Savings
         ChatMessage.TYPE_MEMBER_INVITED -> Icons.Default.PersonAdd
         ChatMessage.TYPE_MEMBER_INVITE_SENT -> Icons.Default.Upload
         ChatMessage.TYPE_MEMBER_INVITE_FAILED -> Icons.Default.ErrorOutline

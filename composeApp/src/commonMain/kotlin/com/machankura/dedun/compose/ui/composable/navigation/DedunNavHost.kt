@@ -1,7 +1,12 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.GroupPayoutsScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import com.machankura.dedun.compose.ui.composable.DepositsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DepositsRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupAssignCoinsRoute
+import com.machankura.dedun.compose.ui.composable.GroupAssignCoinsScreen
+import com.machankura.dedun.compose.database.repository.DatabasePayoutRepository
 import com.machankura.dedun.compose.database.repository.DatabaseDepositRepository
 import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -267,6 +272,14 @@ fun DedunNavHost(
     // Who deposits with each group: docs/member-deposits.md.
     val databaseDepositRepository = remember {
         DatabaseDepositRepository(
+            database = auxDatabaseManager.auxDatabase,
+            activeIdentity = sovereignWalletViewModel.activeIdentity,
+        )
+    }
+
+    // Whose each coin is, and paying members out: docs/payouts-only.md.
+    val databasePayoutRepository = remember {
+        DatabasePayoutRepository(
             database = auxDatabaseManager.auxDatabase,
             activeIdentity = sovereignWalletViewModel.activeIdentity,
         )
@@ -1386,6 +1399,7 @@ fun DedunNavHost(
                     wallets = wallets,
                     watcher = groupTransactionWatcher,
                     depositRepository = databaseDepositRepository,
+                    payoutRepository = databasePayoutRepository,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },
@@ -1421,6 +1435,41 @@ fun DedunNavHost(
                     chain = NodeParamsManager.chain,
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = wallets,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupPayoutsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupPayoutsRoute>()
+
+                GroupPayoutsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    payoutRepository = databasePayoutRepository,
+                    payoutDestinationRepository = databasePayoutDestinationRepository,
+                    wallets = groupOnchainWallets,
+                    lightningRepository = databaseGroupLightningRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupAssignCoinsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupAssignCoinsRoute>()
+
+                GroupAssignCoinsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    chatRepository = databaseChatRepository,
+                    payoutRepository = databasePayoutRepository,
+                    wallets = groupOnchainWallets,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()
                     }
@@ -1543,6 +1592,7 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     frostSigningRepository = databaseFrostSigningRepository,
                     payoutDestinationRepository = databasePayoutDestinationRepository,
+                    payoutRepository = databasePayoutRepository,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

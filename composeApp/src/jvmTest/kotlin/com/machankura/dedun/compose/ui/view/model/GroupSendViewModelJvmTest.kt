@@ -349,7 +349,7 @@ class GroupSendViewModelJvmTest {
     }
 
     @Test
-    fun `a route naming a source and a destination is not opened, nor one funding a wallet the room does not hold`() {
+    fun `a route naming a source and a destination is not opened, nor one from the room's own wallet`() {
         var asked = 0
         val chat = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
             override suspend fun getChatRoomByIdentifier(identifier: String) = localChatRoom
@@ -367,7 +367,13 @@ class GroupSendViewModelJvmTest {
             fundChatRoomId = descendantRoomId).apply { initiate() }
         runBlocking { withTimeout(5_000) { while (unknown.groupSendUIState == GroupSendUIState.Loading) delay(10) } }
         assertEquals(GroupSendUIState.Unavailable, unknown.groupSendUIState)
-        assertEquals(1, asked)
+        // The room's own wallet signs only payouts, which this form never builds: refused before
+        // any guarded wallet is looked for. docs/payouts-only.md, Phase 6.
+        assertEquals(0, asked)
+
+        val own = GroupSendViewModel("a".repeat(64), chatRoomId, Chain.Regtest, GroupSendUIState.Loading, chat, RecordingSigning(), wallets = wallets).apply { initiate() }
+        runBlocking { withTimeout(5_000) { while (own.groupSendUIState == GroupSendUIState.Loading) delay(10) } }
+        assertEquals(GroupSendUIState.Unavailable, own.groupSendUIState)
     }
 
     @Test

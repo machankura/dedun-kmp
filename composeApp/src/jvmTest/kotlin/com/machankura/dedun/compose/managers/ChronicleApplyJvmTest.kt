@@ -865,7 +865,7 @@ class ChronicleApplyJvmTest {
      */
     @Test
     fun `the app's own list carries the two deposit kinds, and nothing else`() {
-        assertEquals(setOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND), ChronicleEvent.CHRONICLABLE_KINDS)
+        assertEquals(setOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND), ChronicleEvent.CHRONICLABLE_KINDS)
         assertTrue(ChronicleEvent.KINDS.applyRank(DepositorStatementEvent.KIND)!! < ChronicleEvent.KINDS.applyRank(DepositAttributionEvent.KIND)!!)
     }
 

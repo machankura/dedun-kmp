@@ -30,6 +30,7 @@ import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.managers.GroupPayoutDestinations
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestinationRemoved
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
@@ -579,6 +580,9 @@ data class ChatMessage(
         /** The group signed whose some deposits are. */
         const val TYPE_DEPOSITS_ATTRIBUTED = "depositsAttributed"
 
+        /** The group signed whose some of its coins are. See `docs/payouts-only.md`. */
+        const val TYPE_COINS_ASSIGNED = "coinsAssigned"
+
         /**
          * Every line the group signed, for the one check the transcript
          * dispatches on. A type missing from here renders as a chat bubble,
@@ -604,6 +608,7 @@ data class ChatMessage(
             TYPE_PAYOUT_DESTINATION_REMOVED,
             TYPE_DEPOSITS_OPENED,
             TYPE_DEPOSITS_ATTRIBUTED,
+            TYPE_COINS_ASSIGNED,
         )
 
         /** The lines in [GROUP_IDENTITY_TYPES] about the Lightning wallet, which open its screen. */
@@ -1593,6 +1598,24 @@ data class ChatMessage(
                         chatRoomId = groupId,
                         createdAt = createdAt,
                         content = "The group said whose $count deposit${if (count == 1) " is" else "s are"}",
+                    )
+                }
+
+                // The group saying whose some of its coins are, so they can be paid out.
+                // docs/payouts-only.md.
+                CoinAssignmentEvent.KIND -> {
+                    val signed = CoinAssignmentEvent.verify(event, groupId) ?: return null
+                    val count = signed.coins.size
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_COINS_ASSIGNED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group said whose $count coin${if (count == 1) " is" else "s are"}",
                     )
                 }
 

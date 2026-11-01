@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.database.model.ChatMessage
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.StaticConfig
@@ -285,7 +286,7 @@ class GroupLightningRegtestJvmTest {
         }
 
         // Receive: a depositor's Bolt11 request comes back as an invoice for the group's node...
-        fixture.openDeposits(all, all[3])
+        val destination = fixture.openDeposits(all, all[3])
         val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 100_000_000, "first")
         val invoice = Bolt11Invoice.read(mineUntil("the operator's invoice", 1.minutes) { all[3].db.groupLightningRecordsDao().invoice(key, requestId)?.bolt11 }).get()
         assertEquals(wallet.statement.nodeId, invoice.nodeId.toString())
@@ -324,7 +325,9 @@ class GroupLightningRegtestJvmTest {
         val priced = mineUntil("the LSP's prices in a member's snapshot", 1.minutes) { report(all[3])?.snapshot?.takeIf { it.fundingRates != null && it.feeratePerByte != null } }
         val price = com.machankura.dedun.compose.wallet.lightning.LiquidityPrice.price(priced.fundingRates!!, 200_000, priced.feeratePerByte!!)!!
         val buy = GroupLightningAuthorisations.prepareBuyLiquidity(wallet, channel.channelId, channel.capacitySat, 200_000, com.machankura.dedun.compose.wallet.lightning.LiquidityPrice.defaultCap(price)).getOrThrow()
-        signed(all, all[2], GroupLightningAuthorisations.proposeBuyLiquidity(all[2].db, all[2].room, all[2].publicKey, buy).id)
+        // Every signer refuses a purchase now (docs/payouts-only.md, D9): one signed before the rule,
+        // filed as signed, is what the operator's node still makes.
+        GroupLightningAuthorisationEvent.template(buy).let { fixture.fileSignedAsRoom(all, it.kind, it.tags, it.content) }
         mineUntil("eclair to see the chain's tip", 1.minutes) { lsp("getinfo").jsonObject["blockHeight"]!!.jsonPrimitive.long.takeIf { it >= btc("getblockcount").jsonPrimitive.long } }
         node.buyAuthorised()
         val bought = mineUntil("every member to see the purchase locked", 4.minutes, confirming = true) {
@@ -341,9 +344,11 @@ class GroupLightningRegtestJvmTest {
         val after = mineUntil("the 50,000 sats in a member's snapshot") { report(all[0])?.snapshot?.channels?.singleOrNull()?.takeIf { it.oursMsat > spliced.oursMsat + 45_000_000 } }
         assertEquals(spliced.capacitySat, after.capacitySat, "no splice was needed to receive it")
 
-        // Pay: the group authorises paying the payer, and the operator's node pays it.
+        // Pay: a payout of the depositor's Lightning balance, which the group signs (docs/payouts-only.md,
+        // Phase 6), and the operator's node pays. The payer stands in for the depositor's own wallet.
         val owed = payer("createinvoice", mapOf("description" to "back", "amountMsat" to "20000000")).jsonObject
         val pay = GroupLightningAuthorisations.prepare(wallet, owed["serialized"]!!.jsonPrimitive.content, null, 2_000_000).getOrThrow()
+            .copy(payout = GroupLightningAuthorisationEvent.Payout(all[3].publicKey, destination))
         signed(all, all[2], GroupLightningAuthorisations.propose(all[2].db, all[2].room, all[2].publicKey, pay).id)
         mineUntil("the payer to receive 20,000 sats") {
             payer("getreceivedinfo", mapOf("paymentHash" to pay.paymentHash)).jsonObject["status"]?.jsonObject?.get("type")?.jsonPrimitive?.content?.takeIf { it == "received" }

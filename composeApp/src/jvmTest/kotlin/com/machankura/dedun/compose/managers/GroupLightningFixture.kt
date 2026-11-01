@@ -1,5 +1,13 @@
 package com.machankura.dedun.compose.managers
 
+import kotlin.time.Clock
+import kotlin.test.assertTrue
+import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
+import fr.acinq.bitcoin.ByteVector
+import fr.acinq.lightning.Lightning.randomBytes32
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
+import com.machankura.dedun.compose.database.model.GroupSignedEvent
+import com.machankura.dedun.compose.database.model.DepositRow
 import kotlin.time.Instant
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.machankura.dedun.compose.text.LightningAddress
@@ -163,7 +171,7 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
      * [all]: what a member needs before the operator's node issues them an invoice
      * (`docs/member-deposits.md`, Phase 6).
      */
-    suspend fun openDeposits(all: List<Device>, member: Device) {
+    suspend fun openDeposits(all: List<Device>, member: Device): HexKey {
         val signed = GroupPayoutDestinationEvent.build(
             PrivateKey(ByteVector32(member.privateKey)), roomId, chain, LightningAddress("member${member.index}", "example.com"),
         )
@@ -177,6 +185,43 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
         val session = Depositors.propose(member.db, member.room, member.publicKey, member.publicKey, chain)
         signSession(all, member, session.id)
         all.forEach { assertNotNull(Depositors.statementOf(it.db, roomId, chain, member.publicKey), "device ${it.index} holds ${member.index}'s statement") }
+        return signed.id
+    }
+
+    /**
+     * What a payment needs to be a payout the group signs (`docs/payouts-only.md`, Phase 6): [member]'s
+     * deposits opened, and [depositedMsat] of Lightning deposits on every device's ledger, so their
+     * balance covers it. The label to put on the payment.
+     */
+    suspend fun payoutFor(all: List<Device>, member: Device, depositedMsat: Long = 100_000_000): GroupLightningAuthorisationEvent.Payout {
+        val destination = openDeposits(all, member)
+        all.forEach { d ->
+            d.db.depositDao().upsert(
+                DepositRow(
+                    chatRoomId = roomId, chain = GroupWalletStatementEvent.chainName(chain), depositKey = "ln:" + randomBytes32().toHex(),
+                    source = DepositRow.LIGHTNING, amountMsat = depositedMsat, member = member.publicKey, attributedBy = DepositRow.BY_INVOICE,
+                )
+            )
+        }
+        return GroupLightningAuthorisationEvent.Payout(member.publicKey, destination)
+    }
+
+    /**
+     * [kind] over [tags], signed by the room as a quorum would have signed it, filed on every device
+     * in [all] without asking any of them: a group-signed event from before a rule that now refuses
+     * it -- a liquidity purchase, say -- whose machinery still has to work.
+     */
+    suspend fun fileSignedAsRoom(all: List<Device>, kind: Int, tags: Array<Array<String>>, content: String = "", createdAt: Long = Clock.System.now().epochSeconds): Event {
+        val id = EventHasher.hashId(roomId, createdAt, kind, tags, content)
+        val cache = SharedKeyDerivation.derive(thresholdPublicKey, SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH).cache
+        val signature = GroupFixtures.signWith(keyMaterial, cache, ByteVector(id.hexToByteArray()), participants = n, threshold = frostThreshold).toHex()
+        val event = Event(id, roomId, createdAt, kind, tags, content, signature)
+        all.forEach { d ->
+            val row = GroupSignedEvent.fromEvent(event, chatRoomId = roomId)
+            assertTrue(row.verifies(), "the room signed it")
+            d.db.groupSignedEventDao().upsert(row)
+        }
+        return event
     }
 
     /** Four devices with an onchain wallet open. */

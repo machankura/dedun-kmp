@@ -30,13 +30,18 @@ object GroupLightningAuthorisations {
     /** How long an authorisation stays open when its invoice does not say sooner. */
     val DEFAULT_LIFETIME: Duration = 24.hours
 
-    /** Every payment the group has authorised for [wallet], as this device verifies it, oldest first. */
+    /**
+     * Every payment the group has authorised for [wallet], as this device verifies it, oldest first --
+     * payouts to a member only. One signed without a member's name, by a quorum of older builds or
+     * before the wallet paid only members, is no budget for any HTLC this device co-signs and nothing
+     * the operator's node pays. `docs/payouts-only.md`, D8.
+     */
     suspend fun payments(database: DedunDatabase, wallet: GroupLightningWalletManager.Wallet): List<GroupLightningAuthorisationEvent.Pay> =
         database.groupSignedEventDao().getByChatRoomIdAndKind(wallet.signedEvent.chatRoomId, GroupLightningAuthorisationEvent.KIND)
             .filter { it.verifies() }
             .sortedWith(compareBy({ it.createdAt }, { it.id }))
             .mapNotNull { GroupLightningAuthorisationEvent.read(it.tags) }
-            .filter { it.chain == wallet.statement.chain && it.wallet == wallet.statement.wallet }
+            .filter { it.chain == wallet.statement.chain && it.wallet == wallet.statement.wallet && it.payout != null }
 
     /** Every payment the group has authorised, with its whole budget, by payment hash, in millisatoshi. */
     suspend fun authorisedPayments(database: DedunDatabase, wallet: GroupLightningWalletManager.Wallet): Map<String, Long> =
