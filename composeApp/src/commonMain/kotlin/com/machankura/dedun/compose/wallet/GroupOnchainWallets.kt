@@ -133,6 +133,49 @@ class GroupOnchainWallets(
     suspend fun usageOf(chain: Chain, script: ByteVector, ownWallet: GroupWalletState? = null): UnusedAddressCheck.Usage =
         UnusedAddressCheck.check(clients.clientFor(chain), script, isTheGroups = { ownWallet?.derivationOf(it) != null })
 
+    /** An output that paid one of the group's receive or deposit addresses, and the branch it is on. */
+    data class OnchainDeposit(val outPoint: OutPoint, val amount: fr.acinq.bitcoin.Satoshi, val branch: Long, val confirmed: Boolean)
+
+    /**
+     * Every output that has paid [state]'s receive branch or a depositor's branch: the coins there
+     * now, and -- from the history of every address that has been used -- the ones the group has
+     * spent since, so a tally keeps them (`docs/member-deposits.md`, Phase 8). A history Electrum
+     * can't give this time reads as empty, which leaves what was already recorded as it was: the
+     * next look asks again. Whether an output is the group paying itself is the caller's to say.
+     */
+    suspend fun depositsIn(state: GroupWalletState): List<OnchainDeposit> {
+        val account = state.account
+        val electrum = clients.clientFor(account.chain)
+        val branches = listOf(GroupWalletDerivation.RECEIVE to state.receive) + state.members.values.map { it.branch to it.state }
+
+        val found = mutableMapOf<OutPoint, OnchainDeposit>()
+        val scripts = mutableMapOf<fr.acinq.bitcoin.ByteVector, Long>()
+        val used = mutableListOf<fr.acinq.bitcoin.ByteVector>()
+        branches.forEach { (branch, walletState) ->
+            walletState.addresses.values.forEach { addressState ->
+                val index = addressState.meta.indexOrNull ?: return@forEach
+                val script = GroupWalletDerivation.derive(account, branch, index.toLong()).pubkeyScript
+                scripts[script] = branch
+                if (addressState.alreadyUsed) used += script
+                addressState.utxos.forEach { utxo ->
+                    found[utxo.outPoint] = OnchainDeposit(utxo.outPoint, utxo.amount, branch, confirmed = utxo.blockHeight > 0)
+                }
+            }
+        }
+        used.forEach { script ->
+            val history = runCatching { electrum.getScriptHashHistory(Crypto.sha256(script).byteVector32().reversed()) }.getOrDefault(emptyList())
+            history.forEach { item ->
+                val tx = transactionOf(item.txid, electrum) ?: return@forEach
+                tx.txOut.forEachIndexed { vout, out ->
+                    val branch = scripts[out.publicKeyScript] ?: return@forEachIndexed
+                    val outPoint = OutPoint(tx, vout.toLong())
+                    if (outPoint !in found) found[outPoint] = OnchainDeposit(outPoint, out.amount, branch, confirmed = item.blockHeight > 0)
+                }
+            }
+        }
+        return found.values.toList()
+    }
+
     suspend fun stop() = mutex.withLock {
         wallets.values.forEach { it.stop() }
         wallets.clear()

@@ -112,7 +112,11 @@ object GroupLightningReports {
         snapshot.payments.forEach { p ->
             dao.upsertPayment(GroupLightningPaymentRow(snapshot.wallet, p.id, p.incoming, p.amountMsat, p.feesMsat, p.paymentHash, p.description, p.completedAt?.let(Instant::fromEpochMilliseconds), p.succeeded, p.liquiditySat))
         }
-        sayWhatHappened(database, chatRoomId, sentBy, snapshot, previous.takeIf { newer })
+        // Whose each incoming payment is: docs/member-deposits.md, Phase 8.
+        GroupLightningCoSigner.walletOf(database, chatRoomId, snapshot.wallet)?.let { wallet ->
+            DepositLedger.recordLightning(database, chatRoomId, wallet.statement.chain, snapshot.wallet, snapshot.payments)
+        }
+                sayWhatHappened(database, chatRoomId, sentBy, snapshot, previous.takeIf { newer })
     }
 
     /** lightning-kmp's channel states from the moment a close begins: what a snapshot says a closing channel is. */

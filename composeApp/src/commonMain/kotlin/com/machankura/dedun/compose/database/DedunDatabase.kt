@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.database
 
+import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.dao.DepositDao
 import com.machankura.dedun.compose.database.model.GroupLightningSnapshotRow
 import com.machankura.dedun.compose.database.model.GroupLightningPaymentRow
 import com.machankura.dedun.compose.database.model.GroupLightningInvoiceRow
@@ -144,6 +146,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GiftWrapPayload::class,
         GroupKeyState::class,
         GroupLightningInvoiceRow::class,
+        DepositRow::class,
         GroupLightningPaymentRow::class,
         GroupLightningSeed::class,
         GroupLightningSnapshotRow::class,
@@ -188,7 +191,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 36,
+    version = 37,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -424,6 +427,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // (wallet, paymentHash): whose deposit an invoice is, and the hash a payment joins it by
         // (docs/member-deposits.md, Phase 6). Null on every row before it.
         AutoMigration(from = 35, to = 36),
+        // v37 adds DepositRow: every deposit into a group as this device learned it, kept so a deposit
+        // the group has spent since still counts in its member's tally (docs/member-deposits.md, Phase 8).
+        AutoMigration(from = 36, to = 37),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -480,6 +486,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun icebergCoSigningDao(): IcebergCoSigningDao
 
     abstract fun groupLightningRecordsDao(): GroupLightningRecordsDao
+
+    abstract fun depositDao(): DepositDao
 
     abstract fun marmotCommitResultDao(): MarmotCommitResultDao
 

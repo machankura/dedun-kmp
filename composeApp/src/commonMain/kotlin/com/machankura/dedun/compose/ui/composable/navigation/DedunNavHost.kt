@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.DepositsScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DepositsRoute
 import com.machankura.dedun.compose.database.repository.DatabaseDepositRepository
 import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -1409,6 +1411,19 @@ fun DedunNavHost(
                     chain = NodeParamsManager.chain,
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = wallets,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<DepositsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<DepositsRoute>()
+
+                DepositsScreen(
+                    chatRoomId = route.chatRoomId,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    chatRepository = databaseChatRepository,
+                    depositRepository = databaseDepositRepository,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

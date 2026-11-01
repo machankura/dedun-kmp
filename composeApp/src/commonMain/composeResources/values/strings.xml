@@ -924,4 +924,16 @@
     <string name="open_deposits">Open deposits</string>
     <string name="couldn_t_ask_the_group_to_open_their_deposits">Couldn't ask the group to open their deposits.</string>
     <string name="no_reply_from_the_operator_s_device_yet">No reply from the operator's device yet. It may be off.</string>
+    <string name="deposits">Deposits</string>
+    <string name="all_deposits">All deposits</string>
+    <string name="s_put_in_s_sats">%1$s put in %2$s sats</string>
+    <string name="you_ve_put_in_s_sats">You've put in %1$s sats</string>
+    <string name="paid_to_them_s_sats">Paid to them: %1$s sats</string>
+    <string name="unattributed_s_sats">Unattributed: %1$s sats</string>
+    <string name="altogether_s_sats">Altogether: %1$s sats</string>
+    <string name="nothing_has_been_deposited_yet">Nothing has been deposited yet.</string>
+    <string name="by_their_address">by their address</string>
+    <string name="by_their_invoice">by their invoice</string>
+    <string name="as_the_operator_reported">as the operator reported</string>
+    <string name="attributed_by_the_group">signed by the group</string>
 </resources>

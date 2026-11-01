@@ -10,6 +10,7 @@ import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import com.machankura.dedun.compose.managers.DepositLedger
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 
 sealed interface ChatRoomDetailUIState {
@@ -127,6 +128,8 @@ sealed interface ChatRoomDetailUIState {
          * holds a share to open: `docs/member-deposits.md`, Phase 5.
          */
         val openableDepositors: Set<HexKey> = emptySet(),
+        /** What each member has put in, the unattributed and the total: `docs/member-deposits.md`, Phase 8. */
+        val tallies: DepositLedger.Tallies? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

@@ -10,6 +10,9 @@ import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
+import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.managers.DepositLedger
+import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -48,6 +51,25 @@ class DatabaseDepositRepository(
     override suspend fun open(localChatRoom: LocalChatRoom, chain: Chain, member: HexKey): FrostSigningSession {
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
         return Depositors.propose(database, localChatRoom, me, member, chain)
+    }
+
+    override suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) {
+        runCatching { DepositLedger.recordOnchain(database, chatRoomId, chain, deposits) }
+            .onFailure { logger.e("Error recording $chatRoomId's deposits", it) }
+    }
+
+    override suspend fun tallies(chatRoomId: String, chain: Chain): DepositLedger.Tallies = try {
+        DepositLedger.tallies(database, chatRoomId, chain)
+    } catch (e: Throwable) {
+        logger.e("Error reading $chatRoomId's tallies", e)
+        DepositLedger.Tallies(emptyMap(), 0, 0)
+    }
+
+    override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = try {
+        DepositLedger.depositsIn(database, chatRoomId, chain)
+    } catch (e: Throwable) {
+        logger.e("Error reading $chatRoomId's deposits", e)
+        emptyList()
     }
 
     companion object {

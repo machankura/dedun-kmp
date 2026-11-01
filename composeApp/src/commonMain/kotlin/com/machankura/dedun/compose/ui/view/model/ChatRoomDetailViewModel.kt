@@ -140,6 +140,7 @@ class ChatRoomDetailViewModel(
                     showsMemberWalletPolicy = !isDisbanded && couldGuard,
                     payouts = payouts,
                     payoutDestinations = if (payouts != null) payoutDestinationRepository.destinationsIn(chatRoomId, NodeParamsManager.chain) else emptyMap(),
+                    tallies = if (payouts != null) depositRepository.tallies(chatRoomId, NodeParamsManager.chain) else null,
                     openableDepositors = if (payouts != null && canSign) {
                         localChatRoom.localParticipants.map { it.participant.participantPublicKey.lowercase() }
                             .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }

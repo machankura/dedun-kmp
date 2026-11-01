@@ -256,7 +256,7 @@ class GroupLightningNode(
     private suspend fun withRequests(payments: List<WalletWire.PaymentView>): List<WalletWire.PaymentView> = payments.map { payment ->
         val hash = payment.paymentHash?.takeIf { payment.incoming } ?: return@map payment
         val invoice = database.groupLightningRecordsDao().invoicesByHash(walletKey, hash).singleOrNull() ?: return@map payment
-        payment.copy(requestId = invoice.requestId)
+        payment.copy(requestId = invoice.requestId, requester = invoice.requester)
     }
 
     /** Sends the room a snapshot when the channels or payments have changed, or when the last is [reportEvery] old. */

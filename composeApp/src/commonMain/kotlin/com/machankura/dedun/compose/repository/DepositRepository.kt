@@ -5,6 +5,9 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
+import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.managers.DepositLedger
+import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 
 /**
  * Who deposits with a group, for the screens: whether the active profile can be handed an
@@ -38,6 +41,15 @@ interface DepositRepository {
     /** Proposes opening [member]'s deposits, as the active profile, which has to hold a share. */
     suspend fun open(localChatRoom: LocalChatRoom, chain: Chain, member: HexKey): FrostSigningSession
 
+    /** Files the outputs that paid the room's receive and deposit branches (Phase 8). */
+    suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>)
+
+    /** Every member's tally, the unattributed and the total (Phase 8). */
+    suspend fun tallies(chatRoomId: String, chain: Chain): DepositLedger.Tallies
+
+    /** Every deposit on record, newest first, with the group's signed attributions applied. */
+    suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow>
+
     companion object {
         val NO_OP = object : DepositRepository {
             override suspend fun standing(chatRoomId: String, chain: Chain, canPropose: Boolean): Standing = Standing.CannotSign
@@ -45,6 +57,9 @@ interface DepositRepository {
             override suspend fun canBeOpened(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false
             override suspend fun open(localChatRoom: LocalChatRoom, chain: Chain, member: HexKey): FrostSigningSession =
                 throw UnsupportedOperationException("no repository")
+            override suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) = Unit
+            override suspend fun tallies(chatRoomId: String, chain: Chain) = DepositLedger.Tallies(emptyMap(), 0, 0)
+            override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = emptyList()
         }
     }
 }

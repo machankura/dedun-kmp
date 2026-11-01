@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.isDecided
@@ -142,6 +143,7 @@ class GroupWalletViewModel(
             // overwrite another.
             val chainState = wallets.walletFor(wallet.account, chatRoomId).state
             noticeGuardianSpends(wallet.account)
+            recordDeposits(chainState)
             watching = viewModelScope.launch(Dispatchers.IO) {
                 combine(
                     chainState,
@@ -176,6 +178,24 @@ class GroupWalletViewModel(
     }
 
     private var noticing: Job? = null
+    private var recording: Job? = null
+
+    /**
+     * Each time the coins or the used addresses change, files every output that has paid the
+     * receive and deposit branches -- so a deposit counts in its member's tally, and keeps counting
+     * once the group spends it. `docs/member-deposits.md`, Phase 8.
+     */
+    private fun recordDeposits(states: Flow<GroupWalletState>) {
+        recording?.cancel()
+        recording = viewModelScope.launch(Dispatchers.IO) {
+            states
+                .distinctUntilChangedBy { state ->
+                    state.utxos.map { it.utxo.outPoint }.toSet() to
+                        (listOf(state.receive) + state.members.values.map { it.state }).sumOf { branch -> branch.addresses.values.count { it.alreadyUsed } }
+                }
+                .collect { state -> depositRepository.recordOnchain(chatRoomId, chain, wallets.depositsIn(state)) }
+        }
+    }
 
     /**
      * For a guarded wallet: each time its coins change, reads the chain for

@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
+import dedun.composeapp.generated.resources.all_deposits
+import dedun.composeapp.generated.resources.deposits
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DepositsRoute
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_their_deposits
 import dedun.composeapp.generated.resources.open_deposits
 import androidx.compose.material.icons.filled.Savings
@@ -650,6 +654,15 @@ fun ChatRoomDetailScreen(
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                 }
+                                // What this profile has put in, under where it is paid back.
+                                chatRoomDetailUIState.tallies?.members?.get(activeUserPublicKey.lowercase())?.takeIf { it.depositedMsat > 0 }?.let { mine ->
+                                    item {
+                                        Text(
+                                            text = stringResource(Res.string.you_ve_put_in_s_sats, sats(mine.depositedMsat)),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                }
                                 item {
                                     PayoutDestinationRow(
                                         standing = payouts,
@@ -661,6 +674,34 @@ fun ChatRoomDetailScreen(
                                             }
                                         } else null,
                                     )
+                                }
+                            }
+
+                            // What every member has put in, and how the total adds up.
+                            // docs/member-deposits.md, Phase 8.
+                            chatRoomDetailUIState.tallies?.let { tallies ->
+                                item { HorizontalDivider() }
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.deposits),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                item {
+                                    Tallies(
+                                        tallies = tallies,
+                                        names = chatRoomDetailUIState.localChatRoom.localParticipants.associate { participant ->
+                                            participant.participant.participantPublicKey.lowercase() to
+                                                (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
+                                        },
+                                    )
+                                }
+                                item {
+                                    TextButton(onClick = { onNavigateToRoute.invoke(DepositsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)) }) {
+                                        Icon(Icons.Default.Savings, contentDescription = Decorative)
+                                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+                                        Text(stringResource(Res.string.all_deposits))
+                                    }
                                 }
                             }
 

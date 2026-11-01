@@ -45,6 +45,8 @@ object WalletWire {
          * itself. `docs/member-deposits.md`, D6.
          */
         val requestId: String? = null,
+        /** Who asked for that invoice, as the operator's node recorded it: so a device that missed the request can attribute it, saying whose word it is. */
+        val requester: String? = null,
     )
 
     const val PAYMENT = "payment"
