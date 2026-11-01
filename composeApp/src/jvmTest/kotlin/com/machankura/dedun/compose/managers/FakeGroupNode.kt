@@ -28,6 +28,10 @@ class FakeGroupNode(private val configuration: GroupLightningNode.NodeConfigurat
     val attempts = mutableListOf<Int>()
     /** A reason sent here ends the current connection, as the LSP hanging up would, with that reason. */
     val drops = Channel<String>(Channel.UNLIMITED)
+    /** What a drop is read as. */
+    var dropCause = LspDrop.Cause.CLOSED_BY_LSP
+    /** Whether the LSP sends its `init` on each connection; while not, the connection stays up and of no use. */
+    var sendsInit = true
     var channels = listOf<WalletWire.ChannelView>()
     val payments = mutableListOf<WalletWire.PaymentView>()
     val invoices = mutableListOf<Bolt11Invoice>()
@@ -47,7 +51,8 @@ class FakeGroupNode(private val configuration: GroupLightningNode.NodeConfigurat
 
     override suspend fun connect(attempt: Int): Boolean { connected = true; connects++; attempts += attempt; return true }
     override fun disconnect() { disconnected = true }
-    override suspend fun awaitDisconnect(): String = drops.receive().also { connected = false }
+    override suspend fun awaitDisconnect(): LspDrop = drops.receive().let { LspDrop(dropCause, it) }.also { connected = false }
+    override suspend fun awaitInit(): Boolean = sendsInit
     override fun commitmentNumbers(): Map<String, Long> = mapOf("ab".repeat(32) to 7L)
     override fun channels(): List<WalletWire.ChannelView> = channels
     override fun payments(): List<WalletWire.PaymentView> = payments.toList()

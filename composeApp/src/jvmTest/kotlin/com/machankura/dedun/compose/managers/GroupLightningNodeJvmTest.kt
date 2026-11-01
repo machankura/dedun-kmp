@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
@@ -256,5 +258,126 @@ class GroupLightningNodeJvmTest {
         assertEquals("Connection closed", GroupLightningNode.dropReason(ours, ours, closed))
         assertEquals("Connection closed, before the LSP sent its features", GroupLightningNode.dropReason(ours, null, closed))
         assertEquals("closed by this node", GroupLightningNode.dropReason(ours, ours, Connection.CLOSED(null)))
+    }
+
+    // The node's status, for the operator's screen (`docs/lsp-connection-status.md`, Phase 2).
+
+    private suspend fun GroupLightningNode.awaitStatus(what: String, until: (GroupLightningNodeStatus) -> Boolean): GroupLightningNodeStatus =
+        withTimeout(5.seconds) { status.first(until) }.also { assertTrue(until(it), what) }
+
+    private fun GroupLightningNodeStatus.link(): LspLink = assertIs<GroupLightningNodeStatus.Running>(this).link
+
+    @Test
+    fun `a refused start says why, in a value the screen can word`() = runBlocking<Unit> {
+        val all = ready()
+        elect(all, all[1])
+        heardFromRoom(all[2])
+        val member = node(all[2])
+        member.start()
+        assertEquals(GroupLightningNodeStatus.NotRunning(GroupLightningNodeStatus.Refusal.NOT_OPERATOR), member.status.value)
+        val operator = node(all[1])
+        operator.start()
+        assertEquals(GroupLightningNodeStatus.NotRunning(GroupLightningNodeStatus.Refusal.ROOM_NOT_SYNCED), operator.status.value)
+    }
+
+    @Test
+    fun `a node waiting for round one is starting, then refused for it`() = runBlocking<Unit> {
+        val all = ready()
+        elect(all, all[1])
+        heardFromRoom(all[1])
+        val node = GroupLightningNode(
+            all[1].db, all[1].room, all[1].publicKey, GroupLightningWalletManager.walletFor(all[1].db, fixture.roomId, fixture.chain)!!, scope, factory,
+            minimumPool = 4, poolWait = 1.seconds,
+        )
+        val seen = mutableListOf<GroupLightningNodeStatus>()
+        val watching = scope.launch { node.status.collect { seen += it } }
+        node.start()
+        delay(100)
+        watching.cancel()
+        assertTrue(GroupLightningNodeStatus.Starting in seen, "seen: $seen")
+        assertEquals(GroupLightningNodeStatus.NotRunning(GroupLightningNodeStatus.Refusal.POOL_SHORT), node.status.value)
+    }
+
+    @Test
+    fun `a node is connected once the LSP has sent its init`() = runBlocking<Unit> {
+        val (node, _) = runningNode()
+        assertIs<LspLink.Connected>(node.awaitStatus("connected") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Connected }.link())
+        node.stop()
+        assertEquals(GroupLightningNodeStatus.NotRunning(), node.status.value)
+    }
+
+    @Test
+    fun `a connection with no init is still connecting`() = runBlocking<Unit> {
+        val all = ready()
+        elect(all, all[1])
+        heardFromRoom(all[1])
+        val node = GroupLightningNode(
+            all[1].db, all[1].room, all[1].publicKey, GroupLightningWalletManager.walletFor(all[1].db, fixture.roomId, fixture.chain)!!, scope,
+            { configuration -> FakeGroupNode(configuration).also { it.sendsInit = false; peers += it } },
+            handoverCheck = 100.milliseconds, minimumPool = 0,
+        )
+        node.start()
+        delay(200)
+        assertEquals(LspLink.Connecting(1), node.status.value.link())
+        node.stop()
+    }
+
+    @Test
+    fun `a drop is unreachable, with its cause and the next try, until the LSP is back`() = runBlocking<Unit> {
+        val (node, peer) = runningNode(reconnectAfter = { 500.milliseconds })
+        node.awaitStatus("connected") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Connected }
+        val connectedAt = (node.status.value.link() as LspLink.Connected).since
+        peer.dropCause = LspDrop.Cause.FEATURE_MISMATCH
+        val before = Clock.System.now()
+        peer.drops.send("Connection closed: the LSP does not offer simple_taproot_channels, which this node requires")
+        val down = node.awaitStatus("unreachable") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Unreachable }.link() as LspLink.Unreachable
+        assertEquals(LspDrop.Cause.FEATURE_MISMATCH, down.drop.cause)
+        assertEquals(1, down.failures)
+        assertEquals(connectedAt, down.lastConnected)
+        assertTrue(down.retryAt >= before + 500.milliseconds && down.retryAt <= Clock.System.now() + 500.milliseconds, "retryAt ${down.retryAt}")
+        node.awaitStatus("connected again") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Connected }
+        assertEquals(2, peer.connects)
+        node.stop()
+    }
+
+    @Test
+    fun `try now dials at once, and still counts against the backoff`() = runBlocking<Unit> {
+        val failures = mutableListOf<Int>()
+        val (node, peer) = runningNode(reconnectAfter = { failures += it; 10.minutes })
+        peer.drops.send("Connection closed")
+        node.awaitStatus("unreachable") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Unreachable }
+        node.reconnectNow()
+        withTimeout(5.seconds) { while (peer.connects < 2) delay(10) }
+        node.awaitStatus("connected") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Connected }
+        peer.drops.send("Connection closed")
+        val down = node.awaitStatus("unreachable again") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Unreachable }.link() as LspLink.Unreachable
+        assertEquals(2, down.failures)
+        assertEquals(listOf(1, 2), failures)
+        node.stop()
+    }
+
+    @Test
+    fun `try now while connected does nothing`() = runBlocking<Unit> {
+        val (node, peer) = runningNode()
+        node.awaitStatus("connected") { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Connected }
+        node.reconnectNow()
+        delay(200)
+        assertEquals(1, peer.connects)
+        node.stop()
+    }
+
+    @Test
+    fun `an identity's status follows the node it makes and forgets`() = runBlocking<Unit> {
+        val all = ready()
+        elect(all, all[3])
+        heardFromRoom(all[3])
+        val nodes = GroupLightningNodes(all[3].db, all[3].publicKey, scope, factory, fixture.chain, minimumPool = 0)
+        val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!.statement.wallet
+        val status = nodes.statusOf(fixture.roomId, wallet)
+        assertEquals(GroupLightningNodeStatus.NotOnThisDevice, status.first())
+        nodes.refresh()
+        withTimeout(5.seconds) { status.first { (it as? GroupLightningNodeStatus.Running)?.link is LspLink.Connected } }
+        nodes.stop()
+        assertEquals(GroupLightningNodeStatus.NotOnThisDevice, status.first())
     }
 }

@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.wallet.lightning
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.managers.GroupLightningNode
+import com.machankura.dedun.compose.managers.GroupLightningNodeStatus
 import com.machankura.dedun.compose.managers.GroupLightningOperatorManager
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.managers.IcebergRitualManager
@@ -10,6 +11,14 @@ import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -44,13 +53,23 @@ class GroupLightningNodes(
 ) {
     private val logger = Logger.withTag("GroupLightningNodes")
     private val mutex = Mutex()
-    private val nodes = mutableMapOf<String, GroupLightningNode>()
+    private val nodes = MutableStateFlow<Map<String, GroupLightningNode>>(emptyMap())
     private var job: Job? = null
 
     /** The node of [chatRoomId]'s wallet [wallet] -- its current one when null -- if this device runs it. */
     fun nodeFor(chatRoomId: String, wallet: Long? = null): GroupLightningNode? =
-        if (wallet != null) nodes[key(chatRoomId, wallet)]
-        else nodes.filterKeys { it.startsWith("$chatRoomId:") }.maxByOrNull { it.value.wallet.statement.wallet }?.value
+        if (wallet != null) nodes.value[key(chatRoomId, wallet)]
+        else nodes.value.filterKeys { it.startsWith("$chatRoomId:") }.maxByOrNull { it.value.wallet.statement.wallet }?.value
+
+    /**
+     * What this device's node for [chatRoomId]'s wallet [wallet] is doing, following it as [refresh] makes
+     * and forgets it: [GroupLightningNodeStatus.NotOnThisDevice] while there is none
+     * (`docs/lsp-connection-status.md`, D5).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun statusOf(chatRoomId: String, wallet: Long): Flow<GroupLightningNodeStatus> =
+        nodes.map { it[key(chatRoomId, wallet)] }.distinctUntilChanged()
+            .flatMapLatest { node -> node?.status ?: flowOf(GroupLightningNodeStatus.NotOnThisDevice) }
 
     private fun key(chatRoomId: String, wallet: Long) = "$chatRoomId:$wallet"
 
@@ -66,13 +85,13 @@ class GroupLightningNodes(
             for (wallet in GroupLightningWalletManager.wallets(database, roomId, chain)) {
                 val key = key(roomId, wallet.statement.wallet)
                 val operator = GroupLightningOperatorManager.current(database, roomId, chain, wallet.statement.wallet)
-                val existing = nodes[key]
+                val existing = nodes.value[key]
                 if (existing?.state?.value is GroupLightningNode.State.Running) continue
                 if (operator?.publicKey != userPublicKey) {
-                    nodes.remove(key)
+                    nodes.update { it - key }
                     continue
                 }
-                val node = existing ?: GroupLightningNode(database, localChatRoom, userPublicKey, wallet, scope, peerFactory, minimumPool = minimumPool).also { nodes[key] = it }
+                val node = existing ?: GroupLightningNode(database, localChatRoom, userPublicKey, wallet, scope, peerFactory, minimumPool = minimumPool).also { node -> nodes.update { it + (key to node) } }
                 val state = runCatching { node.start() }.onFailure { logger.e("Could not start the node for $key", it) }.getOrNull()
                 if (state is GroupLightningNode.State.Refused) logger.i("Not running the node for $key: ${state.reason}")
             }
@@ -93,8 +112,8 @@ class GroupLightningNodes(
     suspend fun stop() {
         job?.cancel()
         mutex.withLock {
-            nodes.values.forEach { runCatching { it.stop() } }
-            nodes.clear()
+            nodes.value.values.forEach { runCatching { it.stop() } }
+            nodes.value = emptyMap()
         }
     }
 

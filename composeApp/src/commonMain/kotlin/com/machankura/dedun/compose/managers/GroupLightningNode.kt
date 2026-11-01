@@ -61,6 +61,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -125,7 +126,12 @@ class GroupLightningNode(
         suspend fun connect(attempt: Int = 1): Boolean
         fun disconnect()
         /** Suspends until the connection to the LSP is down -- at once, when it is down already -- and says why. */
-        suspend fun awaitDisconnect(): String
+        suspend fun awaitDisconnect(): LspDrop
+        /**
+         * Suspends until the LSP's `init` arrives on the current connection, true, or the connection closes
+         * first, false. Only after `init` is a connection any use (`docs/lsp-connection-status.md`, D2).
+         */
+        suspend fun awaitInit(): Boolean
         /** Each channel's local commitment number, by channel id: what the stopped message reports. */
         fun commitmentNumbers(): Map<String, Long>
         /** The node's channels, as a snapshot reports them. */
@@ -158,7 +164,7 @@ class GroupLightningNode(
     sealed class State {
         data object Stopped : State()
         data class Running(val term: Long) : State()
-        data class Refused(val reason: String) : State()
+        data class Refused(val reason: GroupLightningNodeStatus.Refusal) : State()
     }
 
     /** Tor is on and [chain]'s LSP has no onion address: the node will not leave Tor to reach it. */
@@ -166,6 +172,36 @@ class GroupLightningNode(
 
     private val _state = MutableStateFlow<State>(State.Stopped)
     val state: StateFlow<State> = _state
+
+    /** What the node is doing, connection and all, for the operator's screen (`docs/lsp-connection-status.md`). */
+    private val _status = MutableStateFlow<GroupLightningNodeStatus>(GroupLightningNodeStatus.NotRunning())
+    val status: StateFlow<GroupLightningNodeStatus> = _status
+    private var link: LspLink = LspLink.Connecting(1)
+    /** A tap on *Try now*: ends the wait before the next dial, once (D6). */
+    private val skipWait = Channel<Unit>(Channel.CONFLATED)
+
+    private fun enter(state: State): State {
+        _state.value = state
+        _status.value = when (state) {
+            is State.Running -> GroupLightningNodeStatus.Running(state.term, link)
+            is State.Refused -> GroupLightningNodeStatus.NotRunning(state.reason)
+            State.Stopped -> GroupLightningNodeStatus.NotRunning()
+        }
+        return state
+    }
+
+    private fun setLink(link: LspLink) {
+        this.link = link
+        (_state.value as? State.Running)?.let { _status.value = GroupLightningNodeStatus.Running(it.term, link) }
+    }
+
+    /**
+     * Dials the LSP now rather than at the end of the backoff's wait, when the last attempt did not hold
+     * (D6). It skips one wait: the attempt still counts against the backoff.
+     */
+    fun reconnectNow() {
+        if (link is LspLink.Unreachable) skipWait.trySend(Unit)
+    }
 
     private var peer: PeerHandle? = null
     private var transport: GroupIcebergTransport? = null
@@ -183,16 +219,28 @@ class GroupLightningNode(
     /** Starts the node if this device may run it now; otherwise says why not. */
     suspend fun start(): State {
         if (_state.value is State.Running) return _state.value
+        return try {
+            starting()
+        } catch (e: Throwable) {
+            enter(State.Stopped)
+            throw e
+        }
+    }
+
+    private suspend fun starting(): State {
         val roomId = localChatRoom.chatRoom.id
         val operator = GroupLightningOperatorManager.current(database, roomId, chain, wallet.statement.wallet)
         val lastHeard = database.marmotGroupEventDao().newestSavedAt(roomId)
         if (!GroupLightningOperatorManager.mayRunNode(database, roomId, chain, userPublicKey, lastHeard, now(), wallet.statement.wallet)) {
-            return State.Refused(
-                if (operator?.publicKey != userPublicKey) "this device is not the operator" else "this device has not heard from the room recently enough to be sure it still is"
-            ).also { _state.value = it }
+            return enter(
+                State.Refused(
+                    if (operator?.publicKey != userPublicKey) GroupLightningNodeStatus.Refusal.NOT_OPERATOR else GroupLightningNodeStatus.Refusal.ROOM_NOT_SYNCED
+                )
+            )
         }
-        val seed = wallet.seed ?: return State.Refused("this device does not hold the wallet's seed").also { _state.value = it }
+        val seed = wallet.seed ?: return enter(State.Refused(GroupLightningNodeStatus.Refusal.NO_SEED))
         val term = operator!!.term
+        _status.value = GroupLightningNodeStatus.Starting
 
         val transport = GroupIcebergTransport.create(database, localChatRoom, userPublicKey, wallet, term, scope).also { it.start() }
         transport.provision(GroupLightningCoSigner.POOL_WINDOW)
@@ -200,10 +248,10 @@ class GroupLightningNode(
         // ask for anything: a channel that needs a label the pool lacks is aborted.
         if (!transport.awaitPool(minimumPool, poolWait)) {
             transport.stop()
-            return State.Refused("the group has not sent enough round one to sign with yet").also { _state.value = it }
+            return enter(State.Refused(GroupLightningNodeStatus.Refusal.POOL_SHORT))
         }
         val onchain = GroupWalletManager.walletFor(database, roomId, chain, wallet.statement.onchainAccount)
-            ?: return State.Refused("the onchain wallet it closes to is not open").also { _state.value = it }
+            ?: return enter(State.Refused(GroupLightningNodeStatus.Refusal.NO_ONCHAIN_WALLET))
         val keyManager = GroupNodeKeyManager(
             delegate = GroupLightningCoSigner.keyManagerOf(ByteVector(seed.seed), chain),
             fundingSigner = RemoteIcebergFundingSigner(PublicKey.fromHex(wallet.statement.icebergKey), transport, SIGNING_DEADLINE),
@@ -215,7 +263,8 @@ class GroupLightningNode(
         val handle = peerFactory(NodeConfiguration(keyManager, chain, PublicKey.fromHex(wallet.statement.lspNodeId), transport, Satoshi(wallet.statement.policy.maxLiquidityFeeSat)))
         this.transport = transport
         peer = handle
-        _state.value = State.Running(term)
+        link = LspLink.Connecting(1)
+        enter(State.Running(term))
         stayConnected(handle, runCatching { handle.connect(attempt = 1) })
         lastReported = null
         report(term, force = true)
@@ -244,7 +293,7 @@ class GroupLightningNode(
         transport?.stop()
         peer = null
         transport = null
-        _state.value = State.Stopped
+        enter(State.Stopped)
         GroupLightningOperatorManager.announceStopped(database, localChatRoom, userPublicKey, chain, wallet.statement.wallet, running.term, numbers)
         logger.i("The group's node stopped at the end of term ${running.term}")
     }
@@ -386,18 +435,32 @@ class GroupLightningNode(
             var attempt = first
             var since = now()
             var failures = 0
+            var lastConnected: kotlin.time.Instant? = null
             while (isActive) {
-                val reason = attempt.fold({ handle.awaitDisconnect() }, { it.message ?: it::class.simpleName.orEmpty() })
+                val drop = attempt.fold(
+                    { dialled ->
+                        if (dialled && handle.awaitInit()) {
+                            lastConnected = now()
+                            setLink(LspLink.Connected(lastConnected!!))
+                        }
+                        handle.awaitDisconnect()
+                    },
+                    { drop(it) },
+                )
                 val connected = attempt.getOrDefault(false)
                 val lasted = now() - since
                 failures = if (connected && lasted >= STABLE_CONNECTION) 1 else failures + 1
                 val wait = reconnectAfter(failures)
                 logger.w(
-                    if (connected) "The group's node lost the LSP after $lasted: $reason. Reconnecting in $wait"
-                    else "The group's node could not reach the LSP: $reason. Trying again in $wait"
+                    if (connected) "The group's node lost the LSP after $lasted: ${drop.detail}. Reconnecting in $wait"
+                    else "The group's node could not reach the LSP: ${drop.detail}. Trying again in $wait"
                 )
-                delay(wait)
+                // A tap from before this wait is not one for it.
+                skipWait.tryReceive()
+                setLink(LspLink.Unreachable(drop, failures, now() + wait, lastConnected))
+                if (withTimeoutOrNull(wait) { skipWait.receive() } != null) logger.i("Dialling the LSP now, as the operator asked")
                 since = now()
+                setLink(LspLink.Connecting(failures + 1))
                 attempt = runCatching { handle.connect(attempt = failures + 1) }
             }
         }
@@ -639,13 +702,21 @@ class GroupLightningNode(
                     return peer.connect(connectTimeout = connectTimeout, handshakeTimeout = handshakeTimeout)
                 }
                 override fun disconnect() = peer.disconnect()
-                override suspend fun awaitDisconnect(): String {
+                override suspend fun awaitDisconnect(): LspDrop {
                     val closed = peer.connectionState.first { it is Connection.CLOSED } as Connection.CLOSED
                     // An LSP that hangs up on our features does so milliseconds after its own init, and the
                     // socket reads as closed before the peer's event for that init has reached us: wait for it.
                     val theirs = withTimeoutOrNull(INIT_GRACE) { lspInit.filterNotNull().first() }
-                    return dropReason(nodeParams.features.initFeatures(), theirs?.features, closed)
+                    return drop(nodeParams.features.initFeatures(), theirs?.features, closed)
                 }
+                override suspend fun awaitInit(): Boolean =
+                    combine(lspInit, peer.connectionState) { init, state ->
+                        when {
+                            init != null -> true
+                            state is Connection.CLOSED -> false
+                            else -> null
+                        }
+                    }.filterNotNull().first()
                 override fun commitmentNumbers(): Map<String, Long> = peer.channelsFlow.value.mapNotNull { (id, state) ->
                     (state as? ChannelStateWithCommitments)?.let { id.toHex() to it.commitments.localCommitIndex }
                 }.toMap()
