@@ -13,7 +13,9 @@ import com.machankura.dedun.compose.database.model.types.IcebergApprovalStep
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.managers.GroupLightningAuthorisations
 import com.machankura.dedun.compose.managers.GroupLightningDerivation
+import com.machankura.dedun.compose.managers.GroupLightningNodeStatus
 import com.machankura.dedun.compose.managers.GroupLightningOperatorManager
+import com.machankura.dedun.compose.managers.LspLink
 import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -21,6 +23,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatem
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
+import com.machankura.dedun.compose.repository.GroupNodeStatusSource
 import com.machankura.dedun.compose.ui.view.state.GroupLightningReceiveUIState
 import com.machankura.dedun.compose.ui.view.state.GroupLightningSendUIState
 import com.machankura.dedun.compose.ui.view.state.GroupLightningWalletUIState
@@ -183,6 +186,47 @@ class GroupLightningWalletViewModelJvmTest {
         assertTrue(mine.isOperator)
         val theirs = assertIs<GroupLightningWalletUIState.Opened>(settled(Lightning(completed = key, wallet = wallet, operator = operator("b".repeat(64)))))
         assertTrue(!theirs.isOperator)
+    }
+
+    /** This device's nodes, as a test sets them, and what was asked of them. */
+    private class Nodes : GroupNodeStatusSource {
+        val status = MutableStateFlow<GroupLightningNodeStatus>(GroupLightningNodeStatus.Starting)
+        val observed = mutableListOf<Long>()
+        val reconnected = mutableListOf<Long>()
+        override fun observe(chatRoomId: String, wallet: Long): Flow<GroupLightningNodeStatus> = status.also { observed += wallet }
+        override fun reconnectNow(chatRoomId: String, wallet: Long) { reconnected += wallet }
+    }
+
+    private fun opened(viewModel: GroupLightningWalletViewModel, until: (GroupLightningWalletUIState.Opened) -> Boolean): GroupLightningWalletUIState.Opened = runBlocking {
+        withTimeout(5_000) {
+            while ((viewModel.uiState as? GroupLightningWalletUIState.Opened)?.let(until) != true) delay(10)
+            viewModel.uiState as GroupLightningWalletUIState.Opened
+        }
+    }
+
+    @Test
+    fun `the operator's device shows its node's status as it changes`() {
+        val nodes = Nodes()
+        val viewModel = GroupLightningWalletViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningWalletUIState.Loading, MutableStateFlow(null), chat, Lightning(completed = key, wallet = wallet, operator = operator(me)), nodes)
+        viewModel.initiate()
+        assertEquals(GroupLightningNodeStatus.Starting, opened(viewModel) { it.nodeStatus != null }.nodeStatus)
+        val connected = GroupLightningNodeStatus.Running(4, LspLink.Connected(Instant.fromEpochSeconds(1_000)))
+        nodes.status.value = connected
+        assertEquals(connected, opened(viewModel) { it.nodeStatus == connected }.nodeStatus)
+        viewModel.reconnectNow()
+        assertEquals(listOf(wallet.statement.wallet), nodes.reconnected)
+    }
+
+    @Test
+    fun `a member's device never asks for a node it does not run`() {
+        val nodes = Nodes()
+        val viewModel = GroupLightningWalletViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningWalletUIState.Loading, MutableStateFlow(null), chat, Lightning(completed = key, wallet = wallet, operator = operator("b".repeat(64))), nodes)
+        viewModel.initiate()
+        val state = opened(viewModel) { true }
+        runBlocking { delay(100) }
+        assertEquals(null, (viewModel.uiState as GroupLightningWalletUIState.Opened).nodeStatus)
+        assertTrue(nodes.observed.isEmpty())
+        assertTrue(!state.isOperator)
     }
 
     @Test

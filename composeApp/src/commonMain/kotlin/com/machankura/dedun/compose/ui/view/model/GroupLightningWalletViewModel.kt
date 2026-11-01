@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
+import com.machankura.dedun.compose.repository.GroupNodeStatusSource
 import com.machankura.dedun.compose.ui.view.state.GroupLightningWalletUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
@@ -38,6 +39,7 @@ class GroupLightningWalletViewModel(
     private val activeIdentityStateFlow: StateFlow<Identity?>,
     private val chatRepository: ChatRepository,
     private val lightningRepository: GroupLightningRepository,
+    private val nodeStatusSource: GroupNodeStatusSource = GroupNodeStatusSource.None,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -92,7 +94,10 @@ class GroupLightningWalletViewModel(
                     }
                 }
             }
-            if (uiState is GroupLightningWalletUIState.Opened) watchReports()
+            if (uiState is GroupLightningWalletUIState.Opened) {
+                watchReports()
+                watchNodes()
+            }
         }
     }
 
@@ -112,6 +117,41 @@ class GroupLightningWalletViewModel(
                     (uiState as? GroupLightningWalletUIState.Opened)?.let { uiState = it.copy(report = report, payments = payments, unswept = unswept) }
                 }
         }
+    }
+
+    private var watchingNodes: Job? = null
+
+    /**
+     * Keeps this device's node status current, for the wallets it is the operator of: the current one and
+     * any earlier one it still runs (`docs/lsp-connection-status.md`, Phase 3). Never asked for a wallet
+     * somebody else runs.
+     */
+    private fun watchNodes() {
+        watchingNodes?.cancel()
+        val opened = uiState as? GroupLightningWalletUIState.Opened ?: return
+        watchingNodes = viewModelScope.launch(Dispatchers.IO) {
+            if (opened.isOperator) launch {
+                nodeStatusSource.observe(chatRoomId, opened.wallet.statement.wallet).collect { status ->
+                    (uiState as? GroupLightningWalletUIState.Opened)?.let { uiState = it.copy(nodeStatus = status) }
+                }
+            }
+            opened.earlier.filter { it.operator?.publicKey == activeUserPublicKey }.forEach { earlier ->
+                val number = earlier.wallet.statement.wallet
+                launch {
+                    nodeStatusSource.observe(chatRoomId, number).collect { status ->
+                        (uiState as? GroupLightningWalletUIState.Opened)?.let { state ->
+                            uiState = state.copy(earlier = state.earlier.map { if (it.wallet.statement.wallet == number) it.copy(nodeStatus = status) else it })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Dials the LSP now, from the operator's device, when its node's last attempt did not hold. */
+    fun reconnectNow(wallet: Long? = null) {
+        val state = uiState as? GroupLightningWalletUIState.Opened ?: return
+        nodeStatusSource.reconnectNow(chatRoomId, wallet ?: state.wallet.statement.wallet)
     }
 
     /** Proposes the wallet's statement; the wallet exists once a quorum signs, on the session it returns. */
@@ -182,9 +222,10 @@ class GroupLightningWalletViewModel(
             activeIdentityStateFlow: StateFlow<Identity?>,
             chatRepository: ChatRepository,
             lightningRepository: GroupLightningRepository,
+            nodeStatusSource: GroupNodeStatusSource,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                GroupLightningWalletViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningWalletUIState.Loading, activeIdentityStateFlow, chatRepository, lightningRepository)
+                GroupLightningWalletViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningWalletUIState.Loading, activeIdentityStateFlow, chatRepository, lightningRepository, nodeStatusSource)
             }
         }
     }

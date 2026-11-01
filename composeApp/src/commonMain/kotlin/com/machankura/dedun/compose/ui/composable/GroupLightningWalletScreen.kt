@@ -119,6 +119,7 @@ import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
+import com.machankura.dedun.compose.repository.GroupNodeStatusSource
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningReceiveRoute
@@ -157,6 +158,7 @@ fun GroupLightningWalletScreen(
     activeIdentityStateFlow: StateFlow<Identity?>,
     chatRepository: ChatRepository,
     lightningRepository: GroupLightningRepository,
+    nodeStatusSource: GroupNodeStatusSource,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -168,6 +170,7 @@ fun GroupLightningWalletScreen(
             activeIdentityStateFlow = activeIdentityStateFlow,
             chatRepository = chatRepository,
             lightningRepository = lightningRepository,
+            nodeStatusSource = nodeStatusSource,
         )
     )
     LaunchedEffect(true) { viewModel.initiate() }

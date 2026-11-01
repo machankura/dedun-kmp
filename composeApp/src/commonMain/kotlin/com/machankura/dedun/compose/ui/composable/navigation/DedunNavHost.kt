@@ -15,6 +15,7 @@ import fr.acinq.phoenix.managers.DatabaseManager
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.managers.GroupLightningNode
 import com.machankura.dedun.compose.wallet.lightning.GroupLightningNodes
+import com.machankura.dedun.compose.wallet.lightning.GroupLightningNodesStatusSource
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
 import com.machankura.dedun.compose.ui.composable.GroupLightningWalletScreen
 import com.machankura.dedun.compose.ui.composable.GroupLightningReceiveScreen
@@ -170,6 +171,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
@@ -362,8 +364,15 @@ fun DedunNavHost(
             ).also { it.start() }
         }
     }
+    // The screens read the nodes through this, since the nodes are built again as the chain clients change.
+    val currentGroupLightningNodes = remember { MutableStateFlow<GroupLightningNodes?>(null) }
+    val groupNodeStatusSource = remember { GroupLightningNodesStatusSource(currentGroupLightningNodes) }
     DisposableEffect(groupLightningNodes) {
-        onDispose { groupLightningNodes?.let { nodes -> applicationIOScope.launch { nodes.stop() } } }
+        currentGroupLightningNodes.value = groupLightningNodes
+        onDispose {
+            currentGroupLightningNodes.value = null
+            groupLightningNodes?.let { nodes -> applicationIOScope.launch { nodes.stop() } }
+        }
     }
 
     // Where each group pays its members. After the wallets: the onchain check asks the
@@ -763,6 +772,7 @@ fun DedunNavHost(
                     activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
                     chatRepository = databaseChatRepository,
                     lightningRepository = databaseGroupLightningRepository,
+                    nodeStatusSource = groupNodeStatusSource,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },

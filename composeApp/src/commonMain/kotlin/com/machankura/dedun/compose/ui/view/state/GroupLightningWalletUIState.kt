@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.GroupLightningPaymentRow
+import com.machankura.dedun.compose.managers.GroupLightningNodeStatus
 import com.machankura.dedun.compose.managers.GroupLightningOperatorManager
 import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
@@ -45,6 +46,8 @@ sealed class GroupLightningWalletUIState {
         val canOpenNew: Boolean = false,
         /** The wallets a re-key left behind, whose channels are still to be closed and swept. */
         val earlier: List<Earlier> = emptyList(),
+        /** This device's node for the wallet, on the operator's device only; null everywhere else. */
+        val nodeStatus: GroupLightningNodeStatus? = null,
     ) : GroupLightningWalletUIState()
 
     /** A wallet a re-key left behind, with what its operator last said of it. */
@@ -53,6 +56,8 @@ sealed class GroupLightningWalletUIState {
         val operator: GroupLightningOperatorManager.Operator?,
         val report: GroupLightningReports.Report?,
         val unswept: List<GroupSweep.Input>,
+        /** This device's node for that wallet, when this device is its operator. */
+        val nodeStatus: GroupLightningNodeStatus? = null,
     ) {
         val openChannels: List<String> get() = report?.checks?.map { it.channel.channelId }.orEmpty()
     }
