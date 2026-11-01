@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.ui.composable
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
@@ -80,5 +81,20 @@ class GroupSwapInScreenJvmTest {
     fun `a member who is no depositor is told the step before`() = runDesktopComposeUiTest(400, 800) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupSwapInContent(GroupSwapInUIState.NotDepositor) } } }
         onNodeWithText("The group opens your deposits first. Ask for an invoice to start.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `refundable coins can be refunded by the group, by a member who can ask`() = runDesktopComposeUiTest(400, 1600) {
+        var asked = 0
+        val coins = listOf(coin(7_000, SwapInCoin.Status.Refundable), coin(8_000, SwapInCoin.Status.Refundable), coin(1_000, SwapInCoin.Status.Ready))
+        setContent { DedunTheme { ProvideSnackbarHost { GroupSwapInContent(loaded(coins = coins), onRefund = { asked++ }) } } }
+        onNodeWithText("Ask the group to refund 15,000 sats").performClick()
+        kotlin.test.assertEquals(1, asked)
+    }
+
+    @Test
+    fun `a member who cannot ask is not offered a refund`() = runDesktopComposeUiTest(400, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupSwapInContent(loaded(coins = listOf(coin(7_000, SwapInCoin.Status.Refundable)))) } } }
+        onNodeWithText("Ask the group to refund 7,000 sats").assertDoesNotExist()
     }
 }

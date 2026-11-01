@@ -1060,4 +1060,7 @@
     <string name="the_group_s_wallet_takes_no_onchain_deposits_on_this_network">The group's Lightning wallet takes no onchain deposits on this network.</string>
     <string name="you_need_to_be_a_depositor">The group opens your deposits first. Ask for an invoice to start.</string>
     <string name="finding_your_deposits">Finding your deposits</string>
+    <string name="ask_the_group_to_refund_s_sats">Ask the group to refund %1$s sats</string>
+    <string name="the_group_was_asked_to_refund">The group was asked to sign your refund</string>
+    <string name="couldn_t_ask_the_group_to_refund">Couldn't ask the group to refund. Try again.</string>
 </resources>

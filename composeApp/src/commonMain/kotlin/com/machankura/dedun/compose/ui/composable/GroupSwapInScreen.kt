@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
@@ -57,6 +58,9 @@ import com.machankura.dedun.compose.wallet.bip21Uri
 import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallet
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_refund
+import dedun.composeapp.generated.resources.the_group_was_asked_to_refund
+import dedun.composeapp.generated.resources.ask_the_group_to_refund_s_sats
 import dedun.composeapp.generated.resources.address_copied
 import dedun.composeapp.generated.resources.can_be_refunded_in_s
 import dedun.composeapp.generated.resources.can_be_refunded_now
@@ -117,13 +121,27 @@ fun GroupSwapInScreen(
             )
         },
     ) { padding ->
-        GroupSwapInContent(viewModel.uiState, Modifier.padding(padding))
+        val notify = rememberNotifier(rememberCoroutineScope())
+        val asked = stringResource(Res.string.the_group_was_asked_to_refund)
+        val couldNot = stringResource(Res.string.couldn_t_ask_the_group_to_refund)
+        GroupSwapInContent(
+            viewModel.uiState,
+            Modifier.padding(padding),
+            onRefund = if (viewModel.canPropose && !viewModel.isRefunding) {
+                { viewModel.refund(onProposed = { notify(asked) }, onFailure = { notify(couldNot) }) }
+            } else null,
+        )
     }
 }
 
 /** The screen's body for a given state: separate so that it can be drawn without a group. */
 @Composable
-fun GroupSwapInContent(uiState: GroupSwapInUIState, modifier: Modifier = Modifier) {
+fun GroupSwapInContent(
+    uiState: GroupSwapInUIState,
+    modifier: Modifier = Modifier,
+    /** Asks the group to refund the refundable coins; null where this profile cannot ask. */
+    onRefund: (() -> Unit)? = null,
+) {
     val notify = rememberNotifier(rememberCoroutineScope())
     ScreenStateTransition(uiState) { state ->
         when (state) {
@@ -134,13 +152,13 @@ fun GroupSwapInContent(uiState: GroupSwapInUIState, modifier: Modifier = Modifie
                 ErrorState(modifier = modifier, message = stringResource(Res.string.the_group_s_wallet_takes_no_onchain_deposits_on_this_network), onRetry = null)
             GroupSwapInUIState.NotDepositor ->
                 EmptyState(modifier = modifier, message = stringResource(Res.string.you_need_to_be_a_depositor))
-            is GroupSwapInUIState.Loaded -> SwapInList(state, notify, modifier)
+            is GroupSwapInUIState.Loaded -> SwapInList(state, notify, onRefund, modifier)
         }
     }
 }
 
 @Composable
-private fun SwapInList(state: GroupSwapInUIState.Loaded, notify: (String) -> Unit, modifier: Modifier) {
+private fun SwapInList(state: GroupSwapInUIState.Loaded, notify: (String) -> Unit, onRefund: (() -> Unit)?, modifier: Modifier) {
     val clipboardManager = LocalClipboardManager.current
     val addressCopied = stringResource(Res.string.address_copied)
     val copy = { address: String ->
@@ -203,6 +221,15 @@ private fun SwapInList(state: GroupSwapInUIState.Loaded, notify: (String) -> Uni
         if (state.coins.any { it.status == SwapInCoin.Status.Ready || it.status is SwapInCoin.Status.ExpiringSoon }) {
             item(key = "waiting") {
                 Text(stringResource(Res.string.ready_coins_move_while_the_operator), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        // Past the refund delay only the group's FROST key spends a coin, back to the member's own branch (D9).
+        val refundable = state.coins.filter { it.status == SwapInCoin.Status.Refundable }
+        if (onRefund != null && refundable.isNotEmpty()) {
+            item(key = "refund") {
+                OutlinedButton(onClick = onRefund) {
+                    Text(stringResource(Res.string.ask_the_group_to_refund_s_sats, refundable.map { it.amount }.sum().grouped()))
+                }
             }
         }
         items(state.coins, key = { "coin-${it.outPoint}" }) { coin ->

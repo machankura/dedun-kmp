@@ -12,7 +12,9 @@ import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
 import com.machankura.dedun.compose.ui.view.state.GroupSwapInUIState
+import com.machankura.dedun.compose.managers.GroupLightningSweeps
 import com.machankura.dedun.compose.wallet.SwapInAddress
+import com.machankura.dedun.compose.wallet.SwapInCoin
 import com.machankura.dedun.compose.wallet.SwapInWalletView
 import com.machankura.dedun.compose.wallet.lightning.GroupSwapInState
 import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallet
@@ -22,6 +24,7 @@ import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.DefaultSwapInParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The member's swap-in addresses for the group's Lightning wallet and the coins on them, watched for as
@@ -39,6 +42,34 @@ class GroupSwapInViewModel(
     var uiState: GroupSwapInUIState by mutableStateOf(GroupSwapInUIState.Loading)
         private set
 
+    /** Whether this profile can ask the group for anything: a read-only identity cannot sign a proposal. */
+    var canPropose: Boolean by mutableStateOf(false)
+        private set
+
+    var isRefunding: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Asks the group to refund every refundable coin on this member's addresses, to address 0 of their own
+     * deposit branch -- one the onchain wallet always watches, so the refund shows as it arrives (D9).
+     */
+    fun refund(onProposed: () -> Unit, onFailure: () -> Unit) {
+        val loaded = uiState as? GroupSwapInUIState.Loaded ?: return
+        val coins = loaded.coins.filter { it.status == SwapInCoin.Status.Refundable }
+            .mapNotNull { coin -> coin.index?.let { GroupLightningSweeps.RefundableCoin(coin.outPoint, coin.amount, it.toLong()) } }
+        if (coins.isEmpty() || isRefunding) return
+        isRefunding = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val proposed = runCatching {
+                val room = chatRepository.getChatRoomByIdentifier(chatRoomId) ?: error("no room")
+                val wallet = lightningRepository.lightningWallet(chatRoomId, chain) ?: error("no wallet")
+                lightningRepository.proposeSwapInRefund(room, activeUserPublicKey, wallet, activeUserPublicKey, coins, toIndex = 0)
+            }
+            isRefunding = false
+            withContext(Dispatchers.Main) { if (proposed.isSuccess) onProposed() else onFailure() }
+        }
+    }
+
     fun initiate() {
         viewModelScope.launch(Dispatchers.IO) {
             val wallet = lightningRepository.lightningWallet(chatRoomId, chain)
@@ -47,6 +78,7 @@ class GroupSwapInViewModel(
                 uiState = GroupSwapInUIState.Unavailable
                 return@launch
             }
+            canPropose = chatRepository.canSign(chatRoomId)
             val names = chatRepository.getChatRoomByIdentifier(chatRoomId)?.localParticipants.orEmpty().associate { p ->
                 p.participant.participantPublicKey.lowercase() to (p.profile?.humanReadableNameOrPubkey() ?: p.participant.participantPublicKey.take(8))
             }

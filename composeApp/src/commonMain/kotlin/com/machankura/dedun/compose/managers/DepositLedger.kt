@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.network.serialization.CommonJson
+import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -31,7 +33,12 @@ object DepositLedger {
      * signs whose (Phase 9).
      */
     suspend fun recordOnchain(database: DedunDatabase, chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) {
-        val own = database.groupTransactionDao().getByChatRoomId(chatRoomId).map { it.txid.lowercase() }.toSet()
+        // The room's own spends pay the room, so their outputs are no deposits -- except a swap-in refund, which
+        // returns a coin to its depositor's branch that was never counted as a Lightning deposit, and is
+        // their deposit there (docs/group-lightning-swap-in.md, D9).
+        val own = database.groupTransactionDao().getByChatRoomId(chatRoomId)
+            .filterNot { row -> runCatching { CommonJson.decodeFromString(GroupSweep.Sweep.serializer(), row.psbt) }.getOrNull()?.isSwapInRefund == true }
+            .map { it.txid.lowercase() }.toSet()
         val byBranch = Depositors.statementsIn(database, chatRoomId, chain).values.associate { it.branch to it.member }
         deposits.filter { it.outPoint.txid.toString().lowercase() !in own }.forEach { deposit ->
             val member = byBranch[deposit.branch]

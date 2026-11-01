@@ -92,6 +92,9 @@ class DatabaseGroupLightningRepository(private val database: DedunDatabase) : Gr
     override suspend fun proposeSweep(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, inputs: List<GroupSweep.Input>): FrostSigningSession =
         GroupLightningSweeps.propose(database, localChatRoom, userPublicKey, wallet, inputs)
 
+    override suspend fun proposeSwapInRefund(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, member: HexKey, coins: List<GroupLightningSweeps.RefundableCoin>, toIndex: Long): FrostSigningSession =
+        GroupLightningSweeps.proposeSwapInRefund(database, localChatRoom, userPublicKey, wallet, member, coins, toIndex)
+
     override fun observeCeremony(sessionId: String): Flow<IcebergKeySession?> =
         database.icebergKeySessionDao().observeSessionById(sessionId)
 
