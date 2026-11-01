@@ -5,7 +5,7 @@ it hands out for onchain deposits, the coins that have arrived on them, and wher
 each coin is on its way into a channel. It also says why a coin that ought to have
 moved has not.
 
-**Planned.** Written against `d8f44154`, with the `lightning-kmp-app` submodule at
+**Planned; Phase 0 has run.** Written against `d8f44154`, with the `lightning-kmp-app` submodule at
 `67a0376` and its `lightning-kmp` at `688d36ad`.
 
 The headline: **the swap-in already happens, and nobody can see it.** Every
@@ -125,6 +125,62 @@ Three questions the code cannot answer by reading.
    the stored wallet id), and decide whether Phase 7 is a fork change or is cut.
 
 Done when the answers are written into this note under *Phase 0 outcomes*.
+
+#### Phase 0 outcomes
+
+**Ran** on 2026-11-01. Spikes 1 and 2 ran with `SwapInMainnetSpikeJvmTest`. It is
+skipped unless `DEDUN_MAINNET_SPIKE=1`, and it builds a throwaway node from a
+random seed that is never written down. That node connects to ACINQ's mainnet LSP
+and to `electrum.acinq.co`, and opens nothing. Spike 3 was settled by reading the
+code and the regtest LSP's jar.
+
+1. **The swap-in wallet emits as it does in Phoenix.** The first answer from
+   Electrum gave `swapInAddressFlow` index 0, a `bc1p…` taproot address. The
+   wallet watches four addresses: the legacy `bc1q…` one and three derived ones,
+   so a look-ahead of two. This spike used a bare `Peer` rather than a
+   `PhoenixBusiness`, so it says nothing about a profile switch. That part is left
+   to Phase 2's test, which can drive it without a network.
+2. **A first deposit costs 1,287 sat today, whatever its size.** The LSP's
+   funding feerate was 253 sat/kw (1 sat/vB). A 1-sat purchase fell in its
+   first rate: `minAmount = 1 sat`, `fundingWeight = 542`, `feeProportional = 100`,
+   `channelCreationFee = 1000 sat`. Every amount tried (20k, 50k, 100k and 1M sat)
+   came to the same fee:
+
+   | part | sat |
+   |---|---|
+   | our mining fee (one taproot swap-in input and our share of the funding tx) | 150 |
+   | the LSP's mining fee (`fundingWeight` 542) | 137 |
+   | the LSP's service fee, `channelCreationFee` (1 % of 1 sat is 0) | 1,000 |
+   | **total** | **1,287** |
+
+   The service fee is fixed, and the mining fee follows the feerate at about
+   1,135 weight units. The default policy's 5,000 sat cap is reached at about
+   **3,500 sat/kw, which is 14 sat/vB**. Above that, *every* first deposit is
+   refused, whatever its size, until fees drop. The 50 % cap sets the smallest
+   first deposit at twice the fee: about **2,600 sat today**.
+
+   So D6 is not needed for a first deposit today, but it is the only way through
+   on a busy chain. Phase 3's line about the smallest deposit is kept. It is
+   computed live from `remoteFundingRates` and `peerFeeratesFlow`, as this spike
+   computes it, and it also says when the fee is over the cap at any size.
+3. **Phase 7 is cut down to the refund.** Two things stand in the way of a real
+   swap-in on regtest:
+   - **The LSP cannot co-sign one.** The regtest LSP is open-source eclair
+     0.14.4. Its `eclair-core` jar has no swap-in code at all: no class or string
+     mentions it. ACINQ runs the server side of the swap-in protocol outside
+     the open-source release, and the regtest LSP has no swap-in xpub to give a
+     wallet either.
+   - **The personal node is fixed to mainnet.** `NodeParamsManager.chain` is a
+     constant read in fourteen places across the fork and the app, and
+     `Lsp.kt` would need a regtest entry.
+
+   The refund, though, needs no LSP. It is the user's key alone after
+   `RefundDelay`, so Phase 7 becomes a regtest run of the refund: a
+   `LocalKeyManager` on `Chain.Regtest` with a throwaway tpub as the LSP's
+   swap-in key, a `SwapInWallet` over electrs, and bitcoind mining the 25,920
+   blocks. It does not need `PhoenixBusiness`, so it does not need the fork
+   change. The swap-in itself stays tested only by lightning-kmp's own suite and
+   by Phase 4's fake events.
 
 ### Phase 1: the list and the statuses, pure
 
