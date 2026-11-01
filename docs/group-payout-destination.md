@@ -29,8 +29,28 @@ and the Lightning wallet's Phase 12 in
 [group-lightning-wallet.md](./group-lightning-wallet.md) cover the two send forms
 that Phase 7 below fills in.
 
-**Planned.** Written against `230d8dff`, schema v35. Phase 0 is done: both
-spikes have run, and their results are under each.
+**Built**, Phases 0-7, one commit each, written against `230d8dff`, schema v35,
+with no schema change. Both spikes ran first, and their results are under each.
+`GroupPayoutDestinationEvent`, `GroupPayoutDestinations`,
+`LightningAddressResolver`, `UnusedAddressCheck` and
+`GroupPayoutDestinationScreen` are the entry points. The phases below are kept as
+written. Where the build chose differently, the table says so.
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 1: any address type bitcoin-kmp accepts | the five templates a wallet hands out. bitcoin-kmp also reads segwit versions 2 to 16, which nothing can spend from yet, so a payout to one would be lost. Refused as *not an address* |
+| Phase 1: `LightningAddress.parse` wraps the fork's parser | it does, for telling BIP-353 apart, and holds LUD-16 strictly on top: the fork keeps the first word of the first line, and here a second word is refused, as are an IP address and a port |
+| Phase 1: `GroupPayoutDestination` with `ClosedRange<MilliSatoshi>` | `PayoutStatement`, sealed, is the reading: `GroupPayoutDestination` or `PayoutDestinationRemoved`. The range is a `Sendable` |
+| Phase 3: five resolutions | a sixth, `Refused(reason)`, for LUD-06's `{"status": "ERROR"}`. A server that says why it won't answer is not the same as nonsense. The tag is checked before the fork's parser, so a withdraw request with no `k1` reads as *not a pay request* rather than malformed |
+| Phase 3: `usageOf(chatRoomId, chain, script)` on `GroupOnchainWallets` | `usageOf(chain, script, ownWallet)`: the repository looks up the room's wallet. It waits up to five seconds for that wallet's first state and checks without it rather than not at all |
+| Phase 4: `MemberWalletManager.queue` moved to a `RoomInnerEvents.queue` | reused where it is. `GroupPayoutDestinations.publish` calls it, then writes the member's own line, because a device never reads its own message back |
+| Phase 4: the row reads the current address or *Not set* | and offers *Set* or *Change*. A profile with no identity counts as Tor on: there is nobody to set anything for, and nothing to leak |
+| Phase 5: extend `ChatRoomDetailViewModelTest` | there was none. `MemberPayoutRowsJvmTest` renders the screen, and `GroupPayoutDestinationsJvmTest` covers a removed member |
+| Phase 6: the transcript arm skips a signed event it has already filed | a re-sent statement's inner event carries a `resent` tag and makes no line on any device. That way the newcomer, who never saw the original, gets no line for something said before they joined either: walkthrough step 3 |
+| Phase 7: the `payout` tag on the spend proposal too | not needed. Every co-signer's approval screen matches each output against the members' own signed onchain addresses (`GroupPayoutDestinations.payeesOf`), so the name is the device's own finding and the proposal carries nothing new. Only the 30363 gets the tag |
+| Phase 7: the sheet's *Pay* buttons | shown only on a device that holds a share, since only that device can propose. *Pay onchain* refuses *couldn't check* as well as *paid before*. The Lightning label goes on the proposal only while the invoice in the form is the one the address gave |
+
+Still to do by hand: the three-emulator run in Phase 8.
 
 ---
 
