@@ -144,8 +144,6 @@ class GroupLightningNode(
         suspend fun forceClose(channelId: String)
         /** The outputs closing channels pay to the group's basepoints, for the group to sweep. */
         fun heldOutputs(): List<GroupSweep.Input>
-        /** The node's reusable Bolt12 offer, through the LSP: every member recomputes it from the seed. */
-        fun offer(): String?
         /** The LSP's liquidity rates, as its `init` sent them, or null before it has. */
         fun fundingRates(): WalletWire.FundingRates?
         /** The feerate the node would splice at, in sat/vbyte, or null while it has none. */
@@ -274,7 +272,6 @@ class GroupLightningNode(
             channels = current.first, payments = withRequests(current.second.takeLast(REPORTED_PAYMENTS)),
             assignments = transport?.assignments().orEmpty(),
             heldOutputs = current.third,
-            offer = handle.offer(),
             fundingRates = handle.fundingRates(),
             feeratePerByte = handle.feeratePerByte(),
             purchases = bought,
@@ -541,9 +538,17 @@ class GroupLightningNode(
             scope: CoroutineScope,
             /** Whether the identity reaches the network over Tor, read as each node starts, as Phoenix reads it as its peer is made. */
             torIsEnabled: suspend () -> Boolean = { false },
+            /**
+             * Whether the node answers requests for its offers. Never in the app: an offer can be paid by
+             * anybody any number of times, so no payment to one is any member's deposit
+             * (`docs/member-deposits.md`, D7). The regtest fixture turns it on, since public eclair can't
+             * pay the node's BOLT11 route hint, and attributes what arrives with a signed attribution.
+             */
+            answerOfferRequests: Boolean = false,
         ): suspend (NodeConfiguration) -> PeerHandle = { configuration ->
             val base = NodeParams(configuration.chain, loggerFactory, configuration.keyManager)
             val nodeParams = base.copy(
+                answerOfferRequests = answerOfferRequests,
                 zeroConfPeers = setOf(configuration.lspNodeId),
                 // Phoenix's default policy, except that the most one payment's liquidity may cost is the group's,
                 // from the statement it signed, rather than one member's setting.
@@ -660,7 +665,6 @@ class GroupLightningNode(
                         }
                     }
                 }.map(GroupSweep::inputOf).distinctBy { it.txid to it.index }
-                override fun offer(): String = nodeParams.defaultOffer(walletParams.trampolineNode.id).offer.encode()
                 override fun fundingRates(): WalletWire.FundingRates? = peer.remoteFundingRates.value?.let { rates ->
                     WalletWire.FundingRates(
                         rates.fundingRates.map { WalletWire.FundingRate(it.minAmount.sat, it.maxAmount.sat, it.fundingWeight, it.feeProportional, it.feeBase.sat, it.channelCreationFee.sat) },

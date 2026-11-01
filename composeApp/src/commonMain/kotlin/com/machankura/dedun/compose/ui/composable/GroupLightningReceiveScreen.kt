@@ -52,21 +52,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.amount_in_sats
-import dedun.composeapp.generated.resources.anyone_can_pay_this_offer
 import dedun.composeapp.generated.resources.ask_for_an_invoice
 import dedun.composeapp.generated.resources.copy_invoice
-import dedun.composeapp.generated.resources.copy_offer
 import dedun.composeapp.generated.resources.couldn_t_ask_for_an_invoice
 import dedun.composeapp.generated.resources.invoice_copied
 import dedun.composeapp.generated.resources.leave_the_amount_empty_to_let_the_payer_choose
 import dedun.composeapp.generated.resources.nobody_runs_this_wallet_to_make_an_invoice
-import dedun.composeapp.generated.resources.offer_copied
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.sats
 import dedun.composeapp.generated.resources.sats_are_whole_numbers
 import dedun.composeapp.generated.resources.that_is_more_sats_than_there_will_ever_be
 import dedun.composeapp.generated.resources.that_isn_t_an_amount_in_sats
-import dedun.composeapp.generated.resources.the_group_s_offer
 import dedun.composeapp.generated.resources.this_invoice_pays_the_group_s_node
 import dedun.composeapp.generated.resources.waiting_for_the_operator_s_device
 import dedun.composeapp.generated.resources.what_it_is_for
@@ -116,7 +112,6 @@ fun GroupLightningReceiveScreen(
     val notify = rememberNotifier(rememberCoroutineScope())
     val couldNotAsk = stringResource(Res.string.couldn_t_ask_for_an_invoice)
     val copied = stringResource(Res.string.invoice_copied)
-    val offerCopied = stringResource(Res.string.offer_copied)
     val clipboardManager = LocalClipboardManager.current
 
     Scaffold(
@@ -176,21 +171,6 @@ fun GroupLightningReceiveScreen(
                             Icon(Icons.Default.Bolt, contentDescription = Decorative)
                             Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
                             Text(stringResource(Res.string.ask_for_an_invoice))
-                        }
-                        // The offer needs no operator online to ask: the node answers payers itself.
-                        state.offer?.let { offer ->
-                            HorizontalDivider()
-                            Text(stringResource(Res.string.the_group_s_offer), style = MaterialTheme.typography.titleSmall)
-                            Text(stringResource(Res.string.anyone_can_pay_this_offer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            SelectionContainer { Text(offer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                            TextButton(onClick = {
-                                clipboardManager.setText(buildAnnotatedString { append(offer) })
-                                notify(offerCopied)
-                            }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = Decorative)
-                                Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                                Text(stringResource(Res.string.copy_offer))
-                            }
                         }
                     }
                 }

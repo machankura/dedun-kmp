@@ -77,7 +77,9 @@ object GroupLightningReports {
         val operator = GroupLightningOperatorManager.ofTerm(database, localChatRoom.chatRoom.id, wallet.statement.chain, wallet.statement.wallet, snapshot.term)
         if (operator?.publicKey != innerEvent.pubKey) return logger.w("Snapshot ${innerEvent.id} is not from the operator of term ${snapshot.term}")
         // An offer is kept only if it is the one the group's node derives: the seed says which.
-        file(database, localChatRoom.chatRoom.id, innerEvent.pubKey, snapshot.copy(offer = snapshot.offer?.takeIf { it == offerOf(wallet) }))
+        // No offer is kept, even the node's own: BOLT12 is off, since a payment to an offer is nobody's
+        // deposit (docs/member-deposits.md, D7). An older operator still sends one; it goes no further.
+        file(database, localChatRoom.chatRoom.id, innerEvent.pubKey, snapshot.copy(offer = null))
         // The round-one labels the operator handed out, so whoever operates next signs under them.
         val dao = database.icebergCoSigningDao()
         snapshot.assignments.forEach { (purpose, counter) ->

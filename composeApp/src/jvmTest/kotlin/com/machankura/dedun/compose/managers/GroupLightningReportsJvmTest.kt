@@ -272,17 +272,17 @@ class GroupLightningReportsJvmTest {
     }
 
     @Test
-    fun `the node's offer reaches every member, and only the one its seed derives is kept`() = runBlocking<Unit> {
+    fun `no offer reaches any member, not even the node's own`() = runBlocking<Unit> {
+        // BOLT12 is off: a payment to an offer is nobody's deposit (docs/member-deposits.md, D7).
         val (all, _) = running()
         fixture.pump(all, setOf(GroupLightningEvents.SNAPSHOT))
-        val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
-        val expected = GroupLightningReports.offerOf(wallet)
-        all.forEach { assertEquals(expected, GroupLightningReports.latest(it.db, key)!!.snapshot.offer, "device ${it.index}") }
+        all.forEach { assertNull(GroupLightningReports.latest(it.db, key)!!.snapshot.offer, "device ${it.index}") }
 
-        val someoneElse = OfferManager.deterministicOffer(fixture.chain.chainHash, PrivateKey(randomBytes32()), PublicKey.fromHex(lsp), null, null, null).offer.encode()
-        val lying = WalletWire.Snapshot(key, 1, wallet.statement.nodeId, Clock.System.now().epochSeconds + 60, emptyList(), emptyList(), offer = someoneElse)
-        GroupLightningReports.process(all[3].db, all[3].room, snapshotEvent(all[1], lying))
-        assertNull(GroupLightningReports.latest(all[3].db, key)!!.snapshot.offer, "an offer that pays some other node is dropped")
+        // An older operator still sends the node's own offer; it is dropped all the same.
+        val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
+        val older = WalletWire.Snapshot(key, 1, wallet.statement.nodeId, Clock.System.now().epochSeconds + 60, emptyList(), emptyList(), offer = GroupLightningReports.offerOf(wallet))
+        GroupLightningReports.process(all[3].db, all[3].room, snapshotEvent(all[1], older))
+        assertNull(GroupLightningReports.latest(all[3].db, key)!!.snapshot.offer)
     }
 
     /**

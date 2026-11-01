@@ -655,10 +655,6 @@
     <string name="sweep_s_sats">Sweep %1$s sats</string>
     <string name="nobody_runs_this_wallet_s_node">Nobody runs its node, and its channels close only through it.</string>
     <string name="hasn_t_answered_the_proposal_yet">Hasn't answered the proposal yet. Their device may need an update that knows Lightning wallets.</string>
-    <string name="the_group_s_offer">The group's offer</string>
-    <string name="anyone_can_pay_this_offer">Anyone can pay this offer, as often as they like, without asking for an invoice first. It pays the group's node, the one the group signed for.</string>
-    <string name="copy_offer">Copy offer</string>
-    <string name="offer_copied">Offer copied</string>
 
     <!-- A subgroup's wallet policy, chosen by its parent at birth: docs/subgroup-wallet-policy.md -->
     <string name="the_subgroup_s_wallet">The subgroup's wallet</string>

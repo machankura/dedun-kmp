@@ -76,7 +76,7 @@ class GroupLightningReceiveViewModel(
                     descriptionField.setTextAndPlaceCursorAtEnd(if (group != null) "Deposit from @$me to $group" else "Deposit from @$me")
                 }
             }
-            uiState = GroupLightningReceiveUIState.Form(localChatRoom, wallet, lightningRepository.observeReport(chatRoomId, chain, wallet.statement.wallet).first()?.snapshot?.offer)
+            uiState = GroupLightningReceiveUIState.Form(localChatRoom, wallet)
         }
     }
 

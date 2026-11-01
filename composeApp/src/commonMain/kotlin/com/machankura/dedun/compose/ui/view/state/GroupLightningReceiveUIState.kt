@@ -13,8 +13,8 @@ sealed class GroupLightningReceiveUIState {
     /** No wallet, or no operator to run its node. */
     data object Unavailable : GroupLightningReceiveUIState()
 
-    /** [offer] is the group node's reusable Bolt12 offer, once a snapshot carried one this device checked. */
-    data class Form(val localChatRoom: LocalChatRoom, val wallet: GroupLightningWalletManager.Wallet, val offer: String? = null) : GroupLightningReceiveUIState()
+    /** The form, for a depositor: every invoice is issued against their statement. No offer -- BOLT12 is off. */
+    data class Form(val localChatRoom: LocalChatRoom, val wallet: GroupLightningWalletManager.Wallet) : GroupLightningReceiveUIState()
 
     /**
      * A wallet and an operator, but no invoice can be this profile's yet: the step before it, a payout
