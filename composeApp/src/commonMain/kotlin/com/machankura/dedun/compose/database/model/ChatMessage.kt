@@ -30,6 +30,8 @@ import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.managers.GroupPayoutDestinations
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestinationRemoved
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
@@ -569,6 +571,15 @@ data class ChatMessage(
         const val TYPE_PAYOUT_DESTINATION_REMOVED = "payoutDestinationRemoved"
 
         /**
+         * The group signed a depositor statement: a member deposits with it from now on, on a
+         * branch of the wallet that is theirs. See `docs/member-deposits.md`.
+         */
+        const val TYPE_DEPOSITS_OPENED = "depositsOpened"
+
+        /** The group signed whose some deposits are. */
+        const val TYPE_DEPOSITS_ATTRIBUTED = "depositsAttributed"
+
+        /**
          * Every line the group signed, for the one check the transcript
          * dispatches on. A type missing from here renders as a chat bubble,
          * silently, looking exactly like somebody having said it.
@@ -591,6 +602,8 @@ data class ChatMessage(
             TYPE_MEMBER_WALLET_POLICY,
             TYPE_PAYOUT_DESTINATION_SET,
             TYPE_PAYOUT_DESTINATION_REMOVED,
+            TYPE_DEPOSITS_OPENED,
+            TYPE_DEPOSITS_ATTRIBUTED,
         )
 
         /** The lines in [GROUP_IDENTITY_TYPES] about the Lightning wallet, which open its screen. */
@@ -1546,6 +1559,40 @@ data class ChatMessage(
                             is GroupPayoutDestination -> "@$name set where this group pays them"
                             is PayoutDestinationRemoved -> "@$name removed where this group pays them"
                         },
+                    )
+                }
+
+                // The group opening a member's deposits. Checked as the room's own signature,
+                // the branch and the destination it carries; docs/member-deposits.md.
+                DepositorStatementEvent.KIND -> {
+                    val depositor = DepositorStatementEvent.verify(event, groupId) ?: return null
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_DEPOSITS_OPENED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group opened deposits for @${memberName(database, depositor.member)}",
+                    )
+                }
+
+                // The group saying whose some deposits are.
+                DepositAttributionEvent.KIND -> {
+                    val signed = DepositAttributionEvent.verify(event, groupId) ?: return null
+                    val count = signed.attributions.size
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_DEPOSITS_ATTRIBUTED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group said whose $count deposit${if (count == 1) " is" else "s are"}",
                     )
                 }
 

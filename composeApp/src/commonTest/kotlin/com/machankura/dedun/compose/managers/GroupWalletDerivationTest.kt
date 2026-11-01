@@ -148,7 +148,10 @@ class GroupWalletDerivationTest {
     fun `hardened and out-of-range steps are refused`() {
         val account = GroupWalletDerivation.account(k, Chain.Mainnet)
 
-        assertFailsWith<IllegalArgumentException> { GroupWalletDerivation.derive(account, 2, 0) }
+        // Branch 2 and up are members' deposit branches (docs/member-deposits.md, D3); a hardened
+        // branch is never one, and the group's threshold key couldn't walk it.
+        assertFailsWith<IllegalArgumentException> { GroupWalletDerivation.derive(account, DeterministicWallet.hardened(2), 0) }
+        GroupWalletDerivation.derive(account, 2, 0)
         assertFailsWith<IllegalArgumentException> { GroupWalletDerivation.derive(account, 0, DeterministicWallet.hardened(0)) }
         assertFailsWith<IllegalArgumentException> { GroupWalletDerivation.derive(account, 0, -1) }
         assertFailsWith<IllegalArgumentException> { GroupWalletDerivation.account(k, Chain.Mainnet, DeterministicWallet.hardened(0)) }

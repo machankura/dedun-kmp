@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.nostr.wallet
 
 import com.machankura.dedun.compose.managers.DepositBranch
+import com.machankura.dedun.compose.managers.GroupFixtures
 import fr.acinq.bitcoin.crypto.frost.KeyMaterial
 import com.machankura.dedun.compose.managers.GroupFixtures.keyMaterial
 import com.machankura.dedun.compose.managers.GroupFixtures.roomOf
@@ -151,5 +152,27 @@ class DepositStatementsJvmTest {
         val newest = DepositAttributionEvent.newestPerDeposit(listOf(later, earlier), room, chain)
         assertNull(newest[key]?.first?.member)
         assertEquals(later.id, newest[key]?.second?.event?.id)
+    }
+
+    @Test
+    fun `both kinds make a line, and say what the group signed`() = kotlinx.coroutines.runBlocking {
+        val db = com.machankura.dedun.compose.database.builder.getRoomDatabase(androidx.room3.Room.inMemoryDatabaseBuilder<com.machankura.dedun.compose.database.DedunDatabase>())
+        try {
+            GroupFixtures.seedProfile(db, alicePublicKey, name = "alice")
+            suspend fun line(event: Event) = com.machankura.dedun.compose.database.model.ChatMessage.applyInnerEvent(
+                db, room, event, null, null, room, false, kotlin.time.Instant.fromEpochSeconds(event.createdAt), groupSignedEventId = event.id,
+            )
+            val opened = line(statement(tagsFor()))
+            assertEquals(com.machankura.dedun.compose.database.model.ChatMessage.TYPE_DEPOSITS_OPENED, opened?.messageType)
+            assertEquals("The group opened deposits for @alice", opened?.content)
+            assertTrue(com.machankura.dedun.compose.database.model.ChatMessage.TYPE_DEPOSITS_OPENED in com.machankura.dedun.compose.database.model.ChatMessage.GROUP_IDENTITY_TYPES)
+
+            val attributed = line(attribution(DepositAttributionEvent.template(chain, listOf(Attribution(DepositKey.Onchain(txid, 0), alicePublicKey, 1_000))).tags))
+            assertEquals("The group said whose 1 deposit is", attributed?.content)
+
+            assertNull(line(statement(tagsFor(), by = other)))
+        } finally {
+            db.close()
+        }
     }
 }
