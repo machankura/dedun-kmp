@@ -50,6 +50,8 @@ class GroupLightningNodes(
     private val peerFactory: suspend (GroupLightningNode.NodeConfiguration) -> GroupLightningNode.PeerHandle,
     private val chain: Chain = GroupLightningRollout.NETWORK,
     private val minimumPool: Int = GroupLightningNode.MINIMUM_POOL,
+    /** Each room's swap-in wallet for a Lightning wallet, which a node watches for coins to splice in. */
+    private val swapIns: (suspend (chatRoomId: String, wallet: GroupLightningWalletManager.Wallet) -> GroupSwapInWallet?)? = null,
 ) {
     private val logger = Logger.withTag("GroupLightningNodes")
     private val mutex = Mutex()
@@ -91,7 +93,7 @@ class GroupLightningNodes(
                     nodes.update { it - key }
                     continue
                 }
-                val node = existing ?: GroupLightningNode(database, localChatRoom, userPublicKey, wallet, scope, peerFactory, minimumPool = minimumPool).also { node -> nodes.update { it + (key to node) } }
+                val node = existing ?: GroupLightningNode(database, localChatRoom, userPublicKey, wallet, scope, peerFactory, minimumPool = minimumPool, swapIns = swapIns).also { node -> nodes.update { it + (key to node) } }
                 val state = runCatching { node.start() }.onFailure { logger.e("Could not start the node for $key", it) }.getOrNull()
                 if (state is GroupLightningNode.State.Refused) logger.i("Not running the node for $key: ${state.reason}")
             }

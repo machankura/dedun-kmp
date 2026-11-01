@@ -1,5 +1,12 @@
 package com.machankura.dedun.compose.managers
 
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
+import fr.acinq.lightning.blockchain.electrum.WalletState
+import fr.acinq.lightning.crypto.RemoteIcebergSwapInSigner
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInKeys
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInState
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallet
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -107,6 +114,8 @@ class GroupLightningNode(
     private val linkSettle: Duration = LINK_SETTLE,
     /** The least time between two snapshots a change of the link makes due. */
     private val linkReportMin: Duration = LINK_REPORT_MIN,
+    /** The room's swap-in wallet for [wallet], or null where it has none (`docs/group-lightning-swap-in.md`, Phase 3). */
+    private val swapIns: (suspend (chatRoomId: String, wallet: GroupLightningWalletManager.Wallet) -> GroupSwapInWallet?)? = null,
 ) {
     private val logger = Logger.withTag("GroupLightningNode")
     private val chain = wallet.statement.chain
@@ -119,6 +128,8 @@ class GroupLightningNode(
         val transport: GroupIcebergTransport,
         /** The most the group agreed to pay the LSP for the liquidity a payment needs: its statement's policy. */
         val maxLiquidityFee: Satoshi = Satoshi(GroupLightningWalletStatementEvent.Policy.DEFAULT.maxLiquidityFeeSat),
+        /** Every depositor's swap-in coins, numbered for the node ([GroupSwapInState.forNode]), or null with no swap-in wallet. */
+        val swapInCoins: Flow<WalletState>? = null,
     )
 
     /** What this class needs of a running node. */
@@ -288,15 +299,17 @@ class GroupLightningNode(
         }
         val onchain = GroupWalletManager.walletFor(database, roomId, chain, wallet.statement.onchainAccount)
             ?: return enter(State.Refused(GroupLightningNodeStatus.Refusal.NO_ONCHAIN_WALLET))
+        val swapIn = swapIns?.invoke(roomId, wallet)
         val keyManager = GroupNodeKeyManager(
             delegate = GroupLightningCoSigner.keyManagerOf(ByteVector(seed.seed), chain),
             fundingSigner = RemoteIcebergFundingSigner(PublicKey.fromHex(wallet.statement.icebergKey), transport, SIGNING_DEADLINE),
             basepoints = wallet.basepoints.forChannel,
             finalScriptPubKey = GroupWalletDerivation.derive(onchain.account, GroupWalletDerivation.RECEIVE, 0).pubkeyScript,
+            swapInKeys = swapIn?.let { GroupSwapInKeys(it, RemoteIcebergSwapInSigner(PublicKey.fromHex(wallet.statement.icebergKey), transport, SIGNING_DEADLINE)) },
         )
         check(keyManager.nodeKeys.nodeKey.publicKey.toString() == wallet.statement.nodeId) { "the seed does not produce the statement's node" }
 
-        val handle = peerFactory(NodeConfiguration(keyManager, chain, PublicKey.fromHex(wallet.statement.lspNodeId), transport, Satoshi(wallet.statement.policy.maxLiquidityFeeSat)))
+        val handle = peerFactory(NodeConfiguration(keyManager, chain, PublicKey.fromHex(wallet.statement.lspNodeId), transport, Satoshi(wallet.statement.policy.maxLiquidityFeeSat), swapIn?.state?.map { it.forNode }))
         this.transport = transport
         peer = handle
         link = LspLink.Connecting(1)
@@ -706,7 +719,7 @@ class GroupLightningNode(
             val client = clients.clientFor(configuration.chain)
             val watcher = ElectrumWatcher(client, scope, loggerFactory)
             val databases = databasesFor(nodeParams.nodeId, configuration.chain)
-            val peer = Peer(nodeParams, walletParams, client, watcher, databases, TcpSocket.Builder(), scope)
+            val peer = Peer(nodeParams, walletParams, client, watcher, databases, TcpSocket.Builder(), scope, configuration.swapInCoins)
             // The peer learns the chain's height only from header notifications, and a shared client that
             // subscribed long ago sends the next one at the next block: until then the node can answer no
             // invoice request and take no payment. So it is told the current height as it starts.

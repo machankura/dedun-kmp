@@ -189,6 +189,7 @@ import com.machankura.dedun.compose.ui.composable.MemberWalletScreen
 import com.machankura.dedun.compose.ui.composable.NewMemberWalletScreen
 import com.machankura.dedun.compose.database.repository.DatabaseMemberWalletRepository
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallets
 import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import fr.acinq.phoenix.managers.NodeParamsManager
@@ -341,6 +342,15 @@ fun DedunNavHost(
         onDispose { groupOnchainWallets?.let { wallets -> applicationIOScope.launch { wallets.stop() } } }
     }
 
+    // Each group Lightning wallet's swap-in addresses, every depositor's: docs/group-lightning-swap-in.md.
+    // Every device watches them, so a member sees their own deposit arrive; the operator's node splices them in.
+    val groupSwapInWallets = remember(groupChainClients) {
+        groupChainClients?.let { GroupSwapInWallets(it, applicationIOScope, auxDatabaseManager.auxDatabase) }
+    }
+    DisposableEffect(groupSwapInWallets) {
+        onDispose { groupSwapInWallets?.let { wallets -> applicationIOScope.launch { wallets.stop() } } }
+    }
+
     // The group Lightning nodes this identity is the elected operator of. Behind the
     // rollout gate: nothing is built while it is off. Same lifetime as the wallets.
     // A group's node is not the identity's own, and needs only an Electrum client: so a
@@ -374,6 +384,7 @@ fun DedunNavHost(
                     scope = applicationIOScope,
                     torIsEnabled = { identity.userPrefs.getIsTorEnabled.first() },
                 ),
+                swapIns = groupSwapInWallets?.let { wallets -> { chatRoomId, wallet -> wallets.walletFor(chatRoomId, wallet) } },
             ).also { it.start() }
         }
     }
