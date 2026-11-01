@@ -363,6 +363,17 @@ device shows it, signs it on approval, or drops it. The answer decides whether
 Phase 2 must ship a release ahead (it signs or shows) or only should (it drops). It
 also decides what Phase 6's notes say about older devices.
 
+**Result: it shows it, and signs it on approval.** Answered by the code rather than a
+run. `FrostSigningManager.acceptProposal` refuses a proposal for its shape (no key, a
+batch too large, an id that doesn't rebuild), and then runs one hook per kind it knows:
+the birth certificate, the member-wallet certificate, 30339, 30340, the wallet
+statement, the key state. A kind with no hook falls through to a session, which the
+member approves by hand. So an older device shows a 30341 as an unknown event and
+signs it if its member approves it. It signs a 30363 `pay` with no `payout` tag in the
+same way, which is what it does today. Phase 2's transcript arm therefore ships a
+release ahead, as D12 says. Phase 6's notes say a group is covered only once enough
+devices are upgraded.
+
 ### Spike B: the Lightning balance against the channel, on regtest
 
 On the regtest network (`testing/regtest/regtest.sh up`), take the group's channel
@@ -371,6 +382,13 @@ the sum of members' `available` from D8, `PaymentView`'s reported fees, the
 channel's spendable balance, and the close output's amount. That is the gap D8
 promises to show and the shares D3 prefills, measured. It checks that the snapshot
 reports the outgoing fee; if it doesn't, D8 uses `maxfee`.
+
+**Result, in part.** The fee question is answered by the code: `PaymentView.feesMsat`
+is reported for every payment, and `GroupLightningPaymentRow` keeps it, so D8 charges
+the fee the node reports, and uses `maxfee` only for an authorisation not yet sent. The
+measured gap between members' balances and the channel is left to Phase 6's regtest
+case, which goes through deposits, a payout and a close in that order. That makes it
+the same run, once rather than twice.
 
 ---
 
