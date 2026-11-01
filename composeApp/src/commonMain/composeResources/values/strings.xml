@@ -936,4 +936,8 @@
     <string name="by_their_invoice">by their invoice</string>
     <string name="as_the_operator_reported">as the operator reported</string>
     <string name="attributed_by_the_group">signed by the group</string>
+    <string name="attribute">Attribute</string>
+    <string name="correct">Correct</string>
+    <string name="whose_deposit_is_this_question">Whose deposit is this?</string>
+    <string name="the_group_s_own">The group's own</string>
 </resources>

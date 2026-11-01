@@ -1,5 +1,20 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.the_group_s_own
+import dedun.composeapp.generated.resources.whose_deposit_is_this_question
+import dedun.composeapp.generated.resources.couldn_t_ask_the_group
+import dedun.composeapp.generated.resources.cancel
+import dedun.composeapp.generated.resources.correct
+import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
+import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
+import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +66,7 @@ import dedun.composeapp.generated.resources.paid_to_them_s_sats
 import dedun.composeapp.generated.resources.s_dot_s
 import dedun.composeapp.generated.resources.s_put_in_s_sats
 import dedun.composeapp.generated.resources.s_sats
+import dedun.composeapp.generated.resources.attribute
 import dedun.composeapp.generated.resources.attributed_by_the_group
 import dedun.composeapp.generated.resources.unattributed
 import dedun.composeapp.generated.resources.unattributed_s_sats
@@ -67,11 +83,13 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DepositsScreen(
+    activeUserPublicKey: HexKey,
     chatRoomId: String,
     chain: Chain,
     initialUIState: DepositsUIState = DepositsUIState.Loading,
     chatRepository: ChatRepository,
     depositRepository: DepositRepository,
+    onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: DepositsViewModel = viewModel(
@@ -80,6 +98,10 @@ fun DepositsScreen(
     LaunchedEffect(chatRoomId, chain) {
         if (initialUIState == DepositsUIState.Loading) viewModel.initiate()
     }
+    val notify = rememberNotifier(rememberCoroutineScope())
+    val couldNotAsk = stringResource(Res.string.couldn_t_ask_the_group)
+    // The deposit whose attribution is being chosen, by key.
+    var attributing by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
@@ -104,12 +126,67 @@ fun DepositsScreen(
                         item { EmptyState(message = stringResource(Res.string.nothing_has_been_deposited_yet), icon = Icons.Default.Savings) }
                     }
                     items(state.deposits, key = { it.depositKey }) { deposit ->
-                        DepositListRow(deposit, deposit.member?.let { state.names[it] ?: it.take(8) })
+                        DepositListRow(
+                            deposit = deposit,
+                            from = deposit.member?.let { state.names[it] ?: it.take(8) },
+                            // A device that holds a share can ask the group to say whose a deposit
+                            // is, or to correct what it said. docs/member-deposits.md, Phase 9.
+                            onAttribute = if (state.canSign && !viewModel.isActionPending.value) {
+                                { attributing = deposit.depositKey }
+                            } else null,
+                        )
                     }
                 }
             }
         }
     }
+
+    val loaded = viewModel.uiState as? DepositsUIState.Loaded
+    val deposit = attributing?.let { key -> loaded?.deposits?.firstOrNull { it.depositKey == key } }
+    if (loaded != null && deposit != null) {
+        AttributeDialog(
+            depositors = loaded.depositors,
+            names = loaded.names,
+            current = deposit.member,
+            onDismiss = { attributing = null },
+            onChoose = { member ->
+                attributing = null
+                viewModel.attribute(
+                    depositKey = deposit.depositKey,
+                    member = member,
+                    onSuccess = { sessionId -> onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId)) },
+                    onFailure = { notify(couldNotAsk) },
+                )
+            },
+        )
+    }
+}
+
+/** Whose a deposit is: one of the depositors, or the group's own. The current answer is marked. */
+@Composable
+private fun AttributeDialog(
+    depositors: List<HexKey>,
+    names: Map<HexKey, String>,
+    current: HexKey?,
+    onDismiss: () -> Unit,
+    onChoose: (HexKey?) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.whose_deposit_is_this_question)) },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                depositors.forEach { member ->
+                    TextButton(onClick = { onChoose(member) }, enabled = member != current) {
+                        Text("@" + (names[member] ?: member.take(8)))
+                    }
+                }
+                TextButton(onClick = { onChoose(null) }) { Text(stringResource(Res.string.the_group_s_own)) }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
 }
 
 /** Each member's tally, then the unattributed, then the total they add up to. */
@@ -139,8 +216,15 @@ internal fun Tallies(tallies: DepositLedger.Tallies, names: Map<HexKey, String>)
 }
 
 @Composable
-private fun DepositListRow(deposit: DepositRow, from: String?) {
+private fun DepositListRow(deposit: DepositRow, from: String?, onAttribute: (() -> Unit)?) {
     ListItem(
+        trailingContent = onAttribute?.let { attribute ->
+            {
+                TextButton(onClick = attribute) {
+                    Text(stringResource(if (deposit.member == null) Res.string.attribute else Res.string.correct))
+                }
+            }
+        },
         leadingContent = {
             Icon(if (deposit.source == DepositRow.LIGHTNING) Icons.Default.Bolt else Icons.Default.Savings, contentDescription = Decorative)
         },

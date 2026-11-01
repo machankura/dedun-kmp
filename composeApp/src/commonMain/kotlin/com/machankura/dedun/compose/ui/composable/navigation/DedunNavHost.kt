@@ -1420,10 +1420,12 @@ fun DedunNavHost(
                 val route = backStackEntry.toRoute<DepositsRoute>()
 
                 DepositsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
                     chatRepository = databaseChatRepository,
                     depositRepository = databaseDepositRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()
                     }

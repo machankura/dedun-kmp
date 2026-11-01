@@ -16,6 +16,8 @@ import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
 
 /**
  * Every deposit into the group and whose it is, with each member's tally: what the group page's
@@ -47,7 +49,25 @@ class DepositsViewModel(
                 tallies = depositRepository.tallies(chatRoomId, chain),
                 names = names,
                 canSign = localChatRoom.chatRoom.mlsGroupState != null && chatRepository.canSign(chatRoomId),
+                depositors = depositRepository.depositors(chatRoomId, chain).keys.sorted(),
             )
+        }
+    }
+
+    /**
+     * Asks the group to sign that [depositKey] is [member]'s, or the group's own when null: a signing
+     * session over one attribution. `docs/member-deposits.md`, Phase 9.
+     */
+    fun attribute(depositKey: String, member: HexKey?, onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val loaded = uiState as? DepositsUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { depositRepository.attribute(loaded.localChatRoom, chain, mapOf(depositKey to member)) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
+            }
         }
     }
 

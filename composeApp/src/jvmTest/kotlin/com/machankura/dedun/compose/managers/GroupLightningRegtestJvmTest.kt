@@ -283,6 +283,17 @@ class GroupLightningRegtestJvmTest {
         assertTrue(channel.oursMsat in 90_000_000..100_000_000, "the group holds the payment, less the LSP's fee: ${channel.oursMsat}")
         assertTrue(received.count { it!!.checks.single().agrees == true } >= 2, "the members who co-signed agree with the operator")
 
+        // The offer's payment is nobody's deposit -- no invoice of a depositor's explains it -- until the
+        // group signs whose it is (docs/member-deposits.md, Spike B and Phase 9).
+        val offerPaid = mineUntil("the offer's payment on file as a deposit") {
+            DepositLedger.depositsIn(all[0].db, fixture.roomId, fixture.chain).singleOrNull { it.source == com.machankura.dedun.compose.database.model.DepositRow.LIGHTNING }
+        }
+        assertEquals(null, offerPaid.member, "an offer's payment is nobody's")
+        signed(all, all[0], DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(offerPaid.depositKey to all[3].publicKey)).id)
+        all.forEach { d ->
+            assertEquals(offerPaid.amountMsat, DepositLedger.tallies(d.db, fixture.roomId, fixture.chain).members[all[3].publicKey]?.lightningMsat, "device ${d.index}'s tally")
+        }
+
         // Buy liquidity (docs/group-lightning-liquidity.md, Phase 8): a member prices 200,000 sats of inbound
         // from the operator's snapshot, the group authorises it, the operator's node splices, and every
         // co-signer checks the first commitment on the new output and the shared input before the group signs.

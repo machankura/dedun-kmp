@@ -72,6 +72,11 @@ class DatabaseDepositRepository(
         emptyList()
     }
 
+    override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession {
+        val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
+        return DepositLedger.proposeAttribution(database, localChatRoom, me, chain, assignments)
+    }
+
     companion object {
         private const val TAG = "DatabaseDepositRepository"
     }

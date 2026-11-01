@@ -18,5 +18,7 @@ sealed interface DepositsUIState {
         val names: Map<HexKey, String>,
         /** Whether this device holds a share, and so can propose an attribution (Phase 9). */
         val canSign: Boolean = false,
+        /** Whom a deposit can be given to: the members the group has opened deposits for. */
+        val depositors: List<HexKey> = emptyList(),
     ) : DepositsUIState
 }

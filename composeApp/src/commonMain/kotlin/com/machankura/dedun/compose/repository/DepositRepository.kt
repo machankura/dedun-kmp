@@ -50,6 +50,9 @@ interface DepositRepository {
     /** Every deposit on record, newest first, with the group's signed attributions applied. */
     suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow>
 
+    /** Proposes that the group sign whose each deposit in [assignments] is -- a member, or null for the group's own (Phase 9). */
+    suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession
+
     companion object {
         val NO_OP = object : DepositRepository {
             override suspend fun standing(chatRoomId: String, chain: Chain, canPropose: Boolean): Standing = Standing.CannotSign
@@ -60,6 +63,8 @@ interface DepositRepository {
             override suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) = Unit
             override suspend fun tallies(chatRoomId: String, chain: Chain) = DepositLedger.Tallies(emptyMap(), 0, 0)
             override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = emptyList()
+            override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession =
+                throw UnsupportedOperationException("no repository")
         }
     }
 }

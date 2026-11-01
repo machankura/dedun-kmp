@@ -168,4 +168,46 @@ object DepositLedger {
             .forEach { pay -> paid[pay.payout!!.member] = (paid[pay.payout.member] ?: 0) + pay.amountMsat }
         return paid
     }
+
+    /**
+     * Why a signer won't sign [proposed], a deposit attribution for [chatRoomId], or null when it will
+     * (D10): every deposit it names is one this device has on record, for the amount it says, and
+     * every member it names is somebody the group has opened deposits for. Whether the deposit was
+     * unattributed is not asked: correcting an attribution is what a second one is for, and the
+     * screen says when one is a correction. `docs/member-deposits.md`, Phase 9.
+     */
+    suspend fun refuseAttribution(database: DedunDatabase, chatRoomId: String, proposed: com.vitorpamplona.quartz.nip01Core.core.Event): String? {
+        val signed = DepositAttributionEvent.read(proposed) ?: return "does not read as an attribution"
+        val depositors = Depositors.statementsIn(database, chatRoomId, signed.chain)
+        signed.attributions.forEach { attribution ->
+            val row = database.depositDao().get(chatRoomId, attribution.key.text) ?: return "names a deposit this device has not seen"
+            if (row.chain != GroupWalletStatementEvent.chainName(signed.chain)) return "names a deposit on another network"
+            val amount = if (row.source == DepositRow.ONCHAIN) row.amountMsat / 1000 else row.amountMsat
+            if (amount != attribution.amount) return "names a deposit for another amount than this device has"
+            if (attribution.member != null && attribution.member !in depositors) return "gives a deposit to somebody the group has not opened deposits for"
+        }
+        return null
+    }
+
+    /**
+     * Asks the group to sign whose [attributions] are -- a signing session over one 30340, which
+     * proposing counts as approving. Each amount is the one on record: sats onchain, msat over
+     * Lightning, as the attribution says them.
+     */
+    suspend fun proposeAttribution(
+        database: DedunDatabase,
+        localChatRoom: com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom,
+        proposerPublicKey: HexKey,
+        chain: Chain,
+        assignments: Map<String, HexKey?>,
+    ): com.machankura.dedun.compose.database.model.FrostSigningSession {
+        val chatRoomId = localChatRoom.chatRoom.id
+        val attributions = assignments.map { (depositKey, member) ->
+            val row = database.depositDao().get(chatRoomId, depositKey) ?: throw IllegalStateException("No deposit $depositKey on record")
+            val key = DepositAttributionEvent.DepositKey.parse(depositKey) ?: throw IllegalStateException("Not a deposit: $depositKey")
+            DepositAttributionEvent.Attribution(key, member?.lowercase(), if (row.source == DepositRow.ONCHAIN) row.amountMsat / 1000 else row.amountMsat)
+        }
+        val template = DepositAttributionEvent.template(chain, attributions)
+        return FrostSigningManager.proposeSigning(database, localChatRoom, proposerPublicKey, template.kind, template.tags, template.content)
+    }
 }
