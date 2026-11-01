@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.ksp)
     // No sqldelight plugin here on purpose. The fr.acinq.phoenix.db.sqldelight databases this
     // module used to generate are the same three lightning-kmp-app's :library generates from an
-    // identical copy of the .sq sources, and nothing under com.machankura.bennu touches them. Generating
+    // identical copy of the .sq sources, and nothing under com.machankura.dedun touches them. Generating
     // them on both sides put every generated class in the apk twice, which debug tolerates and
     // mergeDexRelease rejects as duplicate types. The library's copies are the ones that count.
 }
@@ -184,7 +184,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEa
 }
 
 android {
-    namespace = "com.machankura.bennu.android"
+    namespace = "com.machankura.dedun.android"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     buildFeatures {
@@ -272,7 +272,7 @@ val m3Audit = tasks.register("m3Audit") {
 
     val script = rootProject.layout.projectDirectory.file("docs/scripts/m3-audit.sh").asFile
     val uiSources = rootProject.layout.projectDirectory
-        .dir("composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui")
+        .dir("composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui")
     val projectDirectory = rootProject.layout.projectDirectory.asFile
 
     inputs.file(script).withPropertyName("auditScript")
@@ -322,7 +322,7 @@ tasks.withType<Test>().configureEach {
 
 compose.desktop {
     application {
-        mainClass = "com.machankura.bennu.desktop.MainKt"
+        mainClass = "com.machankura.dedun.desktop.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)

@@ -17,7 +17,7 @@ Usage:
 """
 import os, re, sys, io, collections
 
-UI = 'composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui'
+UI = 'composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui'
 STRINGS = 'composeApp/src/commonMain/composeResources/values/strings.xml'
 DRY = '--apply' not in sys.argv
 

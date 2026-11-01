@@ -16,7 +16,7 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:exported="true"
-            android:name="com.machankura.bennu.android.MainActivity">
+            android:name="com.machankura.dedun.android.MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
