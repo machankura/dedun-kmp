@@ -28,6 +28,10 @@ import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.repository.MemberWalletRepository
 import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.wallet.PayoutAddress
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import kotlinx.coroutines.withContext
 import com.vitorpamplona.quartz.nip01Core.core.Event
 
 class ChatRoomDetailViewModel(
@@ -100,6 +104,10 @@ class ChatRoomDetailViewModel(
                 // docs/member-wallet-delay.md.
                 val couldGuard = memberWalletRepository.couldGuard(chatRoomId)
 
+                // docs/group-payout-destination.md: a group still going has a Payouts
+                // section, and every member row says where that member is paid.
+                val payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup }
+
                 ChatRoomDetailUIState.Loaded(
                     localChatRoom = localChatRoom,
                     groupKeyState = chatRepository.groupKeyState(chatRoomId),
@@ -125,9 +133,23 @@ class ChatRoomDetailViewModel(
                     // Everybody in a Marmot group sees whether it guards members'
                     // wallets; only a signer is offered to change it.
                     showsMemberWalletPolicy = !isDisbanded && couldGuard,
-                    payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup },
+                    payouts = payouts,
+                    payoutDestinations = if (payouts != null) payoutDestinationRepository.destinationsIn(chatRoomId, NodeParamsManager.chain) else emptyMap(),
                 )
             }
+        }
+    }
+
+    /**
+     * Whether [destination]'s onchain address has been paid since it was set, asked when its
+     * sheet opens -- an address the group has paid once is used, and the payer should ask for a
+     * new one. `docs/group-payout-destination.md`, Phase 5.
+     */
+    fun usageOf(destination: GroupPayoutDestination, onResult: (UnusedAddressCheck.Usage) -> Unit) {
+        val script = destination.onchainAddress?.let { PayoutAddress.parseOrNull(destination.chain, it) }?.script ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val usage = payoutDestinationRepository.usageOf(chatRoomId, destination.chain, script)
+            withContext(Dispatchers.Main) { onResult(usage) }
         }
     }
 

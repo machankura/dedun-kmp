@@ -891,4 +891,14 @@
     <string name="this_address_has_been_used_before">This address has been used before. Use a new one from your wallet.</string>
     <string name="couldn_t_check_the_address">Couldn't check the address. Try again when you're connected.</string>
     <string name="that_s_one_of_this_group_s_own_addresses">That's one of this group's own addresses.</string>
+    <string name="hasn_t_said_where_to_be_paid">Hasn't said where to be paid</string>
+    <string name="where_s_is_paid">Where %1$s is paid</string>
+    <string name="onchain_address">Onchain address</string>
+    <string name="set_on">Set on</string>
+    <string name="unused">Unused</string>
+    <string name="paid_before_ask_for_a_new_one">Paid before. Ask for a new one before paying it again.</string>
+    <string name="couldn_t_check">Couldn't check</string>
+    <string name="checking">Checking…</string>
+    <string name="copy_the_lightning_address">Copy the Lightning address</string>
+    <string name="copy_the_onchain_address">Copy the onchain address</string>
 </resources>

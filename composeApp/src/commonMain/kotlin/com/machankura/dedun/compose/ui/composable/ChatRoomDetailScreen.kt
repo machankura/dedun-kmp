@@ -65,6 +65,22 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.runtime.remember
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import dedun.composeapp.generated.resources.checking
+import dedun.composeapp.generated.resources.copied
+import dedun.composeapp.generated.resources.copy_the_lightning_address
+import dedun.composeapp.generated.resources.copy_the_onchain_address
+import dedun.composeapp.generated.resources.couldn_t_check
+import dedun.composeapp.generated.resources.hasn_t_said_where_to_be_paid
+import dedun.composeapp.generated.resources.lightning_address
+import dedun.composeapp.generated.resources.onchain_address
+import dedun.composeapp.generated.resources.paid_before_ask_for_a_new_one
+import dedun.composeapp.generated.resources.set_on
+import dedun.composeapp.generated.resources.unused
+import dedun.composeapp.generated.resources.where_s_is_paid
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.PersonRemove
@@ -245,6 +261,8 @@ fun ChatRoomDetailScreen(
                         modifier = Modifier.padding(innerPadding).readableContent().fillMaxSize()
                     ) {
                         var isShowingGroupKeyState by rememberSaveable { mutableStateOf(false) }
+                        // The member whose payout sheet is open, by public key.
+                        var showingPayoutOf by rememberSaveable { mutableStateOf<String?>(null) }
 
                         LazyColumn(
                             modifier = Modifier.weight(1f).fillMaxWidth().padding(MaterialTheme.spacing.space250),
@@ -786,10 +804,30 @@ fun ChatRoomDetailScreen(
                                             )
                                         },
                                         supportingContent = {
-                                            localParticipant.profile?.about?.let {
-                                                Text(
-                                                    text = it
-                                                )
+                                            val memberPublicKey = localParticipant.participant.participantPublicKey
+                                            Column {
+                                                localParticipant.profile?.about?.let {
+                                                    Text(
+                                                        text = it
+                                                    )
+                                                }
+                                                // Where the group pays this member: theirs to set on
+                                                // their own row, everybody else's to read and copy.
+                                                // docs/group-payout-destination.md, Phase 5.
+                                                chatRoomDetailUIState.payouts?.let { payouts ->
+                                                    MemberPayoutLine(
+                                                        destination = chatRoomDetailUIState.payoutDestinations[memberPublicKey.lowercase()],
+                                                        isMe = memberPublicKey.equals(activeUserPublicKey, ignoreCase = true),
+                                                        onOpen = { showingPayoutOf = memberPublicKey.lowercase() },
+                                                        onSetMine = if (payouts.canSet) {
+                                                            {
+                                                                onNavigateToRoute.invoke(
+                                                                    GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
+                                                                )
+                                                            }
+                                                        } else null,
+                                                    )
+                                                }
                                             }
                                         }
 
@@ -954,6 +992,21 @@ fun ChatRoomDetailScreen(
                                         reindexState = chatRoomDetailViewModel.reindexState,
                                         onReindex = chatRoomDetailViewModel::reindexMarmotGroupEvents
                                     )
+                                }
+                            }
+                        }
+
+                        showingPayoutOf?.let { member ->
+                            chatRoomDetailUIState.payoutDestinations[member]?.let { destination ->
+                                val name = chatRoomDetailUIState.localChatRoom.localParticipants
+                                    .firstOrNull { it.participant.participantPublicKey.equals(member, ignoreCase = true) }
+                                    ?.profile?.humanReadableNameOrPubkey() ?: member.take(8)
+                                var usage by remember(destination.event.id) { mutableStateOf<UnusedAddressCheck.Usage?>(null) }
+                                LaunchedEffect(destination.event.id) {
+                                    chatRoomDetailViewModel.usageOf(destination) { usage = it }
+                                }
+                                ModalBottomSheet(onDismiss = { showingPayoutOf = null }) {
+                                    PayoutDestinationSheetContent(name = name, destination = destination, usage = usage)
                                 }
                             }
                         }
@@ -1294,6 +1347,121 @@ private fun SubgroupCard(
                 }
             }
         )
+    }
+}
+
+/**
+ * A member row's line about where the group pays them: the active profile's own leads to
+ * setting it, anybody else's Lightning address opens their sheet, and a member who has not
+ * said is told so. `docs/group-payout-destination.md`, Phase 5.
+ */
+@Composable
+private fun MemberPayoutLine(
+    destination: GroupPayoutDestination?,
+    isMe: Boolean,
+    onOpen: () -> Unit,
+    onSetMine: (() -> Unit)?,
+) {
+    when {
+        isMe && onSetMine != null -> TextButton(onClick = onSetMine) {
+            Icon(Icons.Default.Payments, contentDescription = Decorative)
+            Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+            Text(stringResource(Res.string.where_this_group_pays_you))
+        }
+        destination != null -> TextButton(onClick = onOpen) {
+            Icon(Icons.Default.Payments, contentDescription = Decorative)
+            Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+            Text(destination.lightningAddress.toString())
+        }
+        else -> Text(
+            text = stringResource(Res.string.hasn_t_said_where_to_be_paid),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * One member's payout destination, whole: the Lightning address and the range it said it
+ * takes, the onchain address and whether it has been paid since -- asked when the sheet opens,
+ * [usage] null until it answers -- and when it was set. Copy only: an address paid before is
+ * never offered as a QR code. Split out from the sheet so it can be rendered on its own.
+ */
+@Composable
+internal fun PayoutDestinationSheetContent(
+    name: String,
+    destination: GroupPayoutDestination,
+    usage: UnusedAddressCheck.Usage?,
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val notify = rememberNotifier(rememberCoroutineScope())
+    val copied = stringResource(Res.string.copied)
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+    ) {
+        Text(text = stringResource(Res.string.where_s_is_paid, name), style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(MaterialTheme.spacing.relatedGap))
+
+        PayoutAddressField(
+            label = stringResource(Res.string.lightning_address),
+            value = destination.lightningAddress.toString(),
+            copyDescription = stringResource(Res.string.copy_the_lightning_address),
+            onCopy = {
+                clipboardManager.setText(AnnotatedString(destination.lightningAddress.toString()))
+                notify(copied)
+            },
+        )
+        destination.sendable?.let {
+            Text(text = sendableText(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        destination.onchainAddress?.let { onchain ->
+            Spacer(modifier = Modifier.height(MaterialTheme.spacing.relatedGap))
+            PayoutAddressField(
+                label = stringResource(Res.string.onchain_address),
+                value = onchain,
+                copyDescription = stringResource(Res.string.copy_the_onchain_address),
+                onCopy = {
+                    clipboardManager.setText(AnnotatedString(onchain))
+                    notify(copied)
+                },
+            )
+            Text(
+                text = stringResource(
+                    when (usage) {
+                        null -> Res.string.checking
+                        UnusedAddressCheck.Usage.Unused -> Res.string.unused
+                        UnusedAddressCheck.Usage.Used, UnusedAddressCheck.Usage.TheGroups -> Res.string.paid_before_ask_for_a_new_one
+                        UnusedAddressCheck.Usage.Unknown -> Res.string.couldn_t_check
+                    }
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (usage == UnusedAddressCheck.Usage.Used) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(MaterialTheme.spacing.relatedGap))
+        GroupKeyStateField(
+            label = stringResource(Res.string.set_on),
+            value = Instant.fromEpochSeconds(destination.createdAt).toFormattedTimeAndDateString(),
+            isMonospaced = false,
+        )
+    }
+}
+
+/** A labelled address with a copy button beside it. */
+@Composable
+private fun PayoutAddressField(label: String, value: String, copyDescription: String, onCopy: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = value, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+        }
+        IconButton(onClick = onCopy) {
+            Icon(Icons.Default.ContentCopy, contentDescription = copyDescription)
+        }
     }
 }
 
