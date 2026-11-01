@@ -91,6 +91,13 @@ internal class FakeArkWallet(
 
     override suspend fun maintenance() = call("maintenance")
 
+    /** What [renewalFee] answers: null when nothing is due. */
+    var renewal: ArkFee? = null
+
+    override suspend fun renewalFee(): ArkFee? { call("renewalFee"); return renewal }
+
+    override suspend fun renew() = call("renew")
+
     override suspend fun firstExpiryHeight(): Long? { call("firstExpiryHeight"); return firstExpiry }
 
     override suspend fun tipHeight(): Long { call("tipHeight"); return tip }

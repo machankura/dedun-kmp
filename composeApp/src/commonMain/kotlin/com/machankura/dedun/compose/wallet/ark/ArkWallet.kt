@@ -48,6 +48,12 @@ interface ArkWallet {
     /** Syncs, progresses rounds and hands coins due for renewal to the next round -- Phase 0, spike 4. */
     suspend fun maintenance()
 
+    /** What renewing the coins due for it would cost now, or null when none is due. */
+    suspend fun renewalFee(): ArkFee?
+
+    /** Hands the coins due for renewal to the next round, in delegated mode: no need to stay online. */
+    suspend fun renew()
+
     /** The height the earliest coin expires at, or null when none does. */
     suspend fun firstExpiryHeight(): Long?
 

@@ -28,6 +28,13 @@ import dedun.composeapp.generated.resources.ark_board_failed
 import dedun.composeapp.generated.resources.ark_board_s_sats_question
 import dedun.composeapp.generated.resources.ark_board_started
 import dedun.composeapp.generated.resources.cancel
+import dedun.composeapp.generated.resources.ark_renew_explainer
+import dedun.composeapp.generated.resources.ark_renew_failed
+import dedun.composeapp.generated.resources.ark_renew_nothing_due
+import dedun.composeapp.generated.resources.ark_renew_now
+import dedun.composeapp.generated.resources.ark_renew_s_sats_question
+import dedun.composeapp.generated.resources.ark_renew_started
+import com.machankura.dedun.compose.wallet.ark.ArkFee
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.send
 import androidx.compose.material3.Card
@@ -164,6 +171,24 @@ fun ArkWalletScreen(
             dismissButton = { TextButton(onClick = { confirmingBoard = null }) { Text(stringResource(Res.string.cancel)) } },
         )
     }
+    val renewStarted = stringResource(Res.string.ark_renew_started)
+    val renewFailed = stringResource(Res.string.ark_renew_failed)
+    val nothingDue = stringResource(Res.string.ark_renew_nothing_due)
+    var confirmingRenewal by remember { mutableStateOf<ArkFee?>(null) }
+    confirmingRenewal?.let { fee ->
+        AlertDialog(
+            onDismissRequest = { confirmingRenewal = null },
+            title = { Text(stringResource(Res.string.ark_renew_s_sats_question, fee.fee.grouped())) },
+            text = { Text(stringResource(Res.string.ark_renew_explainer)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingRenewal = null
+                    viewModel.renew(onStarted = { notify(renewStarted) }, onFailure = { notify(renewFailed) })
+                }) { Text(stringResource(Res.string.ark_renew_now)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmingRenewal = null }) { Text(stringResource(Res.string.cancel)) } },
+        )
+    }
     val actions: @Composable (ArkWalletUIState.Loaded) -> Unit = { state ->
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
             Button(modifier = Modifier.weight(1f), onClick = onReceive) { Text(stringResource(Res.string.receive)) }
@@ -171,6 +196,12 @@ fun ArkWalletScreen(
         }
         if (state.balance.onchain.sat > 0) {
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmingBoard = state.balance.onchain }) { Text(stringResource(Res.string.ark_board)) }
+        }
+        if (state.expiry is ArkExpiry.RenewSoon || state.expiry == ArkExpiry.Expired) {
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { viewModel.renewalFee(onFee = { fee -> if (fee == null) notify(nothingDue) else confirmingRenewal = fee }, onFailure = { notify(renewFailed) }) },
+            ) { Text(stringResource(Res.string.ark_renew_now)) }
         }
     }
 

@@ -1117,6 +1117,12 @@
     <string name="ark_send_payment_sent">Payment sent</string>
     <string name="ark_send_could_not_send">Couldn't send the payment</string>
     <string name="ark_send_the_request_names_s_sats">The request names the amount: %1$s sats.</string>
+    <string name="ark_renew_now">Renew now</string>
+    <string name="ark_renew_s_sats_question">Renew your coins for %1$s sats?</string>
+    <string name="ark_renew_explainer">They go into the server's next round, which does not need Dedun to stay open. The fee is lower the closer coins are to expiring.</string>
+    <string name="ark_renew_nothing_due">No coins are due for renewal yet.</string>
+    <string name="ark_renew_started">Handed to the next round to renew</string>
+    <string name="ark_renew_failed">Couldn't renew the coins</string>
     <string name="ark_movement_payment_details">Payment details</string>
     <string name="ark_movement_amount">Amount</string>
     <string name="ark_movement_fee">Fee</string>

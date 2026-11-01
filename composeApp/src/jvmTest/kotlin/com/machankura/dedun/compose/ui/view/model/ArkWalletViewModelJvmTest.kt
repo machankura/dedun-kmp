@@ -108,6 +108,25 @@ class ArkWalletViewModelJvmTest {
     }
 
     @Test
+    fun `renewing asks the fee first, and nothing due is said as such`() {
+        val wallet = FakeArkWallet()
+        val vm = viewModel()
+        state.value = ArkWalletState.Open(wallet, ArkRecovery.NotRun)
+        var fee: com.machankura.dedun.compose.wallet.ark.ArkFee? = com.machankura.dedun.compose.wallet.ark.ArkFee(Satoshi(1), Satoshi(1), Satoshi(0))
+        vm.renewalFee(onFee = { fee = it }, onFailure = {})
+        assertEquals(null, fee)
+
+        wallet.renewal = com.machankura.dedun.compose.wallet.ark.ArkFee(Satoshi(20_000), Satoshi(40), Satoshi(19_960))
+        vm.renewalFee(onFee = { fee = it }, onFailure = {})
+        assertEquals(Satoshi(40), fee?.fee)
+
+        var started = false
+        vm.renew(onStarted = { started = true }, onFailure = {})
+        assertTrue(started)
+        assertTrue("renew" in wallet.calls)
+    }
+
+    @Test
     fun `a read that fails is retried by reading, and an open that failed by reopening`() {
         val wallet = FakeArkWallet()
         wallet.failNext = "tipHeight" to ArkError.ServerUnreachable("no")

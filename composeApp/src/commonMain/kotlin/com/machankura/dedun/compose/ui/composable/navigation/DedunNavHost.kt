@@ -190,7 +190,7 @@ import com.machankura.dedun.compose.ui.composable.NewMemberWalletScreen
 import com.machankura.dedun.compose.database.repository.DatabaseMemberWalletRepository
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.IdentityElectrum
-import com.machankura.dedun.compose.wallet.ark.ArkFiles
+import com.machankura.dedun.compose.wallet.ark.ArkProcess
 import com.machankura.dedun.compose.wallet.ark.ArkProfile
 import com.machankura.dedun.compose.wallet.ark.IdentityArk
 import com.machankura.dedun.compose.ui.composable.ArkMovementScreen
@@ -201,10 +201,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkReceiveRo
 import com.machankura.dedun.compose.ui.composable.ArkReceiveScreen
 import com.machankura.dedun.compose.ui.composable.ArkSendScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkSendRoute
-import com.machankura.dedun.compose.AppVersion
 import com.machankura.dedun.compose.identity.StoredIdentity
 import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
-import okio.Path.Companion.toPath
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
@@ -329,20 +327,16 @@ fun DedunNavHost(
         identityElectrum.clientFor(activeIdentityForWallets)
     }
 
-    // The profile's own Ark wallet: docs/bark-wallet.md. One per app, held here as the
-    // Electrum client is, and for the same reason -- a switch closes the last profile's
-    // wallet before the next one opens, because Bark lets a datadir be open only once.
-    // The words come from the seed the selector already decrypted; they are handed to
-    // IdentityArk and kept nowhere else. Tor is followed, so turning it on closes the wallet.
-    val identityArk = remember {
-        IdentityArk(
-            scope = applicationIOScope,
-            files = ArkFiles.under(getApplicationFilesDirectoryPath(phoenixGlobal.ctx).toPath()),
-            appVersion = AppVersion.versionName,
-        )
-    }
-    DisposableEffect(identityArk) {
-        onDispose { applicationIOScope.launch { identityArk.stop() } }
+    // The profile's own Ark wallet: docs/bark-wallet.md. One per process, not per
+    // composition: Bark asks that it not be closed when an activity is recreated, and the
+    // background renewal shares its lock. A switch closes the last profile's wallet before
+    // the next one opens, because Bark lets a datadir be open only once. The words come
+    // from the seed the selector already decrypted; they are handed to IdentityArk and kept
+    // nowhere else. Tor is followed, so turning it on closes the wallet.
+    val identityArk = remember { ArkProcess.holder(getApplicationFilesDirectoryPath(phoenixGlobal.ctx)) }
+    // Each return to the foreground renews what is due, at most hourly (D12).
+    LaunchedEffect(identityArk) {
+        AppLifecycle.isForeground.collect { foreground -> if (foreground) identityArk.maintain() }
     }
     LaunchedEffect(identityArk, activeIdentityForWallets?.id) {
         val identity = activeIdentityForWallets

@@ -11,6 +11,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 /**
  * What the active profile asks of its Ark wallet. [words] is null for a profile with no
@@ -58,6 +61,7 @@ class IdentityArk(
     private val network: ArkNetwork = ArkWalletRollout.NETWORK,
     private val rolloutEnabled: Boolean = ArkWalletRollout.ENABLED,
     private val opener: suspend (ArkConfig, String, String) -> ArkWallet = ArkPlatform::open,
+    private val now: () -> Instant = { Clock.System.now() },
 ) {
     private val logger = Logger.withTag("IdentityArk")
     private val mutex = Mutex()
@@ -67,6 +71,7 @@ class IdentityArk(
 
     private var profile: ArkProfile? = null
     private var wallet: ArkWallet? = null
+    private var maintainedAt: Instant? = null
 
     /** Makes [next] the active profile: closes the last one's wallet, then opens this one's, if it can. */
     fun activate(next: ArkProfile?) {
@@ -94,6 +99,43 @@ class IdentityArk(
         closeCurrent()
         profile = null
         _state.value = ArkWalletState.None
+    }
+
+    /**
+     * The app came to the foreground: run Bark's delegated maintenance, at most once an hour
+     * -- D12. It syncs, progresses rounds and hands every coin due for renewal to the next
+     * round, which needs no device online. Never the interactive `maintenance`, which waits
+     * for a round to start: up to an hour on mainnet (Phase 0, spike 4).
+     */
+    fun maintain() {
+        scope.launch { mutex.withLock { wallet?.let { maintainNow(it, force = false) } } }
+    }
+
+    /**
+     * The background renewal -- Phase 7. Maintains [background]'s wallet: the one open, if it
+     * is that profile's; one opened for the purpose and closed again, if no profile is active;
+     * nothing, if another profile is active, because the app has that one open and a second
+     * open would fail on the datadir. Returns whether it ran.
+     */
+    suspend fun maintainInBackground(background: ArkProfile): Boolean = mutex.withLock {
+        val active = profile
+        when {
+            active != null && active.id == background.id -> {
+                val open = wallet ?: return@withLock false
+                maintainNow(open, force = true)
+                true
+            }
+            active != null -> false
+            else -> {
+                switchTo(background)
+                val open = wallet
+                if (open != null) maintainNow(open, force = true)
+                closeCurrent()
+                profile = null
+                _state.value = ArkWalletState.None
+                open != null
+            }
+        }
     }
 
     /**
@@ -138,6 +180,7 @@ class IdentityArk(
             _state.value = ArkWalletState.Open(opened, opened.recovery())
             logger.i { "opened the Ark wallet for ${next.id} on ${config.network}" }
             claimWaiting(opened)
+            maintainNow(opened, force = false)
         } catch (e: ArkError) {
             logger.w { "could not open the Ark wallet for ${next.id}: ${e.message}" }
             _state.value = ArkWalletState.Failed(e)
@@ -157,13 +200,32 @@ class IdentityArk(
         }
     }
 
+    private suspend fun maintainNow(open: ArkWallet, force: Boolean) {
+        val at = now()
+        val last = maintainedAt
+        if (!force && last != null && at - last < MAINTENANCE_INTERVAL) return
+        maintainedAt = at
+        try {
+            open.maintenance()
+            open.claimLightningReceives()
+        } catch (e: ArkError) {
+            logger.w { "maintaining the Ark wallet: ${e.message}" }
+        }
+    }
+
     private suspend fun closeCurrent() {
         val open = wallet ?: return
         wallet = null
+        maintainedAt = null
         try {
             withContext(NonCancellable) { open.close() }
         } catch (e: ArkError) {
             logger.w { "closing the Ark wallet: ${e.message}" }
         }
+    }
+
+    companion object {
+        /** How often the foreground maintenance runs at most. Bark's daemon syncs in between. */
+        val MAINTENANCE_INTERVAL = 1.hours
     }
 }

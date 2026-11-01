@@ -75,6 +75,9 @@ kotlin {
             // same version, named here.
             implementation(libs.bark.android.get().toString()) { exclude(group = "net.java.dev.jna", module = "jna") }
             implementation("net.java.dev.jna:jna:5.15.0@aar")
+            // The Ark wallet's background renewal. The library already ships WorkManager for its
+            // channels watcher; this names it for the app's own worker, at the library's version.
+            implementation("androidx.work:work-runtime-ktx:2.11.1")
         }
         commonMain.dependencies {
             implementation(libs.androidx.datastore)

@@ -59,6 +59,14 @@ class ArkSignetJvmTest {
 
             assertTrue(wallet.tipHeight() > 0)
             assertEquals(null, wallet.firstExpiryHeight())
+
+            // Delegated maintenance returns without waiting for a round (Phase 0, spike 4).
+            val started = System.currentTimeMillis()
+            wallet.maintenance()
+            assertTrue(System.currentTimeMillis() - started < 60_000, "maintenance waited for a round")
+            assertEquals(null, wallet.renewalFee())
+            wallet.renew()
+            wallet.claimLightningReceives()
         } finally {
             wallet.close()
         }

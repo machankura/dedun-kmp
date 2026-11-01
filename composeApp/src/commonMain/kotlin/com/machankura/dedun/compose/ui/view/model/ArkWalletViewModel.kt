@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.wallet.ark.ArkBalance
 import com.machankura.dedun.compose.wallet.ark.ArkError
 import com.machankura.dedun.compose.wallet.ark.ArkEvent
 import com.machankura.dedun.compose.wallet.ark.ArkExpiry
+import com.machankura.dedun.compose.wallet.ark.ArkFee
 import com.machankura.dedun.compose.wallet.ark.ArkMovement
 import com.machankura.dedun.compose.wallet.ark.ArkNetwork
 import com.machankura.dedun.compose.wallet.ark.ArkRecovery
@@ -110,6 +111,32 @@ class ArkWalletViewModel(
         viewModelScope.launch {
             try {
                 wallet.boardAll()
+                onStarted()
+                refresh()
+            } catch (e: ArkError) {
+                onFailure()
+            }
+        }
+    }
+
+    /** What renewing now would cost: [onFee] gets null when nothing is due. */
+    fun renewalFee(onFee: (ArkFee?) -> Unit, onFailure: () -> Unit) {
+        val wallet = open ?: return
+        viewModelScope.launch {
+            try {
+                onFee(wallet.renewalFee())
+            } catch (e: ArkError) {
+                onFailure()
+            }
+        }
+    }
+
+    /** *Renew now*: the coins due go to the next round in delegated mode -- D12. */
+    fun renew(onStarted: () -> Unit, onFailure: () -> Unit) {
+        val wallet = open ?: return
+        viewModelScope.launch {
+            try {
+                wallet.renew()
                 onStarted()
                 refresh()
             } catch (e: ArkError) {

@@ -9,6 +9,9 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -23,6 +26,7 @@ class IdentityArkJvmTest {
     private val log = mutableListOf<String>()
     private var failOpen: ArkError? = null
     private var lastOpened: FakeArkWallet? = null
+    private var clock = Instant.parse("2026-11-02T08:00:00Z")
 
     private val files = object : ArkFiles {
         val created = mutableSetOf<String>()
@@ -40,6 +44,7 @@ class IdentityArkJvmTest {
         platformSupported = platformSupported,
         network = ArkNetwork.Signet,
         rolloutEnabled = true,
+        now = { clock },
         opener = { config, phrase, datadir ->
             failOpen?.let { failOpen = null; throw it }
             assertEquals("dedun/test", config.userAgent)
@@ -160,12 +165,51 @@ class IdentityArkJvmTest {
     }
 
     @Test
-    fun `an open claims the Lightning payments that arrived while the wallet was closed`() = runTest {
+    fun `an open claims what arrived while the wallet was closed, and renews what is due`() = runTest {
         files.consents += alice
         val ark = identityArk()
         ark.activate(profile(alice))
         advanceUntilIdle()
-        assertEquals<List<String>?>(listOf("claimLightningReceives"), lastOpened?.calls)
+        assertEquals<List<String>?>(listOf("claimLightningReceives", "maintenance", "claimLightningReceives"), lastOpened?.calls)
+    }
+
+    @Test
+    fun `the foreground maintenance runs at most once an hour`() = runTest {
+        files.consents += alice
+        val ark = identityArk()
+        ark.activate(profile(alice))
+        advanceUntilIdle()
+        ark.maintain()
+        advanceUntilIdle()
+        assertEquals(1, lastOpened!!.calls.count { it == "maintenance" })
+
+        clock += 61.minutes
+        ark.maintain()
+        advanceUntilIdle()
+        assertEquals(2, lastOpened!!.calls.count { it == "maintenance" })
+    }
+
+    @Test
+    fun `the background renewal maintains the open wallet, and leaves another profile's alone`() = runTest {
+        files.consents += listOf(alice, bob)
+        val ark = identityArk()
+        ark.activate(profile(alice))
+        advanceUntilIdle()
+        assertTrue(ark.maintainInBackground(profile(alice)))
+        assertEquals(2, lastOpened!!.calls.count { it == "maintenance" })
+
+        assertFalse(ark.maintainInBackground(profile(bob)))
+        assertEquals(1, log.count { it.startsWith("open") })
+    }
+
+    @Test
+    fun `with no profile active the background renewal opens the wallet, renews it and closes it`() = runTest {
+        files.consents += alice
+        val ark = identityArk()
+        assertTrue(ark.maintainInBackground(profile(alice)))
+        assertEquals(listOf("open /ark/signet/${alice.nodeIdHash}", "close /ark/signet/${alice.nodeIdHash}"), log)
+        assertTrue("maintenance" in lastOpened!!.calls)
+        assertEquals(ArkWalletState.None, ark.state.value)
     }
 
     @Test

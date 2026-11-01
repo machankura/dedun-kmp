@@ -193,6 +193,17 @@ private class BarkArkWallet(
 
     override suspend fun maintenance() = bark { wallet.maintenanceDelegated() }
 
+    override suspend fun renewalFee(): ArkFee? {
+        val due = bark { wallet.getVtxosToRefresh() }.map { it.id }
+        if (due.isEmpty()) return null
+        return bark { wallet.estimateRefreshFee(due) }.let { ArkFee(it.grossAmountSats.sat(), it.feeSats.sat(), it.netAmountSats.sat()) }
+    }
+
+    override suspend fun renew() {
+        val due = bark { wallet.getVtxosToRefresh() }.map { it.id }
+        if (due.isNotEmpty()) bark { wallet.refreshVtxosDelegated(due) }
+    }
+
     override suspend fun firstExpiryHeight(): Long? = bark { wallet.getFirstExpiringVtxoBlockheight() }?.toLong()
 
     override suspend fun tipHeight(): Long = bark { onchain.tipHeight() }.toLong()
