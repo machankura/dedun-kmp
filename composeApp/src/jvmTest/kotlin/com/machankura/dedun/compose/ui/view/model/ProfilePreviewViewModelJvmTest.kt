@@ -246,7 +246,7 @@ class ProfilePreviewViewModelJvmTest {
     }
 
     @Test
-    fun `a person with no key package is not yet on Bennu after the timeout, and a late one still counts`() = runBlocking {
+    fun `a person with no key package is not yet on Dedun after the timeout, and a late one still counts`() = runBlocking {
         val recorder = Recorder(profile = MutableStateFlow(resolved(alice)))
         val rooms = Rooms()
         val viewModel = viewModel(recorder, rooms)

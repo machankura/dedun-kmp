@@ -60,7 +60,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Bennu",
+        title = "Dedun",
         // 1100dp is the expanded breakpoint -- 840 to 1199 -- which is the narrowest window
         // M3 recommends two panes in, and so the smallest opening size at which a desktop
         // user sees a desktop layout rather than a phone one stretched. It used to open at
@@ -165,7 +165,7 @@ private fun PassphraseGate(appDir: File, onUnlocked: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Unlock Bennu", style = MaterialTheme.typography.headlineSmall)
+            Text("Unlock Dedun", style = MaterialTheme.typography.headlineSmall)
             Text(
                 "This desktop build protects your seed with a passphrase rather than a " +
                     "hardware-backed keystore. Do not use it for real funds.",

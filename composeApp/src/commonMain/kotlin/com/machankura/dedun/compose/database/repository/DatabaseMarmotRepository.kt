@@ -327,6 +327,6 @@ class DatabaseMarmotRepository(
         private const val TAG = "DatabaseMarmotRepository"
 
         /** The `client` tag on every kind:30443 this app publishes. */
-        const val CLIENT_NAME = "bennu"
+        const val CLIENT_NAME = "dedun"
     }
 }

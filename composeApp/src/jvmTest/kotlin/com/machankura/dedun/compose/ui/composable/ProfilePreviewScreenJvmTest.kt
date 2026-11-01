@@ -130,11 +130,11 @@ class ProfilePreviewScreenJvmTest {
     }
 
     @Test
-    fun `a person not yet on Bennu cannot be written to, and the reason is under the button`() = render(
+    fun `a person not yet on Dedun cannot be written to, and the reason is under the button`() = render(
         ProfilePreviewUIState.Loaded(profile = alice, readiness = Readiness.NotYetOnDedun)
     ) {
         onNodeWithText("Start new chat").assertIsNotEnabled()
-        onNodeWithText("Alice hasn't set up messaging on Bennu yet. Try again later, or ask them to open Bennu.").assertIsDisplayed()
+        onNodeWithText("Alice hasn't set up messaging on Dedun yet. Try again later, or ask them to open Dedun.").assertIsDisplayed()
         onNodeWithText("Try again").assertIsDisplayed()
     }
 

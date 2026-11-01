@@ -31,6 +31,7 @@ differently, this table says so.
 | 1 | done, `b00b50f5`. 896 files are recorded as renames. Git shows 24 very small files as delete-and-add, because the package line is most of their content. Room found the 35 schemas at the new directory and wrote no 36th. 1650 tests, none failing |
 | 2 | done. The generated package is `dedun.composeapp.generated.resources` (confirmed from the build output, not inferred). 86 files and the two extractors were rewritten. The audit still reads 1090 and 191 |
 | 3 | done. The rename also covers each type's logger tag, since a tag is the class name. 1650 tests, none failing |
+| 4 | done. `ProfilePreviewScreenJvmTest` renders one of the changed strings and passes. The desktop window and launcher labels were not looked at on screen: no display was available to the build |
 
 ## What the name is attached to
 

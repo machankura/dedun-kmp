@@ -78,7 +78,7 @@ class AddMemberToChatRoomConfirmationViewModel(
             val lookupTimeout = launch {
                 delay(RELAY_LOOKUP_TIMEOUT)
                 addMemberToChatRoomConfirmationUIState =
-                    AddMemberToChatRoomConfirmationUIState.Error("Profile missing key package event. Try again later or tell ${profile.humanReadableNameOrPubkey()} to use Bennu.")
+                    AddMemberToChatRoomConfirmationUIState.Error("Profile missing key package event. Try again later or tell ${profile.humanReadableNameOrPubkey()} to use Dedun.")
             }
 
             // Observe rather than read once: the key package usually lands a moment after

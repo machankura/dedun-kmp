@@ -1,5 +1,5 @@
 <resources>a
-    <string name="app_name">Bennu</string>
+    <string name="app_name">Dedun</string>
 
     <string name="notification_channels_watcher_title">Channels watcher</string>
     <string name="notification_channels_watcher_desc">Shows up when you need to start Phoenix.</string>

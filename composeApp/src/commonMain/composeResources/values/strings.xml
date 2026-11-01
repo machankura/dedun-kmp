@@ -11,7 +11,7 @@
       actual 334 strings sat inside composables.
 
       The launcher label is a separate resource, in androidMain/res/values/strings.xml,
-      which is what AndroidManifest.xml points at. Both now say "Bennu".
+      which is what AndroidManifest.xml points at. Both now say "Dedun".
 
       Externalising the 334 is the rest of phase 4 in
       docs/material-design-conformance.md. They land here.
@@ -27,7 +27,7 @@
     <string name="it_ends_for_everyone_in_it_no_key_is_created">It ends for everyone in it. No key is created, and the ceremony can be started again.</string>
     <string name="abandoned_nothing_was_signed">Abandoned. Nothing was signed.</string>
     <string name="filter_all">All</string>
-    <string name="app_name">Bennu</string>
+    <string name="app_name">Dedun</string>
     <string name="add_to_group">Add to group</string>
     <string name="after_this_there_is_no_turning_back">After this there is no turning back.</string>
     <string name="all_broadcasts_are_queued_so_that_we_can">All broadcasts are queued so that we can manage data usage on metered connections.</string>
@@ -93,7 +93,7 @@
     <string name="how_many_members_will_it_take_to_sign">How many members will it take to sign?</string>
     <string name="i_have_saved_my_recovery_phrase_somewhere">I have saved my recovery phrase somewhere safe.</string>
     <string name="i_understand_that_if_i_lose_this_phone_and">I understand that if I lose this phone and my recovery phrase, I lose this profile and the funds in its wallet.</string>
-    <string name="if_you_are_new_to_torch_or_just_want_to">If you are new to Bennu or just want to create a fresh profile</string>
+    <string name="if_you_are_new_to_torch_or_just_want_to">If you are new to Dedun or just want to create a fresh profile</string>
     <string name="input_npub_or_nip05">Input npub... or nip05</string>
     <string name="introduce_yourself">Introduce yourself</string>
     <string name="invite">Invite</string>
@@ -129,7 +129,7 @@
     <string name="lose_this_phone_before_you_do_and_the">Lose this phone before you do, and the profile goes with it.</string>
     <string name="lock_prompt_coming_soon">Lock prompt coming soon.</string>
     <string name="malformed_note">Malformed note</string>
-    <string name="dedun">Bennu</string>
+    <string name="dedun">Dedun</string>
     <string name="members">Members</string>
     <string name="members_2">members</string>
     <string name="name">Name</string>
@@ -240,7 +240,7 @@
     <string name="the_ceremony_was_abandoned">The ceremony was abandoned.</string>
     <string name="the_group_can_hold_one_key_together_split_so">The group can hold one key together, split so that no single member holds it. Signing with it takes a quorum.</string>
     <string name="the_group_has_a_shared_key">The group has a shared key.</string>
-    <string name="the_recovery_phrase_sometimes_called_a_seed">The recovery phrase (sometimes called a seed) is a list of 12 English words. It is the only way back to this profile: the key that signs as you, and the wallet that holds your coins, are both derived from it.\n\nOnly you have this phrase. Keep it private — nobody from Bennu will ever ask you for it.\n\nDo not lose it. Write it down and keep it somewhere safe that is not this phone. If you lose both the phone and the phrase, this profile and its funds are gone for good.</string>
+    <string name="the_recovery_phrase_sometimes_called_a_seed">The recovery phrase (sometimes called a seed) is a list of 12 English words. It is the only way back to this profile: the key that signs as you, and the wallet that holds your coins, are both derived from it.\n\nOnly you have this phrase. Keep it private — nobody from Dedun will ever ask you for it.\n\nDo not lose it. Write it down and keep it somewhere safe that is not this phone. If you lose both the phone and the phrase, this profile and its funds are gone for good.</string>
     <string name="these_are_your_keys_keep_them_safe_so_they">These are your keys. Keep them safe so they can keep unlocking this profile and its coins, even when you lose or change your phone.</string>
     <string name="this_device_holds_no_phrase_for_the_profile">This device holds no phrase for the profile that is signed in.</string>
     <string name="this_decides_who_can_change_the_group_later">This decides who can change the group later. You can't switch afterwards.</string>
@@ -260,7 +260,7 @@
     <string name="this_device_holds_no_key_for_s_so_there">This device holds no key for %1$s, so there is nothing to lose. The profile stays on the relays, and you can sign in again any time.</string>
     <string name="could_not_sign_out_please_try_again">Could not sign out. Please try again.</string>
     <string name="this_will_give_you_write_access_to_the">This will give you write access to the profile.</string>
-    <string name="torch_will_be_broadcast_what_you_publish_to">Bennu broadcasts what you publish to a distributed set of relays, so it stays decentralised.</string>
+    <string name="torch_will_be_broadcast_what_you_publish_to">Dedun broadcasts what you publish to a distributed set of relays, so it stays decentralised.</string>
     <string name="transmit_note">Transmit note</string>
     <string name="trending_notes_functionality_coming_soon_in">Trending notes functionality coming soon. In the meantime search for what you are looking for.</string>
     <string name="try_again">Try again</string>
@@ -332,7 +332,7 @@
     <string name="shared_key_for">Shared key for %1$s</string>
     <string name="to_join_the_chat_room">to join the %1$s chat room.</string>
     <string name="unsupported_event_kind_2">Unsupported event kind: %1$s</string>
-    <string name="was_created_but_couldn_t_be_added_yet_invite">%1$s was created, but %2$s couldn't be added yet. Invite them again from the chat once they're on Bennu.</string>
+    <string name="was_created_but_couldn_t_be_added_yet_invite">%1$s was created, but %2$s couldn't be added yet. Invite them again from the chat once they're on Dedun.</string>
     <string name="was_created_but_its_shared_key_ceremony">%1$s was created, but its shared key ceremony couldn't be started. Open the chat and start it from the group's details — until then the group has no key of its own.</string>
     <string name="word_position">#%1$s</string>
     <string name="you_and_others">You and %1$s others</string>
@@ -401,7 +401,7 @@
     <string name="that_nostr_secret_key_is_not_valid">That nostr secret key is not valid.</string>
     <string name="that_recovery_phrase_is_not_valid_check">That recovery phrase is not valid. Check each word and the order.</string>
     <string name="the_key_could_not_be_saved_on_this_device">The key could not be saved on this device.</string>
-    <string name="the_words_or_the_key_never_leave_this_device">Whatever you paste stays on this device. Bennu checks it, shows you the profile it opens, and writes nothing until you confirm.</string>
+    <string name="the_words_or_the_key_never_leave_this_device">Whatever you paste stays on this device. Dedun checks it, shows you the profile it opens, and writes nothing until you confirm.</string>
     <string name="this_key_is_already_on_this_device">This key is already on this device.</string>
     <string name="twelve_words_nsec1_or_npub1">Twelve words, nsec1… or npub1…</string>
     <string name="use_a_different_key">Use a different key</string>
@@ -416,7 +416,7 @@
     <string name="copy_nsec">Copy nsec</string>
     <string name="could_not_forget_the_key_please_try_again">Could not forget the key. Please try again.</string>
     <string name="could_not_unlock_your_key_please_try">Could not unlock your key. Please try again.</string>
-    <string name="dedun_will_delete_the_nsec_for_s_from_this">Bennu will delete the nsec for %1$s from this device. Anything not yet published is lost. The profile stays on the relays, and the key can be signed in again.</string>
+    <string name="dedun_will_delete_the_nsec_for_s_from_this">Dedun will delete the nsec for %1$s from this device. Anything not yet published is lost. The profile stays on the relays, and the key can be signed in again.</string>
     <string name="display_nostr_secret_key">Display nostr secret key</string>
     <string name="forget">Forget</string>
     <string name="forget_this_key">Forget this key</string>
@@ -429,7 +429,7 @@
     <string name="nostr_secret_key">Nostr secret key</string>
     <string name="remove_the_key_from_this_device_the_profile">Remove the key from this device. The profile stays on the relays.</string>
     <string name="store_the_nsec_that_signs_as_this_profile">Store the nsec that signs as this profile. There is no phrase behind it: the key is the whole backup.</string>
-    <string name="the_nsec_is_the_key_that_signs_as_you_this">The nsec is the key that signs as you. This profile was signed in with it rather than made from a recovery phrase, so there is no phrase to write down and no wallet attached: the key is the whole of the backup.\n\nOnly you have it. Keep it private — nobody from Bennu will ever ask you for it.\n\nDo not lose it. Store it somewhere safe that is not this phone. If you lose both the phone and the key, this profile is gone for good.</string>
+    <string name="the_nsec_is_the_key_that_signs_as_you_this">The nsec is the key that signs as you. This profile was signed in with it rather than made from a recovery phrase, so there is no phrase to write down and no wallet attached: the key is the whole of the backup.\n\nOnly you have it. Keep it private — nobody from Dedun will ever ask you for it.\n\nDo not lose it. Store it somewhere safe that is not this phone. If you lose both the phone and the key, this profile is gone for good.</string>
     <string name="this_device_holds_no_key_for_the_profile">This device holds no nostr secret key for the profile that is open. If it was made from a recovery phrase, the phrase is its backup.</string>
     <string name="unlocking_your_key">Unlocking your key…</string>
     <string name="you_have_not_backed_up_your_nostr_secret_key">You have not backed up your nostr secret key</string>
@@ -461,7 +461,7 @@
     <string name="start_new_chat">Start new chat</string>
     <string name="you_already_have_a_chat_with_s">You already have a chat with %1$s.</string>
     <string name="checking_whether_s_can_receive_messages_here">Checking whether %1$s can receive messages here.</string>
-    <string name="s_hasn_t_set_up_messaging_on_dedun_yet">%1$s hasn't set up messaging on Bennu yet. Try again later, or ask them to open Bennu.</string>
+    <string name="s_hasn_t_set_up_messaging_on_dedun_yet">%1$s hasn't set up messaging on Dedun yet. Try again later, or ask them to open Dedun.</string>
     <!-- The group's on-chain wallet. -->
     <string name="group_wallet">Group onchain wallet</string>
     <!-- The group's on-chain wallet, named for its group: "Treasury onchain wallet". -->

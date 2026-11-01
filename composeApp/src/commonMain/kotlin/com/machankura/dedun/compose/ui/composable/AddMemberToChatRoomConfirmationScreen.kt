@@ -221,7 +221,7 @@ private fun ChatRoomDetailScreenPreview() {
                 chatRoomId = "publicKey",
                 relayHint = null,
                 initialChatRoomDetailUIState =
-//                    AddMemberToChatRoomConfirmationUIState.Error("Profile missing key package event.\n\nTry again later or tell Person to use Bennu."),
+//                    AddMemberToChatRoomConfirmationUIState.Error("Profile missing key package event.\n\nTry again later or tell Person to use Dedun."),
                     AddMemberToChatRoomConfirmationUIState.Loaded(
                     localChatRoom = LocalChatRoom(
                         chatRoom = ChatRoom(
