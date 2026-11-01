@@ -1156,6 +1156,10 @@
     <string name="ark_claim_exits">Claim to this address</string>
     <string name="ark_claim_started">Claim broadcast</string>
     <string name="ark_claim_failed">Couldn't claim</string>
+    <string name="ark_pay_from_my_wallet">Pay from my wallet</string>
+    <string name="ark_pay_s_sats_from_your_wallet_question">Pay %1$s sats from your wallet?</string>
+    <string name="ark_pay_with_a_fee_of_s_sats">With a fee of %1$s sats.</string>
+    <string name="ark_use_my_wallet_s_onchain_address">Use my wallet's onchain address</string>
     <string name="ark_movement_payment_details">Payment details</string>
     <string name="ark_movement_amount">Amount</string>
     <string name="ark_movement_fee">Fee</string>

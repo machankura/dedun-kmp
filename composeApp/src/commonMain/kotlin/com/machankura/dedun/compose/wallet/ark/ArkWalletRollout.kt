@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.wallet.ark
 
+import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Satoshi
 
 /** The networks an Ark wallet can be opened on. Mapped to Bark's own enum only inside the adapters. */
@@ -9,6 +10,16 @@ enum class ArkNetwork {
     Regtest;
 
     val isMainnet: Boolean get() = this == Mainnet
+
+    /**
+     * Whether this network is [chain]: a group wallet on another network cannot be paid
+     * from, or pay into, this one -- Phase 10.
+     */
+    fun matches(chain: Chain): Boolean = when (this) {
+        Mainnet -> chain == Chain.Mainnet
+        Signet -> chain == Chain.Signet
+        Regtest -> chain == Chain.Regtest
+    }
 
     /** The datadir's path segment: `<appFiles>/ark/<segment>/<walletId>` -- `docs/bark-wallet.md`, D2. */
     val segment: String get() = name.lowercase()

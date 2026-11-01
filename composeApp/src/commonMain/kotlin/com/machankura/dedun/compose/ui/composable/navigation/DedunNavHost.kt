@@ -844,7 +844,8 @@ fun DedunNavHost(
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()
-                    }
+                    },
+                    identityArk = identityArk,
                 )
             }
             composable<GroupLightningLiquidityRoute> { backStackEntry ->
@@ -1576,6 +1577,7 @@ fun DedunNavHost(
                     activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    identityArk = identityArk,
                     repository = databasePayoutDestinationRepository,
                     depositRepository = databaseDepositRepository,
                     onNavigateToRouteAndPopUpInclusive = { signingRoute ->

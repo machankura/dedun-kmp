@@ -77,6 +77,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
+import com.machankura.dedun.compose.wallet.ark.IdentityArk
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
@@ -102,6 +103,8 @@ fun GroupLightningReceiveScreen(
     depositRepository: DepositRepository = DepositRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
+    // The profile's own Ark wallet, to pay the invoice from: docs/bark-wallet.md, Phase 10.
+    identityArk: IdentityArk? = null,
 ) {
     val viewModel: GroupLightningReceiveViewModel = viewModel(
         factory = GroupLightningReceiveViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository, depositRepository)
@@ -242,6 +245,7 @@ fun GroupLightningReceiveScreen(
                     QRCodeView("lightning:${state.bolt11}")
                     Text(stringResource(Res.string.this_invoice_pays_the_group_s_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     SelectionContainer { Text(state.bolt11, style = MaterialTheme.typography.bodySmall) }
+                    ArkPayFromWalletButton(identityArk, state.bolt11, GroupLightningRollout.NETWORK)
                     TextButton(onClick = {
                         clipboardManager.setText(buildAnnotatedString { append(state.bolt11) })
                         notify(copied)
