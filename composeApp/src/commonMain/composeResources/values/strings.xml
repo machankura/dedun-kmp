@@ -901,4 +901,13 @@
     <string name="checking">Checking…</string>
     <string name="copy_the_lightning_address">Copy the Lightning address</string>
     <string name="copy_the_onchain_address">Copy the onchain address</string>
+    <string name="pay_over_lightning">Pay over Lightning</string>
+    <string name="pay_onchain">Pay onchain</string>
+    <string name="how_much_to_pay_s_question">How much to pay %1$s?</string>
+    <string name="get_an_invoice">Get an invoice</string>
+    <string name="their_address_takes_s_to_s_sats">Their address takes %1$s to %2$s sats.</string>
+    <string name="tor_is_on_and_this_device_can_t_reach_the_address_s_server">Tor is on, and this device can't reach the address's server through it.</string>
+    <string name="that_address_answered_with_an_invoice_for_something_else">That address answered with an invoice for something else.</string>
+    <string name="paid_before_ask_s_for_a_new_address">Paid before. Ask %1$s for a new address.</string>
+    <string name="s_payout_address">%1$s's payout address</string>
 </resources>

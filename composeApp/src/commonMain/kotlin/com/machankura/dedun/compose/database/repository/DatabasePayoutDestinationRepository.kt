@@ -18,6 +18,7 @@ import com.machankura.dedun.compose.wallet.UnusedAddressCheck
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Chain
+import fr.acinq.lightning.MilliSatoshi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -58,11 +59,14 @@ class DatabasePayoutDestinationRepository(
         emptyMap()
     }
 
-    override suspend fun resolve(address: LightningAddress): LightningAddressResolver.Resolution {
-        // No identity is no profile to protect, and no profile to set anything for either.
-        val tor = activeIdentity.value?.userPrefs?.getIsTorEnabled?.first() ?: true
-        return resolver.resolve(address, torEnabled = tor)
-    }
+    /** No identity is no profile to protect, and no profile to set or pay anything for either. */
+    private suspend fun torEnabled(): Boolean = activeIdentity.value?.userPrefs?.getIsTorEnabled?.first() ?: true
+
+    override suspend fun resolve(address: LightningAddress): LightningAddressResolver.Resolution =
+        resolver.resolve(address, torEnabled = torEnabled())
+
+    override suspend fun invoiceFor(destination: GroupPayoutDestination, amount: MilliSatoshi, lightningChain: Chain): LightningAddressResolver.PayoutInvoice =
+        resolver.invoiceFor(destination.lightningAddress, amount, lightningChain, torEnabled = torEnabled())
 
     override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector): UnusedAddressCheck.Usage {
         val wallets = wallets() ?: return UnusedAddressCheck.Usage.Unknown

@@ -31,6 +31,8 @@ import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.wallet.PayoutAddress
 import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import com.machankura.dedun.compose.network.LightningAddressResolver
+import fr.acinq.lightning.MilliSatoshi
 import kotlinx.coroutines.withContext
 import com.vitorpamplona.quartz.nip01Core.core.Event
 
@@ -150,6 +152,18 @@ class ChatRoomDetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val usage = payoutDestinationRepository.usageOf(chatRoomId, destination.chain, script)
             withContext(Dispatchers.Main) { onResult(usage) }
+        }
+    }
+
+    /**
+     * An invoice of [amountSat] from [destination]'s Lightning address, for the group's Lightning
+     * wallet: what *Pay over Lightning* on a member's sheet fills the send form with.
+     * `docs/group-payout-destination.md`, Phase 7.
+     */
+    fun invoiceFor(destination: GroupPayoutDestination, amountSat: Long, onResult: (LightningAddressResolver.PayoutInvoice) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountSat * 1000), GroupLightningRollout.NETWORK)
+            withContext(Dispatchers.Main) { onResult(invoice) }
         }
     }
 

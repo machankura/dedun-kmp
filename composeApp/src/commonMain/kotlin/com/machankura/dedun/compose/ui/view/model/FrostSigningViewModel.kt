@@ -28,6 +28,9 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import com.machankura.dedun.compose.managers.GroupPayoutDestinations
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.ui.view.state.FrostSigningUIState
 
 class FrostSigningViewModel(
@@ -37,6 +40,8 @@ class FrostSigningViewModel(
     initialFrostSigningUIState: FrostSigningUIState,
     val chatRepository: ChatRepository,
     val frostSigningRepository: FrostSigningRepository,
+    /** Where the group pays its members, for naming a spend's outputs. The no-op names none. */
+    val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
 ): ViewModel() {
 
     var frostSigningUIState: FrostSigningUIState by mutableStateOf(initialFrostSigningUIState)
@@ -90,6 +95,7 @@ class FrostSigningViewModel(
                     // change under a session that is still being collected.
                     if (session?.subject == FrostSigningSubject.TRANSACTION && checkedSpend == null) {
                         checkedSpend = frostSigningRepository.checkedSpend(session.id)
+                        checkedSpend?.let { payees = payeesOf(it, localChatRoom) }
                     }
                     if (session?.subject == FrostSigningSubject.SWEEP && checkedSweep == null) {
                         checkedSweep = frostSigningRepository.checkedSweep(session.id)
@@ -115,12 +121,31 @@ class FrostSigningViewModel(
                         silent = owed,
                         spend = checkedSpend,
                         sweep = checkedSweep,
+                        payees = payees,
                     )
                 }
         }
     }
 
     private var checkedSpend: GroupSpend.Checked? = null
+    private var payees: Map<String, String> = emptyMap()
+
+    /**
+     * Which of [spend]'s payments go to a member's payout address, by script: each current
+     * member's own signed destination, matched byte for byte against the output -- so the name
+     * the screen puts on it is this device's finding, not the proposer's claim.
+     */
+    private suspend fun payeesOf(spend: GroupSpend.Checked, localChatRoom: LocalChatRoom): Map<String, String> {
+        val destinations = payoutDestinationRepository.destinationsIn(chatRoomId, spend.account.chain)
+        return GroupPayoutDestinations.payeesOf(
+            payments = spend.outputs.filter { !it.isChange }.map { it.txOut.publicKeyScript },
+            destinations = destinations.values,
+        ) { member ->
+            localChatRoom.localParticipants
+                .firstOrNull { it.participant.participantPublicKey.equals(member, ignoreCase = true) }
+                ?.profile?.humanReadableNameOrPubkey() ?: member.take(8)
+        }
+    }
     private var checkedSweep: GroupSweep.Checked? = null
 
     /** One emission of everything the screen is drawn from -- the fourth flow outgrew `Triple`. */
@@ -215,6 +240,7 @@ class FrostSigningViewModel(
             initialFrostSigningUIState: FrostSigningUIState = FrostSigningUIState.Loading,
             chatRepository: ChatRepository,
             frostSigningRepository: FrostSigningRepository,
+            payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FrostSigningViewModel(
@@ -223,7 +249,8 @@ class FrostSigningViewModel(
                     activeUserPublicKey = activeUserPublicKey,
                     initialFrostSigningUIState = initialFrostSigningUIState,
                     chatRepository = chatRepository,
-                    frostSigningRepository = frostSigningRepository
+                    frostSigningRepository = frostSigningRepository,
+                    payoutDestinationRepository = payoutDestinationRepository,
                 )
             }
         }

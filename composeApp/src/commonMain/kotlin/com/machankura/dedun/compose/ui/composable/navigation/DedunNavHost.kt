@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import fr.acinq.phoenixd.conf.LSP
 import fr.acinq.phoenix.db.createPaymentsDbDriver
 import fr.acinq.phoenix.db.createSqlitePaymentsDb
@@ -790,6 +791,10 @@ fun DedunNavHost(
                     chatRoomId = route.chatRoomId,
                     chatRepository = databaseChatRepository,
                     lightningRepository = databaseGroupLightningRepository,
+                    initialInvoice = route.invoice,
+                    payout = if (route.payoutMember != null && route.payoutDestination != null) {
+                        GroupLightningAuthorisationEvent.Payout(route.payoutMember, route.payoutDestination)
+                    } else null,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },
@@ -1459,6 +1464,7 @@ fun DedunNavHost(
                     wallets = wallets,
                     guardedChatRoomId = route.guardedChatRoomId,
                     fundChatRoomId = route.fundChatRoomId,
+                    initialAddress = route.address,
                     onNavigateToRouteAndPopUpInclusive = { signingRoute ->
                         // Replace the form so back returns to the wallet rather
                         // than to a spend that has already been proposed.
@@ -1480,6 +1486,7 @@ fun DedunNavHost(
                     sessionId = route.sessionId,
                     chatRepository = databaseChatRepository,
                     frostSigningRepository = databaseFrostSigningRepository,
+                    payoutDestinationRepository = databasePayoutDestinationRepository,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

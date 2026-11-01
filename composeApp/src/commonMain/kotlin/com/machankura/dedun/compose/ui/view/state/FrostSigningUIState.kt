@@ -68,6 +68,12 @@ sealed interface FrostSigningUIState {
         val spend: GroupSpend.Checked? = null,
         /** The sweep a sweep session signs, as this device checked it; null for anything else. */
         val sweep: GroupSweep.Checked? = null,
+        /**
+         * The members whose payout address one of [spend]'s outputs pays, by the output's script
+         * as hex: read off the members' own signed destinations on this device, so the name is
+         * checked rather than the proposer's word. `docs/group-payout-destination.md`, Phase 7.
+         */
+        val payees: Map<String, String> = emptyMap(),
     ): FrostSigningUIState {
         /**
          * The members the session can be answered by, as rows to draw.

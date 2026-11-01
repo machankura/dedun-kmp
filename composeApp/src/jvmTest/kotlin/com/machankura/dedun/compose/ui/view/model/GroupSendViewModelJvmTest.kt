@@ -369,4 +369,14 @@ class GroupSendViewModelJvmTest {
         assertEquals(GroupSendUIState.Unavailable, unknown.groupSendUIState)
         assertEquals(1, asked)
     }
+
+    @Test
+    fun `a member's payout address starts the form`() {
+        // docs/group-payout-destination.md, Phase 7: Pay onchain on a member's sheet.
+        val address = "bcrt1p" + "q".repeat(58)
+        val viewModel = GroupSendViewModel("a".repeat(64), chatRoomId, Chain.Regtest, GroupSendUIState.Loading,
+            ChatRepository.NO_OP_CHAT_REPOSITORY, RecordingSigning(), wallets = wallets, initialAddress = address)
+        assertEquals(address, viewModel.addressField.text.toString())
+        assertEquals("", viewModel(GroupSendUIState.Loading).addressField.text.toString())
+    }
 }

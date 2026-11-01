@@ -8,6 +8,8 @@ import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.nostr.wallet.PayoutStatement
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.wallet.PayoutAddress
+import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Chain
 import kotlin.time.Clock
 
@@ -130,5 +132,23 @@ object GroupPayoutDestinations {
         val toSend = newestPerChain.filterIsInstance<GroupPayoutDestination>()
         toSend.forEach { publish(database, chatRoomId, it.event, resent = true) }
         return toSend.size
+    }
+
+    /**
+     * Which of [payments] -- a spend's outputs that are not change -- pay a member's onchain payout
+     * address among [destinations], by script as hex, named by [nameOf]. A byte-for-byte match
+     * against the member's own signed statement, so a co-signer's device names the payee itself
+     * rather than taking the proposer's word for it (Phase 7).
+     */
+    fun payeesOf(
+        payments: List<ByteVector>,
+        destinations: Collection<GroupPayoutDestination>,
+        nameOf: (HexKey) -> String,
+    ): Map<String, String> {
+        val byScript = destinations.mapNotNull { destination ->
+            val script = destination.onchainAddress?.let { PayoutAddress.parseOrNull(destination.chain, it) }?.script ?: return@mapNotNull null
+            script.toHex() to destination.member
+        }.toMap()
+        return payments.mapNotNull { script -> byScript[script.toHex()]?.let { script.toHex() to nameOf(it) } }.toMap()
     }
 }

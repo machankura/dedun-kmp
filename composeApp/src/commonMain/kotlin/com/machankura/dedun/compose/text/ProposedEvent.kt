@@ -137,7 +137,13 @@ object ProposedEvent {
             Summary(
                 label = "Pay ${Satoshi(pay.amountMsat / 1000).grouped()} sats",
                 detail = buildString {
-                    append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeMsat / 1000).grouped()} sats")
+                    // A member's payout destination, on the proposer's word: the Lightning address's
+                    // server signs nothing, so the node key stays beside the name.
+                    // docs/group-payout-destination.md, Phase 7.
+                    pay.payout?.let { payout ->
+                        append("To @${nameOf(payout.member) ?: payout.member.take(8)}'s Lightning address, as the proposer resolved it: ")
+                    }
+                    append("${if (pay.payout != null) "node" else "To"} ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeMsat / 1000).grouped()} sats")
                     invoice?.description?.takeIf { it.isNotBlank() }?.let { append(", for \"$it\"") }
                 },
             )
