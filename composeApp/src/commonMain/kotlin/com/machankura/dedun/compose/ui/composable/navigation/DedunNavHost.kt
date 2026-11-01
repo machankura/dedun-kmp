@@ -190,6 +190,8 @@ import com.machankura.dedun.compose.ui.composable.NewMemberWalletScreen
 import com.machankura.dedun.compose.database.repository.DatabaseMemberWalletRepository
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallets
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupSwapInRoute
+import com.machankura.dedun.compose.ui.composable.GroupSwapInScreen
 import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import fr.acinq.phoenix.managers.NodeParamsManager
@@ -815,9 +817,25 @@ fun DedunNavHost(
                     lightningRepository = databaseGroupLightningRepository,
                     depositRepository = databaseDepositRepository,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onDepositOnchain = groupSwapInWallets?.let {
+                        { navController.navigate(GroupSwapInRoute(activeUserPublicKey = route.activeUserPublicKey, chatRoomId = route.chatRoomId)) }
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            composable<GroupSwapInRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupSwapInRoute>()
+                GroupSwapInScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chatRepository = databaseChatRepository,
+                    lightningRepository = databaseGroupLightningRepository,
+                    swapIns = groupSwapInWallets?.let { wallets -> { chatRoomId, wallet -> wallets.walletFor(chatRoomId, wallet) } },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
                 )
             }
             composable<GroupLightningLiquidityRoute> { backStackEntry ->
