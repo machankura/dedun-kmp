@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +17,10 @@ import com.machankura.dedun.compose.ui.view.state.SwapInWalletUIState
 import com.machankura.dedun.compose.text.SatsInput
 import com.machankura.dedun.compose.text.parseSats
 import com.machankura.dedun.compose.wallet.NodeFeeLimit
+import com.machankura.dedun.compose.wallet.NodeRefunder
+import com.machankura.dedun.compose.wallet.SwapInRefund
+import com.machankura.dedun.compose.wallet.SwapInRefunder
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
 import com.machankura.dedun.compose.wallet.PeerSwapInSource
 import com.machankura.dedun.compose.wallet.SwapInFeeLimit
 import com.machankura.dedun.compose.wallet.SwapInFeeLimits
@@ -27,6 +32,7 @@ import com.machankura.dedun.compose.wallet.SwapInSource
 import com.machankura.dedun.compose.wallet.SwapInWaiting
 import com.machankura.dedun.compose.wallet.SwapInWalletView
 import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.TxId
 import fr.acinq.lightning.payment.LiquidityPolicy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -46,6 +52,8 @@ class SwapInWalletViewModel(
     private val source: SwapInSource?,
     /** Null where nothing can change the node's fee limit: a profile with no node, and the tests that read only. */
     private val feeLimit: SwapInFeeLimit? = null,
+    /** Null where nothing can be refunded from: as for [feeLimit]. */
+    private val refunder: SwapInRefunder? = null,
 ) : ViewModel() {
     private val log = Logger.withTag("SwapInWalletViewModel")
 
@@ -147,6 +155,98 @@ class SwapInWalletViewModel(
         }
     }
 
+    /** The node's last snapshot, which a refund is built from. */
+    private var latest: SwapInSnapshot? = null
+
+    /** Where the refund sheet is, or null while it is closed (Phase 6). */
+    sealed interface RefundStep {
+        data object Entering : RefundStep
+        data object Checking : RefundStep
+        data class Problem(val problem: RefundProblem) : RefundStep
+        data class Review(val address: String, val preview: SwapInRefund.Preview) : RefundStep
+        data object Sending : RefundStep
+    }
+
+    enum class RefundProblem {
+        /** Not a bitcoin address on this network. */
+        UNREADABLE,
+        /** One of this wallet's own deposit addresses. */
+        OWN_DEPOSIT,
+        /** Paid before: a refund to it ties the coins to whatever paid it. */
+        USED,
+        /** Electrum did not answer, so whether it was used is not known. */
+        UNCHECKED,
+        /** No coin is past the refund delay, or the fee would take all of them. */
+        NOTHING_TO_REFUND,
+        /** The broadcast failed. */
+        NOT_SENT,
+    }
+
+    var refund: RefundStep? by mutableStateOf(null)
+        private set
+
+    val canRefund: Boolean get() = refunder != null
+
+    val refundAddressField = TextFieldState()
+
+    fun startRefund() {
+        refundAddressField.clearText()
+        refund = RefundStep.Entering
+    }
+
+    fun closeRefund() {
+        if (refund != RefundStep.Sending) refund = null
+    }
+
+    /** Back from a review or a problem to the address, to change it. */
+    fun editRefund() {
+        refund = RefundStep.Entering
+    }
+
+    /** Checks the typed address and builds the refund, signed but not sent, for the user to confirm. */
+    fun reviewRefund() {
+        val refunder = refunder ?: return
+        val snapshot = latest ?: return
+        val tip = snapshot.tip ?: return
+        refund = RefundStep.Checking
+        viewModelScope.launch {
+            refund = runCatching {
+                when (val destination = SwapInRefund.destination(refunder.chain, refundAddressField.text.toString(), snapshot.state.addresses.keys)) {
+                    SwapInRefund.Destination.Unreadable -> RefundStep.Problem(RefundProblem.UNREADABLE)
+                    SwapInRefund.Destination.OwnDeposit -> RefundStep.Problem(RefundProblem.OWN_DEPOSIT)
+                    is SwapInRefund.Destination.Valid -> when (refunder.usage(destination.script)) {
+                        UnusedAddressCheck.Usage.Used, UnusedAddressCheck.Usage.TheGroups -> RefundStep.Problem(RefundProblem.USED)
+                        UnusedAddressCheck.Usage.Unknown -> RefundStep.Problem(RefundProblem.UNCHECKED)
+                        UnusedAddressCheck.Usage.Unused -> SwapInRefund.preview(snapshot.state, tip, snapshot.params, refunder.keys(), destination.script, refunder.feerate())
+                            ?.let { RefundStep.Review(destination.address, it) }
+                            ?: RefundStep.Problem(RefundProblem.NOTHING_TO_REFUND)
+                    }
+                }
+            }.getOrElse {
+                log.e("could not build the refund", it)
+                RefundStep.Problem(RefundProblem.NOTHING_TO_REFUND)
+            }
+        }
+    }
+
+    /** Broadcasts the refund under review. */
+    fun sendRefund(onSent: (TxId) -> Unit) {
+        val refunder = refunder ?: return
+        val review = refund as? RefundStep.Review ?: return
+        refund = RefundStep.Sending
+        viewModelScope.launch {
+            runCatching { refunder.broadcast(review.preview.tx) }
+                .onSuccess { txId ->
+                    refund = null
+                    onSent(txId)
+                }
+                .onFailure {
+                    log.e("could not broadcast the refund", it)
+                    refund = RefundStep.Problem(RefundProblem.NOT_SENT)
+                }
+        }
+    }
+
     /** Starts reading the node, or reads it again after an error. Does nothing while already reading. */
     fun initiate() {
         val source = source ?: return
@@ -164,7 +264,10 @@ class SwapInWalletViewModel(
                     log.e("could not read the swap-in wallet", e)
                     uiState = SwapInWalletUIState.Error
                 }
-                .collect { snapshot -> uiState = stateOf(snapshot) }
+                .collect { snapshot ->
+                    latest = snapshot
+                    uiState = stateOf(snapshot)
+                }
         }
     }
 
@@ -180,6 +283,7 @@ class SwapInWalletViewModel(
                 used = addresses.filter { it.status == SwapInAddress.Status.USED },
                 coins = coins,
                 minConfirmations = snapshot.params.minConfirmations,
+                refundDelay = snapshot.params.refundDelay,
                 firstDeposit = SwapInWalletView.firstDeposit(snapshot.hasChannel, snapshot.openingFee, snapshot.policy),
                 waiting = SwapInWaiting.of(coins, snapshot.connected, snapshot.refusal),
             )
@@ -191,6 +295,7 @@ class SwapInWalletViewModel(
                 SwapInWalletViewModel(
                     source = business?.let { PeerSwapInSource(it.peerManager, it.notificationsManager) },
                     feeLimit = business?.let { NodeFeeLimit.of(it.peerManager, identity.userPrefs) },
+                    refunder = business?.let(::NodeRefunder),
                 )
             }
         }

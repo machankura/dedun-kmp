@@ -189,6 +189,39 @@ class SwapInWalletScreenJvmTest {
     }
 
     @Test
+    fun `coins close to the end of the swap window are flagged above everything`() = runDesktopComposeUiTest(400, 1400) {
+        val expiring = listOf(coin(5_000, SwapInCoin.Status.ExpiringSoon(144 * 3), 17_000), coin(6_000, SwapInCoin.Status.ExpiringSoon(144 * 10), 15_000))
+        setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = expiring), onRetry = {}) } } }
+        onNodeWithText("11,000 sats must move into Lightning within about 3 days. After that they can only come back as a refund, about 6 months after they were sent.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `refundable coins are offered a refund, all of them at once`() = runDesktopComposeUiTest(400, 1400) {
+        var refunds = 0
+        val coins = listOf(coin(7_000, SwapInCoin.Status.Refundable, 26_000), coin(8_000, SwapInCoin.Status.Refundable, 27_000), coin(1_000, SwapInCoin.Status.Ready, 10))
+        setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = coins), onRetry = {}, onRefund = { refunds++ }) } } }
+        onNodeWithText("Refund 15,000 sats").performClick()
+        assertEquals(1, refunds)
+    }
+
+    @Test
+    fun `without a refunder there is no refund button`() = runDesktopComposeUiTest(400, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = listOf(coin(7_000, SwapInCoin.Status.Refundable, 26_000))), onRetry = {}) } } }
+        onNodeWithText("Refund 7,000 sats").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the refund sheet asks for an address, and says what is wrong with one`() = runDesktopComposeUiTest(400, 1400) {
+        var step by mutableStateOf<SwapInWalletViewModel.RefundStep>(SwapInWalletViewModel.RefundStep.Entering)
+        setContent { DedunTheme { RefundSheet(step, TextFieldState("tb1p"), onReview = {}, onEdit = {}, onSend = {}, onDismiss = {}) } }
+        onNodeWithText("Address to refund to").assertIsDisplayed()
+        onNodeWithText("Review refund").assertIsDisplayed()
+
+        step = SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.OWN_DEPOSIT)
+        onNodeWithText("That is one of your deposit addresses, and the coins would be locked again. Use a wallet of your own.").assertIsDisplayed()
+    }
+
+    @Test
     fun `a tap on a coin shows its transaction`() = runDesktopComposeUiTest(400, 1400) {
         val ready = coin(3_000, SwapInCoin.Status.Ready, 10)
         setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = listOf(ready)), onRetry = {}) } } }

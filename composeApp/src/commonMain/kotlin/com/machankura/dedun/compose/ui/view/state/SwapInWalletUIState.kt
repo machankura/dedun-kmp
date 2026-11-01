@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import fr.acinq.lightning.DefaultSwapInParams
 import com.machankura.dedun.compose.wallet.FirstDeposit
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
@@ -24,6 +25,8 @@ sealed interface SwapInWalletUIState {
         val coins: List<SwapInCoin>,
         /** How many confirmations a deposit waits for before it swaps in. */
         val minConfirmations: Int,
+        /** How many confirmations until a coin too old to swap in can be refunded. */
+        val refundDelay: Int = DefaultSwapInParams.RefundDelay,
         /** What a first deposit costs, while the node has no channel; see [FirstDeposit]. */
         val firstDeposit: FirstDeposit? = null,
         /** Why the ready coins have not moved, or null when none is ready; see [SwapInWaiting]. */

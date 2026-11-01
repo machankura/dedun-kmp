@@ -73,6 +73,25 @@ import com.machankura.dedun.compose.wallet.SwapInRefusal
 import com.machankura.dedun.compose.wallet.SwapInWaiting
 import com.machankura.dedun.compose.wallet.bip21Uri
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.this_address_has_been_used_before
+import dedun.composeapp.generated.resources.the_refund_wasn_t_sent
+import dedun.composeapp.generated.resources.nothing_can_be_refunded
+import dedun.composeapp.generated.resources.couldn_t_check_that_address
+import dedun.composeapp.generated.resources.that_is_one_of_your_deposit_addresses
+import dedun.composeapp.generated.resources.that_isn_t_a_bitcoin_address_on_this_network
+import dedun.composeapp.generated.resources.refund_sent
+import dedun.composeapp.generated.resources.change_address
+import dedun.composeapp.generated.resources.sending_the_refund
+import dedun.composeapp.generated.resources.send_refund
+import dedun.composeapp.generated.resources.network_fee_s_sats
+import dedun.composeapp.generated.resources.refund_s_sats_to
+import dedun.composeapp.generated.resources.checking_the_address
+import dedun.composeapp.generated.resources.review_refund
+import dedun.composeapp.generated.resources.address_to_refund_to
+import dedun.composeapp.generated.resources.refund_explainer
+import dedun.composeapp.generated.resources.refund
+import dedun.composeapp.generated.resources.refund_s_sats
+import dedun.composeapp.generated.resources.s_sats_must_move_into_lightning_within_s
 import dedun.composeapp.generated.resources.that_isn_t_an_amount_in_sats
 import dedun.composeapp.generated.resources.that_is_more_sats_than_there_will_ever_be
 import dedun.composeapp.generated.resources.sats_are_whole_numbers
@@ -128,6 +147,7 @@ import dedun.composeapp.generated.resources.transaction_copied
 import dedun.composeapp.generated.resources.used_addresses
 import dedun.composeapp.generated.resources.waiting_for_its_first_confirmation
 import fr.acinq.bitcoin.Satoshi
+import fr.acinq.lightning.utils.sum
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
@@ -175,7 +195,20 @@ fun SwapInWalletScreen(
             uiState = swapInViewModel.uiState,
             onRetry = swapInViewModel::initiate,
             onReview = if (swapInViewModel.canReviewFees) swapInViewModel::review else null,
+            onRefund = if (swapInViewModel.canRefund) swapInViewModel::startRefund else null,
             modifier = Modifier.padding(padding),
+        )
+    }
+
+    swapInViewModel.refund?.let { step ->
+        val sent = stringResource(Res.string.refund_sent)
+        RefundSheet(
+            step = step,
+            addressField = swapInViewModel.refundAddressField,
+            onReview = swapInViewModel::reviewRefund,
+            onEdit = swapInViewModel::editRefund,
+            onSend = { swapInViewModel.sendRefund { notify(sent) } },
+            onDismiss = swapInViewModel::closeRefund,
         )
     }
 
@@ -201,6 +234,8 @@ fun SwapInWalletContent(
     onRetry: () -> Unit,
     /** Opens the fee-limit sheet for a refusal over the fee; null where nothing can change the limit. */
     onReview: ((SwapInRefusal) -> Unit)? = null,
+    /** Opens the refund sheet; null where nothing can sign a refund. */
+    onRefund: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val notify = rememberNotifier(rememberCoroutineScope())
@@ -219,7 +254,7 @@ fun SwapInWalletContent(
                 ErrorState(modifier = modifier, onRetry = onRetry)
 
             is SwapInWalletUIState.Loaded -> {
-                SwapInWalletList(state = state, notify = notify, onShow = { shown = it }, onReview = onReview, modifier = modifier)
+                SwapInWalletList(state = state, notify = notify, onShow = { shown = it }, onReview = onReview, onRefund = onRefund, modifier = modifier)
                 // Read from the latest state, so a sheet left open follows its coin as it confirms.
                 shown?.let { coin -> state.coins.firstOrNull { it.outPoint == coin.outPoint } }?.let { coin ->
                     CoinSheet(coin = coin, notify = notify, onDismiss = { shown = null })
@@ -235,6 +270,7 @@ private fun SwapInWalletList(
     notify: (String) -> Unit,
     onShow: (SwapInCoin) -> Unit,
     onReview: ((SwapInRefusal) -> Unit)?,
+    onRefund: (() -> Unit)?,
     modifier: Modifier,
 ) {
     val clipboardManager = LocalClipboardManager.current
@@ -248,6 +284,24 @@ private fun SwapInWalletList(
         modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
     ) {
+        // Ahead of everything: the one thing on this screen with a deadline (Phase 6).
+        val expiring = state.coins.filter { it.status is SwapInCoin.Status.ExpiringSoon }
+        if (expiring.isNotEmpty()) {
+            item(key = "expiring") {
+                val soonest = expiring.minOf { (it.status as SwapInCoin.Status.ExpiringSoon).blocksLeft }
+                Text(
+                    text = stringResource(
+                        Res.string.s_sats_must_move_into_lightning_within_s,
+                        expiring.map { it.amount }.sum().grouped(),
+                        approximateDuration(soonest.toLong()),
+                        approximateDuration(state.refundDelay.toLong()),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+
         item(key = "receive") {
             ReceiveSection(state = state, onCopy = { copy(state.current.address) })
         }
@@ -257,6 +311,14 @@ private fun SwapInWalletList(
         }
         state.waiting?.let { waiting ->
             item(key = "waiting") { WaitingLine(waiting, onReview) }
+        }
+        val refundable = state.coins.filter { it.status == SwapInCoin.Status.Refundable }
+        if (onRefund != null && refundable.isNotEmpty()) {
+            item(key = "refund") {
+                OutlinedButton(onClick = onRefund) {
+                    Text(stringResource(Res.string.refund_s_sats, refundable.map { it.amount }.sum().grouped()))
+                }
+            }
         }
         if (state.coins.isEmpty()) {
             item(key = "no-deposits") { EmptyState(message = stringResource(Res.string.nothing_has_been_sent_to_your_deposit_addresses_yet)) }
@@ -412,6 +474,79 @@ fun FeeLimitSheet(
             }
         }
     }
+}
+
+/**
+ * Every refundable coin, sent to an address the user types (D7): checked to be a bitcoin address on
+ * this network, not one of this wallet's own, and never paid before; then shown with its fee, signed,
+ * before anything is broadcast.
+ */
+@Composable
+fun RefundSheet(
+    step: SwapInWalletViewModel.RefundStep,
+    addressField: TextFieldState,
+    onReview: () -> Unit,
+    onEdit: () -> Unit,
+    onSend: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismiss = onDismiss, skipPartiallyExpanded = true) {
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+            Text(text = stringResource(Res.string.refund), style = MaterialTheme.typography.titleMedium)
+            when (step) {
+                is SwapInWalletViewModel.RefundStep.Review -> {
+                    Text(stringResource(Res.string.refund_s_sats_to, step.preview.received.grouped()), style = MaterialTheme.typography.bodyMedium)
+                    SelectionContainer {
+                        Text(text = step.address, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                    }
+                    Text(
+                        text = stringResource(Res.string.network_fee_s_sats, step.preview.fee.grouped()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = onSend) { Text(stringResource(Res.string.send_refund)) }
+                    TextButton(onClick = onEdit) { Text(stringResource(Res.string.change_address)) }
+                }
+
+                SwapInWalletViewModel.RefundStep.Sending ->
+                    LoadingDataIndicator(fillScreen = false, text = stringResource(Res.string.sending_the_refund))
+
+                SwapInWalletViewModel.RefundStep.Checking ->
+                    LoadingDataIndicator(fillScreen = false, text = stringResource(Res.string.checking_the_address))
+
+                SwapInWalletViewModel.RefundStep.Entering, is SwapInWalletViewModel.RefundStep.Problem -> {
+                    Text(
+                        text = stringResource(Res.string.refund_explainer),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val problem = (step as? SwapInWalletViewModel.RefundStep.Problem)?.problem
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        state = addressField,
+                        lineLimits = TextFieldLineLimits.SingleLine,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        label = { Text(stringResource(Res.string.address_to_refund_to)) },
+                        isError = problem != null,
+                        supportingText = problem?.let { p -> { Text(p.sentence()) } },
+                    )
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = onReview, enabled = addressField.text.isNotBlank()) {
+                        Text(stringResource(Res.string.review_refund))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwapInWalletViewModel.RefundProblem.sentence(): String = when (this) {
+    SwapInWalletViewModel.RefundProblem.UNREADABLE -> stringResource(Res.string.that_isn_t_a_bitcoin_address_on_this_network)
+    SwapInWalletViewModel.RefundProblem.OWN_DEPOSIT -> stringResource(Res.string.that_is_one_of_your_deposit_addresses)
+    SwapInWalletViewModel.RefundProblem.USED -> stringResource(Res.string.this_address_has_been_used_before)
+    SwapInWalletViewModel.RefundProblem.UNCHECKED -> stringResource(Res.string.couldn_t_check_that_address)
+    SwapInWalletViewModel.RefundProblem.NOTHING_TO_REFUND -> stringResource(Res.string.nothing_can_be_refunded)
+    SwapInWalletViewModel.RefundProblem.NOT_SENT -> stringResource(Res.string.the_refund_wasn_t_sent)
 }
 
 @Composable

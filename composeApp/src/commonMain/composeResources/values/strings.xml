@@ -1038,4 +1038,22 @@
     <string name="fee_limit_saved">Fee limit saved</string>
     <string name="a_limit_of_0_sats_lets_nothing_through">A limit of 0 sats lets nothing through.</string>
     <string name="the_limit_can_t_be_more_than_the_s_sats_being_moved">The limit can't be more than the %1$s sats being moved.</string>
+    <string name="s_sats_must_move_into_lightning_within_s">%1$s sats must move into Lightning within %2$s. After that they can only come back as a refund, %3$s after they were sent.</string>
+    <string name="refund_s_sats">Refund %1$s sats</string>
+    <string name="refund">Refund</string>
+    <string name="refund_explainer">These coins are too old to move into Lightning. Send them to a wallet of your own: your node signs this alone, without the LSP.</string>
+    <string name="address_to_refund_to">Address to refund to</string>
+    <string name="review_refund">Review refund</string>
+    <string name="checking_the_address">Checking the address</string>
+    <string name="refund_s_sats_to">%1$s sats will reach this address:</string>
+    <string name="network_fee_s_sats">Network fee: %1$s sats</string>
+    <string name="send_refund">Send refund</string>
+    <string name="sending_the_refund">Sending the refund</string>
+    <string name="change_address">Change address</string>
+    <string name="refund_sent">Refund sent</string>
+    <string name="that_isn_t_a_bitcoin_address_on_this_network">That isn't a bitcoin address on this network.</string>
+    <string name="that_is_one_of_your_deposit_addresses">That is one of your deposit addresses, and the coins would be locked again. Use a wallet of your own.</string>
+    <string name="couldn_t_check_that_address">Couldn't check whether that address has been used. Check your connection and try again.</string>
+    <string name="nothing_can_be_refunded">Nothing can be refunded: no coin is old enough, or the network fee would take all of it.</string>
+    <string name="the_refund_wasn_t_sent">The refund wasn't sent. Try again.</string>
 </resources>

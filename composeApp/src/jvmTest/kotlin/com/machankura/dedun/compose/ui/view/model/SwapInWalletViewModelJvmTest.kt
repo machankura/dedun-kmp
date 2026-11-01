@@ -11,6 +11,17 @@ import com.machankura.dedun.compose.wallet.SwapInRefusal
 import com.machankura.dedun.compose.wallet.SwapInSnapshot
 import com.machankura.dedun.compose.wallet.SwapInWaiting
 import com.machankura.dedun.compose.wallet.SwapInSource
+import com.machankura.dedun.compose.wallet.SwapInRefunder
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import fr.acinq.bitcoin.Bitcoin
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.Chain
+import fr.acinq.bitcoin.PrivateKey
+import fr.acinq.lightning.blockchain.fee.FeeratePerKw
+import fr.acinq.lightning.crypto.LocalKeyManager
+import fr.acinq.lightning.crypto.SwapInOnChainKeys
+import fr.acinq.phoenixd.conf.LSP
+import fr.acinq.secp256k1.Hex
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.Satoshi
@@ -231,6 +242,106 @@ class SwapInWalletViewModelJvmTest {
         viewModel.allowOnce {}
         assertTrue(fees.allowed.isEmpty())
         assertEquals(overLimit, viewModel.reviewing)
+    }
+
+    // ---- the refund ----
+
+    private val refundChain = Chain.Testnet3
+    private val refundKeys = LocalKeyManager(randomBytes32(), refundChain, LSP.from(refundChain).swapInXpub).swapInOnChainWallet
+    private val elsewhere = Bitcoin.computeBIP86Address(PrivateKey(ByteVector32(Hex.decode("f1".padStart(64, '0')))).publicKey(), refundChain.chainHash)
+
+    private class FakeRefunder(override val chain: Chain, val swapInKeys: SwapInOnChainKeys, var usage: UnusedAddressCheck.Usage = UnusedAddressCheck.Usage.Unused) : SwapInRefunder {
+        val broadcast = mutableListOf<Transaction>()
+        var fails = false
+        override suspend fun keys() = swapInKeys
+        override suspend fun feerate() = FeeratePerKw(Satoshi(2_500))
+        override suspend fun usage(script: ByteVector) = usage
+        override suspend fun broadcast(tx: Transaction): TxId {
+            if (fails) error("no server")
+            broadcast += tx
+            return tx.txid
+        }
+    }
+
+    /** One coin at index 0 of [refundKeys]'s wallet, [confirmations] deep at tip 3,000,000. */
+    private fun refundSnapshot(confirmations: Int): SwapInSnapshot {
+        val protocol = refundKeys.getSwapInProtocol(0)
+        val tx = Transaction(2, listOf(TxIn(OutPoint(TxId(randomBytes32()), 0), 0)), listOf(TxOut(Satoshi(50_000), protocol.pubkeyScript)), 0)
+        val tip = 3_000_000
+        val utxo = WalletState.Utxo(tx.txid, 0, (tip - confirmations + 1).toLong(), tx, AddressMeta.Derived(0))
+        return SwapInSnapshot(
+            WalletState(mapOf(protocol.address(refundChain) to WalletState.AddressState(AddressMeta.Derived(0), true, listOf(utxo)), unused(1))),
+            tip, emptySet(), params, legacyAddress = "legacy",
+        )
+    }
+
+    private fun refunding(snapshot: SwapInSnapshot, refunder: FakeRefunder) =
+        SwapInWalletViewModel(SwapInSource { MutableStateFlow(snapshot) }, refunder = refunder).also { it.initiate() }
+
+    @Test
+    fun `a refund is checked, shown with its fee, and sent only on confirmation`() {
+        val refunder = FakeRefunder(refundChain, refundKeys)
+        val viewModel = refunding(refundSnapshot(params.refundDelay), refunder)
+        viewModel.startRefund()
+        viewModel.refundAddressField.setTextAndPlaceCursorAtEnd(elsewhere)
+        viewModel.reviewRefund()
+
+        val review = assertIs<SwapInWalletViewModel.RefundStep.Review>(viewModel.refund)
+        assertEquals(elsewhere, review.address)
+        assertEquals(Satoshi(50_000), review.preview.refunded)
+        assertTrue(refunder.broadcast.isEmpty())
+
+        var sent: TxId? = null
+        viewModel.sendRefund { sent = it }
+        assertEquals(listOf(review.preview.tx), refunder.broadcast)
+        assertEquals(review.preview.tx.txid, sent)
+        assertNull(viewModel.refund)
+    }
+
+    @Test
+    fun `a refund is refused to an address that is not one, is the wallet's own, or has been paid`() {
+        val refunder = FakeRefunder(refundChain, refundKeys)
+        val snapshot = refundSnapshot(params.refundDelay)
+        val viewModel = refunding(snapshot, refunder)
+        viewModel.startRefund()
+
+        viewModel.refundAddressField.setTextAndPlaceCursorAtEnd("nope")
+        viewModel.reviewRefund()
+        assertEquals(SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.UNREADABLE), viewModel.refund)
+
+        viewModel.refundAddressField.setTextAndPlaceCursorAtEnd(snapshot.state.addresses.keys.first())
+        viewModel.reviewRefund()
+        assertEquals(SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.OWN_DEPOSIT), viewModel.refund)
+
+        refunder.usage = UnusedAddressCheck.Usage.Used
+        viewModel.refundAddressField.setTextAndPlaceCursorAtEnd(elsewhere)
+        viewModel.reviewRefund()
+        assertEquals(SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.USED), viewModel.refund)
+
+        refunder.usage = UnusedAddressCheck.Usage.Unknown
+        viewModel.reviewRefund()
+        assertEquals(SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.UNCHECKED), viewModel.refund)
+        assertTrue(refunder.broadcast.isEmpty())
+    }
+
+    @Test
+    fun `before the refund delay there is nothing to refund`() {
+        val viewModel = refunding(refundSnapshot(params.refundDelay - 1), FakeRefunder(refundChain, refundKeys))
+        viewModel.startRefund()
+        viewModel.refundAddressField.setTextAndPlaceCursorAtEnd(elsewhere)
+        viewModel.reviewRefund()
+        assertEquals(SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.NOTHING_TO_REFUND), viewModel.refund)
+    }
+
+    @Test
+    fun `a broadcast that fails says so, and can be tried again`() {
+        val refunder = FakeRefunder(refundChain, refundKeys).apply { fails = true }
+        val viewModel = refunding(refundSnapshot(params.refundDelay), refunder)
+        viewModel.startRefund()
+        viewModel.refundAddressField.setTextAndPlaceCursorAtEnd(elsewhere)
+        viewModel.reviewRefund()
+        viewModel.sendRefund {}
+        assertEquals(SwapInWalletViewModel.RefundStep.Problem(SwapInWalletViewModel.RefundProblem.NOT_SENT), viewModel.refund)
     }
 
     /**
