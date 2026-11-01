@@ -60,6 +60,8 @@ class PayoutInvoiceJvmTest {
         val answer = resolver { invoice(it) }.invoiceFor(alice, MilliSatoshi(21_000), Chain.Regtest, torEnabled = false)
         val ready = assertIs<PayoutInvoice.Ready>(answer)
         assertEquals(MilliSatoshi(21_000), Bolt11Invoice.read(ready.bolt11).get().amount)
+        // The metadata the invoice commits to comes back with it, for the payout to carry.
+        assertEquals(metadata, ready.metadata)
     }
 
     @Test

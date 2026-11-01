@@ -78,8 +78,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import dedun.composeapp.generated.resources.amount_in_sats
 import dedun.composeapp.generated.resources.couldn_t_check_the_address
 import dedun.composeapp.generated.resources.couldn_t_reach_that_address_s_server
-import dedun.composeapp.generated.resources.get_an_invoice
-import dedun.composeapp.generated.resources.how_much_to_pay_s_question
 import dedun.composeapp.generated.resources.paid_before_ask_s_for_a_new_address
 import dedun.composeapp.generated.resources.pay_onchain
 import dedun.composeapp.generated.resources.pay_over_lightning
@@ -1114,7 +1112,6 @@ fun ChatRoomDetailScreen(
                                 LaunchedEffect(destination.event.id) {
                                     chatRoomDetailViewModel.usageOf(destination) { usage = it }
                                 }
-                                var askingAmount by remember(destination.event.id) { mutableStateOf(false) }
                                 var payoutProblem by remember(destination.event.id) { mutableStateOf<PayoutProblem?>(null) }
                                 // Paying needs a device that can put a spend to the group.
                                 val canPay = chatRoomDetailUIState.canSponsor
@@ -1123,7 +1120,14 @@ fun ChatRoomDetailScreen(
                                         name = name,
                                         destination = destination,
                                         usage = usage,
-                                        onPayLightning = if (canPay) { { askingAmount = true } } else null,
+                                        // A member is paid their whole balance, from the payouts screen,
+                                        // never a sum typed here. docs/payouts-only.md, Phase 5.
+                                        onPayLightning = if (canPay) {
+                                            {
+                                                showingPayoutOf = null
+                                                onNavigateToRoute.invoke(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
+                                            }
+                                        } else null,
                                         onPayOnchain = if (canPay && destination.onchainAddress != null) {
                                             {
                                                 // Asked again: an address paid since the sheet opened is used now.
@@ -1150,32 +1154,6 @@ fun ChatRoomDetailScreen(
                                         notify(text)
                                         payoutProblem = null
                                     }
-                                }
-                                if (askingAmount) {
-                                    PayoutAmountDialog(
-                                        name = name,
-                                        onDismiss = { askingAmount = false },
-                                        onAmount = { sats ->
-                                            chatRoomDetailViewModel.invoiceFor(destination, sats) { answer ->
-                                                when (answer) {
-                                                    is LightningAddressResolver.PayoutInvoice.Ready -> {
-                                                        askingAmount = false
-                                                        showingPayoutOf = null
-                                                        onNavigateToRoute.invoke(
-                                                            GroupLightningSendRoute(
-                                                                activeUserPublicKey = activeUserPublicKey,
-                                                                chatRoomId = chatRoomId,
-                                                                invoice = answer.bolt11,
-                                                                payoutMember = destination.member,
-                                                                payoutDestination = destination.event.id,
-                                                            )
-                                                        )
-                                                    }
-                                                    else -> payoutProblem = PayoutProblem.NoInvoice(answer)
-                                                }
-                                            }
-                                        },
-                                    )
                                 }
                             }
                         }
@@ -1632,34 +1610,8 @@ internal fun PayoutDestinationSheetContent(
     }
 }
 
-/** How much to pay a member over Lightning, in whole sats, before their address is asked for an invoice. */
-@Composable
-private fun PayoutAmountDialog(name: String, onDismiss: () -> Unit, onAmount: (Long) -> Unit) {
-    val amount = remember { TextFieldState() }
-    val sats = (parseSats(amount.text) as? SatsInput.Sats)?.amount?.sat?.takeIf { it > 0 }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.how_much_to_pay_s_question, name)) },
-        text = {
-            OutlinedTextField(
-                state = amount,
-                outputTransformation = GroupedSats,
-                lineLimits = TextFieldLineLimits.SingleLine,
-                label = { Text(stringResource(Res.string.amount_in_sats)) },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { sats?.let(onAmount) }, enabled = sats != null) { Text(stringResource(Res.string.get_an_invoice)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
-        },
-    )
-}
-
 /** Why paying a member from their sheet went no further: `docs/group-payout-destination.md`, Phase 7. */
 private sealed interface PayoutProblem {
-    data class NoInvoice(val answer: LightningAddressResolver.PayoutInvoice) : PayoutProblem
     data class PaidBefore(val name: String) : PayoutProblem
     data object CouldNotCheck : PayoutProblem
 }
@@ -1668,24 +1620,27 @@ private sealed interface PayoutProblem {
 private fun payoutProblemText(problem: PayoutProblem): String = when (problem) {
     PayoutProblem.CouldNotCheck -> stringResource(Res.string.couldn_t_check_the_address)
     is PayoutProblem.PaidBefore -> stringResource(Res.string.paid_before_ask_s_for_a_new_address, "@" + problem.name)
-    is PayoutProblem.NoInvoice -> when (val answer = problem.answer) {
-        // A ready invoice is never a problem; it opens the send form.
-        is LightningAddressResolver.PayoutInvoice.Ready -> stringResource(Res.string.something_went_wrong)
-        LightningAddressResolver.PayoutInvoice.NotCheckedTor -> stringResource(Res.string.tor_is_on_and_this_device_can_t_reach_the_address_s_server)
-        LightningAddressResolver.PayoutInvoice.Unreachable -> stringResource(Res.string.couldn_t_reach_that_address_s_server)
-        is LightningAddressResolver.PayoutInvoice.Refused -> answer.reason?.takeIf { it.isNotBlank() }
-            ?.let { stringResource(Res.string.that_address_s_server_said_s, it) }
-            ?: stringResource(Res.string.that_address_s_server_refused)
-        LightningAddressResolver.PayoutInvoice.OtherNetwork ->
-            stringResource(Res.string.that_invoice_is_for_another_network, GroupWalletStatementEvent.chainName(GroupLightningRollout.NETWORK))
-        LightningAddressResolver.PayoutInvoice.Mismatched -> stringResource(Res.string.that_address_answered_with_an_invoice_for_something_else)
-        LightningAddressResolver.PayoutInvoice.Malformed -> stringResource(Res.string.that_address_s_server_answered_with_something_that_can_t_be_paid)
-        is LightningAddressResolver.PayoutInvoice.OutOfRange -> stringResource(
-            Res.string.their_address_takes_s_to_s_sats,
-            answer.sendable.min.truncateToSatoshi().grouped(),
-            answer.sendable.max.truncateToSatoshi().grouped(),
-        )
-    }
+}
+
+/** Why a member's Lightning address gave no invoice to pay, said to the member asking. */
+@Composable
+internal fun payoutInvoiceProblemText(answer: LightningAddressResolver.PayoutInvoice): String = when (answer) {
+    // A ready invoice is never a problem; it is paid.
+    is LightningAddressResolver.PayoutInvoice.Ready -> stringResource(Res.string.something_went_wrong)
+    LightningAddressResolver.PayoutInvoice.NotCheckedTor -> stringResource(Res.string.tor_is_on_and_this_device_can_t_reach_the_address_s_server)
+    LightningAddressResolver.PayoutInvoice.Unreachable -> stringResource(Res.string.couldn_t_reach_that_address_s_server)
+    is LightningAddressResolver.PayoutInvoice.Refused -> answer.reason?.takeIf { it.isNotBlank() }
+        ?.let { stringResource(Res.string.that_address_s_server_said_s, it) }
+        ?: stringResource(Res.string.that_address_s_server_refused)
+    LightningAddressResolver.PayoutInvoice.OtherNetwork ->
+        stringResource(Res.string.that_invoice_is_for_another_network, GroupWalletStatementEvent.chainName(GroupLightningRollout.NETWORK))
+    LightningAddressResolver.PayoutInvoice.Mismatched -> stringResource(Res.string.that_address_answered_with_an_invoice_for_something_else)
+    LightningAddressResolver.PayoutInvoice.Malformed -> stringResource(Res.string.that_address_s_server_answered_with_something_that_can_t_be_paid)
+    is LightningAddressResolver.PayoutInvoice.OutOfRange -> stringResource(
+        Res.string.their_address_takes_s_to_s_sats,
+        answer.sendable.min.truncateToSatoshi().grouped(),
+        answer.sendable.max.truncateToSatoshi().grouped(),
+    )
 }
 
 /** A labelled address with a copy button beside it. */

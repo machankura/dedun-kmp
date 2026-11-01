@@ -899,8 +899,6 @@
     <string name="copy_the_onchain_address">Copy the onchain address</string>
     <string name="pay_over_lightning">Pay over Lightning</string>
     <string name="pay_onchain">Pay onchain</string>
-    <string name="how_much_to_pay_s_question">How much to pay %1$s?</string>
-    <string name="get_an_invoice">Get an invoice</string>
     <string name="their_address_takes_s_to_s_sats">Their address takes %1$s to %2$s sats.</string>
     <string name="tor_is_on_and_this_device_can_t_reach_the_address_s_server">Tor is on, and this device can't reach the address's server through it.</string>
     <string name="that_address_answered_with_an_invoice_for_something_else">That address answered with an invoice for something else.</string>
@@ -984,4 +982,6 @@
     <string name="you_have_s_sats_onchain_add_an_onchain_address">You have %1$s sats onchain in this group. Add an onchain address to be paid them.</string>
     <string name="members_balances_and_payouts">Members' balances and payouts</string>
     <string name="a_payout_pays_each_member_everything_they_own">A payout pays each member everything they own here, to the address they gave, less their share of the fee.</string>
+    <string name="pay_out_over_lightning">Pay out over Lightning</string>
+    <string name="pays_s_s_sats_up_to_s_in_fees_to_s">Pays %1$s %2$s sats, and up to %3$s sats in routing fees, to %4$s.</string>
 </resources>

@@ -4,6 +4,8 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import fr.acinq.bitcoin.Chain
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** What a member may still be paid over Lightning -- `docs/payouts-only.md`, D8. */
 class LightningBalanceTest {
@@ -49,6 +51,21 @@ class LightningBalanceTest {
             nowSeconds = now,
         )
         assertEquals(50_000_000, balance.availableMsat)
+    }
+
+    @Test
+    fun `a whole balance is paid in whole sats with a fee limit beside it, and the two never pass it`() {
+        // 30,000 sats: a percent is 297 sats on 29,702.
+        assertEquals(29_702_000L to 297_020L, LightningBalance.payable(30_000_000))
+        // Under a thousand sats the floor fee of ten sats rules.
+        assertEquals(500_000L to 10_000L, LightningBalance.payable(510_000))
+        listOf(15_000L, 999_999L, 1_010_000L, 1_234_567_891L, 2_100_000_000_000_000_000L).forEach { available ->
+            val (amount, fee) = LightningBalance.payable(available)!!
+            assertTrue(amount + fee <= available, "$available")
+            assertEquals(0, amount % 1000)
+        }
+        assertNull(LightningBalance.payable(10_500))
+        assertNull(LightningBalance.payable(0))
     }
 
     @Test

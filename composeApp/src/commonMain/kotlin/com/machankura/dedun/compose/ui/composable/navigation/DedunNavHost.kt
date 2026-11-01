@@ -1442,6 +1442,7 @@ fun DedunNavHost(
                     payoutRepository = databasePayoutRepository,
                     payoutDestinationRepository = databasePayoutDestinationRepository,
                     wallets = groupOnchainWallets,
+                    lightningRepository = databaseGroupLightningRepository,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()

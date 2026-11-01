@@ -44,4 +44,22 @@ object LightningBalance {
         val open = theirs.filter { it.paymentHash.lowercase() !in sentFees && it.expiresAt > nowSeconds }.sumOf { it.budgetMsat }
         return Balance(depositedMsat, sent, open)
     }
+
+    /** The least a payout's fee limit is: what the send form defaults to, ten sats. */
+    const val MIN_FEE_MSAT: Long = 10_000
+
+    /**
+     * The most a member with [availableMsat] can be paid in one payment, in whole sats, and the fee
+     * limit beside it -- a percent of the amount, never under [MIN_FEE_MSAT] -- so that the two
+     * together never pass what they have: the whole of their balance, as one authorisation. Null
+     * when there is too little to pay anything after the fee.
+     */
+    fun payable(availableMsat: Long): Pair<Long, Long>? {
+        fun feeOf(amount: Long) = maxOf(MIN_FEE_MSAT, (amount + 99) / 100)
+        // A guess from the percent, amount + amount/100 = available, walked down a sat at a time
+        // until its fee fits beside it: a step or two, or a few more where the floor fee rules.
+        var amount = availableMsat / 101 * 100 / 1000 * 1000
+        while (amount > 0 && amount + feeOf(amount) > availableMsat) amount -= 1000
+        return if (amount > 0) amount to feeOf(amount) else null
+    }
 }

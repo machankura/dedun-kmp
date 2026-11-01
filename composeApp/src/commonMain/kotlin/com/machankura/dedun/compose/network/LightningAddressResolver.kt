@@ -179,7 +179,11 @@ class LightningAddressResolver(base: HttpClient = HttpClient(platformHttpClientE
 
     /** An invoice for paying a member's Lightning address, or why there is none: Phase 7. */
     sealed interface PayoutInvoice {
-        data class Ready(val bolt11: String) : PayoutInvoice
+        /**
+         * [bolt11], and the metadata [bolt11]'s description hash commits to, which a payout carries so
+         * every signer can see it names the member's address (`docs/payouts-only.md`, D8).
+         */
+        data class Ready(val bolt11: String, val metadata: String? = null) : PayoutInvoice
         data object NotCheckedTor : PayoutInvoice
         /** The amount is outside what the address said it takes, just now. */
         data class OutOfRange(val sendable: Sendable) : PayoutInvoice
@@ -207,7 +211,7 @@ class LightningAddressResolver(base: HttpClient = HttpClient(platformHttpClientE
         }
         if (amount < intent.minSendable || amount > intent.maxSendable) return PayoutInvoice.OutOfRange(Sendable(intent.minSendable, intent.maxSendable))
         return when (val answer = requestInvoice(intent, amount, torEnabled)) {
-            is InvoiceAnswer.Invoice -> if (answer.invoice.chain != chain) PayoutInvoice.OtherNetwork else PayoutInvoice.Ready(answer.bolt11)
+            is InvoiceAnswer.Invoice -> if (answer.invoice.chain != chain) PayoutInvoice.OtherNetwork else PayoutInvoice.Ready(answer.bolt11, intent.metadata.raw)
             InvoiceAnswer.NotCheckedTor -> PayoutInvoice.NotCheckedTor
             InvoiceAnswer.Unreachable -> PayoutInvoice.Unreachable
             is InvoiceAnswer.Refused -> PayoutInvoice.Refused(answer.reason)

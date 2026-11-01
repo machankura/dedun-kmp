@@ -50,6 +50,16 @@ class PayoutLabelJvmTest {
     }
 
     @Test
+    fun `a payout carries the metadata its invoice commits to, and reads back with it`() {
+        // docs/payouts-only.md, Phase 5: what lets every signer see the invoice names the address.
+        val metadata = "[[\"text/identifier\",\"alice@example.com\"]]"
+        val tags = GroupLightningAuthorisationEvent.template(pay(GroupLightningAuthorisationEvent.Payout(alicePublicKey, "de".repeat(32))).copy(lnurl = metadata)).tags
+        assertTrue(tags.any { it.toList() == listOf("lnurl", metadata) })
+        assertEquals(metadata, GroupLightningAuthorisationEvent.read(tags)?.lnurl)
+        assertNull(GroupLightningAuthorisationEvent.read(GroupLightningAuthorisationEvent.template(pay(null)).tags)?.lnurl)
+    }
+
+    @Test
     fun `a payment without a destination has no tag, and reads as before`() {
         val tags = GroupLightningAuthorisationEvent.template(pay(null)).tags
         assertTrue(tags.none { it[0] == "payout" })

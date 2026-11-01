@@ -181,17 +181,6 @@ class ChatRoomDetailViewModel(
         }
     }
 
-    /**
-     * An invoice of [amountSat] from [destination]'s Lightning address, for the group's Lightning
-     * wallet: what *Pay over Lightning* on a member's sheet fills the send form with.
-     * `docs/group-payout-destination.md`, Phase 7.
-     */
-    fun invoiceFor(destination: GroupPayoutDestination, amountSat: Long, onResult: (LightningAddressResolver.PayoutInvoice) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountSat * 1000), GroupLightningRollout.NETWORK)
-            withContext(Dispatchers.Main) { onResult(invoice) }
-        }
-    }
 
     /**
      * Puts a member's request for a guarded wallet to the group, as this device:

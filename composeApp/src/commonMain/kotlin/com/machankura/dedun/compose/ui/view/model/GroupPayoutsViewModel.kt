@@ -1,5 +1,13 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import kotlinx.coroutines.flow.first
+import fr.acinq.lightning.MilliSatoshi
+import com.machankura.dedun.compose.wallet.lightning.LightningBalance
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
+import com.machankura.dedun.compose.network.LightningAddressResolver
+import com.machankura.dedun.compose.managers.GroupLightningAuthorisations
+import com.machankura.dedun.compose.managers.MemberBalances
+import com.machankura.dedun.compose.repository.GroupLightningRepository
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.MutableState
@@ -48,6 +56,7 @@ class GroupPayoutsViewModel(
     private val payoutRepository: PayoutRepository,
     private val payoutDestinationRepository: PayoutDestinationRepository,
     private val wallets: GroupOnchainWallets?,
+    private val lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -77,6 +86,13 @@ class GroupPayoutsViewModel(
                     (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
             }
             val canSign = localChatRoom.chatRoom.mlsGroupState != null && chatRepository.canSign(chatRoomId)
+            // A Lightning wallet pays only through its operator's node: without one, nothing is paid.
+            val lightningWallet = lightningRepository.lightningWallet(chatRoomId, chain)
+                ?.takeIf { lightningRepository.operator(chatRoomId, chain, it.statement.wallet)?.publicKey != null }
+            val lightningSpendable = lightningWallet?.let { wallet ->
+                lightningRepository.observeReport(chatRoomId, chain, wallet.statement.wallet).first()
+                    ?.snapshot?.channels?.filter { it.state.equals("Normal", ignoreCase = true) }?.sumOf { it.oursMsat }
+            }
             val loaded = GroupPayoutsUIState.Loaded(
                 localChatRoom = localChatRoom,
                 balances = payoutRepository.balances(chatRoomId, chain, null),
@@ -86,6 +102,8 @@ class GroupPayoutsViewModel(
                 names = names,
                 canSign = canSign && wallet != null,
                 self = activeUserPublicKey.lowercase(),
+                lightningWallet = lightningWallet,
+                lightningSpendableMsat = lightningSpendable,
             )
             uiState = loaded
 
@@ -190,6 +208,57 @@ class GroupPayoutsViewModel(
         }
     }
 
+    /**
+     * What a Lightning payout of [balance] would be: the most its whole balance pays after a fee
+     * limit, held to what the channels hold -- the member who withdraws last bears what the channel
+     * can't cover (D8) -- as (amount, fee limit) in msat, or null when nothing can be paid.
+     */
+    fun lightningPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return null
+        val available = state.lightningSpendableMsat?.let { minOf(it, balance.lightning.availableMsat) } ?: balance.lightning.availableMsat
+        return LightningBalance.payable(available)
+    }
+
+    /** Why a Lightning payout went no further: the address's answer, or the authorisation's. */
+    sealed interface LightningProblem {
+        data class NoInvoice(val answer: LightningAddressResolver.PayoutInvoice) : LightningProblem
+        data class NotAuthorisable(val problem: Throwable) : LightningProblem
+        data object CouldNotPropose : LightningProblem
+    }
+
+    /**
+     * Asks the group to pay [member] their whole Lightning balance (D8): their address is resolved
+     * again on this device, asked for an invoice of the amount, and the authorisation carries whose
+     * destination it is and the metadata the invoice commits to.
+     */
+    fun payOutLightning(member: HexKey, onSuccess: (sessionId: String) -> Unit, onProblem: (LightningProblem) -> Unit) {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return
+        val wallet = state.lightningWallet ?: return
+        val balance = state.balances.members[member] ?: return
+        val destination = balance.destination ?: return
+        val (amountMsat, maxFeeMsat) = lightningPayable(balance) ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val problem: LightningProblem? = run {
+                val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountMsat), wallet.statement.chain)
+                val ready = invoice as? LightningAddressResolver.PayoutInvoice.Ready ?: return@run LightningProblem.NoInvoice(invoice)
+                val pay = GroupLightningAuthorisations.prepare(wallet, ready.bolt11, null, maxFeeMsat)
+                    .getOrElse { return@run LightningProblem.NotAuthorisable(it) }
+                    .copy(payout = GroupLightningAuthorisationEvent.Payout(member, destination.event.id), lnurl = ready.metadata)
+                val session = runCatching { lightningRepository.proposePayment(state.localChatRoom, activeUserPublicKey, pay) }
+                    .onFailure { logger.e("Failed to propose a Lightning payout from $chatRoomId", it) }.getOrNull()
+                    ?: return@run LightningProblem.CouldNotPropose
+                withContext(Dispatchers.Main) { onSuccess(session.id) }
+                null
+            }
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                problem?.let(onProblem)
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "GroupPayoutsViewModel"
 
@@ -203,11 +272,12 @@ class GroupPayoutsViewModel(
             payoutRepository: PayoutRepository,
             payoutDestinationRepository: PayoutDestinationRepository,
             wallets: GroupOnchainWallets?,
+            lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupPayoutsViewModel(
                     activeUserPublicKey, chatRoomId, chain, initialUIState,
-                    chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets,
+                    chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository,
                 )
             }
         }

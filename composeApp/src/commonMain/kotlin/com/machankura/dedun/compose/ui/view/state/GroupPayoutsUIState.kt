@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.MemberBalances
 import com.machankura.dedun.compose.wallet.GroupWalletState
@@ -27,5 +28,9 @@ sealed interface GroupPayoutsUIState {
         val canSign: Boolean,
         /** The active profile, whose own row asks for an address it has not given. */
         val self: HexKey?,
+        /** The group's Lightning wallet, when it has one with an operator to pay from: Phase 5. */
+        val lightningWallet: GroupLightningWalletManager.Wallet? = null,
+        /** What the Lightning wallet's channels hold, as its operator last reported, or null before a report. */
+        val lightningSpendableMsat: Long? = null,
     ) : GroupPayoutsUIState
 }

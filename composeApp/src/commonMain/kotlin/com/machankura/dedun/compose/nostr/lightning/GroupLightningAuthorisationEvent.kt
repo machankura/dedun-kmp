@@ -32,6 +32,8 @@ object GroupLightningAuthorisationEvent {
     private const val EXPIRES_TAG = "expires"
     /** Whose payout destination a payment is for, on the proposer's word: a label, never a check. */
     private const val PAYOUT_TAG = "payout"
+    /** The LNURL metadata a payout's invoice commits to: `docs/payouts-only.md`, D8. */
+    private const val LNURL_TAG = "lnurl"
 
     private const val CHANNEL_TAG = "channel"
     private const val ID_TAG = "id"
@@ -63,6 +65,12 @@ object GroupLightningAuthorisationEvent {
          * and decides nothing -- no co-signer rule reads it, and a build without it ignores the tag.
          */
         val payout: Payout? = null,
+        /**
+         * The LNURL-pay metadata [invoice]'s description hash commits to, as the proposer was given it
+         * by the member's address: what lets every signer see the invoice names that address, though
+         * not that it pays it. `docs/payouts-only.md`, D8.
+         */
+        val lnurl: String? = null,
     ) {
         val budgetMsat: Long get() = amountMsat + maxFeeMsat
     }
@@ -81,7 +89,10 @@ object GroupLightningAuthorisationEvent {
                 arrayOf(MAX_FEE_TAG, pay.maxFeeMsat.toString()),
                 arrayOf(HASH_TAG, pay.paymentHash),
                 arrayOf(EXPIRES_TAG, pay.expiresAt.toString()),
-                *listOfNotNull(pay.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) }).toTypedArray(),
+                *listOfNotNull(
+                    pay.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) },
+                    pay.lnurl?.let { arrayOf(LNURL_TAG, it) },
+                ).toTypedArray(),
             ),
             content = "",
         )
@@ -110,7 +121,8 @@ object GroupLightningAuthorisationEvent {
         if (invoice.amount != null && invoice.amount!!.msat != amount) return null
         if (expires > invoice.timestampSeconds + (invoice.expirySeconds ?: Bolt11Invoice.DEFAULT_EXPIRY_SECONDS.toLong())) return null
         val payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout(it[1].lowercase(), it[2].lowercase()) }
-        return Pay(chain, wallet, bolt11, amount, maxFee, hash, expires, payout)
+        val lnurl = value(LNURL_TAG)
+        return Pay(chain, wallet, bolt11, amount, maxFee, hash, expires, payout, lnurl)
     }
 
     /** A [CLOSE] or [FORCE_CLOSE] of [channelId], open until [expiresAt] (epoch seconds). */

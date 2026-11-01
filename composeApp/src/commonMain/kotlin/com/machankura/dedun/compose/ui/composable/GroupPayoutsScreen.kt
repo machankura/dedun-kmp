@@ -1,5 +1,13 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.pays_s_s_sats_up_to_s_in_fees_to_s
+import dedun.composeapp.generated.resources.pay_out_over_lightning
+import dedun.composeapp.generated.resources.something_went_wrong
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import com.machankura.dedun.compose.repository.GroupLightningRepository
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -114,15 +122,14 @@ fun GroupPayoutsScreen(
     payoutRepository: PayoutRepository,
     payoutDestinationRepository: PayoutDestinationRepository,
     wallets: GroupOnchainWallets?,
-    /** Pays [member]'s Lightning balance, where the group has a Lightning wallet: Phase 5. Null hides the action. */
-    lightningPayout: (@Composable (member: MemberBalances.MemberBalance) -> Unit)? = null,
+    lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
     onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupPayoutsViewModel = viewModel(
         factory = GroupPayoutsViewModel.factory(
             activeUserPublicKey, chatRoomId, chain, initialUIState,
-            chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets,
+            chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository,
         )
     )
     LaunchedEffect(chatRoomId, chain) {
@@ -131,6 +138,18 @@ fun GroupPayoutsScreen(
     val notify = rememberNotifier(rememberCoroutineScope())
     val asked = stringResource(Res.string.asked_the_group_to_pay_out)
     val couldNotAsk = stringResource(Res.string.couldn_t_ask_the_group)
+    var lightningProblem by remember { mutableStateOf<GroupPayoutsViewModel.LightningProblem?>(null) }
+    lightningProblem?.let { problem ->
+        val text = when (problem) {
+            is GroupPayoutsViewModel.LightningProblem.NoInvoice -> payoutInvoiceProblemText(problem.answer)
+            is GroupPayoutsViewModel.LightningProblem.NotAuthorisable -> stringResource(Res.string.something_went_wrong)
+            GroupPayoutsViewModel.LightningProblem.CouldNotPropose -> couldNotAsk
+        }
+        LaunchedEffect(problem) {
+            notify(text)
+            lightningProblem = null
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
@@ -181,7 +200,22 @@ fun GroupPayoutsScreen(
                                 onSetMine = {
                                     onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
                                 },
-                                lightningPayout = lightningPayout,
+                                // The whole Lightning balance, through the group's Lightning wallet (D8).
+                                lightningOffer = if (state.canSign && state.lightningWallet != null && balance.destination != null) {
+                                    viewModel.lightningPayable(balance)
+                                } else null,
+                                onPayLightning = if (!viewModel.isActionPending.value) {
+                                    {
+                                        viewModel.payOutLightning(
+                                            member = balance.member,
+                                            onSuccess = { sessionId ->
+                                                notify(asked)
+                                                onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId))
+                                            },
+                                            onProblem = { lightningProblem = it },
+                                        )
+                                    }
+                                } else null,
                             )
                             HorizontalDivider()
                         }
@@ -235,7 +269,9 @@ private fun MemberPayoutRow(
     selected: Boolean,
     onToggle: (() -> Unit)?,
     onSetMine: () -> Unit,
-    lightningPayout: (@Composable (MemberBalances.MemberBalance) -> Unit)?,
+    /** The Lightning payout this member's balance makes, as (amount, fee limit) in msat, or null where there is none to offer. */
+    lightningOffer: Pair<Long, Long>?,
+    onPayLightning: (() -> Unit)?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space50)) {
         Row(
@@ -284,7 +320,20 @@ private fun MemberPayoutRow(
                 Text(stringResource(Res.string.you_have_s_sats_onchain_add_an_onchain_address, Satoshi(balance.onchainConfirmedSat).grouped()))
             }
         }
-        lightningPayout?.invoke(balance)
+        if (lightningOffer != null) {
+            val (amount, fee) = lightningOffer
+            Text(
+                stringResource(
+                    Res.string.pays_s_s_sats_up_to_s_in_fees_to_s,
+                    name, Satoshi(amount / 1000).grouped(), Satoshi(fee / 1000).grouped(), balance.destination?.lightningAddress.toString(),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { onPayLightning?.invoke() }, enabled = onPayLightning != null) {
+                Text(stringResource(Res.string.pay_out_over_lightning))
+            }
+        }
     }
 }
 
