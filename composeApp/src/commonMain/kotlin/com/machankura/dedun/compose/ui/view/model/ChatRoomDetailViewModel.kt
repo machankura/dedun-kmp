@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.repository.MemberWalletRepository
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.vitorpamplona.quartz.nip01Core.core.Event
 
 class ChatRoomDetailViewModel(
@@ -38,6 +39,8 @@ class ChatRoomDetailViewModel(
     val chatRepository: ChatRepository,
     /** The member wallets this group guards -- `docs/member-guarded-wallets.md`. The no-op lists none. */
     val memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
+    /** Where this group pays its members -- `docs/group-payout-destination.md`. The no-op has no section. */
+    val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
 ): ViewModel() {
 
     var chatRoomDetailUIState: ChatRoomDetailUIState by mutableStateOf(initialChatRoomDetailUIState)
@@ -122,6 +125,7 @@ class ChatRoomDetailViewModel(
                     // Everybody in a Marmot group sees whether it guards members'
                     // wallets; only a signer is offered to change it.
                     showsMemberWalletPolicy = !isDisbanded && couldGuard,
+                    payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup },
                 )
             }
         }
@@ -259,6 +263,7 @@ class ChatRoomDetailViewModel(
             nostrRepository: NostrRepository,
             chatRepository: ChatRepository,
             memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
+            payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ChatRoomDetailViewModel(
@@ -269,6 +274,7 @@ class ChatRoomDetailViewModel(
                     nostrRepository = nostrRepository,
                     chatRepository = chatRepository,
                     memberWalletRepository = memberWalletRepository,
+                    payoutDestinationRepository = payoutDestinationRepository,
                 )
             }
         }

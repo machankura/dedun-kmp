@@ -1,10 +1,12 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.managers.MemberWalletManager.asEvent
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.nostr.wallet.PayoutStatement
+import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlin.time.Clock
@@ -58,4 +60,37 @@ object GroupPayoutDestinations {
         member: HexKey,
         now: Long = Clock.System.now().epochSeconds,
     ): GroupPayoutDestination? = destinationsIn(database, chatRoomId, chain, now)[member.lowercase()]
+
+    /**
+     * Puts [signed] into [chatRoomId], whole, as an inner event's content, and writes this device's
+     * own line for it: a device never reads its own message back, so the line every other member's
+     * device writes on arrival is written here on the way out. Returns the inner event's id.
+     */
+    suspend fun publish(database: DedunDatabase, chatRoomId: String, signed: Event): HexKey {
+        require(signed.kind == GroupPayoutDestinationEvent.KIND) { "not a payout destination" }
+        val createdAt = Clock.System.now()
+        val tags = arrayOf(arrayOf("h", chatRoomId.lowercase()))
+        val content = signed.toJson()
+        val id = MemberWalletManager.queue(
+            database = database,
+            chatRoomId = chatRoomId,
+            userPublicKey = signed.pubKey,
+            tags = tags,
+            content = content,
+            kind = GroupPayoutDestinationEvent.KIND,
+            createdAt = createdAt,
+        )
+        val inner = Event(id, signed.pubKey, createdAt.epochSeconds, GroupPayoutDestinationEvent.KIND, tags, content, "")
+        ChatMessage.applyInnerEvent(
+            database = database,
+            groupId = chatRoomId,
+            event = inner,
+            marmotGroupEventId = null,
+            marmotInnerEventId = id,
+            senderPublicKey = signed.pubKey,
+            isUserMessage = true,
+            createdAt = createdAt,
+        )?.let { database.chatMessageDao().upsert(it) }
+        return id
+    }
 }

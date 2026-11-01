@@ -9,6 +9,7 @@ import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 
 sealed interface ChatRoomDetailUIState {
     data class Loaded(
@@ -113,6 +114,11 @@ sealed interface ChatRoomDetailUIState {
         val memberWalletPolicy: MemberWalletPolicyEvent.Policy? = null,
         /** Whether to show that at all: a Marmot group, still going. */
         val showsMemberWalletPolicy: Boolean = false,
+        /**
+         * Where this group pays the active profile, and whether it can say: null, or not a group,
+         * for no *Payouts* section at all. `docs/group-payout-destination.md`.
+         */
+        val payouts: PayoutDestinationRepository.Standing? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

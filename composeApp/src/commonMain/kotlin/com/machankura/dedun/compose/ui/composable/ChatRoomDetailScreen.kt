@@ -9,9 +9,15 @@ import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import dedun.composeapp.generated.resources.change
+import dedun.composeapp.generated.resources.not_set
+import dedun.composeapp.generated.resources.payouts
+import dedun.composeapp.generated.resources.set
+import dedun.composeapp.generated.resources.where_this_group_pays_you
 import dedun.composeapp.generated.resources.guard_members_wallets
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.ui.composable.navigation.routes.MemberWalletPolicyRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutDestinationRoute
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import dedun.composeapp.generated.resources.guarded_wallet_after
 import com.machankura.dedun.compose.ui.composable.widgets.delayText
 import com.machankura.dedun.compose.managers.MemberWalletManager
@@ -183,6 +189,7 @@ fun ChatRoomDetailScreen(
     nostrRepository: NostrRepository,
     chatRepository: ChatRepository,
     memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
+    payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit,
     onPopBackToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
@@ -196,6 +203,7 @@ fun ChatRoomDetailScreen(
             chatRepository = chatRepository,
             activeUserPublicKey = activeUserPublicKey,
             memberWalletRepository = memberWalletRepository,
+            payoutDestinationRepository = payoutDestinationRepository,
         )
     )
     val couldNotPutToGroup = stringResource(Res.string.couldn_t_put_it_to_the_group)
@@ -574,6 +582,30 @@ fun ChatRoomDetailScreen(
                                             Text(stringResource(Res.string.ask_this_group_to_guard_a_wallet_for_you))
                                         }
                                     }
+                                }
+                            }
+
+                            // Where the group pays this profile, above the members it
+                            // will pay. docs/group-payout-destination.md, Phase 4.
+                            chatRoomDetailUIState.payouts?.let { payouts ->
+                                item { HorizontalDivider() }
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.payouts),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                item {
+                                    PayoutDestinationRow(
+                                        standing = payouts,
+                                        onChange = if (payouts.canSet) {
+                                            {
+                                                onNavigateToRoute.invoke(
+                                                    GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
+                                                )
+                                            }
+                                        } else null,
+                                    )
                                 }
                             }
 
@@ -1262,6 +1294,33 @@ private fun SubgroupCard(
                 }
             }
         )
+    }
+}
+
+/**
+ * *Where this group pays you*, and the Lightning address it pays -- or *Not set* -- with
+ * *Change* or *Set* for a profile that can sign one. `docs/group-payout-destination.md`.
+ */
+@Composable
+private fun PayoutDestinationRow(standing: PayoutDestinationRepository.Standing, onChange: (() -> Unit)?) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(text = stringResource(Res.string.where_this_group_pays_you), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = standing.current?.lightningAddress?.toString() ?: stringResource(Res.string.not_set),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        onChange?.let { change ->
+            TextButton(onClick = change) {
+                Text(stringResource(if (standing.current != null) Res.string.change else Res.string.set))
+            }
+        }
     }
 }
 
