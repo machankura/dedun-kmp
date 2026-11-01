@@ -77,6 +77,11 @@ object GroupWalletDerivation {
      * frozen the moment a group holds coins under it: changing it moves every
      * address, and the coins at the old ones are found by nobody. A rename is a
      * protocol fork and belongs in a `v2`, never in an edit to this one.
+     *
+     * That is why it still says `bennu/` in Dedun, as the `mantra/` tags kept their
+     * prefix through the rebrands before it. Every `bennu/` tag in the app stays for
+     * the same reason, and `DomainTagsPinnedTest` and the pinned vectors beside it
+     * fail if one moves. See docs/dedun-rename.md, D2.
      */
     private const val ACCOUNT_TAG = "bennu/group-wallet/account/v1"
 

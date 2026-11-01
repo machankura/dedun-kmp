@@ -51,7 +51,10 @@ import fr.acinq.bitcoin.PublicKey
  * never the nostr key, never a key from the profile's seed.
  */
 object MemberWalletDerivation {
-    /** The tag of a wallet id's hash. Frozen the moment a certificate carries one: a rename moves every leaf. */
+    /**
+     * The tag of a wallet id's hash. Frozen the moment a certificate carries one: a rename moves every leaf.
+     * It says `bennu/` in Dedun for the reason [GroupWalletDerivation]'s account tag does.
+     */
     private const val ID_TAG = "bennu/member-wallet/id/v1"
 
     /**

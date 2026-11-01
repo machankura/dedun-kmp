@@ -55,14 +55,14 @@ and in this app "anything else" is most of the app:
 | what needs the secret | where |
 |---|---|
 | signing every queued event — the kind 0, the follow list, key packages, group posts, proposals | `NotaryViewModel.observeUnsignedNostrEvents` |
-| opening a NIP-17 gift wrap addressed to the user | [GiftWrapMessage.kt:126](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/GiftWrapMessage.kt) — NIP-44 with the recipient's key |
+| opening a NIP-17 gift wrap addressed to the user | [GiftWrapMessage.kt:126](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/GiftWrapMessage.kt) — NIP-44 with the recipient's key |
 | joining a Marmot group — a key package has to be signed and published before any welcome can be addressed to it, and the welcome itself arrives as a gift wrap | `MarmotRepository.publishMarmotKeyPackageBundle`, `MarmotInboundManager` |
-| the ChillDKG host key, `sha256(tag ‖ nostrPrivateKey)` | [ChillDkgRitualManager.kt:117](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/ChillDkgRitualManager.kt) |
+| the ChillDKG host key, `sha256(tag ‖ nostrPrivateKey)` | [ChillDkgRitualManager.kt:117](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/ChillDkgRitualManager.kt) |
 
 What a public key *gets* is the events it has published — the kind 0, the kind 3,
 the relay lists — and the profiles of the people it follows, because indexing a
 kind 3 plants a placeholder for each and queues its sync
-([NostrDao.kt:1128](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt)).
+([NostrDao.kt:1128](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt)).
 In a client with a public feed, that is the client: read-only in Damus or Amethyst
 means "browse as this person".
 
@@ -84,16 +84,16 @@ of it on the way.
 
 | piece | where | state |
 |---|---|---|
-| the parser recognises `npub1…` and `nostr:npub1…` — and refuses it, as `PublicKeyOnly` | [CredentialParser.kt:94](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/CredentialParser.kt) | one branch from accepting it |
-| `signInToProfile(pubkey)` plants the `GENESIS_AT` placeholder from a pubkey alone | [DatabaseNostrRepository.kt:258](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt) | built; needs one property, see [Phase 4](#a-sign-in-that-can-be-repeated) |
-| the state machine from there — `UnqueuedProfileSynchronization → UnsyncedProfile → UnindexedProfile → ProfileLoaded` — reads `identity.nostrPublicKey` and never a key | [NavigationViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NavigationViewModel.kt) | built |
+| the parser recognises `npub1…` and `nostr:npub1…` — and refuses it, as `PublicKeyOnly` | [CredentialParser.kt:94](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/CredentialParser.kt) | one branch from accepting it |
+| `signInToProfile(pubkey)` plants the `GENESIS_AT` placeholder from a pubkey alone | [DatabaseNostrRepository.kt:258](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt) | built; needs one property, see [Phase 4](#a-sign-in-that-can-be-repeated) |
+| the state machine from there — `UnqueuedProfileSynchronization → UnsyncedProfile → UnindexedProfile → ProfileLoaded` — reads `identity.nostrPublicKey` and never a key | [NavigationViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NavigationViewModel.kt) | built |
 | the sign-in sync, the indexer relays, the one hop, and the not-found exit | `SignInSync`, `UnsyncedProfileViewModel` | built; the exit needs a third action, see [Phase 6](#phase-6--leaving) |
-| `RelaysSocketManager` follows the identity's relay list by pubkey | [RelaysSocketManager.kt:70](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt) | works unchanged |
-| the notary returns before doing anything when there is no key | [NotaryViewModel.kt:72](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NotaryViewModel.kt) | works unchanged — and so the key package bundle it would publish is never attempted |
+| `RelaysSocketManager` follows the identity's relay list by pubkey | [RelaysSocketManager.kt:70](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt) | works unchanged |
+| the notary returns before doing anything when there is no key | [NotaryViewModel.kt:72](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NotaryViewModel.kt) | works unchanged — and so the key package bundle it would publish is never attempted |
 | quartz's `KeyPair(pubKey = …)` with no private key, commented in its own source as "this is a read-only account" | `com.vitorpamplona.quartz.nip01Core.crypto.KeyPair` | usable; it is why the DAO carries `privKey!!` at all |
-| `Identity.business` is nullable; a read-only identity is `NostrSecret` minus the secret | [Identity.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/Identity.kt) | one field from it |
+| `Identity.business` is nullable; a read-only identity is `NostrSecret` minus the secret | [Identity.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/Identity.kt) | one field from it |
 | the forget flow — key out, prefs deleted, metadata hidden, account rows gone, re-list, selector | `NostrSecretViewModel.forgetKey`, `IdentityWriter.forgetNostrKey` | built for an nsec; the sequence transfers whole |
-| `WalletsSelector` shows the npub for every kind | [WalletsSelector.kt:161](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/wallet/WalletsSelector.kt) | needs a "read only" label |
+| `WalletsSelector` shows the npub for every kind | [WalletsSelector.kt:161](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/wallet/WalletsSelector.kt) | needs a "read only" label |
 | `nostr-keys.dat`, with a version byte and a doc that says "a new shape would be a new version" | `EncryptedNostrKeys`, `NostrKeyManager`, `AtomicFileWrite` | the envelope, the atomic write and the manager shape all carry over; only the entries change |
 | a string, `this_will_give_you_read_only_access_to_the` | `strings.xml` | present, unused, and says too little |
 
@@ -103,7 +103,7 @@ Five things, in dependency order.
 
 **The identity's key is not optional.** `Identity.nostrPrivateKey` is a
 `PrivateKey` and `nostrPublicKey` is computed from it
-([Identity.kt:50](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/Identity.kt),
+([Identity.kt:50](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/Identity.kt),
 62). Every reader of the identity compiles against that.
 
 **There is nowhere to keep a public key.** Both stores hold secrets. `nostr-keys.dat`
@@ -114,7 +114,7 @@ this one ([Phase 2](#phase-2--one-credentials-file)).
 
 **The pumps are gated on the private key.** `SynchronizationViewModel` runs its
 four collectors inside `identity?.nostrPrivateKey?.let { … }`
-([SynchronizationViewModel.kt:194](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SynchronizationViewModel.kt)).
+([SynchronizationViewModel.kt:194](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SynchronizationViewModel.kt)).
 A read-only identity's sign-in sync would be queued and never dispatched, and the
 machine would park on `UnsyncedProfile` for good — the nsec plan's Phase 5 failure
 again, from a different cause.
@@ -122,10 +122,10 @@ again, from a different cause.
 **The DAO opens what is addressed to it, or rolls back.** `storeNostrEvent` is
 `@Transaction` and indexes inside it; a gift wrap addressed to the active key that
 cannot be unsealed throws
-([NostrDao.kt:448–459](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt)),
+([NostrDao.kt:448–459](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt)),
 and the throw takes the event with it. Worse, and not obvious: `decryptGiftWrapSeal`
 builds `KeyPair(privKey = keyPair.privKey)`
-([GiftWrapMessage.kt:126](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/GiftWrapMessage.kt)),
+([GiftWrapMessage.kt:126](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/GiftWrapMessage.kt)),
 and in quartz a `KeyPair` given neither key *generates a fresh random one*. A
 read-only pair forwarded there would try to open the wrap with a key nobody has,
 fail, and roll back — silently correct-looking in the logs.
@@ -242,7 +242,7 @@ forces anything, and the sites that need a decision are found by reading, in
 
 One site does change. `KeyRecoveryScreen` branches on `activeIdentity?.kind` with
 `NostrSecret` in one arm and `else` in the other
-([KeyRecoveryScreen.kt:177](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/KeyRecoveryScreen.kt)),
+([KeyRecoveryScreen.kt:177](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/KeyRecoveryScreen.kt)),
 and the `else` meant *mnemonic*. A read-only identity would fall into it and be
 offered a recovery phrase it does not have. Make both `when`s in that file
 exhaustive; the `NostrPublic` arm is unreachable after Phase 5 hides the row, and
@@ -329,7 +329,7 @@ A version byte of 2 in `nostr-keys.dat` would be the natural move and it is the
 wrong one. An older build's reader throws on an unknown version, `NostrKeyManager`
 classifies that as `SerializationError`, and `listIdentities` **returns** on that
 result before it publishes anything
-([SovereignWalletViewModel.kt:218](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt)):
+([SovereignWalletViewModel.kt:218](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt)):
 the old build would list no identities at all, seed wallets included. That is the
 `seed.dat` failure the nsec plan's appendix rejected a version-4 payload for. A
 file the old build does not look for cannot do that to it.
@@ -446,10 +446,10 @@ leaves the others and takes its preferences.
 `SovereignWalletViewModel.listIdentities` runs the migration, then reads
 `nostr-credentials.dat` where it read `nostr-keys.dat`, with the same five results
 handled the same way; the change is the type of the map it hands to `merge`
-([SovereignWalletViewModel.kt:242](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt)).
+([SovereignWalletViewModel.kt:242](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt)).
 
 `SovereignWalletStartupScreen` gains its third branch, beside the nsec one
-([SovereignWalletStartupScreen.kt:185](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/SovereignWalletStartupScreen.kt)):
+([SovereignWalletStartupScreen.kt:185](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/SovereignWalletStartupScreen.kt)):
 
 ```kotlin
 is StoredIdentity.NostrPublic -> sovereignWalletViewModel.setActiveIdentity(
@@ -515,14 +515,14 @@ With a private key, quartz recomputes the public key from it and the second
 argument is a cross-check. Without one, it is the read-only constructor. What it
 must never be is `KeyPair(privKey = null)` with nothing else — that is quartz's
 "make me a new key", and it is what `decryptGiftWrapSeal` does today
-([GiftWrapMessage.kt:126](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/GiftWrapMessage.kt)).
+([GiftWrapMessage.kt:126](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/GiftWrapMessage.kt)).
 The helper exists so that the trap has one place to be avoided; leave a comment on
 it that says what the trap is.
 
 ### The one DAO guard
 
 After the `isAddressedTo` check in `indexNostrEvent`
-([NostrDao.kt:439](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt)):
+([NostrDao.kt:439](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt)):
 
 ```kotlin
 if (activeKeyPair.privKey == null) {
@@ -625,7 +625,7 @@ because Phase 3 made it run.
 ### A sign-in that can be repeated
 
 `signInToProfile` inserts a new kind-0 `UnsignedNostrEvent` every time it is called
-([DatabaseNostrRepository.kt:258](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt)).
+([DatabaseNostrRepository.kt:258](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt)).
 Until now nothing called it twice for one pubkey: the writers refused the second
 sign-in before it got there. The upgrade is the first path that signs in a pubkey
 whose account already exists, and a second placeholder would be "two kind-0 rows
@@ -677,7 +677,7 @@ val LocalCanSign: ProvidableCompositionLocal<Boolean> = staticCompositionLocalOf
 fun ProvideSigningCapability(activeIdentity: StateFlow<Identity?>, content: @Composable () -> Unit)
 ```
 
-Provided once, in `BennuNavHost` around the `NavHost`, from
+Provided once, in `DedunNavHost` around the `NavHost`, from
 `sovereignWalletViewModel.activeIdentity`. The default is `true` rather than an
 error, and that is the one way this differs from `LocalSnackbarHostState`: the
 provider sits above every screen and cannot be forgotten per screen, so the only
@@ -700,14 +700,14 @@ the empty state beside it.
 |---|---|---|---|
 | `HomeScreen` | *New chat* (both layouts), the sheet, the npub dialog | key packages, welcomes, gift wraps | hidden; the tab shows the [empty state below](#the-messages-tab) |
 | `HomeScreen` | `ChatRoomListViewModel.initiate` | queues the inbox sync and the MLS negentropy | not composed, so not queued |
-| `MetadataEventDetail` | *follow*, *unfollow*, *follow back* ([:215](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/detail/MetadataEventDetail.kt)) | a kind 3 | hidden; the "follows you" state still shows |
-| `MetadataEventDetail` | *send message* ([:303](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/detail/MetadataEventDetail.kt)) | a gift wrap | hidden |
+| `MetadataEventDetail` | *follow*, *unfollow*, *follow back* ([:215](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/detail/MetadataEventDetail.kt)) | a kind 3 | hidden; the "follows you" state still shows |
+| `MetadataEventDetail` | *send message* ([:303](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/detail/MetadataEventDetail.kt)) | a gift wrap | hidden |
 | `MetadataEventDetail` | *edit profile* | a kind 0 | hidden (it is `ImplementationPendingRoute` today, and stays so for the other kinds) |
-| `ActiveProfileScreen` | *key package management* ([:233](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/ActiveProfileScreen.kt)) | key packages | hidden |
-| `ActiveProfileScreen` | *key recovery* ([:286](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/ActiveProfileScreen.kt)) | nothing, but there is nothing to recover | hidden |
-| `ActiveProfileScreen` | *sign out* ([:341](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/ActiveProfileScreen.kt)) | — | **real**, see [Phase 6](#phase-6--leaving) |
-| `ShareProfileScreen` | *re-broadcast* ([:191](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/ShareProfileScreen.kt)) | nothing is signed, but a copy of the kind 0 is queued for the finder relays | hidden; a preview puts nothing on a relay, not even a copy, and the broadcast pump is not running to carry it |
-| `UnsyncedProfileScreen` | *set one up* ([:217](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/UnsyncedProfileScreen.kt)) | the six-event bootstrap | hidden; replaced, see Phase 6 |
+| `ActiveProfileScreen` | *key package management* ([:233](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/ActiveProfileScreen.kt)) | key packages | hidden |
+| `ActiveProfileScreen` | *key recovery* ([:286](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/ActiveProfileScreen.kt)) | nothing, but there is nothing to recover | hidden |
+| `ActiveProfileScreen` | *sign out* ([:341](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/ActiveProfileScreen.kt)) | — | **real**, see [Phase 6](#phase-6--leaving) |
+| `ShareProfileScreen` | *re-broadcast* ([:191](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/ShareProfileScreen.kt)) | nothing is signed, but a copy of the kind 0 is queued for the finder relays | hidden; a preview puts nothing on a relay, not even a copy, and the broadcast pump is not running to carry it |
+| `UnsyncedProfileScreen` | *set one up* ([:217](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/UnsyncedProfileScreen.kt)) | the six-event bootstrap | hidden; replaced, see Phase 6 |
 | `SocialPreconditionScreen` | *invite a friend*, *view invites* | pending, and writes when they exist | hidden; only *skip for now* |
 | `WriteNewNoteScreen` and the rest | — | — | unreachable: every route to them starts in a room or behind a control above |
 

@@ -77,7 +77,7 @@ import com.machankura.dedun.compose.ui.theme.spacing
 /**
  * Everything that can put this profile back on another phone.
  *
- * A Bennu profile is its key: the npub that signs and, for a wallet, the coins
+ * A Dedun profile is its key: the npub that signs and, for a wallet, the coins
  * it holds, both come out of one secret that never leaves the device -- twelve
  * words, or a bare nostr key that was signed in with. There is no account to
  * reset, so this screen is the only thing standing between a lost phone and a

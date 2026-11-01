@@ -47,7 +47,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * One timeout, the one both DM view models use, and it only changes what is shown:
  * nothing found becomes not-found, and a person found without a key package becomes
- * not-yet-on-Bennu. The collect stays live past it, so whatever arrives on the
+ * not-yet-on-Dedun. The collect stays live past it, so whatever arrives on the
  * twenty-first second still lands. See docs/npub-profile-preview.md.
  */
 class ProfilePreviewViewModel(

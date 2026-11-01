@@ -64,8 +64,8 @@ class SeedCredentialsJvmTest {
 
     @BeforeTest
     fun setUp() {
-        storeDir = Files.createTempDirectory("bennu-seed-credentials-store").toFile()
-        appDir = Files.createTempDirectory("bennu-seed-credentials-app").toFile()
+        storeDir = Files.createTempDirectory("dedun-seed-credentials-store").toFile()
+        appDir = Files.createTempDirectory("dedun-seed-credentials-app").toFile()
         JvmKeyStore.lock()
         JvmKeyStore.unlock("correct horse battery staple".toCharArray(), storeDir)
         phoenixGlobal = PhoenixGlobal(PlatformContext(applicationDir = appDir))

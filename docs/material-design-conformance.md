@@ -103,7 +103,7 @@ Worth knowing before reading older guidance or older code:
 
 ## Where this app stands
 
-Counts below are over `composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui`
+Counts below are over `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui`
 unless stated. Phase 0 turns them into a script so they can be re-run.
 
 ### The theme is incomplete, and two entry points bypass it
@@ -125,7 +125,7 @@ Three gaps:
    today; the trap springs the first time an expressive component does.
 
 2. **The medium and high contrast schemes are dead code.** All four are declared
-   `private val`; `BennuTheme` only ever selects `darkScheme` or `lightScheme`.
+   `private val`; `DedunTheme` only ever selects `darkScheme` or `lightScheme`.
    There is no plumbing to the platform's contrast setting, so the two schemes
    that would honour it are unreachable. The accessibility foundation's first
    principle is *honour individuals* — *"supporting varying preferences and
@@ -137,12 +137,12 @@ Three gaps:
 
 Two entry points render outside the theme:
 
-- `composeApp/src/jvmMain/kotlin/com/machankura/bennu/desktop/Main.kt:126` —
-  `PassphraseGate` sits in the `else` branch beside `BennuApp`, so it composes
+- `composeApp/src/jvmMain/kotlin/com/machankura/dedun/desktop/Main.kt:126` —
+  `PassphraseGate` sits in the `else` branch beside `DedunApp`, so it composes
   under the **default** `MaterialTheme`. Its `MaterialTheme.colorScheme.error`
   and `typography.headlineSmall` are baseline M3, not this app's. It is the
   first screen a desktop user sees.
-- `Profile.kt:183` and 50 other `@Preview` bodies wrap in `BennuTheme` by hand,
+- `Profile.kt:183` and 50 other `@Preview` bodies wrap in `DedunTheme` by hand,
   which is correct, but there is no preview that exercises dark, high-contrast
   or a wide window — so nothing catches the two problems below.
 
@@ -422,7 +422,7 @@ find-and-replace.
    Keep the existing hex values for the roles already defined so nothing shifts
    visually; this phase adds, it does not restyle.
 
-2. **Reach the contrast schemes.** *Built.* `BennuTheme` takes a `ThemeContrast`
+2. **Reach the contrast schemes.** *Built.* `DedunTheme` takes a `ThemeContrast`
    defaulted from a new `platformThemeContrast()` expect/actual, and the six-way
    selection table lives in common code as `appColorScheme`. The old
    `themeColorScheme` expect took four arguments and did both jobs; it splits into
@@ -445,8 +445,8 @@ find-and-replace.
 
 3. **Give the theme its other three slots.** *Built.* The expressive-vs-standard
    question was put to the product owner on 2026-09-08 and answered
-   **expressive**, so `BennuTheme` calls `MaterialExpressiveTheme` with all four
-   slots passed explicitly — colour, `MotionScheme.expressive()`, `BennuShapes`,
+   **expressive**, so `DedunTheme` calls `MaterialExpressiveTheme` with all four
+   slots passed explicitly — colour, `MotionScheme.expressive()`, `DedunShapes`,
    `AuxTypography`. Explicitly, because `MaterialExpressiveTheme` would otherwise
    default them to `expressiveLightColorScheme()` and friends, which is Material's
    palette rather than this app's: the same class of accident as the twelve
@@ -460,13 +460,13 @@ find-and-replace.
    components later phases need (button groups, split buttons, floating toolbars,
    wide navigation rails, `LoadingIndicator`).
 
-   `BennuShapes` is baseline `Shapes()`, and `Shape.kt` records why: the corners
+   `DedunShapes` is baseline `Shapes()`, and `Shape.kt` records why: the corners
    hand-written across the tree already land on the scale — 4dp ×3 = `extraSmall`,
    12dp ×11 = `medium`, 16dp ×2 = `large`, and one 30dp that drifted two units off
    `extraLarge`. Nothing needs restyling; seventeen literals need migrating, later.
 
 4. **Move and fill typography.** `Type.kt` moves from `com.example.ui.theme` to
-   `com.machankura.bennu.compose.ui.theme`. It stays baseline-derived, but it becomes a
+   `com.machankura.dedun.compose.ui.theme`. It stays baseline-derived, but it becomes a
    real file with a stated font stack and a comment recording which roles carry
    what: `display*`/`headline*` for screen identity, `title*` for section and
    card headers, `body*` for prose, `label*` for component text only.
@@ -476,19 +476,19 @@ find-and-replace.
    `container`/`on`/`onContainer`. `CreateProfileScreen.kt:311` and `:329` then
    stop pairing them with `Color.White`/`Color.DarkGray` by eye.
 
-6. **Wrap the desktop gate.** *Built.* `Main.kt` moves `BennuTheme` outside the
+6. **Wrap the desktop gate.** *Built.* `Main.kt` moves `DedunTheme` outside the
    `unlocked` branch, so `PassphraseGate` — the first screen a desktop user sees —
-   stops composing under the default `MaterialTheme`. `BennuApp` keeps its own
-   `BennuTheme`, so the unlocked branch is wrapped twice: android and ios enter
-   through `BennuApp` and would lose the theme entirely if it moved out, and a
+   stops composing under the default `MaterialTheme`. `DedunApp` keeps its own
+   `DedunTheme`, so the unlocked branch is wrapped twice: android and ios enter
+   through `DedunApp` and would lose the theme entirely if it moved out, and a
    second application of the same values costs one `CompositionLocalProvider`.
 
-   `Type.kt` also left `com.example.ui.theme` for `com.machankura.bennu.compose.ui.theme`,
+   `Type.kt` also left `com.example.ui.theme` for `com.machankura.dedun.compose.ui.theme`,
    which removes one of the three package namespaces the UI was living across.
 
 **Done when** every role in `ColorScheme` is explicitly assigned in both
 schemes; the contrast test still passes and now covers six schemes; `Type.kt`
-lives under `com.machankura.bennu`; no composable in the tree renders under a default
+lives under `com.machankura.dedun`; no composable in the tree renders under a default
 `MaterialTheme`.
 
 **Risk:** medium. Adding the fixed roles cannot regress anything (nothing reads
@@ -658,11 +658,11 @@ format argument. `m3-extract-formatted.py --remaining` lists them.
 `UserAgent.APP_NAME` said "Torch", and was left that way here because it goes on the wire
 to relay operators -- a network identity question rather than a content one. That was
 settled when the app was rebranded to Curated: both it and `CLIENT_NAME` were moved off
-Torch there, and the later rebrands carried them to "Curare" and then "Bennu", so the
+Torch there, and the later rebrands carried them to "Curare", "Bennu" and then "Dedun", so the
 `client` tag on a published relay list names the client that published it. `TorchTheme`
-became `CuratedTheme` in that same change, `CurareTheme` in the next and `BennuTheme` in
-the one after, and the two error strings that told a user to install Torch name Bennu
-now, so no live code answers to
+became `CuratedTheme` in that same change, `CurareTheme` in the next, `BennuTheme` in
+the one after and `DedunTheme` in the last, and the two error strings that told a user to
+install Torch name Dedun now, so no live code answers to
 that brand any more. What is left of it is this note, the finding above, and one test
 fixture -- all three records of what was, and wrong to rewrite.
 
@@ -744,13 +744,13 @@ panes last because both were product decisions.
    see below.
 
 2. **`Breakpoint`**, the five-value enum with `ofWidth` as a pure function so the
-   thresholds are assertable without a Compose runtime. `BennuTheme` classifies
+   thresholds are assertable without a Compose runtime. `DedunTheme` classifies
    once and provides `LocalBreakpoint`, so no two screens can disagree about the
    window they are both in.
 
    It reads `currentWindowDpSize()` rather than `currentWindowAdaptiveInfo()`,
    because the latter also computes a `Posture` from the platform's fold state —
-   on android, `WindowInfoTracker` and an activity. This call sits in `BennuTheme`,
+   on android, `WindowInfoTracker` and an activity. This call sits in `DedunTheme`,
    which wraps all 51 `@Preview` bodies in the tree, and a preview context is not
    an activity.
 
@@ -977,9 +977,9 @@ reduced. And a crossfade is told from a cut by the one frame in which *both*
 states are composed.
 
 **A test found a design flaw rather than a bug.** The reduced case read 54dp of
-slide at first, because the test provided `LocalReducedMotion` around `BennuTheme`
+slide at first, because the test provided `LocalReducedMotion` around `DedunTheme`
 and the theme overwrote it. The fix is not in the test: `reducedMotion` is now a
-`BennuTheme` parameter defaulted to the platform, exactly as `contrast` is,
+`DedunTheme` parameter defaulted to the platform, exactly as `contrast` is,
 because a value nothing can override is a value nothing can test — and because the
 desktop actual is a hardcoded `false` that a settings screen will need to override
 anyway.
@@ -1044,7 +1044,7 @@ finding that out is most of what it was worth.
    High contrast is deliberately not in the annotation. Contrast is a property of
    the scheme rather than of a screen, `ColorSchemeContrastTest` measures every
    pair in all six, and there is no `@Preview` parameter for it — it needs
-   `BennuTheme(contrast = …)` in the body. `ThemeGallery` covers the six once,
+   `DedunTheme(contrast = …)` in the body. `ThemeGallery` covers the six once,
    over components rather than screens, with `dynamicColor = false` because an
    android 12+ preview would otherwise paint all six columns from the wallpaper.
    It is the only place the medium and high contrast schemes can be seen at all.
@@ -1131,7 +1131,7 @@ Phases 1–5 can be worked in parallel by different people if 1 lands first;
   `ExperimentalMaterial3ExpressiveApi` opt-ins and the pinned alpha both point
   expressive, but it is a product decision with a visible outcome, and it should
   be made deliberately rather than inherited from an import.
-- **Whether dynamic colour should keep overriding the brand.** `BennuTheme` defaults
+- **Whether dynamic colour should keep overriding the brand.** `DedunTheme` defaults
   `dynamicColor = true`, and on Android 12+ that wins unconditionally — so on
   essentially every current Android device, none of the six schemes below is used
   and the app renders in whatever the user's wallpaper produced. Verified on an API
@@ -1154,7 +1154,7 @@ Phases 1–5 can be worked in parallel by different people if 1 lands first;
 - **iOS.** The ios targets only build on a mac (see `jvm-target.md`), so nothing
   here has been verified on the platform whose HIG asks for 44dp targets rather
   than 48dp. M3 notes the difference; this plan assumes 48dp everywhere.
-- **The three package namespaces.** `com.machankura.bennu`, `com.example.ui.theme` and
+- **The three package namespaces.** `com.machankura.dedun`, `com.example.ui.theme` and
   `com.machankura.compose` all hold live UI code. Phase 1 moves `Type.kt` and
   Phase 3 moves `Clickable.kt` because both are in the way; the rest of the
   `com.machankura` tree — NFC widgets among it — is out of scope.

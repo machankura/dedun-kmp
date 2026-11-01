@@ -82,15 +82,15 @@ import kotlin.time.TimeSource
  * 2. how long eclair waits for our signatures inside a splice, by delaying each one (step 3);
  * 3. how long two commitments stay live, from the purchase's answer to the splice locking (step 4).
  *
- * Skipped unless `BENNU_REGTEST=1`. `BENNU_SPLICE_DELAYS` takes the delays to try, in seconds,
+ * Skipped unless `DEDUN_REGTEST=1`. `DEDUN_SPLICE_DELAYS` takes the delays to try, in seconds,
  * comma-separated; by default 0, 10 and 25. A purchase needs two signatures, the first commitment on the
  * new output and the shared input, and eclair allows a splice `channel.quiescence-timeout`, one minute by
  * default, from quiescence: at 30 seconds a signature it disconnects as the second arrives (the run of
  * 2026-11-01, recorded in the plan's Phase 0).
  */
 class LiquidityPurchaseRegtestJvmTest {
-    private val enabled = System.getenv("BENNU_REGTEST") == "1"
-    private val delays = (System.getenv("BENNU_SPLICE_DELAYS") ?: "0,10,25").split(",").map { it.trim().toInt().seconds }
+    private val enabled = System.getenv("DEDUN_REGTEST") == "1"
+    private val delays = (System.getenv("DEDUN_SPLICE_DELAYS") ?: "0,10,25").split(",").map { it.trim().toInt().seconds }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val loggerFactory = LoggerFactory(StaticConfig(Severity.Warn, listOf(platformLogWriter())))
     private val http = HttpClient.newHttpClient()
@@ -178,7 +178,7 @@ class LiquidityPurchaseRegtestJvmTest {
 
     @Test
     fun `a node that keeps its funding key buys liquidity from eclair, and how long eclair waits`() = runBlocking<Unit> {
-        assumeTrue("set BENNU_REGTEST=1 with testing/regtest up", enabled)
+        assumeTrue("set DEDUN_REGTEST=1 with testing/regtest up", enabled)
         val lspId = PublicKey.fromHex(lsp("getinfo").jsonObject["nodeId"]!!.jsonPrimitive.content)
 
         var signingDelay = Duration.ZERO
@@ -189,7 +189,7 @@ class LiquidityPurchaseRegtestJvmTest {
         )
         val electrum = ElectrumClient(scope, loggerFactory)
         check(electrum.connect(ServerAddress("127.0.0.1", 28001, TcpSocket.TLS.DISABLED), TcpSocket.Builder())) { "electrs is not reachable: testing/regtest/regtest.sh up" }
-        val ctx = PlatformContext(Files.createTempDirectory("bennu-liquidity").toFile())
+        val ctx = PlatformContext(Files.createTempDirectory("dedun-liquidity").toFile())
         val databases = PhoenixDatabases(
             channels = createSqliteChannelsDb(createChannelsDbDriver(ctx, "channels.sqlite")),
             payments = createSqlitePaymentsDb(createPaymentsDbDriver(ctx, "payments.sqlite") {}, null, loggerFactory),

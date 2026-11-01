@@ -1,4 +1,4 @@
-# curare docs
+# dedun docs
 
 Notes on the parts of this app whose behaviour is not recoverable by reading the
 code alone — where the reasoning lives in a protocol, a failure mode that is

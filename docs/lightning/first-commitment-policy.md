@@ -9,7 +9,7 @@ Phase 9, check 5, and with the floor-starting deviation at its line 80
 ## The finding
 
 `GroupLightningCoSigner.checkRemote` runs its checks in this order
-(`composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/GroupLightningCoSigner.kt`):
+(`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/GroupLightningCoSigner.kt`):
 
 1. the mainnet channel cap, `:374-377`, which runs for every remote commitment,
    first or not;

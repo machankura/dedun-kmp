@@ -24,7 +24,7 @@ ceremony — the rounds, the group events, and the approval a human is asked for
 A batch of `k` events is `k` independent FROST instances run in lockstep,
 sharing one signer set, one transcript and one prompt. The saving is transport
 and UX, not crypto, and that is the saving worth having: today
-[FrostSigningManager](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/FrostSigningManager.kt)
+[FrostSigningManager](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/FrostSigningManager.kt)
 spends five MLS group events and one human decision per event signed.
 
 ## The constraint
@@ -33,7 +33,7 @@ A Schnorr partial signature is `s = k + e·x`, with `e = H(R‖P‖m)`. Two diff
 messages under the same nonce `R` give two equations in one unknown and the
 secret share falls out. That is not a subtlety to be careful around; it is the
 one way a t-of-n key is lost, and it is already what the two write-once rules on
-[FrostSigningSession](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/FrostSigningSession.kt)
+[FrostSigningSession](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/FrostSigningSession.kt)
 exist to prevent.
 
 So the rule every phase below is built to keep:
@@ -136,13 +136,13 @@ in-flight session resumes as though nothing happened. A migration that dropped
 them and let sessions restart would be the one dangerous way to write this.
 
 Update the entity list and `version = 10` in
-[BennuDatabase.kt:175](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/BennuDatabase.kt),
+[DedunDatabase.kt:175](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/DedunDatabase.kt),
 regenerate `composeApp/schemas/10.json`, and add the DAO methods:
 `getItems(sessionId)`, `observeItems(sessionId)`, `upsertItems(List<FrostSigningItem>)`,
 `countItems(sessionId)`, `countSignedItems(sessionId)`.
 
 **Test:** extend
-[FrostSigningSessionDaoJvmTest](../composeApp/src/jvmTest/kotlin/com/machankura/bennu/compose/database/dao/FrostSigningSessionDaoJvmTest.kt)
+[FrostSigningSessionDaoJvmTest](../composeApp/src/jvmTest/kotlin/com/machankura/dedun/compose/database/dao/FrostSigningSessionDaoJvmTest.kt)
 with item CRUD, the `(sessionId, itemIndex)` dedupe, index ordering and the
 cascade delete. Add a migration test that runs the migration over a v9 database
 holding a half-finished session and asserts the seed and aggregate survive at
@@ -159,7 +159,7 @@ The whole point of this phase is that **every existing test passes unchanged**.
 on the wire are byte-identical to today's. What changes is that `advance()`
 loops.
 
-In [FrostSigningManager.advance](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/FrostSigningManager.kt):
+In [FrostSigningManager.advance](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/FrostSigningManager.kt):
 
 1. Load `items` once, ordered by `index`.
 2. Nonce generation becomes a `map` over items, each with its own
@@ -214,9 +214,9 @@ they are the identity — a one-element comma join is the bare value — so they
 change no byte on the wire and leave Phase 3 to the proposal encoding alone.
 
 **Test:** existing tests are the test. If
-[FrostSigningRoundTest](../composeApp/src/commonTest/kotlin/com/machankura/bennu/compose/managers/FrostSigningRoundTest.kt)
+[FrostSigningRoundTest](../composeApp/src/commonTest/kotlin/com/machankura/dedun/compose/managers/FrostSigningRoundTest.kt)
 and
-[SignedGroupKeyStateTest](../composeApp/src/jvmTest/kotlin/com/machankura/bennu/compose/managers/SignedGroupKeyStateTest.kt)
+[SignedGroupKeyStateTest](../composeApp/src/jvmTest/kotlin/com/machankura/dedun/compose/managers/SignedGroupKeyStateTest.kt)
 pass without edits beyond the schema move, the vectorisation is faithful.
 
 ---
@@ -326,7 +326,7 @@ above. This phase is what surrounds it.)*
 
 ```kotlin
 suspend fun proposeSigningBatch(
-    database: BennuDatabase,
+    database: DedunDatabase,
     localChatRoom: LocalChatRoom,
     userPublicKey: HexKey,
     events: List<EventTemplate<*>>,   // each carries its own createdAt
@@ -335,17 +335,17 @@ suspend fun proposeSigningBatch(
 ```
 
 `proposeSigning` stays, as the one-element call into it, so
-[AddDialectViewModel](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/AddDialectViewModel.kt),
-[AddArtifactViewModel](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/AddArtifactViewModel.kt)
+[AddDialectViewModel](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/AddDialectViewModel.kt),
+[AddArtifactViewModel](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/AddArtifactViewModel.kt)
 and
-[GroupKeyStateManager.propose](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/GroupKeyStateManager.kt)
+[GroupKeyStateManager.propose](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/GroupKeyStateManager.kt)
 need no edit at all. `GroupKeyStateManager` in particular should never batch: a
 room's key state is the statement every other session is opened against, and
 bundling it with anything else would make it as available as its worst
 co-passenger.
 
 Mirror both on
-[FrostSigningRepository](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/repository/FrostSigningRepository.kt),
+[FrostSigningRepository](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/repository/FrostSigningRepository.kt),
 including the `NO_OP` implementation. `signedEvent(session): Event?` becomes
 `signedEvents(session): List<Event>`.
 
@@ -386,10 +386,10 @@ coordinator rather than a normal ending.
 **Two days, most of it in the screen.**
 
 - `FrostSigningUIState.Loaded` gains `items: List<FrostSigningItem>`.
-- [FrostSigningViewModel](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/FrostSigningViewModel.kt)
+- [FrostSigningViewModel](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/FrostSigningViewModel.kt)
   combines `observeItems` into its existing `combine`; nothing else changes,
   since it already re-renders on every session write.
-- [FrostSigningScreen](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/FrostSigningScreen.kt)
+- [FrostSigningScreen](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/FrostSigningScreen.kt)
   renders a list where it renders one event today.
 
 **The approval gate must show every event, not a count.** The argument in
@@ -406,7 +406,7 @@ one session.
 
 No new `ChatMessage` types. The existing `TYPE_FROST_*` constants,
 `FROST_REQUEST_FULFILMENTS`, `FROST_SETTLEMENTS` and `FROST_TYPES` in
-[ChatMessage.kt:220](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/ChatMessage.kt)
+[ChatMessage.kt:220](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/ChatMessage.kt)
 all work as they stand — one line per step, per member, whatever `k` is. Only
 the wording in `announceStep` and `announceStarted` gains a count: "signed their
 part of 12 events". This is worth checking rather than assuming, because a new
@@ -451,7 +451,7 @@ session opens the list instead.
 this is the section anybody adding to these tests will read.)*
 
 Extend
-[SignedGroupKeyStateTest](../composeApp/src/jvmTest/kotlin/com/machankura/bennu/compose/managers/SignedGroupKeyStateTest.kt),
+[SignedGroupKeyStateTest](../composeApp/src/jvmTest/kotlin/com/machankura/dedun/compose/managers/SignedGroupKeyStateTest.kt),
 which already runs a real signing session between two devices over two
 databases, with a `k = 3` batch: both devices reach `COMPLETE`, all three
 signatures verify against their own event ids under the room's key, all three
@@ -480,7 +480,7 @@ faulty or dishonest member in this harness:
   message.
 
 And three in
-[FrostSigningRoundTest](../composeApp/src/commonTest/kotlin/com/machankura/bennu/compose/managers/FrostSigningRoundTest.kt),
+[FrostSigningRoundTest](../composeApp/src/commonTest/kotlin/com/machankura/dedun/compose/managers/FrostSigningRoundTest.kt),
 against real FROST with no database, for the same reason that file exists at
 all — the library calls are checked with nothing in the way: a `k = 3` batch
 from one signer set where all three verify, an item's signature refusing to

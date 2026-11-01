@@ -11,7 +11,7 @@ app is in the foreground:
   events that make us a member of a new group.
 - **kind 445**, Marmot group events h-tagged with every group id we belong to.
 
-The code is [`LiveSubscriptionManager`](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/LiveSubscriptionManager.kt),
+The code is [`LiveSubscriptionManager`](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/LiveSubscriptionManager.kt),
 built and scoped by `SynchronizationViewModel`.
 
 ## What this replaced
@@ -99,14 +99,14 @@ reconcile against a conversation the relay is no longer having.
 The two kinds need opposite treatment, and it is visible in our own outbound code.
 
 Gift wraps are stamped with `TimeUtils.randomWithTwoDays()`
-([`DatabaseChatRepository.kt:344`](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseChatRepository.kt:344)),
+([`DatabaseChatRepository.kt:344`](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseChatRepository.kt:344)),
 so a wrap published *now* can carry a `created_at` two days old. **A `since`
 anywhere near the present would silently drop a large fraction of genuinely new
 messages** — and "some DMs just don't arrive" is the worst failure mode to debug.
 There is none.
 
 Group events use `TimeUtils.now()`
-([`MarmotOutboundDao.kt:578`](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/MarmotOutboundDao.kt:578)),
+([`MarmotOutboundDao.kt:578`](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/MarmotOutboundDao.kt:578)),
 so a watermark would be safe there. It still is not used: `limit` already bounds
 the initial burst, and a watermark would have to be recomputed every time a
 chunk's membership changed.
@@ -154,7 +154,7 @@ id which the old one then closes out from under.
 ### Lifecycle
 
 `AppLifecycle` is a singleton `StateFlow<Boolean>` fed by a `LifecycleEventObserver`
-in `BennuNavHost`. A singleton rather than something threaded through the
+in `DedunNavHost`. A singleton rather than something threaded through the
 composition, because the consumers are application-scoped coroutines that outlive
 any screen. It defaults to foreground: on a platform where the observer is not
 wired up, "always on" is the behaviour that predates it, and a subscription that

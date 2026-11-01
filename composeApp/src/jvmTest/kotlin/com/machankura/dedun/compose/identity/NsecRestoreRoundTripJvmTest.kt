@@ -68,8 +68,8 @@ class NsecRestoreRoundTripJvmTest {
 
     @BeforeTest
     fun setUp() {
-        storeDir = Files.createTempDirectory("bennu-round-trip-store").toFile()
-        appDir = Files.createTempDirectory("bennu-round-trip-app").toFile()
+        storeDir = Files.createTempDirectory("dedun-round-trip-store").toFile()
+        appDir = Files.createTempDirectory("dedun-round-trip-app").toFile()
         JvmKeyStore.lock()
         JvmKeyStore.unlock("correct horse battery staple".toCharArray(), storeDir)
         phoenixGlobal = PhoenixGlobal(PlatformContext(applicationDir = appDir))

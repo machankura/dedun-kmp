@@ -6,10 +6,10 @@ import com.vitorpamplona.quartz.nip65RelayList.tags.AdvertisedRelayInfo
 import com.vitorpamplona.quartz.nip65RelayList.tags.AdvertisedRelayType
 
 object Relays {
-    // Still on the mantra.press host three rebrands later -- Mantra to Curated, Curated
-    // to Curare, Curare to Bennu -- because this is a running relay, not a brand string. It is in the
+    // Still on the mantra.press host four rebrands later -- Mantra to Curated, Curated
+    // to Curare, Curare to Bennu, Bennu to Dedun -- because this is a running relay, not a brand string. It is in the
     // bootstrap, publish, finder and DM sets, so pointing it at a name nobody has stood
-    // up yet would take the app off the network. Swap it when a Bennu relay exists to
+    // up yet would take the app off the network. Swap it when a Dedun relay exists to
     // swap it for.
     val ephemeral = RelayUrlNormalizer.normalize("wss://ephemeral.mantra.press")
 

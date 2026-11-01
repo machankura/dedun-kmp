@@ -66,6 +66,12 @@ object IcebergDkg {
     /** `SECP256K1_ICEBERG_MAX_PARTICIPANTS`, which sizes the library's ABI. */
     const val MAX_PARTICIPANTS = 10
 
+    /*
+     * Inputs to the session id, the commitments, the seeds and the transcript, so a
+     * group's Lightning key and every member's check of it hang on these exact
+     * bytes. They say `bennu/` in Dedun for the reason [GroupWalletDerivation]'s
+     * account tag does, and `DomainTagsPinnedTest` pins each one.
+     */
     private const val TAG_SESSION = "bennu/iceberg-dkg/session/v1"
     private const val TAG_CONTRIBUTION = "bennu/iceberg-dkg/contribution/v1"
     private const val TAG_COMMIT = "bennu/iceberg-dkg/commit/v1"

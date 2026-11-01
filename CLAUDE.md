@@ -207,7 +207,7 @@ testing/regtest/regtest.sh up
 ```
 
 ```bash
-BENNU_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
+DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
 ```
 
 `docs/scripts/` also holds the tools each phase was done with —

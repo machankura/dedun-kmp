@@ -85,8 +85,8 @@ class MultipleProfilesRoundTripJvmTest {
 
     @BeforeTest
     fun setUp() {
-        storeDir = Files.createTempDirectory("bennu-profiles-store").toFile()
-        appDir = Files.createTempDirectory("bennu-profiles-app").toFile()
+        storeDir = Files.createTempDirectory("dedun-profiles-store").toFile()
+        appDir = Files.createTempDirectory("dedun-profiles-app").toFile()
         JvmKeyStore.lock()
         JvmKeyStore.unlock("correct horse battery staple".toCharArray(), storeDir)
         // No GlobalPrefs of the test's own -- see AddProfileFromInsideJvmTest.setUp.

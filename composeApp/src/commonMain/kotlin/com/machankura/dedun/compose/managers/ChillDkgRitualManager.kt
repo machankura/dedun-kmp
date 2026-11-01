@@ -96,8 +96,8 @@ object ChillDkgRitualManager {
      * flaw in either can reach the other. Deriving it from the same seed keeps it
      * recoverable from the wallet backup without being the same key.
      *
-     * The `mantra/` prefix has now survived three rebrands on purpose -- Mantra to
-     * Curated, Curated to Curare, Curare to Bennu. It is an input to the hash, so renaming it derives
+     * The `mantra/` prefix has now survived four rebrands on purpose -- Mantra to
+     * Curated, Curated to Curare, Curare to Bennu, Bennu to Dedun. It is an input to the hash, so renaming it derives
      * a different host key from the same seed --
      * which loses the outputs of every DKG session already run, since ChillDKG needs
      * the host secret key to recover them. Renaming it is a protocol fork.

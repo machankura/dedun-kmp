@@ -406,7 +406,7 @@ migration, which can find them by kind.
 tests a kind set of their own. Closes F13 and F14 in code; the tables go in
 Phase 8.**
 
-Paths below are under `composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/`
+Paths below are under `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`
 unless they say otherwise. Line numbers were right at `e3839da5`; confirm them
 with a grep.
 
@@ -424,7 +424,7 @@ with a grep.
 
 ### Edited
 
-- **`BennuNavHost.kt`**: the feature's imports, `databaseMantraRepository`,
+- **`DedunNavHost.kt`**: the feature's imports, `databaseMantraRepository`,
   the `mantraRepository =` argument in the chat room detail block, and the
   `composable<>` blocks for the nine routes.
 - **`ChatRoomDetailScreen.kt`, `ChatRoomDetailViewModel.kt`**: the
@@ -564,7 +564,7 @@ stay, since the chronicle does.
 - `GroupSignedEvent` keeps any rows of kinds 30300-30309. The table is generic
   and keyed by kind, nothing reads those kinds any more, and deleting a group's
   signed record is not this plan's call.
-- `BennuDatabase`: `version = 27`, the twelve entities and thirteen DAO
+- `DedunDatabase`: `version = 27`, the twelve entities and thirteen DAO
   accessors removed, and the migration-history comment gets a line for 26 → 27.
   Commit `27.json`.
 

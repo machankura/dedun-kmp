@@ -68,8 +68,8 @@ class AddProfileFromInsideJvmTest {
 
     @BeforeTest
     fun setUp() {
-        storeDir = Files.createTempDirectory("bennu-add-inside-store").toFile()
-        appDir = Files.createTempDirectory("bennu-add-inside-app").toFile()
+        storeDir = Files.createTempDirectory("dedun-add-inside-store").toFile()
+        appDir = Files.createTempDirectory("dedun-add-inside-app").toFile()
         JvmKeyStore.lock()
         JvmKeyStore.unlock("correct horse battery staple".toCharArray(), storeDir)
         // No GlobalPrefs of the test's own: DataStoreManager caches one per process, and

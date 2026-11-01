@@ -78,7 +78,11 @@ object GroupLightningCoSigner {
 
     fun walletKey(chatRoomId: String, chain: Chain, wallet: Long): String = "$chatRoomId:${GroupWalletStatementEvent.chainName(chain)}:$wallet"
 
-    /** The label of pool counter [counter] for the group key [icebergKey]: every member computes the same. */
+    /**
+     * The label of pool counter [counter] for the group key [icebergKey]: every member computes the same.
+     * The tag stays `bennu/` in Dedun -- a co-signer that hashed under another would label every nonce
+     * differently from the rest of its group -- and `DomainTagsPinnedTest` pins it.
+     */
     fun poolLabel(icebergKey: HexKey, counter: Long): ByteVector32 =
         Crypto.taggedHash(ByteVector(icebergKey).toByteArray() + Pack.writeInt64BE(counter), "bennu/iceberg/pool/v1")
 

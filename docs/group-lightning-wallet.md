@@ -157,7 +157,7 @@ testing/regtest/regtest.sh up
 ```
 
 ```bash
-BENNU_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
+DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
 ```
 
 | step | what happens | result |

@@ -52,7 +52,7 @@ import java.io.File
  *
  *  - the wallet seed is protected by a passphrase, so nothing can start until one has been
  *    entered (see [PassphraseGate]);
- *  - one directory is handed to both the bennu and the phoenix context, so a single install
+ *  - one directory is handed to both the dedun and the phoenix context, so a single install
  *    keeps a single place on disk rather than two named after different projects.
  */
 fun main() = application {

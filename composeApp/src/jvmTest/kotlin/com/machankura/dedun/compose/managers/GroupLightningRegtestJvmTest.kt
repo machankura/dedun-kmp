@@ -76,10 +76,10 @@ import kotlin.time.Duration.Companion.seconds
  * Every message between the devices goes through the same managers the inbound path uses, pumped in the
  * background; the node's signatures are the group's, made by Iceberg co-signing in the room.
  *
- * Skipped unless `BENNU_REGTEST=1`, because it needs the docker network.
+ * Skipped unless `DEDUN_REGTEST=1`, because it needs the docker network.
  */
 class GroupLightningRegtestJvmTest {
-    private val enabled = System.getenv("BENNU_REGTEST") == "1"
+    private val enabled = System.getenv("DEDUN_REGTEST") == "1"
     private val fixture = GroupLightningFixture(chain = Chain.Regtest)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val loggerFactory = LoggerFactory(StaticConfig(Severity.Info, listOf(platformLogWriter())))
@@ -220,7 +220,7 @@ class GroupLightningRegtestJvmTest {
 
     @Test
     fun `four devices open, receive, pay, close and sweep on regtest`() = runBlocking<Unit> {
-        assumeTrue("set BENNU_REGTEST=1 with testing/regtest up", enabled)
+        assumeTrue("set DEDUN_REGTEST=1 with testing/regtest up", enabled)
         requireNetwork()
         val lspId = lsp("getinfo").jsonObject["nodeId"]!!.jsonPrimitive.content
 
@@ -241,7 +241,7 @@ class GroupLightningRegtestJvmTest {
         val electrum = ElectrumClient(scope, loggerFactory)
         assertTrue(electrum.connect(ServerAddress("127.0.0.1", 28001, TcpSocket.TLS.DISABLED), TcpSocket.Builder()), "electrs is reachable")
         val clients = GroupChainClients.single(electrum)
-        val ctx = PlatformContext(Files.createTempDirectory("bennu-regtest").toFile())
+        val ctx = PlatformContext(Files.createTempDirectory("dedun-regtest").toFile())
         val walletParams = LSP.from(Chain.Testnet3).walletParams.copy(trampolineNode = NodeUri(PublicKey.fromHex(lspId), "127.0.0.1", 29735))
         val handles = mutableListOf<GroupLightningNode.PeerHandle>()
         val real = GroupLightningNode.lightningKmpPeers(

@@ -143,7 +143,7 @@ class DedunDatabaseJvmTest {
      */
     @Test
     fun `the on-disk builder writes where the context says`() = runBlocking {
-        val dir = Files.createTempDirectory("bennu-db-test").toFile()
+        val dir = Files.createTempDirectory("dedun-db-test").toFile()
         try {
             val onDisk = getRoomDatabase(
                 PlatformDatabaseBuilder.getDatabaseBuilder(PlatformContext(dir))

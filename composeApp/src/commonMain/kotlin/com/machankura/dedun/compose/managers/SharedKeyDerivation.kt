@@ -62,11 +62,11 @@ object SharedKeyDerivation {
      * coexist with keys already derived under this one, and distinct from any other
      * use of the same threshold key.
      *
-     * The `mantra/` prefix has now survived three rebrands on purpose -- Mantra to
-     * Curated, Curated to Curare, Curare to Bennu -- for the same reason [MARMOT_ADMIN_GROUP_PATH] has
+     * The `mantra/` prefix has now survived four rebrands on purpose -- Mantra to
+     * Curated, Curated to Curare, Curare to Bennu, Bennu to Dedun -- for the same reason [MARMOT_ADMIN_GROUP_PATH] has
      * to stay put: this string is an input to the derivation, so changing it changes
      * every key derived under it. That would orphan every room already created, and
-     * split Bennu off from any peer still running an older build -- the two would
+     * split Dedun off from any peer still running an older build -- the two would
      * derive different keys from the same threshold key and their partial signatures
      * would aggregate to nothing that verifies.
      * Renaming it is a protocol fork, and belongs in a `v2` tag if it is ever wanted.

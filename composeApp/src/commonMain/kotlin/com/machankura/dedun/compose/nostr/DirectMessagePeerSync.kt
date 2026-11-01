@@ -16,7 +16,7 @@ import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
  * hold the key package and the DM relay list, and the kind 0 of anyone who has
  * published one here; the indexer relays hold everyone's kind 0 and nothing else a
  * chat needs. A three-kind filter to the indexers comes back with the kind 0 alone;
- * a kind-0-only filter to our relay finds a person who has never opened Bennu
+ * a kind-0-only filter to our relay finds a person who has never opened Dedun
  * nowhere.
  *
  * Both at level 0, for the reason `MemberProfileSync` gives: it marks a request as

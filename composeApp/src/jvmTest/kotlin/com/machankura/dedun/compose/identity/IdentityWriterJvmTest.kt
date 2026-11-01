@@ -78,8 +78,8 @@ class IdentityWriterJvmTest {
         // to; a real dispatcher rather than a test one, because it reports after a real
         // one-second delay and a virtual clock would never reach it.
         Dispatchers.setMain(Dispatchers.Default)
-        storeDir = Files.createTempDirectory("bennu-identity-writer-store").toFile()
-        appDir = Files.createTempDirectory("bennu-identity-writer-app").toFile()
+        storeDir = Files.createTempDirectory("dedun-identity-writer-store").toFile()
+        appDir = Files.createTempDirectory("dedun-identity-writer-app").toFile()
         JvmKeyStore.lock()
         JvmKeyStore.unlock("correct horse battery staple".toCharArray(), storeDir)
         phoenixGlobal = PhoenixGlobal(PlatformContext(applicationDir = appDir))

@@ -232,7 +232,7 @@ four rules unchanged.
  * device is the elected sender for (D4); the catch-up passes false.
  * Returns the rooms told.
  */
-suspend fun forward(database: BennuDatabase, statement: Event, chatRoomId: String, whenElected: Boolean): List<LocalChatRoom>
+suspend fun forward(database: DedunDatabase, statement: Event, chatRoomId: String, whenElected: Boolean): List<LocalChatRoom>
 ```
 
 1. `believable(statement)`, or nothing;

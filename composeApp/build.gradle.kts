@@ -318,11 +318,11 @@ val m3Audit = tasks.register("m3Audit") {
 
 tasks.named("check") { dependsOn(m3Audit) }
 
-// The group Lightning wallet's regtest run (testing/regtest/README.md) runs only when BENNU_REGTEST=1.
+// The group Lightning wallet's regtest run (testing/regtest/README.md) runs only when DEDUN_REGTEST=1.
 // An environment variable is not a task input, so without this a skipped run would leave jvmTest up to
 // date, and asking for the run afterwards would replay the skip.
 tasks.withType<Test>().configureEach {
-    inputs.property("bennuRegtest", providers.environmentVariable("BENNU_REGTEST").orElse(""))
+    inputs.property("dedunRegtest", providers.environmentVariable("DEDUN_REGTEST").orElse(""))
 }
 
 compose.desktop {

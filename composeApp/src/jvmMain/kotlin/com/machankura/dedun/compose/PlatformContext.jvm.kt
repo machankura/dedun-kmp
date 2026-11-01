@@ -45,7 +45,7 @@ internal fun defaultDedunDir(): File {
 }
 
 /**
- * The directory name kept the old brand through the rebrands to Curare and Bennu, for the same
+ * The directory name kept the old brand through the rebrands to Curare, Bennu and Dedun, for the same
  * reason the `mantra/` hash prefixes did: its spelling is load-bearing for state that
  * already exists. It names the one directory holding the Room database, the marmot
  * group state and the phoenix wallet, so renaming it does not move an install -- it
@@ -54,6 +54,6 @@ internal fun defaultDedunDir(): File {
  *
  * Renaming it is a migration -- copy or move on first run, then flip this -- and not
  * part of a rebrand. Until that exists, the desktop app is `curated` on disk and
- * `Bennu` everywhere a user can read.
+ * `Dedun` everywhere a user can read.
  */
 private const val APP_DIR_NAME = "curated"

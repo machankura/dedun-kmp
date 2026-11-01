@@ -144,13 +144,13 @@ class NostrEventFilterQueryTest {
 
     @Test
     fun `search still matches content`() {
-        val query = NostrEventFilterQuery.build(SynchronizationFilter(search = "bennu"))
+        val query = NostrEventFilterQuery.build(SynchronizationFilter(search = "dedun"))
 
         assertEquals(
             "SELECT * FROM NostrEvent WHERE content LIKE '%' || ? || '%' ORDER BY createdAt DESC, id DESC",
             query.sql,
         )
-        assertEquals(listOf("bennu"), query.boundValues())
+        assertEquals(listOf("dedun"), query.boundValues())
     }
 
     private fun androidx.room3.RoomRawQuery.boundValues(): List<Any> =

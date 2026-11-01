@@ -83,7 +83,10 @@ object MemberWalletRequestEvent {
     private const val POSSESSION_TAG = "possession"
     private const val POLICY_TAG = "member_wallet_policy"
 
-    /** The tag of the possession signature's message. Frozen once a request carries one. */
+    /**
+     * The tag of the possession signature's message. Frozen once a request carries one, so it
+     * says `bennu/` in Dedun: a new tag would fail every request already on the relays.
+     */
     private const val POSSESSION_HASH_TAG = "bennu/member-wallet/possession/v1"
 
     /** The longest label a request carries: a name for a wallet, not a note. */

@@ -166,7 +166,7 @@ is not repeated here.
 
 **Half a day, most of it the test.**
 
-In `composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/wallet/GroupOnchainWallet.kt`,
+In `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/wallet/GroupOnchainWallet.kt`,
 beside `receiveAddress`:
 
 ```kotlin
@@ -241,7 +241,7 @@ on the old behaviour.
 
 - `GroupWalletAddressesRoute(activeUserPublicKey, chatRoomId)` in
   `ui/composable/navigation/routes/`, and a `composable<GroupWalletAddressesRoute>`
-  in `BennuNavHost` beside `GroupWalletRoute`'s, with `onNavigateBack =
+  in `DedunNavHost` beside `GroupWalletRoute`'s, with `onNavigateBack =
   { navController.popBackStack() }`. It is a pushed screen, so it gets
   `NavigateBackButton` in the leading slot of its `TopAppBar`.
 - **The way in** is a `TextButton` at the bottom of the receive-address card in

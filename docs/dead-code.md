@@ -34,7 +34,7 @@ Two things that method cannot see, so each item was also read in context:
 ## Orphaned by the live-sync change
 
 **`ChatRoomListViewModel.scheduleSynchronization`** —
-[ChatRoomListViewModel.kt:80](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/ChatRoomListViewModel.kt:80)
+[ChatRoomListViewModel.kt:80](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/ChatRoomListViewModel.kt:80)
 
 No longer called by `initiate()`. It was kept as the entry point for a
 user-initiated refresh, which is the one thing the live tier does not answer —
@@ -57,21 +57,21 @@ Each of these predates the sync work.
 
 | what | where | note |
 |---|---|---|
-| `RelayPool.removeRelays` | [RelayPool.kt:123](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelayPool.kt:123) | never called; `changeRelays` and `closePool` cover every path that removes a relay |
-| `RelayPool.hasRelays` | [RelayPool.kt:171](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelayPool.kt:171) | never called |
-| `RelayPool.transformWhileEventsAreIncoming` | [RelayPool.kt:486](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelayPool.kt:486) | private, never called. Superseded by `completeOnSubscriptionEnd`, which ends a flow on EOSE/CLOSED/NEG-ERR rather than on "the last message was not an event" |
-| the commented-out publish gate | [RelayPool.kt:547-560](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelayPool.kt:547) | the only thing keeping `import kotlinx.coroutines.flow.transform` ([:30](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelayPool.kt:30)) alive |
-| `RelaysSocketManager.clearRelayPools` | [RelaysSocketManager.kt:100](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt:100) | private, never called. Nothing tears the pool down on sign-out |
-| `RelaysSocketManager.tryConnectingToAllRelays` | [RelaysSocketManager.kt:131](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt:131) | never called; the only caller of `RelayPool.tryConnectingToRelay`, which is otherwise dead too |
-| the commented `tryConnectingToUserRelay` | [RelaysSocketManager.kt:139](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt:139) | |
-| `NostrIncomingMessage?.verifyOrThrow` | [NostrIncomingMessage.kt:59](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrIncomingMessage.kt:59) | never called. It also treats any NOTICE as a failure, which is wrong for the reason `filterByEventId` documents — a NOTICE has no subscription id and reaches every collector |
-| `String?.decodeFromJsonStringOrNull` | [CommonJson.kt:37](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/serialization/CommonJson.kt:37) | never called |
-| `NostrSocketClientImpl.compressMessage` | [NostrSocketClientImpl.kt:368](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClientImpl.kt:368) | already carries `@Suppress("unused")`. Outgoing compression is not a thing any relay here asks for |
-| `DefaultNostrSocketClientFactory.create(httpClient = …)` | [NostrSocketClientFactory.kt](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClientFactory.kt) | the overload taking an explicit `HttpClient` has no caller; everything goes through the interface method and `defaultSocketsHttpClient` |
+| `RelayPool.removeRelays` | [RelayPool.kt:123](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelayPool.kt:123) | never called; `changeRelays` and `closePool` cover every path that removes a relay |
+| `RelayPool.hasRelays` | [RelayPool.kt:171](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelayPool.kt:171) | never called |
+| `RelayPool.transformWhileEventsAreIncoming` | [RelayPool.kt:486](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelayPool.kt:486) | private, never called. Superseded by `completeOnSubscriptionEnd`, which ends a flow on EOSE/CLOSED/NEG-ERR rather than on "the last message was not an event" |
+| the commented-out publish gate | [RelayPool.kt:547-560](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelayPool.kt:547) | the only thing keeping `import kotlinx.coroutines.flow.transform` ([:30](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelayPool.kt:30)) alive |
+| `RelaysSocketManager.clearRelayPools` | [RelaysSocketManager.kt:100](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt:100) | private, never called. Nothing tears the pool down on sign-out |
+| `RelaysSocketManager.tryConnectingToAllRelays` | [RelaysSocketManager.kt:131](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt:131) | never called; the only caller of `RelayPool.tryConnectingToRelay`, which is otherwise dead too |
+| the commented `tryConnectingToUserRelay` | [RelaysSocketManager.kt:139](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt:139) | |
+| `NostrIncomingMessage?.verifyOrThrow` | [NostrIncomingMessage.kt:59](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrIncomingMessage.kt:59) | never called. It also treats any NOTICE as a failure, which is wrong for the reason `filterByEventId` documents — a NOTICE has no subscription id and reaches every collector |
+| `String?.decodeFromJsonStringOrNull` | [CommonJson.kt:37](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/serialization/CommonJson.kt:37) | never called |
+| `NostrSocketClientImpl.compressMessage` | [NostrSocketClientImpl.kt:368](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClientImpl.kt:368) | already carries `@Suppress("unused")`. Outgoing compression is not a thing any relay here asks for |
+| `DefaultNostrSocketClientFactory.create(httpClient = …)` | [NostrSocketClientFactory.kt](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClientFactory.kt) | the overload taking an explicit `HttpClient` has no caller; everything goes through the interface method and `defaultSocketsHttpClient` |
 
 ### `RelaysSocketManager.userRelays` is a field that is never written
 
-[RelaysSocketManager.kt:52](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt:52)
+[RelaysSocketManager.kt:52](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt:52)
 
 Worth separating from the table, because it does not read as dead — it reads as
 a bug.
@@ -80,9 +80,9 @@ a bug.
 private val userRelays = mutableSetOf<RelayDTO>()   // nothing ever adds to this
 ```
 
-The `userRelays` at [:83](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt:83)
+The `userRelays` at [:83](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt:83)
 is a *different, shadowing local* inside `observeRelays`. The field itself is
-only ever read, at [:107](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt:107):
+only ever read, at [:107](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt:107):
 
 ```kotlin
 return if (userRelays.isNotEmpty()) { ...publish to the user's relays... }
@@ -102,10 +102,10 @@ command with `OptimizedJsonMapper` and goes through `sendMESSAGE`.
 
 | declaration | impl |
 |---|---|
-| `sendREQ` [:37](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClient.kt:37) | [:349](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClientImpl.kt:333) |
-| `sendCLOSE` [:31](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClient.kt:31) | [:361](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClientImpl.kt:345) |
-| `sendCOUNT` [:33](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClient.kt:33) | [:354](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClientImpl.kt:338) |
-| `sendAUTH` [:29](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClient.kt:29) | [:365](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrSocketClientImpl.kt:349) |
+| `sendREQ` [:37](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClient.kt:37) | [:349](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClientImpl.kt:333) |
+| `sendCLOSE` [:31](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClient.kt:31) | [:361](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClientImpl.kt:345) |
+| `sendCOUNT` [:33](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClient.kt:33) | [:354](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClientImpl.kt:338) |
+| `sendAUTH` [:29](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClient.kt:29) | [:365](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrSocketClientImpl.kt:349) |
 
 Removing them also orphans `buildNostrREQMessage`, `buildNostrCOUNTMessage`,
 `buildNostrCLOSEMessage` and `buildNostrAUTHMessage` in
@@ -114,12 +114,12 @@ Removing them also orphans `buildNostrREQMessage`, `buildNostrCOUNTMessage`,
 Two of the four are worth keeping for a named reason rather than out of habit:
 
 - **`sendAUTH` is the NIP-42 hole.** `NostrIncomingMessage.AuthMessage`
-  ([:34](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrIncomingMessage.kt:34))
+  ([:34](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrIncomingMessage.kt:34))
   is parsed and then dropped — nothing anywhere handles an AUTH challenge. A
   relay that answers CLOSED with `auth-required` is currently retried with
   backoff forever and will never succeed. `sendAUTH` is half of the fix, so
   delete it only alongside a decision not to support authenticated relays.
-- **`sendCOUNT` and `CountMessage`** ([:38](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/sockets/NostrIncomingMessage.kt:38))
+- **`sendCOUNT` and `CountMessage`** ([:38](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/sockets/NostrIncomingMessage.kt:38))
   are a matched pair with no caller. `CountMessage` is parsed and admitted by
   `filterBySubscriptionId`, but since nothing sends a COUNT it can never arrive.
   Both go, or neither.
@@ -130,7 +130,7 @@ would not start.
 ## Dead all the way down: the publisher chain
 
 **`NostrPublisherRepository`** —
-[NostrPublisherRepository.kt:15](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/repository/NostrPublisherRepository.kt:15)
+[NostrPublisherRepository.kt:15](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/repository/NostrPublisherRepository.kt:15)
 
 The whole class is unreferenced: nothing constructs it, and neither of its two
 methods (`signPublishImportNostrEvent`, `publishRelayList`) is called. Publishing
@@ -149,9 +149,9 @@ would let `CachingImportRepository` go with them.
 ## Dead columns (need a migration)
 
 `isRecommendedRelay` on both
-[SynchronizeNostrEventRequest.kt:40](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/SynchronizeNostrEventRequest.kt:40)
+[SynchronizeNostrEventRequest.kt:40](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/SynchronizeNostrEventRequest.kt:40)
 and
-[NegentropySynchronizeRequest.kt:39](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/NegentropySynchronizeRequest.kt:39)
+[NegentropySynchronizeRequest.kt:39](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/NegentropySynchronizeRequest.kt:39)
 is never written by any caller (every construction takes the `false` default)
 and never read.
 
@@ -175,7 +175,7 @@ not have to re-derive them:
   re-add, but see the Room caveat above: confirm each against the generated
   implementation, not just by grep.
 - **Bech32/credential helpers** in
-  [Credentials.kt](composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/extensions/Credentials.kt) —
+  [Credentials.kt](composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/extensions/Credentials.kt) —
   `assureValidNpub`, `assureValidPubKeyHex`, `hexToNoteHrp`, `urlToLnUrlHrp`,
   `bechToBytesOrThrow`. A conversion toolkit where only some conversions are
   used. Worth keeping as a set if the intent is a complete encoding surface;

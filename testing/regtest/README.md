@@ -10,7 +10,7 @@ LSP. What the run checks, what it found, and why each LSP setting is there is in
 funding key buys inbound liquidity from the LSP, with its signatures delayed, to see what eclair accepts
 and how long it waits. The group run buys liquidity too, between receiving and paying.
 
-The run is **not** part of `./gradlew check` or CI. Without `BENNU_REGTEST=1` the test is reported as
+The run is **not** part of `./gradlew check` or CI. Without `DEDUN_REGTEST=1` the test is reported as
 skipped, so a green `jvmTest` says nothing about it.
 
 ## Prerequisites
@@ -30,7 +30,7 @@ skipped, so a green `jvmTest` says nothing about it.
 | 28080 | the LSP's API (password `lsp`) |
 | 28081 | the payer's API (password `payer`) |
 
-Nothing listens on any other interface, and the compose project is named `bennu-regtest`, so it sits
+Nothing listens on any other interface, and the compose project is named `dedun-regtest`, so it sits
 beside other stacks without touching them.
 
 ## Running it
@@ -48,7 +48,7 @@ finishes by printing the LSP's node id. Allow a minute the first time, after the
 From the repository root:
 
 ```bash
-BENNU_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
+DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
 ```
 
 It takes about thirty seconds. It can be run again on the same network as often as you like. Each
@@ -71,7 +71,7 @@ call eclair's API, for example `./regtest.sh lsp channels` or `./regtest.sh paye
 
 - **The run's own lines and the node's log.** With Gradle's `-q`, or whenever the test passes, nothing
   reaches the console. Everything the test printed is in
-  `composeApp/build/test-results/jvmTest/TEST-com.machankura.bennu.compose.managers.GroupLightningRegtestJvmTest.xml`,
+  `composeApp/build/test-results/jvmTest/TEST-com.machankura.dedun.compose.managers.GroupLightningRegtestJvmTest.xml`,
   under `<system-out>`: the `REGTEST …` progress lines, lightning-kmp's log (`fr.acinq.lightning.*`),
   and the app's managers (`GroupLightningNode`, `GroupLightningCoSigner`, `FrostSigningManager`). The
   HTML report beside it, `composeApp/build/reports/tests/jvmTest/index.html`, shows the same.
@@ -89,7 +89,7 @@ call eclair's API, for example `./regtest.sh lsp channels` or `./regtest.sh paye
 
 | what you see | what it means |
 |---|---|
-| the test is reported as skipped | `BENNU_REGTEST=1` was not set in the environment Gradle runs the test in |
+| the test is reported as skipped | `DEDUN_REGTEST=1` was not set in the environment Gradle runs the test in |
 | `The regtest network is not running: nothing answers for … on 127.0.0.1:…` | that service is down. Run `./regtest.sh up`, or check it with `docker compose ps -a` and its logs |
 | `the payer has no open channel to the LSP` | `up` stopped part way through. Run `./regtest.sh down`, then `up` again |
 | `up` prints `timed out waiting for: …` | a container exited: `docker compose ps -a` shows which, and its log says why |

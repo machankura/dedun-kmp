@@ -84,6 +84,7 @@ object GuardianDerivation {
     /**
      * The key of the guardian root's HMAC. An input to every guardian key, so it
      * is frozen the moment a certificate carries one: a rename moves every leaf.
+     * It says `bennu/` in Dedun for the reason [GroupWalletDerivation]'s account tag does.
      */
     private const val ROOT_TAG = "bennu/group-wallet/guardian/v1"
 

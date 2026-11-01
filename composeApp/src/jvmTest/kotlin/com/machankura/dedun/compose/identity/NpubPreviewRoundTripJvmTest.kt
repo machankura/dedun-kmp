@@ -91,8 +91,8 @@ class NpubPreviewRoundTripJvmTest {
 
     @BeforeTest
     fun setUp() {
-        storeDir = Files.createTempDirectory("bennu-preview-store").toFile()
-        appDir = Files.createTempDirectory("bennu-preview-app").toFile()
+        storeDir = Files.createTempDirectory("dedun-preview-store").toFile()
+        appDir = Files.createTempDirectory("dedun-preview-app").toFile()
         JvmKeyStore.lock()
         JvmKeyStore.unlock("correct horse battery staple".toCharArray(), storeDir)
         phoenixGlobal = PhoenixGlobal(PlatformContext(applicationDir = appDir))

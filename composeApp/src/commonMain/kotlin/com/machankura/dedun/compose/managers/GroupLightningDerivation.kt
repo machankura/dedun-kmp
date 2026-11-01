@@ -44,7 +44,7 @@ import fr.acinq.lightning.crypto.GroupBasepoints
  * TapTweak, because nothing commits a script tree to these keys -- they are the leaf.
  */
 object GroupLightningDerivation {
-    /** Frozen once a channel exists under it, for the reason [GroupWalletDerivation]'s account tag is. */
+    /** Frozen once a channel exists under it, `bennu/` and all, for the reason [GroupWalletDerivation]'s account tag is. */
     private const val TAG = "bennu/group-lightning/basepoints/v1"
 
     const val PAYMENT: Long = 0L

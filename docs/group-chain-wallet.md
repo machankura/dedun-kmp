@@ -34,7 +34,7 @@ kept as written; where the build chose differently the table below says so.
 | `receiveAddress` is the first unused address | it is, and that is `ElectrumMiniWallet`'s rule: the *lowest* unused index, so a gap below a paid address is refilled before the next one is offered. Null until Electrum has answered, rather than `/0/0` |
 | members who can sign see *Open a group wallet* on the group's screen; others see nothing | every member sees a *Group wallet* row, saying *Open on mainnet* or *Not opened yet*; the open action lives on the wallet screen's empty state, behind the same `canSign` gate, with Phase 10's sentence about unencrypted shares above the button |
 | the wallet's network is the identity's | `NodeParamsManager.chain`, read statically. An nsec or npub profile has no node, and still has to know which network's statement to look for |
-| `GroupOnchainWallets` started under the identity's `collectLatest` | made in `BennuNavHost`, remembered on the identity's `PhoenixBusiness` and stopped in a `DisposableEffect` when it changes — the same lifetime, held where the business already is |
+| `GroupOnchainWallets` started under the identity's `collectLatest` | made in `DedunNavHost`, remembered on the identity's `PhoenixBusiness` and stopped in a `DisposableEffect` when it changes — the same lifetime, held where the business already is |
 | `FrostSigningItem.eventId` and `unsignedEventJson` renamed in Kotlin to `message` and `payload` with `@ColumnInfo(name = …)` | not renamed: `message` and `payload` are getters over them. `eventId` is spelled the same way in thirty files that have nothing to do with this table, and a rename a search cannot tell apart from them is not worth what it would tidy |
 | `GroupTransaction` has `broadcastAt` and `confirmedAt` | and `seenAt`, because Electrum's broadcast reports success whatever the server said: sent and seen are the two facts there are, and confirmed is a third. Inserted with `IGNORE` so the proposed PSBT is write-once at the database, not only in the manager |
 | a claimed index is bounded by the range the wallet has generated | by a constant, `GroupSpend.MAX_ADDRESS_INDEX` (100,000). The bound is on work, and a member with no node — who can still sign — has no generated range to bound it by |
@@ -132,7 +132,7 @@ has one share. Do what those helpers do, by hand, through `TweakCache` and
 | more than one wallet per group is possible later | BIP44's `account'` |
 | a member can check, alone, that no script path is hidden in the address | otherwise one member can propose an address with a back door and nobody can tell |
 | addresses rotate, and change is told apart from payment | address reuse is a privacy leak for a treasury, and a signer has to see where the money goes |
-| a watch-only tool can follow the wallet | a treasurer, an auditor or a member's Sparrow should not need Bennu to see the balance |
+| a watch-only tool can follow the wallet | a treasurer, an auditor or a member's Sparrow should not need Dedun to see the balance |
 | everything is a pure function of what every member already holds | [Rederive rather than persist](./shared-key-derivation.md#what-it-produces) |
 
 ### The path
@@ -304,7 +304,7 @@ bitcoin-kmp; there is no `tr()` builder in the library, so it is formatted here.
 
 **A day. Pure functions, no I/O, no schema.**
 
-`composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/GroupWalletDerivation.kt`,
+`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/GroupWalletDerivation.kt`,
 an `object` beside `SharedKeyDerivation` and shaped like it:
 
 ```kotlin
@@ -474,7 +474,7 @@ group's signed record.
 **Two days.**
 
 `GroupOnchainWallet`, the counterpart of `FinalWallet`, in
-`composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/wallet/`:
+`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/wallet/`:
 
 ```kotlin
 class GroupOnchainWallet(
@@ -541,7 +541,7 @@ address; two groups on one client see only their own coins.
 **Two days, most of it in the screen.**
 
 - `GroupWalletRoute(activeUserPublicKey, chatRoomId, relayHint)` and a
-  `composable<GroupWalletRoute>` in `BennuNavHost`, with `onNavigateBack` and
+  `composable<GroupWalletRoute>` in `DedunNavHost`, with `onNavigateBack` and
   `NavigateBackButton` — it is a pushed screen.
 - A `SignedWorkRow` on `ChatRoomDetailScreen`, fed by a `groupWallet` field on
   `ChatRoomDetailUIState.Loaded`. With no statement, members who can sign see
@@ -654,7 +654,7 @@ that overpays a fee. Phase 2 has the test.
 
 ```kotlin
 suspend fun proposeSpend(
-    database: BennuDatabase,
+    database: DedunDatabase,
     localChatRoom: LocalChatRoom,
     userPublicKey: HexKey,
     psbt: Psbt,
@@ -871,7 +871,7 @@ bitcoin transactions, which is cross-protocol key reuse with nothing to gain.
 
 **`SharedKeyDerivation` at a new path, e.g. `m/9421/<coin>/<account>/<c>/<i>`.**
 Works, reuses tested code, and needs no new tag. Rejected because nothing outside
-Bennu can derive its addresses: no ranged descriptor, no meaningful
+Dedun can derive its addresses: no ranged descriptor, no meaningful
 `tap_bip32_derivation`, no watch-only tool, and no published vectors for any of
 it. Its reasons for avoiding BIP32 do not apply to a full-point key with a chain
 code to hand.

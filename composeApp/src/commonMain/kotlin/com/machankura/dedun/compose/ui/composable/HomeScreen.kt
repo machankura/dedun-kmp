@@ -167,13 +167,15 @@ fun HomeScreen(
                         // default is `surface`/`onSurface` and needs no help.
                         TopAppBar(
                             title = {
-                                // "Bennu". The launcher label, the desktop window title, the
+                                // "Dedun". The launcher label, the desktop window title, the
                                 // landing screen and the package name all say so, and since the
                                 // rebrand so does `UserAgent.CLIENT_NAME` -- the one that goes on
-                                // the wire, as the `client` tag on a published relay list. The three
+                                // the wire, as the `client` tag on a published relay list. The four
                                 // brands before it are gone from live code too -- what was
-                                // `TorchTheme`, then `CuratedTheme`, then `CurareTheme`, is
-                                // `DedunTheme`, and no error string names any of them.
+                                // `TorchTheme`, then `CuratedTheme`, `CurareTheme` and
+                                // `BennuTheme`, is `DedunTheme`, and no error string names any
+                                // of them. Bennu survives only where it is protocol: the
+                                // `bennu/` hash tags.
                                 Text(stringResource(Res.string.dedun))
                             },
                             // No navigation icon and no actions. The avatar in the leading

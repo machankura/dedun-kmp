@@ -190,7 +190,7 @@ plans that fix the `pinned == null` holes —
 must treat a marks-derived row as a real pin; ordering this phase ahead of
 either is fine, but the three are one deployable unit.
 
-**Tests** (four-device harness, `composeApp/src/jvmTest/kotlin/com/machankura/bennu/compose/managers/`, beside `GroupLightningCoSigningJvmTest.kt`):
+**Tests** (four-device harness, `composeApp/src/jvmTest/kotlin/com/machankura/dedun/compose/managers/`, beside `GroupLightningCoSigningJvmTest.kt`):
 
 - *a restored device answers nothing before the marks*: sign commitments to
   advance every ledger, wipe device 4's co-signing tables, replay the room's
