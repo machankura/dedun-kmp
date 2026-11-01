@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.your_device_signs_only_payouts
+import dedun.composeapp.generated.resources.pay_out
 import dedun.composeapp.generated.resources.members_balances_and_payouts
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_your_deposits
@@ -257,18 +259,6 @@ fun GroupWalletScreen(
             )
         )
     }
-    // Behind the room's own send's gates, since a funding is one: a share to
-    // propose with, and a node to see this group's coins with.
-    val toGuardianFund = { row: GuardedWalletRow ->
-        onNavigateToRoute(
-            GroupSendRoute(
-                activeUserPublicKey = activeUserPublicKey,
-                chatRoomId = chatRoomId,
-                relayHint = null,
-                fundChatRoomId = row.wallet.descendantChatRoomId,
-            )
-        )
-    }
     // A member's wallets are gathered under them, and their header opens them:
     // a person is someone to look at, not a room to go into.
     val toPerson = { publicKey: HexKey ->
@@ -390,16 +380,15 @@ fun GroupWalletScreen(
                         modifier = Modifier.padding(padding),
                         state = state,
                         notify = notify,
-                        // Behind both gates: a share to propose with, and a node to
-                        // see the coins with -- a spend built blind is not one.
+                        // The group's own wallet pays only its members, from the payouts
+                        // screen, behind a share to propose with. docs/payouts-only.md, Phase 6.
                         onSend = if (state.canSign) {
                             {
                                 onNavigateToRoute(
-                                    GroupSendRoute(
+                                    GroupPayoutsRoute(
                                         activeUserPublicKey = activeUserPublicKey,
                                         chatRoomId = chatRoomId,
-                                        relayHint = null,
-                                        chain = GroupWalletStatementEvent.chainName(chain)
+                                        chain = GroupWalletStatementEvent.chainName(chain),
                                     )
                                 )
                             }
@@ -447,7 +436,9 @@ fun GroupWalletScreen(
                         isPending = groupWalletViewModel.isActionPending.value,
                         onShare = onShare,
                         onSpend = if (state.canSign) toGuardianSpend else null,
-                        onFund = if (state.canSign) toGuardianFund else null,
+                        // A funding pays a guarded wallet, not a member: not a payout, and so
+                        // nothing the group's own wallet signs. docs/payouts-only.md, D9.
+                        onFund = null,
                         onOpenPerson = toPerson,
                     )
                 }
@@ -591,9 +582,18 @@ private fun OpenWallet(
                 Button(onClick = send) {
                     Icon(Icons.Default.Send, contentDescription = Decorative)
                     Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                    Text(stringResource(Res.string.send))
+                    Text(stringResource(Res.string.pay_out))
                 }
             }
+        }
+
+        // What this device will sign from here, said once: docs/payouts-only.md, D12.
+        item {
+            Text(
+                text = stringResource(Res.string.your_device_signs_only_payouts),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         when {

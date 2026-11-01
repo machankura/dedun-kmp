@@ -219,9 +219,18 @@ internal object GroupFixtures {
     private fun signature(material: KeyMaterial, eventId: String): String =
         signWith(material, SharedKeyDerivation.derive(thresholdKeyOf(material), path).cache, ByteVector(eventId.hexToByteArray())).toHex()
 
-    /** A 2-of-3 FROST signature by [material]'s quorum over [message] under [cache] -- a leaf's, an address's, the room's. */
-    fun signWith(material: KeyMaterial, cache: TweakCache, message: ByteVector): ByteVector64 {
-        val signerIds = listOf(0, 1)
+    /**
+     * A FROST signature by [material]'s quorum over [message] under [cache] -- a leaf's, an address's,
+     * the room's: 2-of-3 by default, or [threshold] of [participants] for a group of another size.
+     */
+    fun signWith(
+        material: KeyMaterial,
+        cache: TweakCache,
+        message: ByteVector,
+        participants: Int = PARTICIPANTS,
+        threshold: Int = THRESHOLD,
+    ): ByteVector64 {
+        val signerIds = (0 until threshold).toList()
 
         val nonces = signerIds.map { signerId ->
             SecretNonce.generate(
@@ -237,8 +246,8 @@ internal object GroupFixtures {
             aggregatedNonce = IndividualNonce.aggregate(nonces.map { it.second }).right!!,
             signerIds = signerIds.map { it.toUInt() },
             signerPublicShares = signerIds.map { material.publicShares[it] },
-            nParticipants = PARTICIPANTS,
-            threshold = THRESHOLD,
+            nParticipants = participants,
+            threshold = threshold,
             tweakCache = cache,
             message = message,
         )

@@ -147,21 +147,23 @@ class GuardedWalletCardJvmTest {
         }
 
     @Test
-    fun `each guarded wallet offers fund beside spend, each naming its wallet`() = render(loaded("Savings")) {
+    fun `each guarded wallet offers spend, naming its wallet, and no fund`() = render(loaded("Savings")) {
         onNodeWithText("Savings").assertIsDisplayed()
         onNodeWithText("0 sats within this group's reach · 50,000 sats arriving").assertIsDisplayed()
-        onNodeWithContentDescription("Fund Savings's guarded wallet").assertIsDisplayed()
         onNodeWithContentDescription("Spend from Savings's guarded wallet").assertIsDisplayed()
+        // A funding pays a guarded wallet, not a member: the group's own wallet pays only
+        // members. docs/payouts-only.md, D9.
+        onNodeWithContentDescription("Fund Savings's guarded wallet").assertDoesNotExist()
     }
 
     @Test
-    fun `fund opens the send form paying the descendant, from the room's own wallet`() {
+    fun `spend opens the send form, from the descendant's wallet`() {
         var opened: Route? = null
         render(loaded("Savings"), onRoute = { opened = it }) {
-            onNodeWithContentDescription("Fund Savings's guarded wallet").performClick()
+            onNodeWithContentDescription("Spend from Savings's guarded wallet").performClick()
         }
         assertEquals(
-            GroupSendRoute(activeUserPublicKey = "a".repeat(64), chatRoomId = chatRoomId, relayHint = null, fundChatRoomId = descendantRoomId),
+            GroupSendRoute(activeUserPublicKey = "a".repeat(64), chatRoomId = chatRoomId, relayHint = null, guardedChatRoomId = descendantRoomId),
             opened,
         )
     }
@@ -174,8 +176,7 @@ class GuardedWalletCardJvmTest {
     }
 
     @Test
-    fun `at twice the text size the buttons stay whole`() = render(loaded("Savings"), fontScale = 2f) {
-        onNodeWithContentDescription("Fund Savings's guarded wallet").assertIsDisplayed()
+    fun `at twice the text size the button stays whole`() = render(loaded("Savings"), fontScale = 2f) {
         onNodeWithContentDescription("Spend from Savings's guarded wallet").assertIsDisplayed()
     }
 
@@ -209,11 +210,8 @@ class GuardedWalletCardJvmTest {
 
     @Test
     fun `each of a member's buttons names its wallet`() = render(atR(savings, rent, heldBy(LineageExample.r, "9".repeat(64), LineageExample.rentGuardians, guardianName = "#N", branchName = "#N"))) {
-        onNodeWithContentDescription("Fund @alice's guarded wallet “Savings”").assertIsDisplayed()
         onNodeWithContentDescription("Spend from @alice's guarded wallet “Savings”").assertIsDisplayed()
-        onNodeWithContentDescription("Fund @alice's guarded wallet “Rent”").assertIsDisplayed()
         onNodeWithContentDescription("Spend from @alice's guarded wallet “Rent”").assertIsDisplayed()
-        onNodeWithContentDescription("Fund @alice's wallet guarded by #N").assertIsDisplayed()
         onNodeWithContentDescription("Spend from @alice's wallet guarded by #N").assertIsDisplayed()
     }
 

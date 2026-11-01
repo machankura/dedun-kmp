@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.managers
 
+import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
+import com.machankura.dedun.compose.database.model.GroupSignedEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import kotlin.test.assertFailsWith
 import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.wallet.PayoutBuilder
 import com.machankura.dedun.compose.wallet.MemberBranch
@@ -228,15 +233,68 @@ class GroupSpendSigningJvmTest {
 
     private fun sessionIdOf(queued: Queued) = FrostSigningEvents.parseSessionId(queued.tags)!!
 
+    // ---- A payout: the one spend the wallet signs (docs/payouts-only.md) --
+
+    private val payee = PrivateKey(ByteVector32("a11ce".padStart(64, '0')))
+    private val payeeKey = payee.xOnlyPublicKey().value.toHex()
+
+    /**
+     * On every one of [devices]: Alice, paid at [elsewhere], owning each of [coins] -- outpoint and
+     * sats -- by a coin assignment the room signed. What a payout of those coins needs.
+     */
+    private suspend fun alicesCoins(coins: List<Pair<OutPoint, Long>>, vararg devices: Device) {
+        val destination = GroupPayoutDestinationEvent.build(payee, roomId, chain, LightningAddress("alice", "example.com"), onchainAddress = ProposedSpend.addressOf(elsewhere, chain), createdAt = 1_700_000_000)
+        val template = CoinAssignmentEvent.template(
+            chain,
+            coins.map { (outPoint, sats) -> CoinAssignmentEvent.Coin(DepositAttributionEvent.DepositKey.Onchain(outPoint.txid.toString(), outPoint.index), sats, mapOf(payeeKey to sats)) },
+            createdAt = 1_700_000_100,
+        )
+        val id = EventHasher.hashId(roomId, 1_700_000_100, template.kind, template.tags, template.content)
+        val cache = SharedKeyDerivation.derive(thresholdPublicKey, SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH).cache
+        val assignment = Event(id, roomId, 1_700_000_100, template.kind, template.tags, template.content, GroupFixtures.signWith(keyMaterial, cache, ByteVector(id.hexToByteArray())).toHex())
+        devices.forEach { device ->
+            val nostrEventId = "e$payeeKey".take(64)
+            device.db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = payeeKey, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
+            device.db.profileDao().upsert(Profile(publicKey = payeeKey, nostrEventId = nostrEventId))
+            device.db.participantDao().upsert((members + payeeKey).map { Participant(participantPublicKey = it, chatRoomId = roomId, relayHint = null) })
+            val tags = arrayOf(arrayOf("h", roomId))
+            device.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(
+                    id = EventHasher.hashId(payeeKey, destination.createdAt, GroupPayoutDestinationEvent.KIND, tags, destination.toJson()),
+                    publicKey = payeeKey, kind = GroupPayoutDestinationEvent.KIND, createdAt = Instant.fromEpochSeconds(destination.createdAt),
+                    tags = tags, content = destination.toJson(), chatRoomId = roomId,
+                )
+            )
+            device.db.groupSignedEventDao().upsert(GroupSignedEvent.fromEvent(assignment, chatRoomId = roomId))
+        }
+    }
+
+    /** Both funding coins, all of them Alice's, to her address less [fee]: a payout, with no change. */
+    private fun payoutTx(fee: Long = 1_000) = Transaction(
+        version = 2,
+        txIn = listOf(TxIn(OutPoint(funding, 0), ByteVector.empty, 0xfffffffdL), TxIn(OutPoint(funding, 1), ByteVector.empty, 0xfffffffdL)),
+        txOut = listOf(TxOut(Satoshi(100_000 - fee), elsewhere)),
+        lockTime = 0,
+    )
+
+    private fun payoutPsbt(): Psbt = GroupSpend.psbtOf(payoutTx(), listOf(funding.txOut[0] to first, funding.txOut[1] to second), emptyMap(), account)
+
+    private suspend fun alicesFunding(vararg devices: Device) =
+        alicesCoins(listOf(OutPoint(funding, 0) to 60_000L, OutPoint(funding, 1) to 40_000L), *devices)
+
     // ---- The spend, end to end ------------------------------------------
 
     @Test
-    fun `a quorum spends the group's coins, and both devices hold the transaction`() = runBlocking {
+    fun `a quorum pays a member out of the group's coins, and both devices hold the transaction`() = runBlocking {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
         openWallet(proposer, other)
+        alicesFunding(proposer, other)
 
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        // Anything but a payout is not even proposed: docs/payouts-only.md, Phase 6.
+        assertFailsWith<IllegalArgumentException> { FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain) }
+
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, payoutPsbt(), chain)
         pump(proposer, other)
 
         assertEquals(FrostSigningSubject.TRANSACTION, other.session(session.id)?.subject)
@@ -253,7 +311,7 @@ class GroupSpendSigningJvmTest {
                 funding.txOut.mapIndexed { i, out -> OutPoint(funding, i.toLong()) to out }.toMap(),
                 ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS,
             )
-            assertEquals(spendTx().txid, signed.txid, "the txid fixed at proposal is the one that was signed")
+            assertEquals(payoutTx().txid, signed.txid, "the txid fixed at proposal is the one that was signed")
         }
 
         // Each input its own instance: every positive assertion above still
@@ -353,24 +411,23 @@ class GroupSpendSigningJvmTest {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
         openWallet(proposer, other)
+        alicesFunding(proposer, other)
 
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, payoutPsbt(), chain)
         pump(proposer, other)
 
         // What the approval screen draws, read off the member's own copy.
         val spend = assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id))
-        assertEquals(Satoshi(70_000), spend.amountSent)
+        assertEquals(Satoshi(99_000), spend.amountSent)
         assertEquals(Satoshi(1_000), spend.fee)
-        assertEquals(listOf(false, true), spend.outputs.map { it.isChange })
+        assertEquals(listOf(false), spend.outputs.map { it.isChange })
 
         val coins = setOf(OutPoint(funding, 0), OutPoint(funding, 1))
         assertEquals(coins, FrostSigningManager.reservedOutPoints(other.db, roomId))
-        assertEquals(setOf(0L), FrostSigningManager.reservedChangeIndices(other.db, roomId, account), "and its change address")
 
         // Abandoned however it was -- the stage is all the reservation reads.
         other.db.frostSigningSessionDao().upsert(other.session(session.id)!!.copy(stage = FrostSigningStage.FAILED))
         assertEquals(emptySet(), FrostSigningManager.reservedOutPoints(other.db, roomId), "a failed spend releases its coins")
-        assertEquals(emptySet(), FrostSigningManager.reservedChangeIndices(other.db, roomId, account), "and its change address")
     }
 
     /** The wallet as Electrum would report it holding [funding], with [changeWindow] change addresses watched and unused. */
@@ -387,76 +444,6 @@ class GroupSpendSigningJvmTest {
                 WalletState.AddressState(WalletState.AddressMeta.Derived(index), alreadyUsed = false, utxos = emptyList())
         }
         return GroupWalletState(account, WalletState(receive), WalletState(change), tipHeight = 110)
-    }
-
-    @Test
-    fun `an amount the form built is signed by the group, its change is the group's on every device, and it comes back`() = runBlocking {
-        val proposer = device(members[0], signerIndex = 0)
-        val other = device(members[1], signerIndex = 1)
-        openWallet(proposer, other)
-
-        // A first spend is open and holds change index 0, so the form pays past it.
-        FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
-        pump(proposer, other)
-        val heldChange = FrostSigningManager.reservedChangeIndices(proposer.db, roomId, account)
-        assertEquals(setOf(0L), heldChange)
-
-        // The second spends coins the first does not hold: a fresh funding of its own.
-        val more = Transaction(
-            2, listOf(TxIn(OutPoint(TxId(ByteVector32(ByteArray(32) { 0x43 })), 0), ByteVector.empty, 0xffffffffL)),
-            listOf(TxOut(Satoshi(80_000), first.pubkeyScript)), 0,
-        )
-        val wallet = fundedState().let { state ->
-            val meta = WalletState.AddressMeta.Derived(0)
-            val receive = state.receive.addresses + (first.address(chain) to WalletState.AddressState(
-                meta, alreadyUsed = true, utxos = listOf(WalletState.Utxo(more.txid, 0, 100, more, meta)),
-            ))
-            state.copy(receive = WalletState(receive))
-        }
-        val reserved = FrostSigningManager.reservedOutPoints(proposer.db, roomId)
-        val built = assertIs<GroupSpendBuilder.Result.Built>(
-            GroupSpendBuilder.send(wallet, ProposedSpend.addressOf(elsewhere, chain), Satoshi(30_000), 3, reserved, heldChange)
-        )
-
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, built.psbt, chain)
-        pump(proposer, other)
-        FrostSigningManager.approve(other.db, other.room, session.id)
-        pump(proposer, other)
-
-        // On the device that did not build it: the change derives, so it is change.
-        val seen = assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id))
-        val changeOutput = seen.outputs.single { it.isChange }
-        assertEquals(1L, changeOutput.change!!.index, "past the index the open spend holds")
-        assertEquals(built.change, changeOutput.txOut.amount)
-        assertEquals(Satoshi(30_000), seen.amountSent)
-        assertEquals(setOf(0L, 1L), FrostSigningManager.reservedChangeIndices(other.db, roomId, account))
-
-        listOf(proposer, other).forEach { device ->
-            assertEquals(FrostSigningStage.COMPLETE, device.session(session.id)?.stage)
-            val signed = Transaction.read(assertNotNull(device.transaction(session.id)?.signedTransaction))
-            signed.correctlySpends(mapOf(OutPoint(more, 0) to more.txOut[0]), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-        }
-
-        // Confirmed, the change is a coin the wallet counts, on the branch it watches.
-        val signed = Transaction.read(other.transaction(session.id)!!.signedTransaction!!)
-        val changeMeta = WalletState.AddressMeta.Derived(1)
-        val changeAddress = changeOutput.change!!.address(chain)
-        val after = wallet.copy(
-            receive = WalletState(wallet.receive.addresses - first.address(chain)),
-            change = WalletState(wallet.change.addresses + (changeAddress to WalletState.AddressState(
-                changeMeta, alreadyUsed = true, utxos = listOf(WalletState.Utxo(signed.txid, changeOutput.index, 111, signed, changeMeta)),
-            ))),
-        )
-        assertEquals(changeOutput.change, after.derivationOf(changeOutput.txOut.publicKeyScript))
-        assertEquals(Satoshi(40_000) + built.change!!, after.confirmedBalance, "the second funding coin, and the change")
-
-        // The transcript says what left the group: the payment, never the change with it.
-        FrostSigningManager.recordConfirmed(other.db, session.id)
-        val lines = other.db.chatMessageDao().getChatMessagesByChatRoomId(roomId).map { it.chatMessage }
-        val signedLine = lines.single { it.messageType == ChatMessage.TYPE_FROST_COMPLETE && it.content.startsWith("The group signed a transaction") }
-        assertTrue(signedLine.content.startsWith("The group signed a transaction sending 30000 sats, with ${seen.fee.sat} sats in fees."), signedLine.content)
-        val confirmedLine = lines.single { it.messageType == ChatMessage.TYPE_GROUP_TRANSACTION_CONFIRMED }
-        assertEquals("The group's transaction confirmed: 30000 sats sent.", confirmedLine.content)
     }
 
     // ---- A payout --------------------------------------------------------
@@ -582,19 +569,19 @@ class GroupSpendSigningJvmTest {
         assertEquals(opening.account, guarded)
 
         val first = GroupWalletDerivation.derive(guarded, GroupWalletDerivation.RECEIVE, 0)
-        val change = GroupWalletDerivation.derive(guarded, GroupWalletDerivation.CHANGE, 0)
         val funding = Transaction(2, listOf(TxIn(OutPoint(TxId(ByteVector32(ByteArray(32) { 0x47 })), 0), ByteVector.empty, 0xffffffffL)),
             listOf(TxOut(Satoshi(60_000), first.pubkeyScript)), 0)
-        val tx = Transaction(2, listOf(TxIn(OutPoint(funding, 0), ByteVector.empty, 0xfffffffdL)),
-            listOf(TxOut(Satoshi(40_000), elsewhere), TxOut(Satoshi(19_000), change.pubkeyScript)), 0)
-        val psbt = GroupSpend.psbtOf(tx, listOf(funding.txOut[0] to first), mapOf(1 to change), guarded)
+        // Its own spends are payouts too: the coin is Alice's, and all of it goes to her.
+        alicesCoins(listOf(OutPoint(funding, 0) to 60_000L), proposer, other)
+        val tx = Transaction(2, listOf(TxIn(OutPoint(funding, 0), ByteVector.empty, 0xfffffffdL)), listOf(TxOut(Satoshi(59_000), elsewhere)), 0)
+        val psbt = GroupSpend.psbtOf(tx, listOf(funding.txOut[0] to first), emptyMap(), guarded)
 
         // The plain account's check refuses the guarded coin: same internal key, another output.
         assertIs<GroupSpend.Result.Refused>(GroupSpend.check(psbt, account))
 
         val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt, chain)
         pump(proposer, other)
-        assertEquals(listOf(false, true), assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id)).outputs.map { it.isChange })
+        assertEquals(listOf(false), assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id)).outputs.map { it.isChange })
         FrostSigningManager.approve(other.db, other.room, session.id)
         pump(proposer, other)
 

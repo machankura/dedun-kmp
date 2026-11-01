@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
@@ -627,6 +628,17 @@ object FrostSigningManager {
             }
         }
 
+        // The group's Lightning wallet authorises only a payout of a member's own balance to their
+        // own address, and buys no liquidity while nobody's balance is charged with it.
+        // docs/payouts-only.md, Phase 6.
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind != GroupLightningAuthorisationEvent.KIND) return@forEach
+            GroupLightningPayouts.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a Lightning authorisation that $reason; dropping")
+                return null
+            }
+        }
+
         // An assignment says whose some of the group's coins are, which is whom a payout of
         // them pays: each coin has to be one this device knows, for the amount it has, shared
         // among members the group opened deposits for. docs/payouts-only.md, Phase 3.
@@ -743,6 +755,7 @@ object FrostSigningManager {
             is GroupSpend.Result.Ok -> result.checked
             is GroupSpend.Result.Refused -> throw IllegalArgumentException("This spend ${result.reason}")
         }
+        refusePayout(database, chatRoomId, checked)?.let { throw IllegalArgumentException("This spend $it") }
 
         val session = FrostSigningSession(
             id = RandomInstance.bytes(32).toHex(),
@@ -953,6 +966,12 @@ object FrostSigningManager {
                 logger.w("Spend proposal $sessionId ${result.reason}; dropping")
                 return null
             }
+        }
+
+        // 8. The group's own wallet signs only payouts. docs/payouts-only.md, Phase 6.
+        refusePayout(database, localChatRoom.chatRoom.id, checked)?.let { reason ->
+            logger.w("Spend proposal $sessionId $reason; dropping")
+            return null
         }
 
         val session = FrostSigningSession(
@@ -1423,6 +1442,18 @@ object FrostSigningManager {
      * transcript line rides on the same guard.
      */
     /**
+     * Why [checked], a spend of [chatRoomId]'s own wallet, is not a payout -- the one spend that
+     * wallet signs -- or null when it is: `docs/payouts-only.md`, D1. A guardian's spend passes: it is
+     * the ancestor's to sign, under the ancestor's rules, and the leaf it signs through is the
+     * descendant's way back when the descendant can't sign at all.
+     */
+    private suspend fun refusePayout(database: DedunDatabase, chatRoomId: String, checked: GroupSpend.Checked): String? {
+        if (checked.spender != GroupSpend.Spender.Owner) return null
+        val rule = PayoutRule.check(checked, MemberBalances.payoutContextOf(database, chatRoomId, checked.account.chain))
+        return (rule as? PayoutRule.Result.Refused)?.reason
+    }
+
+    /**
      * The members [checked] pays out, named for a transcript line -- *@alice*, *@alice and @bob* --
      * or null when it is not a payout. Read on the device writing the line, from its own signed
      * history, as a signer reads it. `docs/payouts-only.md`, Phase 4.
@@ -1551,6 +1582,9 @@ object FrostSigningManager {
             is GroupSpend.Result.Ok -> result.checked
             is GroupSpend.Result.Refused -> throw IllegalStateException("This spend ${result.reason}")
         }
+        // Again here: a spend accepted by a build before the rule, or before this device learnt
+        // whose its coins are, is not signed now if it is not a payout.
+        refusePayout(database, session.chatRoomId, checked)?.let { throw IllegalStateException("This spend $it") }
 
         val signatures = items.mapIndexed { index, item ->
             val input = checked.inputs[index]
@@ -2892,6 +2926,18 @@ object FrostSigningManager {
         if (!isAwaitingApproval(session, items)) {
             logger.i("Session $sessionId is not waiting on an approval; ignoring it")
             return
+        }
+
+        // A spend this device took in before it refused anything but a payout -- an older build,
+        // or before it learnt whose the coins are -- is declined rather than signed.
+        // docs/payouts-only.md, Phase 6.
+        if (session.subject == FrostSigningSubject.TRANSACTION) {
+            val refused = checkedSpend(database, sessionId)?.let { refusePayout(database, session.chatRoomId, it) }
+            if (refused != null) {
+                logger.w("Session $sessionId $refused; declining instead of signing")
+                decline(database, localChatRoom, sessionId)
+                return
+            }
         }
 
         update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }

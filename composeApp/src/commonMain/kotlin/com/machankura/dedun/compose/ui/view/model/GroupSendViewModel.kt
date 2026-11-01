@@ -90,6 +90,14 @@ class GroupSendViewModel(
                 return@launch
             }
 
+            // The room's own wallet signs only payouts, which the payouts screen builds: this form
+            // is a guardian's spend from a descendant's wallet, and nothing else.
+            // docs/payouts-only.md, Phase 6.
+            if (guardedChatRoomId == null) {
+                groupSendUIState = GroupSendUIState.Unavailable
+                return@launch
+            }
+
             // A descendant's guarded wallet, as this room was told it, with the
             // group as its guardian -- or the room's own wallet.
             val heldByRoom = if (guardedChatRoomId != null || fundChatRoomId != null) chatRepository.guardedWallets(chatRoomId) else emptyList()

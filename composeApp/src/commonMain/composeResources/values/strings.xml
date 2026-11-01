@@ -984,4 +984,6 @@
     <string name="a_payout_pays_each_member_everything_they_own">A payout pays each member everything they own here, to the address they gave, less their share of the fee.</string>
     <string name="pay_out_over_lightning">Pay out over Lightning</string>
     <string name="pays_s_s_sats_up_to_s_in_fees_to_s">Pays %1$s %2$s sats, and up to %3$s sats in routing fees, to %4$s.</string>
+    <string name="pay_out">Pay out</string>
+    <string name="your_device_signs_only_payouts">Your device signs only payouts: each member's own coins, to the address they gave.</string>
 </resources>

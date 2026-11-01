@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.pay_out
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material3.TextButton
 import dedun.composeapp.generated.resources.add_liquidity
@@ -242,7 +244,9 @@ fun GroupLightningWalletScreen(
                     modifier = Modifier.padding(padding),
                     state = state,
                     onReceive = { onNavigateToRoute(GroupLightningReceiveRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)) },
-                    onSend = { onNavigateToRoute(GroupLightningSendRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)) },
+                    // The Lightning wallet pays only members, their whole balance each, from the
+                    // payouts screen: no invoice typed in. docs/payouts-only.md, Phase 6.
+                    onSend = { onNavigateToRoute(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = GroupWalletStatementEvent.chainName(state.wallet.statement.chain))) },
                     onAddLiquidity = { onNavigateToRoute(GroupLightningLiquidityRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)) },
                     onClose = { channelId, force -> viewModel.close(channelId, force, onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                     onSweep = { viewModel.sweep(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
@@ -297,7 +301,9 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
                 state.report,
                 onReceive = onReceive.takeIf { state.operator?.publicKey != null },
                 onSend = onSend.takeIf { state.operator?.publicKey != null },
-                onAddLiquidity = onAddLiquidity.takeIf { liquidity is LiquidityPrice.Availability.Available && !isPending },
+                // Buying liquidity pays the LSP and no member, and every signer refuses it while
+                // nobody's balance is charged with it. docs/payouts-only.md, D9.
+                onAddLiquidity = null,
                 liquidityNote = liquidity?.takeIf { it !is LiquidityPrice.Availability.Available && it != LiquidityPrice.Availability.NoOperator }?.let { unavailableBecause(it) },
             )
         }
@@ -399,7 +405,7 @@ private fun Balance(report: GroupLightningReports.Report?, onReceive: (() -> Uni
                         OutlinedButton(onClick = it) {
                             Icon(Icons.AutoMirrored.Filled.CallMade, contentDescription = Decorative)
                             Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                            Text(stringResource(Res.string.send))
+                            Text(stringResource(Res.string.pay_out))
                         }
                     }
                 }

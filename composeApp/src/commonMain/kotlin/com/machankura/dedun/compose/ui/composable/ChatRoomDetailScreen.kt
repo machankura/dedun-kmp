@@ -1130,20 +1130,8 @@ fun ChatRoomDetailScreen(
                                         } else null,
                                         onPayOnchain = if (canPay && destination.onchainAddress != null) {
                                             {
-                                                // Asked again: an address paid since the sheet opened is used now.
-                                                chatRoomDetailViewModel.usageOf(destination) { now ->
-                                                    usage = now
-                                                    when (now) {
-                                                        UnusedAddressCheck.Usage.Unused -> {
-                                                            showingPayoutOf = null
-                                                            onNavigateToRoute.invoke(
-                                                                GroupSendRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = null, address = destination.onchainAddress)
-                                                            )
-                                                        }
-                                                        UnusedAddressCheck.Usage.Unknown -> payoutProblem = PayoutProblem.CouldNotCheck
-                                                        else -> payoutProblem = PayoutProblem.PaidBefore(name)
-                                                    }
-                                                }
+                                                showingPayoutOf = null
+                                                onNavigateToRoute.invoke(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
                                             }
                                         } else null,
                                     )

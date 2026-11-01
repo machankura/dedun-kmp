@@ -71,9 +71,15 @@ abstract class GroupLightningLiquidityCases(chain: Chain) {
         return node
     }
 
+    /**
+     * A purchase the group signed before its wallet paid only members: every signer refuses a new
+     * one now (`docs/payouts-only.md`, D9), so it is filed as signed, and the machinery that makes an
+     * old one is what is tested.
+     */
     private suspend fun authorise(all: List<GroupLightningFixture.Device>, wallet: GroupLightningWalletManager.Wallet, maxFeeSat: Long = 4_000): GroupLightningAuthorisationEvent.BuyLiquidity {
         val buy = GroupLightningAuthorisations.prepareBuyLiquidity(wallet, channelId, 25_000, 200_000, maxFeeSat).getOrThrow()
-        fixture.signSession(all, all[2], GroupLightningAuthorisations.proposeBuyLiquidity(all[2].db, all[2].room, all[2].publicKey, buy).id)
+        val template = GroupLightningAuthorisationEvent.template(buy)
+        fixture.fileSignedAsRoom(all, template.kind, template.tags, template.content)
         return buy
     }
 
@@ -123,10 +129,18 @@ abstract class GroupLightningLiquidityCases(chain: Chain) {
     }
 
     @Test
-    fun `once the group signs, every member reads the open purchase, until it expires`() = runBlocking<Unit> {
+    fun `a purchase proposed now is refused by every signer, and nobody reads one`() = runBlocking<Unit> {
+        // It pays the LSP and no member: docs/payouts-only.md, D9.
         val (all, wallet) = opened()
         val buy = GroupLightningAuthorisations.prepareBuyLiquidity(wallet, channelId, 25_000, 200_000, 4_000).getOrThrow()
         fixture.signSession(all, all[2], GroupLightningAuthorisations.proposeBuyLiquidity(all[2].db, all[2].room, all[2].publicKey, buy).id)
+        all.forEach { d -> assertTrue(GroupLightningAuthorisations.liquidityPurchases(d.db, wallet).isEmpty(), "device ${d.index}") }
+    }
+
+    @Test
+    fun `once the group signs, every member reads the open purchase, until it expires`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val buy = authorise(all, wallet)
         all.forEach { d ->
             val mine = GroupLightningWalletManager.walletFor(d.db, fixture.roomId, fixture.chain)!!
             assertEquals(listOf(buy), GroupLightningAuthorisations.liquidityPurchases(d.db, mine), "device ${d.index}")
