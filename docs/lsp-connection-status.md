@@ -24,8 +24,12 @@ first (the operator, the node and the snapshot), then
 [material-design-conformance.md](./material-design-conformance.md) for the rules
 the new rows follow.
 
-**Planned**, against `50c21a46`. No schema change. One wire change, optional in both
-directions (D8).
+**Built**, Phases 0-6, one commit each, against `50c21a46`. No schema change. One
+wire change, optional in both directions (D8). `GroupLightningNodeStatus`,
+`LspLink`, `LspDrop`, `GroupNodeStatusSource`, `NodeStatusRow` and `OperatorLinkRow`
+are the entry points. The phases below are kept as written. Where the build chose
+differently, the table at the end says so. Not done: the hand check on Android and
+desktop (Phase 6).
 
 ## What is there today
 
@@ -113,7 +117,9 @@ lightning-kmp source. No mainnet operator logs were available on this machine.
    `CLOSED_BY_LSP` is added for a connection the LSP ended with features agreed.
    The Tor check now throws its own `TorWithoutOnion`, so it doesn't have to be
    recognised by its message.
-3. Left to Phase 6, which drives it.
+3. Phase 6 drives it. `lsp disconnect -d nodeId=…` ends the group node's
+   connection and reads as `CLOSED_BY_LSP`, after a connection of about 100 ms in
+   the run.
 
 ## Phase 1: the status, pure
 
@@ -338,6 +344,22 @@ update before the first operator sends the new field (it's ignored if they haven
   - check in the dark and high-contrast schemes.
 - This document's status line becomes **Built**, with a table of where the build
   chose differently.
+
+## Where the build chose differently
+
+| plan | build | why |
+|---|---|---|
+| `INIT_DEADLINE`: no `init` in time counts as a failed attempt (Phase 2) | none: the link stays *connecting* until `init` arrives or the socket closes | Phase 0: a deadline would change how the node connects, not only what it shows |
+| causes `ClosedByUs` and five others (D4) | `HANDSHAKE` in its place, plus `CLOSED_BY_LSP` | Phase 0: in the reconnect loop, no reason means the handshake. A connection the LSP ends with features agreed is the commonest drop and needed its own words |
+| `awaitDisconnect` returns the reason string | it returns an `LspDrop` (cause and detail), and `dropReason` is still the detail | the cause needs the socket's exception type and both sides' features, which only the real handle has |
+| the wait is a `select` on a delay and a channel | `withTimeoutOrNull(wait) { skipWait.receive() }`, draining any earlier tap first | same effect, one call |
+| `observe(chatRoomId, chain, wallet, isOperator)` | `observe(chatRoomId, wallet)`. The view model only asks on the operator's device | the nodes run on one chain, and asking is the view model's decision |
+| a stopped node | `NotRunning(reason = null)` | a stop and a refusal look the same to the operator, except for the reason |
+| *Try now* disabled for `RECONNECT_FIRST` after a tap | disabled until the status changes | the next status (*connecting*) arrives within milliseconds, so a timer would be dead code |
+| the `Balance` card's *Reported by the operator* gains the age (Phase 5) | the age is on the members' operator card only | the operator's own device shows its live status. Saying the age twice on a member's screen added nothing |
+| — | the members' row only for a snapshot from the current operator's term | an older term's snapshot describes somebody else's node |
+| — | a settled link back where the room last heard it keeps the reported time | without this, a recovered blip moved `since` and sent a snapshot anyway |
+| a test that the screen shows no row on a member's device | the view model test that a member's state carries no node status, and never asks for one | the screen shows the row only from that state |
 
 ## Order and size
 

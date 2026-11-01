@@ -268,6 +268,24 @@ class GroupLightningRegtestJvmTest {
             lsp("peers").jsonArray.firstOrNull { it.jsonObject["nodeId"]?.jsonPrimitive?.content == wallet.statement.nodeId && it.jsonObject["state"]?.jsonPrimitive?.content == "CONNECTED" }
         }
 
+        // The operator sees the link as it is (docs/lsp-connection-status.md, Phase 6): connected once the LSP's
+        // init is in, unreachable when the LSP hangs up, and back after the backoff -- or at once, on Try now.
+        fun link() = (node.status.value as? GroupLightningNodeStatus.Running)?.link
+        mineUntil("the operator's status to say connected", 1.minutes) { link() as? LspLink.Connected }
+        lsp("disconnect", mapOf("nodeId" to wallet.statement.nodeId))
+        val dropped = mineUntil("the operator's status to say unreachable", 1.minutes) { link() as? LspLink.Unreachable }
+        println("REGTEST the LSP's disconnect read as ${dropped.drop}, failures ${dropped.failures}")
+        assertEquals(1, dropped.failures)
+        mineUntil("the node to reconnect after its backoff", 1.minutes) { link() as? LspLink.Connected }
+        lsp("disconnect", mapOf("nodeId" to wallet.statement.nodeId))
+        val again = mineUntil("the operator's status to say unreachable again", 1.minutes) { link() as? LspLink.Unreachable }
+        node.reconnectNow()
+        mineUntil("the node to reconnect on Try now", 1.minutes) { link() as? LspLink.Connected }
+        assertTrue(Clock.System.now() < again.retryAt, "Try now dialled before the backoff would have")
+        mineUntil("the LSP to see the group's node again", 1.minutes) {
+            lsp("peers").jsonArray.firstOrNull { it.jsonObject["nodeId"]?.jsonPrimitive?.content == wallet.statement.nodeId && it.jsonObject["state"]?.jsonPrimitive?.content == "CONNECTED" }
+        }
+
         // Receive: a depositor's Bolt11 request comes back as an invoice for the group's node...
         fixture.openDeposits(all, all[3])
         val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 100_000_000, "first")

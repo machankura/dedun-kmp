@@ -731,6 +731,11 @@ screen say what happened.
 
 **About a week and a half.**
 
+*Later:* the node keeps a status of its own (not running and why, starting,
+connecting, connected, or unable to reach the LSP and when it tries again), and the
+operator's wallet screen shows it, with *Try now*. See
+[lsp-connection-status.md](./lsp-connection-status.md).
+
 `GroupLightningNode`, in `composeApp/…/compose/lightning/`, runs only on the
 current operator's device, one per wallet:
 
@@ -854,6 +859,7 @@ minutes while the node runs:
 | payments | the newest page: hash, direction, amount, fees, status, time, description |
 | closing | outputs waiting on the group (Phase 13) |
 | pools | round-one contributions left, per channel |
+| `lsp` | *later, optional:* whether the node could reach the LSP, settled, since when, and why not ([lsp-connection-status.md](./lsp-connection-status.md)) |
 
 Members store the newest snapshot and a `GroupLightningPayment` row per payment.
 The schema goes from 28 to 29.
