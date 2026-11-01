@@ -941,4 +941,39 @@
     <string name="whose_deposit_is_this_question">Whose deposit is this?</string>
     <string name="the_group_s_own">The group's own</string>
     <string name="payout_destination_saved_the_group_is_asked_to_open_your_deposits">Payout destination saved. The group is asked to open your deposits.</string>
+
+    <!-- Whether the group's node can reach the LSP: docs/lsp-connection-status.md -->
+    <string name="connected_to_the_lsp">Connected to the LSP</string>
+    <string name="since_s">Since %1$s</string>
+    <string name="connecting_to_the_lsp">Connecting to the LSP</string>
+    <string name="attempt_s">Attempt %1$s</string>
+    <string name="can_t_reach_the_lsp">Can't reach the LSP</string>
+    <plurals name="trying_again_in_n_seconds">
+        <item quantity="one">Trying again in %1$d second</item>
+        <item quantity="other">Trying again in %1$d seconds</item>
+    </plurals>
+    <plurals name="trying_again_in_n_minutes">
+        <item quantity="one">Trying again in %1$d minute</item>
+        <item quantity="other">Trying again in %1$d minutes</item>
+    </plurals>
+    <string name="trying_again_now">Trying again now</string>
+    <string name="try_now">Try now</string>
+    <string name="starting_your_node">Starting your node</string>
+    <string name="waiting_for_enough_of_the_group_to_be_ready_to_sign">Waiting for enough of the group to be ready to sign.</string>
+    <string name="your_node_isn_t_running">Your node isn't running</string>
+    <string name="this_device_checks_again_every_minute">This device checks again every minute.</string>
+    <string name="your_node_isn_t_running_on_this_device">Your node isn't running on this device</string>
+    <string name="open_dedun_on_the_device_that_runs_it">Open Dedun on the device that runs it, or step down so somebody else can.</string>
+    <string name="payments_wait_until_your_node_reaches_the_lsp">Payments wait until your node reaches the LSP.</string>
+    <string name="refusal_not_operator">This device isn't the wallet's operator.</string>
+    <string name="refusal_room_not_synced">This device hasn't heard from the group recently enough to be sure it's still the operator.</string>
+    <string name="refusal_no_seed">This device doesn't hold the wallet's seed.</string>
+    <string name="refusal_pool_short">The group hasn't sent enough to sign with yet.</string>
+    <string name="refusal_no_onchain_wallet">The onchain wallet its channels close to isn't open on this device.</string>
+    <string name="drop_feature_mismatch">The LSP and this node don't agree on the features a connection needs.</string>
+    <string name="drop_unreachable">The LSP didn't answer. Check this device's connection.</string>
+    <string name="drop_handshake">The LSP answered, but the connection didn't complete.</string>
+    <string name="drop_closed_by_lsp">The LSP closed the connection.</string>
+    <string name="drop_tor_without_onion">Tor is on, and the LSP has no onion address on this network.</string>
+    <string name="drop_other">The connection ended unexpectedly.</string>
 </resources>

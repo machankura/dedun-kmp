@@ -89,6 +89,7 @@ import dedun.composeapp.generated.resources.opening_a_lightning_wallet_asks
 import dedun.composeapp.generated.resources.payments
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.received_s_sats
+import dedun.composeapp.generated.resources.payments_wait_until_your_node_reaches_the_lsp
 import dedun.composeapp.generated.resources.reported_by_the_operator_in_term_s
 import dedun.composeapp.generated.resources.run_by_s_term_s
 import dedun.composeapp.generated.resources.run_this_wallet_on_my_device
@@ -119,6 +120,8 @@ import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
+import com.machankura.dedun.compose.managers.GroupLightningNodeStatus
+import com.machankura.dedun.compose.managers.LspLink
 import com.machankura.dedun.compose.repository.GroupNodeStatusSource
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
@@ -258,6 +261,7 @@ fun GroupLightningWalletScreen(
                     isPending = viewModel.isActionPending.value,
                     onNominate = { viewModel.nominateSelf(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                     onStepDown = { viewModel.stepDown(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
+                    onTryNow = { viewModel.reconnectNow(it) },
                 )
             }
         }
@@ -270,7 +274,8 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
     onCloseEarlier: (GroupLightningWalletUIState.Earlier) -> Unit,
     onSweepEarlier: (GroupLightningWalletUIState.Earlier) -> Unit,
     onRunEarlier: (GroupLightningWalletUIState.Earlier) -> Unit,
-    isPending: Boolean, onNominate: () -> Unit, onStepDown: () -> Unit) {
+    isPending: Boolean, onNominate: () -> Unit, onStepDown: () -> Unit,
+    onTryNow: (wallet: Long) -> Unit) {
     val statement = state.wallet.statement
     val operatorName = state.operator?.publicKey?.let { key ->
         if (state.isOperator) stringResource(Res.string.you)
@@ -302,6 +307,9 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
                 onSend = onSend.takeIf { state.operator?.publicKey != null },
                 onAddLiquidity = onAddLiquidity.takeIf { liquidity is LiquidityPrice.Availability.Available && !isPending },
                 liquidityNote = liquidity?.takeIf { it !is LiquidityPrice.Availability.Available && it != LiquidityPrice.Availability.NoOperator }?.let { unavailableBecause(it) },
+                // Requests and authorisations go through the room and wait for the node, so nothing is disabled.
+                nodeNote = state.nodeStatus?.takeIf { (it as? GroupLightningNodeStatus.Running)?.link !is LspLink.Connected }
+                    ?.let { stringResource(Res.string.payments_wait_until_your_node_reaches_the_lsp) },
             )
         }
         if (state.unswept.isNotEmpty()) {
@@ -334,7 +342,12 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
                         text = if (operatorName == null) stringResource(Res.string.nobody_runs_this_wallet) else stringResource(Res.string.run_by_s_term_s, operatorName, state.operator!!.term.toString()),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    Text(stringResource(Res.string.the_operator_s_device_runs_the_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val nodeStatus = state.nodeStatus
+                    if (state.isOperator && nodeStatus != null) {
+                        NodeStatusRow(nodeStatus, onTryNow = { onTryNow(statement.wallet) })
+                    } else {
+                        Text(stringResource(Res.string.the_operator_s_device_runs_the_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if (state.isParticipant && !state.isOperator) {
                         Button(onClick = onNominate, enabled = !isPending) { Text(stringResource(Res.string.run_this_wallet_on_my_device)) }
                     }
@@ -352,6 +365,7 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
                 onClose = { onCloseEarlier(earlier) },
                 onSweep = { onSweepEarlier(earlier) },
                 onRun = { onRunEarlier(earlier) },
+                onTryNow = { onTryNow(earlier.wallet.statement.wallet) },
             )
         }
         item {
@@ -376,7 +390,7 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
  * the two actions, *Add liquidity* when the group can be asked for it, or [liquidityNote], why not.
  */
 @Composable
-private fun Balance(report: GroupLightningReports.Report?, onReceive: (() -> Unit)?, onSend: (() -> Unit)?, onAddLiquidity: (() -> Unit)? = null, liquidityNote: String? = null) {
+private fun Balance(report: GroupLightningReports.Report?, onReceive: (() -> Unit)?, onSend: (() -> Unit)?, onAddLiquidity: (() -> Unit)? = null, liquidityNote: String? = null, nodeNote: String? = null) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.balance), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -415,6 +429,7 @@ private fun Balance(report: GroupLightningReports.Report?, onReceive: (() -> Uni
                 }
             }
             liquidityNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            nodeNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -519,13 +534,14 @@ internal fun PaymentRow(payment: GroupLightningPaymentRow) {
 
 /** A wallet a re-key left behind: what is still in it, and the two ways it reaches the onchain wallet. */
 @Composable
-private fun EarlierWallet(earlier: GroupLightningWalletUIState.Earlier, canRun: Boolean, isPending: Boolean, onClose: () -> Unit, onSweep: () -> Unit, onRun: () -> Unit) {
+private fun EarlierWallet(earlier: GroupLightningWalletUIState.Earlier, canRun: Boolean, isPending: Boolean, onClose: () -> Unit, onSweep: () -> Unit, onRun: () -> Unit, onTryNow: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.earlier_wallet_s, earlier.wallet.statement.wallet.toString()), style = MaterialTheme.typography.titleSmall)
             earlier.report?.let { report ->
                 Text(stringResource(Res.string.s_sats_in_s_channels, Satoshi(report.snapshot.spendableMsat / 1000).grouped(), report.checks.size.toString()), style = MaterialTheme.typography.bodyMedium)
             }
+            earlier.nodeStatus?.let { NodeStatusRow(it, onTryNow = onTryNow, compact = true) }
             if (earlier.operator?.publicKey == null && earlier.openChannels.isNotEmpty()) {
                 Text(stringResource(Res.string.nobody_runs_this_wallet_s_node), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
