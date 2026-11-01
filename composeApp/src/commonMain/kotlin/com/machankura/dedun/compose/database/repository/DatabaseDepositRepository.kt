@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.Depositors
+import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -51,6 +52,14 @@ class DatabaseDepositRepository(
     override suspend fun open(localChatRoom: LocalChatRoom, chain: Chain, member: HexKey): FrostSigningSession {
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
         return Depositors.propose(database, localChatRoom, me, member, chain)
+    }
+
+    override suspend fun openOwnIfReady(chatRoomId: String, chain: Chain): FrostSigningSession? {
+        val identity = activeIdentity.value?.takeIf { it.canSign } ?: return null
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId)?.takeIf { it.chatRoom.mlsGroupState != null } ?: return null
+        if (Depositors.refusal(database, chatRoomId, chain, identity.nostrPublicKey) != null) return null
+        if (!FrostSigningManager.canSign(database, chatRoomId)) return null
+        return Depositors.propose(database, room, identity.nostrPublicKey, identity.nostrPublicKey, chain)
     }
 
     override suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) {

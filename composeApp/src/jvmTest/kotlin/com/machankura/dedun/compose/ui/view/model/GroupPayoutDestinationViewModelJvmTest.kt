@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.network.LightningAddressResolver
 import com.machankura.dedun.compose.network.LightningAddressResolver.Resolution
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
@@ -96,7 +98,18 @@ class GroupPayoutDestinationViewModelJvmTest {
         GroupPayoutDestinationEvent.build(me, chatRoomId, chain, LightningAddress("alice", "example.com"), onchainAddress = onchain)
     ) as GroupPayoutDestination
 
-    private fun loaded(fake: Fake) = GroupPayoutDestinationViewModel(chatRoomId, chain, GroupPayoutDestinationUIState.Loading, fake).apply {
+    /** Asks to open this profile's deposits once a destination is saved, as a device holding a share would: [session] or nothing. */
+    private class Deposits(val session: String?) : DepositRepository by DepositRepository.NO_OP {
+        var asked = 0
+        override suspend fun openOwnIfReady(chatRoomId: String, chain: Chain): FrostSigningSession? {
+            asked++
+            return session?.let {
+                FrostSigningSession(id = it, chatRoomId = chatRoomId, coordinatorPublicKey = "a".repeat(64), userPublicKey = "a".repeat(64), dkgSessionId = "d", threshold = 2, participantCount = 3, signerId = 1)
+            }
+        }
+    }
+
+    private fun loaded(fake: Fake, deposits: DepositRepository = DepositRepository.NO_OP) = GroupPayoutDestinationViewModel(chatRoomId, chain, GroupPayoutDestinationUIState.Loading, fake, deposits).apply {
         initiate()
         runBlocking { withTimeout(5_000) { while (uiState !is GroupPayoutDestinationUIState.Loaded) delay(10) } }
     }
@@ -140,7 +153,7 @@ class GroupPayoutDestinationViewModelJvmTest {
         val viewModel = loaded(fake)
         viewModel.type("alice@example.com", fresh)
         var notChecked: Boolean? = null
-        viewModel.save(onSaved = { notChecked = it }, onFailure = {})
+        viewModel.save(onSaved = { checked, _ -> notChecked = checked }, onFailure = {})
         viewModel.awaitIdle()
 
         assertEquals(listOf(Fake.Set(LightningAddress("alice", "example.com"), Sendable(MilliSatoshi(1_000), MilliSatoshi(100_000_000)), fresh)), fake.sets)
@@ -154,7 +167,7 @@ class GroupPayoutDestinationViewModelJvmTest {
         val fake = Fake(standing(), Resolution.Resolved(intent))
         val viewModel = loaded(fake)
         viewModel.type("alice@example.com")
-        viewModel.save(onSaved = {}, onFailure = {})
+        viewModel.save(onSaved = { _, _ -> }, onFailure = {})
         viewModel.awaitIdle()
         assertEquals(0, fake.checked)
         assertNull(fake.sets.single().onchain)
@@ -166,7 +179,7 @@ class GroupPayoutDestinationViewModelJvmTest {
         val viewModel = loaded(fake)
         viewModel.type("alice@example.com")
         var notChecked: Boolean? = null
-        viewModel.save(onSaved = { notChecked = it }, onFailure = {})
+        viewModel.save(onSaved = { checked, _ -> notChecked = checked }, onFailure = {})
         viewModel.awaitIdle()
         assertEquals(true, notChecked)
         assertNull(fake.sets.single().sendable)
@@ -186,7 +199,7 @@ class GroupPayoutDestinationViewModelJvmTest {
             val fake = Fake(standing(), Resolution.Resolved(intent))
             val viewModel = loaded(fake)
             viewModel.type(input)
-            viewModel.save(onSaved = {}, onFailure = {})
+            viewModel.save(onSaved = { _, _ -> }, onFailure = {})
             assertEquals(problem, viewModel.lightningProblem, input)
             assertEquals(0, fake.resolved, input)
             assertTrue(fake.sets.isEmpty(), input)
@@ -205,7 +218,7 @@ class GroupPayoutDestinationViewModelJvmTest {
             val fake = Fake(standing(), resolution)
             val viewModel = loaded(fake)
             viewModel.type("alice@example.com")
-            viewModel.save(onSaved = {}, onFailure = {})
+            viewModel.save(onSaved = { _, _ -> }, onFailure = {})
             viewModel.awaitIdle()
             assertEquals(problem, viewModel.lightningProblem)
             assertTrue(fake.sets.isEmpty())
@@ -222,7 +235,7 @@ class GroupPayoutDestinationViewModelJvmTest {
             val fake = Fake(standing(), Resolution.Resolved(intent), usage)
             val viewModel = loaded(fake)
             viewModel.type("alice@example.com", fresh)
-            viewModel.save(onSaved = {}, onFailure = {})
+            viewModel.save(onSaved = { _, _ -> }, onFailure = {})
             viewModel.awaitIdle()
             assertEquals(problem, viewModel.onchainProblem)
             assertNull(viewModel.lightningProblem)
@@ -237,7 +250,7 @@ class GroupPayoutDestinationViewModelJvmTest {
             val fake = Fake(standing(), Resolution.Resolved(intent))
             val viewModel = loaded(fake)
             viewModel.type("alice@example.com", input)
-            viewModel.save(onSaved = {}, onFailure = {})
+            viewModel.save(onSaved = { _, _ -> }, onFailure = {})
             assertEquals(problem, viewModel.onchainProblem)
             assertEquals(0, fake.resolved)
         }
@@ -267,5 +280,34 @@ class GroupPayoutDestinationViewModelJvmTest {
         val viewModel = GroupPayoutDestinationViewModel(chatRoomId, chain, GroupPayoutDestinationUIState.Loading, Fake(null, Resolution.Unreachable))
         viewModel.initiate()
         runBlocking { withTimeout(5_000) { while (viewModel.uiState !is GroupPayoutDestinationUIState.Error) delay(10) } }
+    }
+
+    @Test
+    fun `saving the destination deposits were waiting on asks the group to open them, and says which session`() {
+        val deposits = Deposits(session = "opening")
+        val viewModel = loaded(Fake(standing(), Resolution.Resolved(intent)), deposits)
+        viewModel.type("alice@example.com")
+        var session: String? = "not called"
+        viewModel.save(onSaved = { _, opened -> session = opened }, onFailure = {})
+        viewModel.awaitIdle()
+        assertEquals("opening", session)
+        assertEquals(1, deposits.asked)
+    }
+
+    @Test
+    fun `a save with nothing to open, or refused, asks once and moves nowhere`() {
+        val deposits = Deposits(session = null)
+        val viewModel = loaded(Fake(standing(), Resolution.Resolved(intent)), deposits)
+        viewModel.type("alice@example.com")
+        var session: String? = "not called"
+        viewModel.save(onSaved = { _, opened -> session = opened }, onFailure = {})
+        viewModel.awaitIdle()
+        assertNull(session)
+
+        val refused = loaded(Fake(standing(), Resolution.NotFound), deposits)
+        refused.type("alice@example.com")
+        refused.save(onSaved = { _, _ -> }, onFailure = {})
+        refused.awaitIdle()
+        assertEquals(1, deposits.asked, "a destination that wasn't saved asks for nothing")
     }
 }

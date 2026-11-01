@@ -41,6 +41,13 @@ interface DepositRepository {
     /** Proposes opening [member]'s deposits, as the active profile, which has to hold a share. */
     suspend fun open(localChatRoom: LocalChatRoom, chain: Chain, member: HexKey): FrostSigningSession
 
+    /**
+     * Proposes opening the active profile's own deposits in [chatRoomId] when it can now: it has a
+     * destination, the group has not opened its deposits, and this device holds a share to propose
+     * with. What saving a first destination leads to. Null when there is nothing to propose.
+     */
+    suspend fun openOwnIfReady(chatRoomId: String, chain: Chain): FrostSigningSession?
+
     /** Files the outputs that paid the room's receive and deposit branches (Phase 8). */
     suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>)
 
@@ -60,6 +67,7 @@ interface DepositRepository {
             override suspend fun canBeOpened(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false
             override suspend fun open(localChatRoom: LocalChatRoom, chain: Chain, member: HexKey): FrostSigningSession =
                 throw UnsupportedOperationException("no repository")
+            override suspend fun openOwnIfReady(chatRoomId: String, chain: Chain): FrostSigningSession? = null
             override suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) = Unit
             override suspend fun tallies(chatRoomId: String, chain: Chain) = DepositLedger.Tallies(emptyMap(), 0, 0)
             override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = emptyList()

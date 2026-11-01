@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.payout_destination_saved_the_group_is_asked_to_open_your_deposits
+import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
+import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
+import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -95,10 +99,14 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupPayoutDestinationScreen(
+    activeUserPublicKey: String,
     chatRoomId: String,
     chain: Chain,
     initialUIState: GroupPayoutDestinationUIState = GroupPayoutDestinationUIState.Loading,
     repository: PayoutDestinationRepository,
+    depositRepository: DepositRepository = DepositRepository.NO_OP,
+    /** Onto the signing session that opens the member's deposits, in place of this screen. */
+    onNavigateToRouteAndPopUpInclusive: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupPayoutDestinationViewModel = viewModel(
@@ -107,6 +115,7 @@ fun GroupPayoutDestinationScreen(
             chain = chain,
             initialUIState = initialUIState,
             repository = repository,
+            depositRepository = depositRepository,
         )
     )
 
@@ -119,6 +128,7 @@ fun GroupPayoutDestinationScreen(
     val notify = rememberNotifier(rememberCoroutineScope())
     val saved = stringResource(Res.string.payout_destination_saved)
     val savedNotChecked = stringResource(Res.string.payout_destination_saved_not_checked)
+    val savedAndAsked = stringResource(Res.string.payout_destination_saved_the_group_is_asked_to_open_your_deposits)
     val removed = stringResource(Res.string.payout_destination_removed)
     val couldNotSave = stringResource(Res.string.couldn_t_save_the_payout_destination)
     val couldNotRemove = stringResource(Res.string.couldn_t_remove_the_payout_destination)
@@ -204,7 +214,16 @@ fun GroupPayoutDestinationScreen(
                                 Button(
                                     onClick = {
                                         viewModel.save(
-                                            onSaved = { notChecked -> notify(if (notChecked) savedNotChecked else saved) },
+                                            onSaved = { notChecked, depositsSession ->
+                                                if (depositsSession != null) {
+                                                    notify(if (notChecked) savedNotChecked else savedAndAsked)
+                                                    onNavigateToRouteAndPopUpInclusive(
+                                                        FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = depositsSession)
+                                                    )
+                                                } else {
+                                                    notify(if (notChecked) savedNotChecked else saved)
+                                                }
+                                            },
                                             onFailure = { notify(couldNotSave) },
                                         )
                                     },

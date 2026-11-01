@@ -1435,9 +1435,18 @@ fun DedunNavHost(
                 val route = backStackEntry.toRoute<GroupPayoutDestinationRoute>()
 
                 GroupPayoutDestinationScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
                     repository = databasePayoutDestinationRepository,
+                    depositRepository = databaseDepositRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the form, so back returns to where the member came from rather
+                        // than to a destination already saved.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<GroupPayoutDestinationRoute> { inclusive = true }
+                        }
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }
