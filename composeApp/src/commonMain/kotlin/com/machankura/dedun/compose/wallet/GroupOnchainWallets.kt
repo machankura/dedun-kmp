@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.wallet
 
 import com.machankura.dedun.compose.managers.GroupWalletDerivation
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Chain
 import com.machankura.dedun.compose.managers.GuardianManager
@@ -30,6 +31,11 @@ import kotlinx.coroutines.sync.withLock
 class GroupOnchainWallets(
     private val clients: GroupChainClients,
     private val scope: CoroutineScope,
+    /**
+     * Each depositor's branch in a room on a network, by member: what a wallet watches beside
+     * receive and change. Read from the group's signed statements (`Depositors`).
+     */
+    private val depositors: suspend (chatRoomId: String, chain: Chain) -> Map<HexKey, Long> = { _, _ -> emptyMap() },
 ) {
     /** Every network on [electrum]: what the tests, whose fake client answers anything, construct. */
     constructor(electrum: IElectrumClient, scope: CoroutineScope) : this(GroupChainClients.single(electrum), scope)
@@ -46,6 +52,14 @@ class GroupOnchainWallets(
     suspend fun walletFor(account: GroupWalletDerivation.Account): GroupOnchainWallet = mutex.withLock {
         wallets.getOrPut(account.receiveDescriptor) { GroupOnchainWallet(account, clients.clientFor(account.chain), scope) }
     }
+
+    /**
+     * [chatRoomId]'s own wallet for [account], watching every depositor's branch the room's
+     * statements name -- read again each time, so a member opened since is watched from the
+     * next look. `docs/member-deposits.md`, Phase 4.
+     */
+    suspend fun walletFor(account: GroupWalletDerivation.Account, chatRoomId: String): GroupOnchainWallet =
+        walletFor(account).also { wallet -> wallet.watchMembers(depositors(chatRoomId, account.chain)) }
 
     /**
      * A feerate to start the send form at, in sats per virtual byte: Electrum's

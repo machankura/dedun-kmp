@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import fr.acinq.phoenixd.conf.LSP
 import fr.acinq.phoenix.db.createPaymentsDbDriver
@@ -303,7 +304,12 @@ fun DedunNavHost(
 
     // The group wallets this identity is watching. Remade with the client.
     val groupOnchainWallets = remember(groupChainClients) {
-        groupChainClients?.let { GroupOnchainWallets(it, applicationIOScope) }
+        groupChainClients?.let {
+            // Each depositor's branch, from the group's signed statements: docs/member-deposits.md.
+            GroupOnchainWallets(it, applicationIOScope) { chatRoomId, chain ->
+                Depositors.statementsIn(auxDatabaseManager.auxDatabase, chatRoomId, chain).mapValues { (_, depositor) -> depositor.branch }
+            }
+        }
     }
     DisposableEffect(groupOnchainWallets) {
         onDispose { groupOnchainWallets?.let { wallets -> applicationIOScope.launch { wallets.stop() } } }

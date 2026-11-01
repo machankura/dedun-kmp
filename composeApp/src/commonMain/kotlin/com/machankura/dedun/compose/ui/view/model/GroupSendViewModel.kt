@@ -127,7 +127,9 @@ class GroupSendViewModel(
                 }
             }
 
-            follow(ready, wallets.walletFor(wallet.account).state, funded?.let { wallets.walletFor(it.account).state })
+            // The room's own wallet watches its depositors' branches too, so their coins can be spent.
+            val own = if (guardedChatRoomId == null) wallets.walletFor(wallet.account, chatRoomId) else wallets.walletFor(wallet.account)
+            follow(ready, own.state, funded?.let { wallets.walletFor(it.account).state })
         }
     }
 

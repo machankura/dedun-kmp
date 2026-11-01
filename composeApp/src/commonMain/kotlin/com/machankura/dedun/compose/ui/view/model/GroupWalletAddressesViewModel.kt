@@ -64,7 +64,7 @@ class GroupWalletAddressesViewModel(
             }
 
             uiState = GroupWalletAddressesUIState.Loaded(receive = null)
-            wallets.walletFor(wallet.account).state.collect { state ->
+            wallets.walletFor(wallet.account, chatRoomId).state.collect { state ->
                 val receive = state.receiveAddresses
                 uiState = GroupWalletAddressesUIState.Loaded(receive = receive, change = state.changeAddresses.orEmpty())
 

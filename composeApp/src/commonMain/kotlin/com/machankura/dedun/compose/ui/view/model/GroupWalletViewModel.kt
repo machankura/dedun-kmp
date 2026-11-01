@@ -132,7 +132,7 @@ class GroupWalletViewModel(
             // The chain, the room's spends and the wallets it guards, as one
             // state: any of them changing redraws the screen, and none may
             // overwrite another.
-            val chainState = wallets.walletFor(wallet.account).state
+            val chainState = wallets.walletFor(wallet.account, chatRoomId).state
             noticeGuardianSpends(wallet.account)
             watching = viewModelScope.launch(Dispatchers.IO) {
                 combine(

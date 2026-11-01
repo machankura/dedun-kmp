@@ -74,7 +74,7 @@ class DatabasePayoutDestinationRepository(
         // first state, and check without it rather than not at all.
         val own = runCatching {
             GroupWalletManager.walletFor(database, chatRoomId, chain)?.let { wallet ->
-                withTimeoutOrNull(OWN_WALLET_WAIT) { wallets.walletFor(wallet.account).state.first() }
+                withTimeoutOrNull(OWN_WALLET_WAIT) { wallets.walletFor(wallet.account, chatRoomId).state.first() }
             }
         }.getOrNull()
         return wallets.usageOf(chain, script, own)
