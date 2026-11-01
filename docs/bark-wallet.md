@@ -21,6 +21,11 @@ Where the build chose differently, phase by phase:
 | 2 | R8 keep rules from spike 1 | none: release builds are not minified (`isMinifyEnabled = false`) |
 | 2 | the signet test pays itself from a second wallet | it cannot: there is no faucet API. It covers everything a wallet with no money can do, and the funded flows are Phase 12's |
 | 2 | the debug APK starts on an emulator | not done: the emulators on the build host belong to other work, and nothing calls the binding until Phase 3 |
+| 3 | consent in `InternalPrefs`, next to the Tor flag | a file, `<appFiles>/ark/consented/<walletId>`, behind `ArkFiles`. `InternalPrefs` keeps its DataStore private to the library, and one boolean was not worth a submodule commit. The Tor flag is in `UserPrefs`, not `InternalPrefs` |
+| 3 | the words reach `IdentityArk` through the startup screen's `Mnemonic` branch | the nav host reads them from `availableIdentities`, the seeds the selector has already decrypted, when the identity changes. The startup screen is unchanged, and the words go into an `ArkProfile`, never into `Identity` |
+| 3 | `Recovering(status)`, and a retry that calls `recover_vtxos` on the failed ids | `Recovering` is shown while a datadir that did not exist is opened, because the scan runs inside `open`. The scan's outcome rides on `Open(wallet, recovery)` for the screen to state, and `retry()` reopens after a failed open. Re-scanning failed ids is left to Phase 9's advanced screen |
+| 3 | forget refuses with `ArkFundsOrExits` and deletes the datadirs | unchanged, because it cannot be reached: `ForgetIdentity` already refuses every profile with a seed (`WalletAttached`), and only those have an Ark wallet. Phase 13's nsec wallets are the first that forget will meet |
+| 3 | Tor read once | followed: the nav host collects the profile's Tor preference, so turning it on closes the wallet and turning it off reopens it |
 
 The headline: **a seed profile already holds the twelve words Bark needs. Bark's keys sit at
 `m/350'` and its onchain wallet at BIP86, so it can open those same words without touching a

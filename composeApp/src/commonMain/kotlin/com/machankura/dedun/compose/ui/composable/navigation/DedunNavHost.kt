@@ -190,6 +190,13 @@ import com.machankura.dedun.compose.ui.composable.NewMemberWalletScreen
 import com.machankura.dedun.compose.database.repository.DatabaseMemberWalletRepository
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.IdentityElectrum
+import com.machankura.dedun.compose.wallet.ark.ArkFiles
+import com.machankura.dedun.compose.wallet.ark.ArkProfile
+import com.machankura.dedun.compose.wallet.ark.IdentityArk
+import com.machankura.dedun.compose.AppVersion
+import com.machankura.dedun.compose.identity.StoredIdentity
+import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
+import okio.Path.Companion.toPath
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
@@ -312,6 +319,33 @@ fun DedunNavHost(
     }
     val electrum = remember(activeIdentityForWallets?.id, activeIdentityForWallets?.business) {
         identityElectrum.clientFor(activeIdentityForWallets)
+    }
+
+    // The profile's own Ark wallet: docs/bark-wallet.md. One per app, held here as the
+    // Electrum client is, and for the same reason -- a switch closes the last profile's
+    // wallet before the next one opens, because Bark lets a datadir be open only once.
+    // The words come from the seed the selector already decrypted; they are handed to
+    // IdentityArk and kept nowhere else. Tor is followed, so turning it on closes the wallet.
+    val identityArk = remember {
+        IdentityArk(
+            scope = applicationIOScope,
+            files = ArkFiles.under(getApplicationFilesDirectoryPath(phoenixGlobal.ctx).toPath()),
+            appVersion = AppVersion.versionName,
+        )
+    }
+    DisposableEffect(identityArk) {
+        onDispose { applicationIOScope.launch { identityArk.stop() } }
+    }
+    LaunchedEffect(identityArk, activeIdentityForWallets?.id) {
+        val identity = activeIdentityForWallets
+        if (identity == null) {
+            identityArk.activate(null)
+            return@LaunchedEffect
+        }
+        val words = (sovereignWalletViewModel.availableIdentities.value[identity.id] as? StoredIdentity.Mnemonic)?.userWallet?.words
+        identity.userPrefs.getIsTorEnabled.collect { tor ->
+            identityArk.activate(ArkProfile(identity.id, words, tor))
+        }
     }
 
     // One Electrum connection per network: the identity's own -- its node's, or the one a
