@@ -103,6 +103,10 @@ class GroupLightningNode(
     private val poolWait: Duration = POOL_WAIT,
     /** How long to wait before redialling the LSP after [failures] attempts in a row that did not hold. */
     private val reconnectAfter: (failures: Int) -> Duration = ::reconnectDelay,
+    /** How long a change of the link must hold before the room hears of it (`docs/lsp-connection-status.md`, D9). */
+    private val linkSettle: Duration = LINK_SETTLE,
+    /** The least time between two snapshots a change of the link makes due. */
+    private val linkReportMin: Duration = LINK_REPORT_MIN,
 ) {
     private val logger = Logger.withTag("GroupLightningNode")
     private val chain = wallet.statement.chain
@@ -191,8 +195,40 @@ class GroupLightningNode(
     }
 
     private fun setLink(link: LspLink) {
+        val was = this.link
         this.link = link
-        (_state.value as? State.Running)?.let { _status.value = GroupLightningNodeStatus.Running(it.term, link) }
+        if (link is LspLink.Unreachable) lastDrop = link.drop
+        val running = _state.value as? State.Running ?: return
+        _status.value = GroupLightningNodeStatus.Running(running.term, link)
+        if ((was is LspLink.Connected) != (link is LspLink.Connected)) {
+            linkChangedAt = now()
+            // Told to the room once it has held, rather than at the next handover check.
+            settling?.cancel()
+            settling = scope.launch {
+                delay(linkSettle)
+                runCatching { report(running.term) }.onFailure { logger.e("Could not report the link to the room", it) }
+            }
+        }
+    }
+
+    /** When the link last went up or down, the drop that took it down, and the next settled report it makes. */
+    private var linkChangedAt: kotlin.time.Instant? = null
+    private var lastDrop: LspDrop? = null
+    private var settling: Job? = null
+    private var reportedLink: WalletWire.LspLink? = null
+    private var linkReportedAt: kotlin.time.Instant? = null
+
+    /**
+     * The link as the room hears of it: only once a change has held for [linkSettle], so a drop the node
+     * recovers from in seconds never reaches anybody. Until the first change has held, nothing.
+     */
+    private fun settledLink(now: kotlin.time.Instant): WalletWire.LspLink? {
+        val changedAt = linkChangedAt ?: return reportedLink
+        if (now - changedAt < linkSettle) return reportedLink
+        val connected = link is LspLink.Connected
+        // Back where the room last heard it was: a blip in between moves nothing, not even the time.
+        if (reportedLink?.connected == connected) return reportedLink
+        return WalletWire.LspLink(connected, changedAt.epochSeconds, lastDrop?.cause?.name.takeIf { !connected })
     }
 
     /**
@@ -264,6 +300,10 @@ class GroupLightningNode(
         this.transport = transport
         peer = handle
         link = LspLink.Connecting(1)
+        linkChangedAt = now()
+        lastDrop = null
+        reportedLink = null
+        linkReportedAt = null
         enter(State.Running(term))
         stayConnected(handle, runCatching { handle.connect(attempt = 1) })
         lastReported = null
@@ -287,6 +327,8 @@ class GroupLightningNode(
         // First, or the disconnect below would read as a drop and be redialled.
         connecting?.cancel()
         connecting = null
+        settling?.cancel()
+        settling = null
         waking?.cancel()
         waking = null
         peer?.disconnect()
@@ -317,7 +359,9 @@ class GroupLightningNode(
         val now = now()
         val current = Triple(handle.channels(), handle.payments(), handle.heldOutputs())
         val bought = purchasesFor(current.first)
-        val due = force || current != lastReported || bought != lastPurchases || lastReportedAt.let { it == null || now - it >= reportEvery }
+        val lsp = settledLink(now)
+        val linkDue = lsp != reportedLink && linkReportedAt.let { it == null || now - it >= linkReportMin }
+        val due = force || current != lastReported || bought != lastPurchases || linkDue || lastReportedAt.let { it == null || now - it >= reportEvery }
         if (!due) return
         val snapshot = WalletWire.Snapshot(
             wallet = walletKey, term = term, nodeId = wallet.statement.nodeId, sentAt = now.epochSeconds,
@@ -327,8 +371,11 @@ class GroupLightningNode(
             fundingRates = handle.fundingRates(),
             feeratePerByte = handle.feeratePerByte(),
             purchases = bought,
+            lsp = lsp,
         )
         GroupLightningReports.publishSnapshot(database, localChatRoom, userPublicKey, snapshot)
+        if (lsp != reportedLink) linkReportedAt = now
+        reportedLink = lsp
         lastReported = current
         lastPurchases = bought
         lastReportedAt = now
@@ -543,6 +590,10 @@ class GroupLightningNode(
         val REPORT_EVERY: Duration = 5.minutes
         /** How many of the newest payments a snapshot carries; members keep every one they have seen. */
         const val REPORTED_PAYMENTS = 50
+
+        /** How long a change of the LSP link holds before the room hears of it, and the least between two such reports. */
+        val LINK_SETTLE: Duration = 30.seconds
+        val LINK_REPORT_MIN: Duration = 1.minutes
 
         /** How long a connection to the LSP has to last to reset the backoff. */
         val STABLE_CONNECTION: Duration = 1.minutes

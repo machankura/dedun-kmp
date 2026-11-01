@@ -343,8 +343,11 @@ private fun OpenedWallet(modifier: Modifier, state: GroupLightningWalletUIState.
                         style = MaterialTheme.typography.titleMedium,
                     )
                     val nodeStatus = state.nodeStatus
+                    val snapshot = state.report?.snapshot
                     if (state.isOperator && nodeStatus != null) {
                         NodeStatusRow(nodeStatus, onTryNow = { onTryNow(statement.wallet) })
+                    } else if (!state.isOperator && operatorName != null && snapshot != null && snapshot.term == state.operator?.term) {
+                        OperatorLinkRow(snapshot, operatorName)
                     } else {
                         Text(stringResource(Res.string.the_operator_s_device_runs_the_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

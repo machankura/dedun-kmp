@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.managers.GroupLightningNodeStatus
 import com.machankura.dedun.compose.managers.LspDrop
 import com.machankura.dedun.compose.managers.LspLink
 import com.machankura.dedun.compose.ui.theme.DedunTheme
+import com.machankura.dedun.compose.wallet.lightning.WalletWire
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Clock
@@ -98,5 +99,43 @@ class NodeStatusRowJvmTest {
         onNodeWithText("Can't reach the LSP").assertIsDisplayed()
         onNodeWithText("The LSP closed the connection.").assertDoesNotExist()
         onNodeWithText("Try now").assertDoesNotExist()
+    }
+
+    // Every other member's row, from the operator's snapshot (Phase 5).
+
+    private val now = Clock.System.now()
+    private fun snapshot(age: kotlin.time.Duration, lsp: WalletWire.LspLink?) =
+        WalletWire.Snapshot("w", 3, "n", (now - age).epochSeconds, emptyList(), emptyList(), lsp = lsp)
+
+    @Test
+    fun `a member reads the operator's link, and how old the word is`() = runDesktopComposeUiTest {
+        setContent {
+            DedunTheme {
+                Column {
+                    OperatorLinkRow(snapshot(2.minutes, WalletWire.LspLink(true, 1)), "Alice", now)
+                    OperatorLinkRow(snapshot(3.minutes, WalletWire.LspLink(false, 1, LspDrop.Cause.UNREACHABLE.name)), "Bob", now)
+                }
+            }
+        }
+        onNodeWithText("Alice's node was connected to the LSP").assertIsDisplayed()
+        onNodeWithText("As of 2 minutes ago").assertIsDisplayed()
+        onNodeWithText("Bob's node couldn't reach the LSP").assertIsDisplayed()
+        onNodeWithText("The LSP didn't answer. Check this device's connection.").assertIsDisplayed()
+        onNodeWithText("As of 3 minutes ago").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an old snapshot says only that it is old`() = runDesktopComposeUiTest {
+        setContent { DedunTheme { OperatorLinkRow(snapshot(40.minutes, WalletWire.LspLink(true, 1)), "Alice", now) } }
+        onNodeWithText("Alice hasn't reported for 40 minutes").assertIsDisplayed()
+        onNodeWithText("Payments may wait until the operator's device is back.").assertIsDisplayed()
+        onNodeWithText("Alice's node was connected to the LSP").assertDoesNotExist()
+    }
+
+    @Test
+    fun `an operator from before the link keeps the old line, with its age`() = runDesktopComposeUiTest {
+        setContent { DedunTheme { OperatorLinkRow(snapshot(30.seconds, null), "Alice", now) } }
+        onNodeWithText("Last reported less than a minute ago").assertIsDisplayed()
+        onNodeWithText("The operator's device runs", substring = true).assertIsDisplayed()
     }
 }

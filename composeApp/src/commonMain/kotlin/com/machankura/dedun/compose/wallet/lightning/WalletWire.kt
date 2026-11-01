@@ -103,10 +103,20 @@ object WalletWire {
         val feeratePerByte: Long? = null,
         /** What came of each liquidity purchase the group authorised. */
         val purchases: List<LiquidityPurchase> = emptyList(),
+        /** Whether the node could reach the LSP, settled; absent from an older operator. `docs/lsp-connection-status.md`, D8. */
+        val lsp: LspLink? = null,
     ) {
         val spendableMsat: Long get() = channels.sumOf { it.oursMsat }
         val inboundMsat: Long get() = channels.sumOf { it.theirsMsat }
     }
+
+    /**
+     * The operator's word on its node's connection to the LSP: [connected] or not since [since], in epoch
+     * seconds, and when not, the [cause] of the last drop by its name in [LspDrop.Cause]. Never the drop's
+     * detail, which can carry a host or an address and stays on the operator's device.
+     */
+    @Serializable
+    data class LspLink(val connected: Boolean, val since: Long, val cause: String? = null)
 
     /**
      * Kind 30364: a member asks the operator for an invoice. [depositor] is the id of the group's

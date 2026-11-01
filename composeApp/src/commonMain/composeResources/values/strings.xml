@@ -976,4 +976,23 @@
     <string name="drop_closed_by_lsp">The LSP closed the connection.</string>
     <string name="drop_tor_without_onion">Tor is on, and the LSP has no onion address on this network.</string>
     <string name="drop_other">The connection ended unexpectedly.</string>
+    <string name="s_s_node_was_connected_to_the_lsp">%1$s's node was connected to the LSP</string>
+    <string name="s_s_node_couldn_t_reach_the_lsp">%1$s's node couldn't reach the LSP</string>
+    <string name="as_of_s_ago">As of %1$s ago</string>
+    <string name="last_reported_s_ago">Last reported %1$s ago</string>
+    <string name="s_hasn_t_reported_for_s">%1$s hasn't reported for %2$s</string>
+    <string name="payments_may_wait_until_the_operator_s_device_is_back">Payments may wait until the operator's device is back.</string>
+    <string name="less_than_a_minute">less than a minute</string>
+    <plurals name="n_minutes_span">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <plurals name="n_hours_span">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <plurals name="n_days_span">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
 </resources>

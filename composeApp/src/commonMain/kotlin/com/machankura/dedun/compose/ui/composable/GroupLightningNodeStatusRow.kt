@@ -28,12 +28,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.machankura.dedun.compose.extensions.toChatListTimestampString
+import com.machankura.dedun.compose.managers.GroupLightningNode
 import com.machankura.dedun.compose.managers.GroupLightningNodeStatus
 import com.machankura.dedun.compose.managers.LspDrop
 import com.machankura.dedun.compose.managers.LspLink
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.theme.spacing
+import com.machankura.dedun.compose.wallet.lightning.WalletWire
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.as_of_s_ago
 import dedun.composeapp.generated.resources.attempt_s
 import dedun.composeapp.generated.resources.can_t_reach_the_lsp
 import dedun.composeapp.generated.resources.connected_to_the_lsp
@@ -44,14 +47,24 @@ import dedun.composeapp.generated.resources.drop_handshake
 import dedun.composeapp.generated.resources.drop_other
 import dedun.composeapp.generated.resources.drop_tor_without_onion
 import dedun.composeapp.generated.resources.drop_unreachable
+import dedun.composeapp.generated.resources.last_reported_s_ago
+import dedun.composeapp.generated.resources.less_than_a_minute
+import dedun.composeapp.generated.resources.n_days_span
+import dedun.composeapp.generated.resources.n_hours_span
+import dedun.composeapp.generated.resources.n_minutes_span
 import dedun.composeapp.generated.resources.open_dedun_on_the_device_that_runs_it
+import dedun.composeapp.generated.resources.payments_may_wait_until_the_operator_s_device_is_back
 import dedun.composeapp.generated.resources.refusal_no_onchain_wallet
 import dedun.composeapp.generated.resources.refusal_no_seed
 import dedun.composeapp.generated.resources.refusal_not_operator
 import dedun.composeapp.generated.resources.refusal_pool_short
 import dedun.composeapp.generated.resources.refusal_room_not_synced
+import dedun.composeapp.generated.resources.s_hasn_t_reported_for_s
+import dedun.composeapp.generated.resources.s_s_node_couldn_t_reach_the_lsp
+import dedun.composeapp.generated.resources.s_s_node_was_connected_to_the_lsp
 import dedun.composeapp.generated.resources.since_s
 import dedun.composeapp.generated.resources.starting_your_node
+import dedun.composeapp.generated.resources.the_operator_s_device_runs_the_node
 import dedun.composeapp.generated.resources.this_device_checks_again_every_minute
 import dedun.composeapp.generated.resources.try_now
 import dedun.composeapp.generated.resources.trying_again_in_n_minutes
@@ -65,6 +78,8 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -182,6 +197,67 @@ private fun retryText(retryAt: Instant): String {
         else -> ((left.inWholeSeconds + 59) / 60).toInt().let { pluralStringResource(Res.plurals.trying_again_in_n_minutes, it, it) }
     }
 }
+
+/**
+ * What the operator's newest snapshot says of its node's link to the LSP, on every other member's device
+ * (`docs/lsp-connection-status.md`, Phase 5), and how old it is. A snapshot older than two reporting
+ * periods says only that, whatever it says of the link (D10): an operator whose phone has been off for a
+ * day last said it was connected. [now] is for a test; the row keeps its own clock otherwise.
+ */
+@Composable
+internal fun OperatorLinkRow(snapshot: WalletWire.Snapshot, operatorName: String, now: Instant? = null) {
+    val clock by produceState(now ?: Clock.System.now(), now) {
+        if (now != null) return@produceState
+        while (true) {
+            value = Clock.System.now()
+            delay(AGE_TICK)
+        }
+    }
+    val age = (clock - Instant.fromEpochSeconds(snapshot.sentAt)).coerceAtLeast(Duration.ZERO)
+    val lsp = snapshot.lsp
+    val (icon, tint) = when {
+        age > STALE -> Icons.Default.PhonelinkOff to MaterialTheme.colorScheme.onSurfaceVariant
+        lsp == null -> null to MaterialTheme.colorScheme.onSurfaceVariant
+        lsp.connected -> Icons.Default.CloudDone to MaterialTheme.colorScheme.primary
+        else -> Icons.Default.CloudOff to MaterialTheme.colorScheme.error
+    }
+    val headline = when {
+        age > STALE -> stringResource(Res.string.s_hasn_t_reported_for_s, operatorName, spanText(age))
+        lsp == null -> null
+        lsp.connected -> stringResource(Res.string.s_s_node_was_connected_to_the_lsp, operatorName)
+        else -> stringResource(Res.string.s_s_node_couldn_t_reach_the_lsp, operatorName)
+    }
+    val supporting = when {
+        age > STALE -> listOf(stringResource(Res.string.payments_may_wait_until_the_operator_s_device_is_back))
+        // An operator from before the link was reported: the old line, and its age.
+        lsp == null -> listOf(stringResource(Res.string.the_operator_s_device_runs_the_node), stringResource(Res.string.last_reported_s_ago, spanText(age)))
+        lsp.connected -> listOf(stringResource(Res.string.as_of_s_ago, spanText(age)))
+        else -> listOfNotNull(
+            lsp.cause?.let { name -> LspDrop.Cause.entries.firstOrNull { it.name == name } }?.let { dropText(it) },
+            stringResource(Res.string.as_of_s_ago, spanText(age)),
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+        if (icon != null) Box(modifier = Modifier.size(ICON_SIZE), contentAlignment = Alignment.Center) { StatusIcon(icon, tint) }
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            headline?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+            supporting.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+/** *40 minutes*, *3 hours*: how long, in the largest whole unit, or *less than a minute*. */
+@Composable
+internal fun spanText(span: Duration): String = when {
+    span < 1.minutes -> stringResource(Res.string.less_than_a_minute)
+    span < 1.hours -> span.inWholeMinutes.toInt().let { pluralStringResource(Res.plurals.n_minutes_span, it, it) }
+    span < 1.days -> span.inWholeHours.toInt().let { pluralStringResource(Res.plurals.n_hours_span, it, it) }
+    else -> span.inWholeDays.toInt().let { pluralStringResource(Res.plurals.n_days_span, it, it) }
+}
+
+/** Past two reporting periods, a snapshot says more about the operator's device than about its node. */
+private val STALE = GroupLightningNode.REPORT_EVERY * 2
+private val AGE_TICK = 15.seconds
 
 private val ICON_SIZE = 24.dp
 private val PROGRESS_SIZE = 20.dp

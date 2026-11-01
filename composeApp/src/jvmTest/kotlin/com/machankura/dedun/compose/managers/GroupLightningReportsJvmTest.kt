@@ -30,6 +30,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +85,76 @@ class GroupLightningReportsJvmTest {
         )
         assertIs<GroupLightningNode.State.Running>(node.start())
         return all to node
+    }
+
+    // The link, as the room hears of it (`docs/lsp-connection-status.md`, Phase 5).
+
+    private suspend fun linked(linkSettle: Duration, linkReportMin: Duration, reconnectAfter: (Int) -> Duration): Pair<List<GroupLightningFixture.Device>, GroupLightningNode> {
+        val (all, first) = running()
+        first.stop()
+        val who = all[1]
+        val node = GroupLightningNode(
+            who.db, who.room, who.publicKey, GroupLightningWalletManager.walletFor(who.db, fixture.roomId, fixture.chain)!!, scope,
+            { configuration -> FakeGroupNode(configuration).also { nodes += it } },
+            handoverCheck = 10.minutes, minimumPool = 0, reconnectAfter = reconnectAfter, linkSettle = linkSettle, linkReportMin = linkReportMin,
+        )
+        assertIs<GroupLightningNode.State.Running>(node.start())
+        return all to node
+    }
+
+    private suspend fun links(device: GroupLightningFixture.Device): List<WalletWire.LspLink?> =
+        fixture.outbox(device, setOf(GroupLightningEvents.SNAPSHOT)).map { CommonJson.decodeFromString(WalletWire.Snapshot.serializer(), it.content) }
+            .sortedBy { it.sentAt }.map { it.lsp }
+
+    private suspend fun awaitLinks(device: GroupLightningFixture.Device, until: (List<WalletWire.LspLink?>) -> Boolean): List<WalletWire.LspLink?> =
+        withTimeout(5.seconds) { while (!until(links(device))) delay(20); links(device) }
+
+    @Test
+    fun `a drop that lasts reaches the room once it has held, without its detail`() = runBlocking<Unit> {
+        val (all, node) = linked(linkSettle = 200.milliseconds, linkReportMin = Duration.ZERO, reconnectAfter = { 10.minutes })
+        val before = links(all[1]).size
+        awaitLinks(all[1]) { l -> l.drop(before).any { it?.connected == true } }
+        nodes.last().drops.send("Connection closed: 203.0.113.9:9735")
+        val sent = awaitLinks(all[1]) { l -> l.drop(before).any { it?.connected == false } }.drop(before).filterNotNull()
+        assertEquals(listOf(true, false), sent.map { it.connected }.distinct())
+        assertEquals(LspDrop.Cause.CLOSED_BY_LSP.name, sent.last().cause)
+        assertTrue(fixture.outbox(all[1], setOf(GroupLightningEvents.SNAPSHOT)).none { "203.0.113.9" in it.content }, "the detail stays on the operator's device")
+        // A member hears it as it was sent.
+        fixture.pump(all, setOf(GroupLightningEvents.SNAPSHOT))
+        assertEquals(false, GroupLightningReports.latest(all[3].db, key)!!.snapshot.lsp?.connected)
+        node.stop()
+    }
+
+    @Test
+    fun `a drop the node recovers from at once is never sent`() = runBlocking<Unit> {
+        val (all, node) = linked(linkSettle = 400.milliseconds, linkReportMin = Duration.ZERO, reconnectAfter = { 10.milliseconds })
+        val before = links(all[1]).size
+        val up = awaitLinks(all[1]) { l -> l.drop(before).any { it?.connected == true } }.size
+        nodes.last().drops.send("Connection closed")
+        delay(1_000)
+        assertEquals(up, links(all[1]).size, "nothing more was sent")
+        node.stop()
+    }
+
+    @Test
+    fun `a flapping link is reported at most once a minute`() = runBlocking<Unit> {
+        val (all, node) = linked(linkSettle = 50.milliseconds, linkReportMin = 10.seconds, reconnectAfter = { 150.milliseconds })
+        val before = links(all[1]).size
+        val up = awaitLinks(all[1]) { l -> l.drop(before).any { it?.connected == true } }.size
+        repeat(3) {
+            nodes.last().drops.send("Connection closed")
+            delay(400)
+        }
+        assertEquals(up, links(all[1]).size, "each drop held past the settle, and none was sent inside the minimum")
+        node.stop()
+    }
+
+    @Test
+    fun `a snapshot from before the link reads as no word on it, and one with it reads back`() {
+        val old = """{"wallet":"w","term":1,"nodeId":"n","sentAt":5,"channels":[],"payments":[]}"""
+        assertEquals(null, CommonJson.decodeFromString(WalletWire.Snapshot.serializer(), old).lsp)
+        val snapshot = WalletWire.Snapshot("w", 1, "n", 5, emptyList(), emptyList(), lsp = WalletWire.LspLink(false, 4, LspDrop.Cause.UNREACHABLE.name))
+        assertEquals(snapshot, CommonJson.decodeFromString(WalletWire.Snapshot.serializer(), CommonJson.encodeToString(WalletWire.Snapshot.serializer(), snapshot)))
     }
 
     private fun snapshotEvent(from: GroupLightningFixture.Device, snapshot: WalletWire.Snapshot) =
