@@ -216,7 +216,7 @@ old proposer are impossible, which is the safe direction.
 **About a day, plus the measurement.**
 
 - The regtest run (`testing/regtest/regtest.sh up`, then
-  `BENNU_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'`) re-runs
+  `DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'`) re-runs
   end to end; its force-close step now exercises the deferred revocation against a real eclair.
 - The app's JVM suite and the fork's suite pass.
 - **Measure how long ACINQ's LSP waits for `revoke_and_ack`** before this ships to a real group:

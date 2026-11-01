@@ -40,7 +40,7 @@ of the code:
 | Phase 4: "extend `Outcome.BlockedOn` to a package that cannot be used" | `MarmotKeyPackageProfileException` at the add step, whose message the confirmation screen shows. `BlockedOn` still means missing, because the picker -- `getMarmotKeyPackageForPublicKey(publicKey, roomProfile)` -- refuses the wrong profile before creation ever asks, so there a wrong-profile package *is* a missing one |
 | Phase 5: four stores | one, `RoomMlsGroupStateStore`, over the state blob, `MarmotRetainedEpochSecret` and `MarmotRouting`. No `KeyPackageBundleStore` and no snapshot table: the `KeyPackageRotationManager` is constructed because the processor's constructor demands one and is never consulted, and bundles stay the app's rows with the notary's per-profile republish over them. No `MarmotIngestDedupStore`: 1.15.2's processor takes no such store, so there is nothing to mark into |
 | Phase 5: `MarmotGroupEvent` gains a `marmotMessageId` column | not added. The processor dedups by message id in memory for the life of the process; the reindex sweep still dedups by event id. The follow-up if a relay ever redelivers under a second id |
-| Phase 5: one engine "held by the identity's scope" | `BennuDatabase.marmotEngine`, one per database, restored on first use. The DAOs that need it hold the database and not a view model's scope, and a switch of identity is a restart |
+| Phase 5: one engine "held by the identity's scope" | `DedunDatabase.marmotEngine`, one per database, restored on first use. The DAOs that need it hold the database and not a view model's scope, and a switch of identity is a restart |
 | Phase 5: the timer "beside `LiveSubscriptionManager`"; an outbound row "stays on the queue" while a pass is open | `MarmotEngine.settleLater`, armed by the ingest whenever a pass opens and ticking on the engine's own scope; and `awaitSettled` on the outbound side -- a wait of up to three ticks rather than a refusal, because the outbound queue re-emits on a table change and a pass settling is not one |
 | Phase 6: "a terminal rejection resolves `FAILED`" | built in a follow-up, once "terminal" had a definition: a NIP-01 `OK` reason a relay will keep giving (`blocked:`, `invalid:`, `pow:`, `restricted:`) is a new "rejected" status that the launch-time requeue leaves alone, `rate-limited:` and `error:` are "failed" like a timeout, and `duplicate:` is "published". The obligation goes only when every relay in scope has rejected -- `BroadcastStatus`, `MarmotEngine.discardRejected` -- and the room gets a line in the relay's words |
 | Phase 6: `gate.satisfyEmptyObligation` for the group that is only its creator | `installState` straight after `stageAddMember`, keyed off the `isOneMemberInitialGroupCreation` the app already computed |
@@ -154,11 +154,11 @@ decision in here that cannot be reversed once a v2 room exists.
 `quartz = "1.15.2"` in the version catalogue, and two compile fixes:
 
 - `CommitOrdering` was deleted from the library. It is vendored, unchanged, as
-  [managers/CommitOrdering.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/CommitOrdering.kt)
+  [managers/CommitOrdering.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/CommitOrdering.kt)
   with a header saying why the library dropped it. It goes again in Phase 5.
 - `GroupEventResult` gained `AppMessageOnCandidateBranch` and `RefusedByLifecycle`,
   and the exhaustive `when` in
-  [ChatMessage.fromGroupEventResult](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/ChatMessage.kt:777)
+  [ChatMessage.fromGroupEventResult](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/ChatMessage.kt:777)
   now returns `null` for both. Neither is a delivery, and until Phase 5 the app never
   constructs either.
 
@@ -182,7 +182,7 @@ with Amethyst users starts, since Amethyst still joins legacy groups. Nothing it
 
 Seventeen call sites read `currentMarmotData()`, which is the `0xF2EE` extension
 and is null on a v2 group. Ten of them read `nostrGroupId`, and the Welcome path in
-[NostrDao.kt:701](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt:701)
+[NostrDao.kt:701](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt:701)
 throws `MarmotMissingNostrGroupDataExtension` when it gets null -- so today a v2
 Welcome is not a room the app cannot read but an exception it cannot get past.
 
@@ -208,12 +208,12 @@ fun MlsGroup.retentionSeconds(): Long? =
 
 and point the seventeen sites at those, `currentNostrGroupId()` and
 `currentAdminIdentities()`. The two that matter most are
-[SubgroupManager.kt:123](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/SubgroupManager.kt:123),
+[SubgroupManager.kt:123](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/SubgroupManager.kt:123),
 which decides who may open a subgroup ceremony, and
-[MarmotInboundManager.processGroupMembershipChanges](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/MarmotInboundManager.kt:104),
+[MarmotInboundManager.processGroupMembershipChanges](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/MarmotInboundManager.kt:104),
 which stamps `adminAt`. On a v2 group both currently see no admins at all, so a
 member who is an admin is shown as none, and a subgroup cannot be started.
-[MarmotInnerEvent.disappearingExpiration](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/MarmotInnerEvent.kt:117)
+[MarmotInnerEvent.disappearingExpiration](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/MarmotInnerEvent.kt:117)
 gets the same treatment; the library's own outbound processor had precisely this
 bug -- it read only `0xF2EE` and disappearing messages silently did not disappear in
 v2 groups -- and fixed it the same way.
@@ -222,14 +222,14 @@ v2 groups -- and fixed it the same way.
 
 A current-profile kind:30443's content is not a bare `KeyPackage` but an
 `MLSMessage{KEY_PACKAGE}` around one.
-[MarmotOutboundDao.inviteMember](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/MarmotOutboundDao.kt:453)
+[MarmotOutboundDao.inviteMember](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/MarmotOutboundDao.kt:453)
 does `MlsKeyPackage.decodeTls(TlsReader(bytes))` on whatever the ingest stored,
 which reads the framing's version and wire-format words as the KeyPackage's own
 and fails. `KeyPackageUtils.decodeKeyPackage(bytes)` sniffs the first four bytes
 and handles both; use it there.
 
 While in the ingest at
-[NostrDao.kt:429](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt:429):
+[NostrDao.kt:429](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt:429):
 nothing validates a KeyPackage today. Run `KeyPackageUtils.isValid(event)` and
 `isCryptographicallyValid(event)` before storing one. The second now checks the
 leaf's lifetime and, for a current-profile package, the identity proof -- which is
@@ -239,7 +239,7 @@ for that.
 
 ### Payloads without a signature
 
-In [MarmotInboundManager.processPrivateMessage](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/MarmotInboundManager.kt:289)
+In [MarmotInboundManager.processPrivateMessage](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/MarmotInboundManager.kt:289)
 the author check reads `Event.fromJsonOrNull(innerJson)`. That accepts a canonical
 payload by accident -- the deserialiser defaults `sig` -- but it also accepts
 payloads the spec says to refuse: duplicate keys, unknown members, an id that does
@@ -284,7 +284,7 @@ asserting the member lands. That is the Amethyst-user case, end to end.
 
 ### What goes out
 
-In [encryptAndSendMarmotInnerEvent](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/MarmotOutboundDao.kt:735)
+In [encryptAndSendMarmotInnerEvent](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/MarmotOutboundDao.kt:735)
 the plaintext is `innerEvent.toJson().encodeToByteArray()`, which carries
 `"sig":""`. The library's outbound processor is explicit about why that is refused
 by a conformant peer rather than merely untidy: a payload with a real signature
@@ -324,7 +324,7 @@ accepts it.
 A kind:1059 wrap is signed -- by a throwaway key, but signed -- and its `pubkey`
 is that key, not the sender's. Under v2 it is refused twice over: for the `sig`
 member and for the author mismatch. The carve-out in
-[mip03Rejection](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/MarmotInboundManager.kt:88)
+[mip03Rejection](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/MarmotInboundManager.kt:88)
 that admits it is exactly what other clients do not have, and the direct-message
 note already says those clients drop these as impersonation.
 
@@ -381,7 +381,7 @@ kind:30443 anyway -- the notary returns before signing anything for it, so the
 bundle is never attempted, as [the npub sign-in note](./npub-sign-in.md) records.
 
 Replace
-[DatabaseMarmotRepository.generateKeyPackage](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseMarmotRepository.kt:164)
+[DatabaseMarmotRepository.generateKeyPackage](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseMarmotRepository.kt:164)
 and `buildKeyPackageLeafNode` with `CurrentProfileGroupFactory.createKeyPackage(signer, lastResort = true)`,
 and the event with `KeyPackageEvent.buildCurrentProfileFrom(bundle.keyPackage, dTagSlot, clientName = "curare")`.
 The event's tags change shape -- `mls_extensions` names `0x0006`, `mls_proposals`
@@ -466,7 +466,7 @@ app creates on the current profile gets a fresh `RandomInstance.bytes(32)` as it
 routing id and keeps `SharedKeyDerivation.marmotGroupId` as its `ChatRoom.id`.
 
 The lookups that change are the ones keyed by the `h` tag:
-[NostrDao.kt:441](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt:441),
+[NostrDao.kt:441](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt:441),
 where an inbound kind:445's `groupId()` becomes the room via the table;
 `getMarmotGroupNostrEventsByChatRoomId`, whose `LIKE` on the tag narrows by the
 room's routing ids; the `#h` filter `LiveSubscriptionManager` keeps open, which
@@ -485,9 +485,9 @@ group's private traffic to its public work with one string comparison.
 
 ### Creating one
 
-[MarmotGroupCreation.create](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/MarmotGroupCreation.kt:105)
+[MarmotGroupCreation.create](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/MarmotGroupCreation.kt:105)
 and
-[SelectChatRoomTypeViewModel.createMarmotChatRoom](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SelectChatRoomTypeViewModel.kt:219)
+[SelectChatRoomTypeViewModel.createMarmotChatRoom](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SelectChatRoomTypeViewModel.kt:219)
 both build a `MarmotGroupData` and hand it to `MlsGroup.create`. Both become
 
 ```kotlin
@@ -584,7 +584,7 @@ group whose current state it never retained.
 
 ### Inbound
 
-[NostrDao.indexMarmotGroupEvent](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt:1311)
+[NostrDao.indexMarmotGroupEvent](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt:1311)
 replaces its `MlsGroupCache.withGroup { MarmotInboundManager.processGroupEvent(...) }`
 with `engine.inbound.processGroupEvent(groupEvent)`. Everything after the result --
 `ChatMessage.fromGroupEventResult`, the FROST and DKG dispatch, membership changes
@@ -679,7 +679,7 @@ second because a `Disbanding` or `Leaving` gate must survive a restart.
 `MarmotCommitResult` stays as the Welcome half; it already holds the framed commit,
 the Welcome bytes and the pre-commit exporter secret.
 
-[inviteMember](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/MarmotOutboundDao.kt:453)
+[inviteMember](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/MarmotOutboundDao.kt:453)
 becomes: `stageAddMembers` on the manager (a clone; the live group keeps its
 pending proposals) -> `buildCommitEvent(routingId, staged.framedCommitBytes, staged.preCommitExporterSecret)`
 -> `gate.prepare(groupId, staged, outboundBytes, recipientScope = relays)`, which is
@@ -689,7 +689,7 @@ goes to the inbound processor at the same time, because the gate does not tell
 convergence about our own commits and a fork we are half of would otherwise look
 like an orphan.
 
-[DatabaseNostrRepository.broadcastProcessed](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt:473)
+[DatabaseNostrRepository.broadcastProcessed](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt:473)
 is already the place a relay OK arrives and already turns it into the deferred
 Welcome. It gains `gate.resolve(obligationId, CONFIRMED)` first, which installs the
 pending state, and only then delivers the Welcome -- which is the MIP-02 ordering
@@ -728,7 +728,7 @@ welcome goes out` with the order it asserts made strict.
 
 ### Leaving
 
-[leaveChatRoom](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseChatRepository.kt:655)
+[leaveChatRoom](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseChatRepository.kt:655)
 sets `leftGroupAt` and sends the text "Left group". The group does not learn of
 it: the leaf stays in the tree, holding the group's keys. v2 leaving is a
 `SelfRemove` proposal published as a `PublicMessage` kind:445, which the app already
@@ -784,7 +784,7 @@ disband is absorbing across a rebuilt engine; the snapshot diff yields exactly o
 **Two days.**
 
 Two implementations in one group, in `jvmTest`: the app's engine over a
-`BennuDatabase`, and a bare library stand-in -- `MlsGroupManager` and
+`DedunDatabase`, and a bare library stand-in -- `MlsGroupManager` and
 `MarmotInboundProcessor` over the in-memory stores -- playing Amethyst. The
 existing subgroup tests already run two databases in one process; this is the same
 shape with a foreign member.

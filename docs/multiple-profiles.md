@@ -106,7 +106,7 @@ Every screen from the home tab inward takes `activeUserPublicKey` as a route
 argument — `HomeRoute`, `SearchRoute`, `ActiveProfileRoute`, `ChatRoomDetailRoute`,
 all of them. The navigation component reads the signed-in key *off the current
 route* rather than holding it
-([BennuNavHost.kt:418](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/navigation/BennuNavHost.kt)),
+([DedunNavHost.kt:418](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/navigation/DedunNavHost.kt)),
 precisely so that it cannot drift from the screen underneath. That is the right
 design for one profile and it decides the shape of a switch: a stack of routes
 built for key A cannot be handed key B. The only honest switch is to clear the
@@ -116,7 +116,7 @@ does when the active identity changes.
 The second half of the constraint is the database. It is one Room file for the
 device, and it is *mostly* keyed by whose it is: `ChatRoom.userPublicKey` — whose
 comment reads "should help us have multiple user support"
-([ChatRoom.kt:48](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/model/ChatRoom.kt))
+([ChatRoom.kt:48](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/ChatRoom.kt))
 — `UnsignedNostrEvent.pubKey`, `MarmotKeyPackageBundle.publicKey`,
 `GiftWrapMessage.receiverPublicKey`, the `Connection` relation by both keys. The
 profile cache is shared, and should be: a kind 0 is the same event whoever fetched
@@ -131,19 +131,19 @@ application, and its switching machinery came across intact and unused.
 
 | piece | where | state |
 |---|---|---|
-| the credentials file, its encrypted writer, and the app writing it from `writeMnemonic` — to *delete* a public entry a seed supersedes | [IdentityWriter.kt:148](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/IdentityWriter.kt) | built; writing a `Secret` from the same place is one line more |
-| `migrateFromNostrKeys`: a named, idempotent write that runs from `listIdentities` before anything reads either file | [SovereignWalletViewModel.kt:183](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt) | built; the shape Phase 1's repair copies |
-| `StoredIdentity.merge`, deriving every seed's nostr public key at listing to compare stores by pubkey | [StoredIdentity.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/StoredIdentity.kt) | built; the derivation is what attaches a seed to its credential |
-| `switchToWallet(id)`: sets `desiredWalletId`, clears the active identity | [SovereignWalletViewModel.kt:304](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt) | built; called by the sign-in and create tails and the startup selector, never from a signed-in screen |
-| `resetToSelector()`: clears both and asks startup for the list | [SovereignWalletViewModel.kt:315](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt) | built; the sign-out and forget tails use it |
-| `NavigationViewModel.observeProfile`: a null identity is `StartupPhoenix`, which the nav host navigates to with `popUpTo(0)`; a new identity is observed from its account | [NavigationViewModel.kt:184](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NavigationViewModel.kt) | built — this *is* the restart |
-| the notary, the sync pumps and the live subscriptions run as children of `collectLatest` over the identity, so a change cancels them — the comments say "a wallet switch" in as many words | [NotaryViewModel.kt:62](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NotaryViewModel.kt), [SynchronizationViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SynchronizationViewModel.kt) | built |
-| the startup screen: lists, picks by `forceWalletId` / `desiredWalletId` / the default, shows `WalletsSelector` otherwise, and wraps every activation in the lock gate | [SovereignWalletStartupScreen.kt:106](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/SovereignWalletStartupScreen.kt) | built; the precedence is wrong for a switch, see below |
-| `WalletsSelector`: a current section with a divider, the others below, a *read only* label, `topContent` and `bottomContent` slots | [WalletsSelector.kt:59](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/wallet/WalletsSelector.kt) | built; shows "Default name" and a random emoji for every row |
+| the credentials file, its encrypted writer, and the app writing it from `writeMnemonic` — to *delete* a public entry a seed supersedes | [IdentityWriter.kt:148](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/IdentityWriter.kt) | built; writing a `Secret` from the same place is one line more |
+| `migrateFromNostrKeys`: a named, idempotent write that runs from `listIdentities` before anything reads either file | [SovereignWalletViewModel.kt:183](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt) | built; the shape Phase 1's repair copies |
+| `StoredIdentity.merge`, deriving every seed's nostr public key at listing to compare stores by pubkey | [StoredIdentity.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/StoredIdentity.kt) | built; the derivation is what attaches a seed to its credential |
+| `switchToWallet(id)`: sets `desiredWalletId`, clears the active identity | [SovereignWalletViewModel.kt:304](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt) | built; called by the sign-in and create tails and the startup selector, never from a signed-in screen |
+| `resetToSelector()`: clears both and asks startup for the list | [SovereignWalletViewModel.kt:315](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt) | built; the sign-out and forget tails use it |
+| `NavigationViewModel.observeProfile`: a null identity is `StartupPhoenix`, which the nav host navigates to with `popUpTo(0)`; a new identity is observed from its account | [NavigationViewModel.kt:184](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NavigationViewModel.kt) | built — this *is* the restart |
+| the notary, the sync pumps and the live subscriptions run as children of `collectLatest` over the identity, so a change cancels them — the comments say "a wallet switch" in as many words | [NotaryViewModel.kt:62](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NotaryViewModel.kt), [SynchronizationViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SynchronizationViewModel.kt) | built |
+| the startup screen: lists, picks by `forceWalletId` / `desiredWalletId` / the default, shows `WalletsSelector` otherwise, and wraps every activation in the lock gate | [SovereignWalletStartupScreen.kt:106](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/SovereignWalletStartupScreen.kt) | built; the precedence is wrong for a switch, see below |
+| `WalletsSelector`: a current section with a divider, the others below, a *read only* label, `topContent` and `bottomContent` slots | [WalletsSelector.kt:59](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/wallet/WalletsSelector.kt) | built; shows "Default name" and a random emoji for every row |
 | `BusinessManager`: a map of running nodes by wallet id; starting one that runs returns it; `stopBusiness(walletId)` on all three platforms | [BusinessManager.kt:208](../lightning-kmp-app/library/src/androidMain/kotlin/fr/acinq/phoenix/android/BusinessManager.kt) | built; nothing in the app calls `stopBusiness` |
 | `GlobalPrefs.getDefaultWallet`, `saveDefaultWallet`, `clearDefaultWallet` | [GlobalPrefs.kt:102](../lightning-kmp-app/library/src/commonMain/kotlin/fr/acinq/phoenix/utils/preferences/GlobalPrefs.kt) | read by startup; never written by anything |
-| the sign-in and create tails: re-list, select, go to startup | [BennuNavHost.kt:746](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/navigation/BennuNavHost.kt), [:545](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/navigation/BennuNavHost.kt) | built; a shape that works from inside the app as well as from Landing |
-| *Change account* on the profile tab | [ActiveProfileScreen.kt:309](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/ActiveProfileScreen.kt) | `ImplementationPendingRoute` |
+| the sign-in and create tails: re-list, select, go to startup | [DedunNavHost.kt:746](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/navigation/DedunNavHost.kt), [:545](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/navigation/DedunNavHost.kt) | built; a shape that works from inside the app as well as from Landing |
+| *Change account* on the profile tab | [ActiveProfileScreen.kt:309](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/ActiveProfileScreen.kt) | `ImplementationPendingRoute` |
 | `ForgetIdentity` and `SignOutViewModel` for a read-only identity; *forget this key* for an nsec | `identity/ForgetIdentity.kt`, `NostrSecretScreen` | built; the tail lands on the selector or Landing, which is right for several profiles too |
 | `NpubPreviewRoundTripJvmTest`: a real key store, a real in-memory database, real view models | `jvmTest/.../identity/` | the harness every test below reuses |
 
@@ -160,10 +160,10 @@ Seven things, in the order a user would hit them.
 **A seed's profile is not a credential.** `writeMnemonic` writes `seed.dat` and
 nothing else — and if a `Public` entry for the seed's key exists, it *deletes*
 it, so the seed becomes the only holder
-([IdentityWriter.kt:148](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/IdentityWriter.kt)).
+([IdentityWriter.kt:148](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/IdentityWriter.kt)).
 The key is then derived twice on every launch: at listing, from the words, to
 learn the pubkey the selector shows; and at activation, from the *running node's*
-key manager ([SovereignWalletViewModel.kt:151](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt)),
+key manager ([SovereignWalletViewModel.kt:151](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt)),
 which is why a seed-backed profile has to start Lightning before it can be
 anyone. Both sign-in plans made this an invariant rather than an accident — one
 entry per pubkey *across both files*, `writeNostrKey` refusing a key a seed
@@ -173,7 +173,7 @@ builds would inherit a list in which one kind of row is a key and another is a
 seed pretending to be one.
 
 **There is no way in.** Landing is reached only when `availableIdentities` is
-empty ([SovereignWalletStartupScreen.kt:95](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/SovereignWalletStartupScreen.kt)),
+empty ([SovereignWalletStartupScreen.kt:95](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/SovereignWalletStartupScreen.kt)),
 and the sign-in and create screens are reached only from Landing. A device with
 one profile cannot be given a second: the flow that adds one is behind a screen
 the device never shows again.
@@ -185,7 +185,7 @@ pending screen.
 
 **The startup precedence is wrong for a switch.** The `when` that picks what to
 open reads `!startWalletImmediately -> null` *before* `desiredWalletId != null`
-([:122](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/SovereignWalletStartupScreen.kt)),
+([:122](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/SovereignWalletStartupScreen.kt)),
 and `startWalletImmediately` is set to false by `resetToSelector()` and by the
 lock prompt's back button and set back to true by nothing. So after the first
 visit to the selector, every sign-in on that device lands on the selector instead
@@ -196,7 +196,7 @@ profiles is the selector, every time, with no memory of which one was open.
 **Two things are not torn down.** `RelaysSocketManager.observeActiveUserId` keeps
 one relay-list observer *per pubkey* and only ever cancels the one for the pubkey
 being started; its own comment says `TODO: Cancel all pending jobs?`
-([RelaysSocketManager.kt:65](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt)).
+([RelaysSocketManager.kt:65](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt)).
 After a switch, A's observer and B's observer both feed `updateRelayPools`, and
 the one pool follows whichever relay list emitted last. And the previous
 profile's node, where it had one, keeps running in `BusinessManager` — Electrum,
@@ -207,13 +207,13 @@ running for a profile that is not active is that finding with the sign flipped.
 **The queues belong to the device, not the identity.** `SynchronizeNostrEventRequest`,
 `NegentropySynchronizeRequest` and `BroadcastNostrEventRequest` have no owner
 column, and the pumps drain whatever is `pending` with the *active* key pair
-([DatabaseNostrRepository.kt:111](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt)).
+([DatabaseNostrRepository.kt:111](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt)).
 Requests A queued a moment before the switch — its sign-in sync, its room
 reconciliation — are answered while B is active, and everything that comes back
 is indexed as B: a gift wrap addressed to A is stored, found not to be addressed
-to the active key, and left ([NostrDao.kt:439](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt)).
+to the active key, and left ([NostrDao.kt:439](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt)).
 Then `storeNostrEvent` never indexes an event it already holds
-([NostrDao.kt:176](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt),
+([NostrDao.kt:176](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt),
 the `TODO: Check if event got indexed`), so when A is opened again, its live
 subscription re-receives the wrap, the DAO sees a known id, and returns. **A
 message that arrives while the other profile is open is lost to the one it was
@@ -221,7 +221,7 @@ for.** Silently, and it looks in the logs like nothing happened, because nothing
 did.
 
 **Two destructive controls assume one profile.** `CreateProfileScreen`'s *end
-this* calls `wipeDatabase()` ([CreateProfileScreen.kt:381](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/CreateProfileScreen.kt))
+this* calls `wipeDatabase()` ([CreateProfileScreen.kt:381](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/CreateProfileScreen.kt))
 — on a device with a second profile, that profile's rooms and MLS state go with
 it, from a screen the user opened to *add* one. And once a default is remembered,
 forgetting the identity it names has to clear it, or the next boot opens a
@@ -731,7 +731,7 @@ detail to pair with.
 
 `WalletsSelector` shows `metadata.nameOrDefault()` — "Default name", for every
 row, because nothing in this app writes the wallet metadata's name — over a
-random emoji ([WalletsSelector.kt:162](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/wallet/WalletsSelector.kt)).
+random emoji ([WalletsSelector.kt:162](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/wallet/WalletsSelector.kt)).
 Two profiles side by side, both called Default name, distinguished by a bech32
 string, is not a switcher.
 
@@ -753,7 +753,7 @@ a wallet question, and between two profiles with the same name, and it belongs
 before the tap for the reason the read-only label does. A bare-key profile
 carries no label; it is the plain case.
 
-The startup screen draws the same widget and gets the same map: `BennuNavHost`
+The startup screen draws the same widget and gets the same map: `DedunNavHost`
 already holds `databaseNostrRepository` where it composes
 `SovereignWalletStartupScreen`, and passes it through. Both lists then look the
 same, which is what a user who has just seen one and is now looking at the other
@@ -814,7 +814,7 @@ the app.
 ### A profile created from inside is a key
 
 `CreateProfileScreen` generates twelve words behind its form
-([CreateProfileViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/CreateProfileViewModel.kt)):
+([CreateProfileViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/CreateProfileViewModel.kt)):
 a seed, a node, a wallet, and — at the NIP-06 path — the key that becomes the
 profile. That is the right thing for the first profile on a device, which is the
 one the wallet will belong to, and the wrong thing for the second: a user who

@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.ksp)
     // No sqldelight plugin here on purpose. The fr.acinq.phoenix.db.sqldelight databases this
     // module used to generate are the same three lightning-kmp-app's :library generates from an
-    // identical copy of the .sq sources, and nothing under com.machankura.bennu touches them. Generating
+    // identical copy of the .sq sources, and nothing under com.machankura.dedun touches them. Generating
     // them on both sides put every generated class in the apk twice, which debug tolerates and
     // mergeDexRelease rejects as duplicate types. The library's copies are the ones that count.
 }
@@ -184,7 +184,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEa
 }
 
 android {
-    namespace = "com.machankura.bennu.android"
+    namespace = "com.machankura.dedun.android"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     buildFeatures {
@@ -194,8 +194,13 @@ android {
         // The store identity and the namespace are one value again. They were split when
         // the app was com.it.curated so the base package could land verbatim as the
         // applicationId; the rebrand collapsed them, so `BuildConfig` and the manifest's
-        // relative `android:name=".BennuApplication"` resolve against this same package.
-        applicationId = "com.machankura.bennu.android"
+        // relative `android:name=".DedunApplication"` resolve against this same package.
+        //
+        // Dedun is a new app to Play and to the device, not an update of Bennu: the old
+        // `com.machankura.bennu.android` sandbox, its database and its keys stay where they
+        // were and nothing here reads them. That is deliberate -- Dedun's users are new
+        // users (docs/dedun-rename.md, D5).
+        applicationId = "com.machankura.dedun.android"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 9
@@ -272,7 +277,7 @@ val m3Audit = tasks.register("m3Audit") {
 
     val script = rootProject.layout.projectDirectory.file("docs/scripts/m3-audit.sh").asFile
     val uiSources = rootProject.layout.projectDirectory
-        .dir("composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui")
+        .dir("composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui")
     val projectDirectory = rootProject.layout.projectDirectory.asFile
 
     inputs.file(script).withPropertyName("auditScript")
@@ -313,20 +318,20 @@ val m3Audit = tasks.register("m3Audit") {
 
 tasks.named("check") { dependsOn(m3Audit) }
 
-// The group Lightning wallet's regtest run (testing/regtest/README.md) runs only when BENNU_REGTEST=1.
+// The group Lightning wallet's regtest run (testing/regtest/README.md) runs only when DEDUN_REGTEST=1.
 // An environment variable is not a task input, so without this a skipped run would leave jvmTest up to
 // date, and asking for the run afterwards would replay the skip.
 tasks.withType<Test>().configureEach {
-    inputs.property("bennuRegtest", providers.environmentVariable("BENNU_REGTEST").orElse(""))
+    inputs.property("dedunRegtest", providers.environmentVariable("DEDUN_REGTEST").orElse(""))
 }
 
 compose.desktop {
     application {
-        mainClass = "com.machankura.bennu.desktop.MainKt"
+        mainClass = "com.machankura.dedun.desktop.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.machankura.bennu.desktop"
+            packageName = "com.machankura.dedun.desktop"
             packageVersion = "1.0.0"
         }
     }

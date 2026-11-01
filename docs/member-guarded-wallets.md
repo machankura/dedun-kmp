@@ -41,7 +41,7 @@ below are kept as written; where the build chose differently the table says so.
 | Phase 6: the gate arrives in Phase 12 | with Phase 6, where an entrance is first offered, as the guardians note's gate came with its Phase 5 |
 | Phase 7: requests join `observeProposalsAwaitingYou` | *Put to the group* is on the request's row in the group page's *Members' guarded wallets* (Phase 11). The transcript says a request arrived; the proposal list still lists only sessions |
 | Phase 7: the summary names the member | `ProposedEvent.summarize` takes a `nameOf`, and the callers that have no profiles to hand pass none, so the proposal list and signing screen say *Guard a member's wallet* without the name. The certificate's `p` tag is the member either way |
-| Phase 8: the wipe callers warn first | `wipeDatabase` has no callers and `BennuDatabase.wipeData` deletes nothing. There is nothing to guard yet; a note on `wipeData` says what a caller must do once it does |
+| Phase 8: the wipe callers warn first | `wipeDatabase` has no callers and `DedunDatabase.wipeData` deletes nothing. There is nothing to guard yet; a note on `wipeData` says what a caller must do once it does |
 | Phase 9: `GroupTransactionWatcher` generalised | a member's spend has no session, so `MemberWalletViewModel` follows the member's spends while the wallet screen is open, sending again any Electrum has not heard of -- the economy the guardian-spend notice makes. *Bump the fee* is not built for a member's spend |
 | Phase 10: `descendantChatRoomId` becomes `subject.id`, `statement` becomes `signedEvent` | both keep their names -- `descendantChatRoomId` is `subject.id`, and `statement` is the 30334 for a member -- so the guardian spend path did not change a line. `Spender.Guardian.name` is `@name` for a member |
 | Phase 11: the person's page shows the amount within each group's reach | it does not watch the chain, so it shows the guarding group and *Spend*; the group's wallet screen has the amount. On one's own profile the section is not drawn: the profile's own list is the answer there |
@@ -522,7 +522,7 @@ exists to fail the day somebody reads both kinds in one query.
 ## Phase 5 — schema 29 → 30
 
 One new table. Room auto-migrates a new table, so the entry joins the list in
-`BennuDatabase`.
+`DedunDatabase`.
 
 ```kotlin
 @Entity(indices = [Index("ownerPublicKey"), Index("guardingChatRoomId")])
@@ -558,10 +558,10 @@ New `managers/MemberWalletManager.kt`:
 ```kotlin
 object MemberWalletManager {
     /** Steps 1 and 2: makes the key, works out the leaves, stores the key, and only then publishes the request. */
-    suspend fun request(database: BennuDatabase, groupRoom: LocalChatRoom, identity: Identity, chain: Chain, label: String?): MemberWallet
+    suspend fun request(database: DedunDatabase, groupRoom: LocalChatRoom, identity: Identity, chain: Chain, label: String?): MemberWallet
 
     /** Every wallet [ownerPublicKey] holds a key for here, or that a group this device is in has certified for them. */
-    suspend fun walletsOf(database: BennuDatabase, ownerPublicKey: HexKey): List<MemberWalletRow>
+    suspend fun walletsOf(database: DedunDatabase, ownerPublicKey: HexKey): List<MemberWalletRow>
 }
 ```
 

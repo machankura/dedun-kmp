@@ -81,7 +81,7 @@ Run on 2026-11-01 against the docker eclair v0.14.4, whose rates are one band, 1
 
 Fork paths below are relative to
 `lightning-kmp-app/experimental/lightning-kmp/modules/core/src/commonMain/kotlin/fr/acinq/lightning/`;
-app paths to `composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/`.
+app paths to `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`.
 
 ---
 

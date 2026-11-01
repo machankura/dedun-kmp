@@ -36,7 +36,7 @@ device check, has not been done.
 The headline: **every consumer already takes an `IElectrumClient`, and every
 "cannot watch" branch in the app is `wallets == null`. So the work is a connection
 loop, about sixty lines ported from the node's daemon, and one `remember` in
-`BennuNavHost` that hands it to whoever has no node. No screen learns a new state.
+`DedunNavHost` that hands it to whoever has no node. No screen learns a new state.
 Five of them lose one.**
 
 ---
@@ -45,16 +45,16 @@ Five of them lose one.**
 
 | fact | where | what it means here |
 |---|---|---|
-| `GroupOnchainWallets`, `GroupOnchainWallet` and `GroupTransactionWatcher` take an `IElectrumClient`, not a `PhoenixBusiness` | [wallet/](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/wallet/) | nothing below the nav host knows where the client came from |
-| both are made from `activeIdentity?.business?.electrumClient` and are null without it | [BennuNavHost.kt:246](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/navigation/BennuNavHost.kt) | the one place the null enters |
-| every `canWatch` is `wallets != null`, and `CannotWatch` / `CANNOT_WATCH` are the same test | `GroupWalletViewModel:124`, `MemberWalletViewModel:71`, `GroupWalletAddressesViewModel:65`, `BennuNavHost:1222` | with a client for everyone, the condition never holds |
-| an nsec or npub identity's preferences already carry Tor and a custom Electrum server, *"saved anyway"* | [IdentityWriter.kt:64](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/IdentityWriter.kt) `prepareIdentity` | the configuration exists and nothing reads it yet |
+| `GroupOnchainWallets`, `GroupOnchainWallet` and `GroupTransactionWatcher` take an `IElectrumClient`, not a `PhoenixBusiness` | [wallet/](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/wallet/) | nothing below the nav host knows where the client came from |
+| both are made from `activeIdentity?.business?.electrumClient` and are null without it | [DedunNavHost.kt:246](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/navigation/DedunNavHost.kt) | the one place the null enters |
+| every `canWatch` is `wallets != null`, and `CannotWatch` / `CANNOT_WATCH` are the same test | `GroupWalletViewModel:124`, `MemberWalletViewModel:71`, `GroupWalletAddressesViewModel:65`, `DedunNavHost:1222` | with a client for everyone, the condition never holds |
+| an nsec or npub identity's preferences already carry Tor and a custom Electrum server, *"saved anyway"* | [IdentityWriter.kt:64](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/IdentityWriter.kt) `prepareIdentity` | the configuration exists and nothing reads it yet |
 | the server lists are public top-level vals, and `platformElectrumRegtestConf` is a public `expect fun` | `lightning-kmp-app/.../data/ElectrumServers.kt` | a random server can be picked without an `AppConfigurationManager`, which needs a business |
 | `AppConnectionsDaemon` is the only reconnect loop, and its constructor takes a `PhoenixBusiness` | `lightning-kmp-app/.../managers/AppConnectionsDaemon.kt:241` | it cannot be reused. Its Electrum branch is what gets ported |
 | `ElectrumClient.connect` returns after one attempt; reconnecting is the caller's job | `lightning-kmp/.../ElectrumClient.kt:75` | the loop is not optional |
 | `ElectrumClient.stop()` is final: *"the client cannot be used after it has been closed"* | `ElectrumClient.kt:296` | one client per identity, made anew on a switch |
 | `NetworkMonitor` lives on `PhoenixGlobal`, not the business, and `start()` is idempotent on every platform | `PhoenixGlobal.kt:38`, the three `NetworkMonitor.*.kt` | available without a node, and safe to start from a second place |
-| `FakeElectrum` implements `IElectrumClient` for the wallet tests | [FakeElectrum.kt](../composeApp/src/jvmTest/kotlin/com/machankura/bennu/compose/wallet/FakeElectrum.kt) | the downstream tests need nothing new |
+| `FakeElectrum` implements `IElectrumClient` for the wallet tests | [FakeElectrum.kt](../composeApp/src/jvmTest/kotlin/com/machankura/dedun/compose/wallet/FakeElectrum.kt) | the downstream tests need nothing new |
 
 ## Decisions
 
@@ -141,7 +141,7 @@ test drives, with no socket.
 
 **Half a day.**
 
-In `BennuNavHost`, the two `remember(activeIdentityForWallets?.business)` blocks
+In `DedunNavHost`, the two `remember(activeIdentityForWallets?.business)` blocks
 become one resolution keyed on the identity:
 
 ```kotlin
@@ -162,7 +162,7 @@ nsec profiles changes the first and not the second, and the old profile's client
 must not survive it (the reason `GroupOnchainWallets`' own comment gives).
 
 The resolution is written as a plain function beside `StandaloneElectrum`, so it
-can be tested without composition, and `BennuNavHost` calls it.
+can be tested without composition, and `DedunNavHost` calls it.
 
 **Test**: a mnemonic identity resolves to the business's client and makes no
 standalone; an nsec identity and an npub identity each get one; switching from
@@ -178,7 +178,7 @@ branches are unreachable but still compiled.
 `wallets` becomes non-null wherever it is passed: `GroupWalletViewModel`,
 `GroupSendViewModel`, `GroupWalletAddressesViewModel`, `MemberWalletViewModel`,
 `MemberWalletsViewModel`, `MemberSendViewModel`, and the `ActiveProfileRoute` at
-`BennuNavHost:929`. The compiler then finds every `wallets == null` for us.
+`DedunNavHost:929`. The compiler then finds every `wallets == null` for us.
 Removed with them:
 
 - `GroupWalletAddressesUIState.CannotWatch` and its `EmptyState`;

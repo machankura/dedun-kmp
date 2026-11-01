@@ -19,7 +19,7 @@ is a dimension and is left alone.
 """
 import re, sys, io, os
 
-UI = 'composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui'
+UI = 'composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui'
 # {"padding": {"8": "compactPadding"}, "gap": {...}, "spacer": {...}, "*": {...}}
 # A shape-specific entry wins over "*". Shape matters because the same number means
 # different things in different positions: 8dp of padding is compactPadding, 8dp of gap
@@ -131,11 +131,11 @@ def process(path):
                     break
             lines.insert(idx + 1, 'import androidx.compose.material3.MaterialTheme')
             text = '\n'.join(lines)
-        if 'import com.machankura.bennu.compose.ui.theme.spacing' not in text and \
+        if 'import com.machankura.dedun.compose.ui.theme.spacing' not in text and \
            not path.endswith('theme/Spacing.kt'):
             lines = text.split('\n')
             idx = max(i for i, l in enumerate(lines) if l.startswith('import '))
-            lines.insert(idx + 1, 'import com.machankura.bennu.compose.ui.theme.spacing')
+            lines.insert(idx + 1, 'import com.machankura.dedun.compose.ui.theme.spacing')
             text = '\n'.join(lines)
         if not DRY:
             io.open(path, 'w', encoding='utf-8').write(text)

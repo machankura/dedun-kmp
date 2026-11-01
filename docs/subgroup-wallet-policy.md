@@ -281,7 +281,7 @@ phase adds the one reader the later phases reuse:
 
 ```kotlin
 /** What [chatRoomId]'s own verified certificate says of its wallet; null for a room with none. */
-suspend fun walletPolicyOf(database: BennuDatabase, chatRoomId: String): WalletPolicyReading?
+suspend fun walletPolicyOf(database: DedunDatabase, chatRoomId: String): WalletPolicyReading?
 ```
 
 It goes on `SubgroupManager` beside `guardiansOf`, and like it reads the
@@ -495,7 +495,7 @@ policy is still adopted.
 
 ```kotlin
 /** What [chatRoomId]'s verified certificate allows it to open. */
-suspend fun walletPolicyFor(database: BennuDatabase, chatRoomId: String): WalletPolicyReading?
+suspend fun walletPolicyFor(database: DedunDatabase, chatRoomId: String): WalletPolicyReading?
 ```
 
 This delegates to Phase 3's `SubgroupManager.walletPolicyOf`, which reads the

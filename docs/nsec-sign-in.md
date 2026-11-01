@@ -89,14 +89,14 @@ ten times, in eight files:
 
 | site | what it does with the key |
 |---|---|
-| [NotaryViewModel.kt:71](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NotaryViewModel.kt) | signs the queues, seals Marmot bundles with `nsecPassword` |
-| [SynchronizationViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SynchronizationViewModel.kt) | the three pumps' key pair |
-| [RelaysSocketManager.kt:68](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/network/relays/RelaysSocketManager.kt) | the pubkey whose relay list to follow |
-| [NavigationViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NavigationViewModel.kt) | the pubkey whose account to observe |
-| [DkgRitualViewModel.kt:476](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/DkgRitualViewModel.kt), 516, 570 | the ChillDKG host key, derived from the nostr key |
-| [SelectChatRoomTypeViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SelectChatRoomTypeViewModel.kt) | same |
-| [SelectSubgroupAdminsViewModel.kt:208](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SelectSubgroupAdminsViewModel.kt) | same |
-| [NostrNotaryRepository.kt:70](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/repository/NostrNotaryRepository.kt) | signs — but nothing constructs this class; it only has to compile |
+| [NotaryViewModel.kt:71](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NotaryViewModel.kt) | signs the queues, seals Marmot bundles with `nsecPassword` |
+| [SynchronizationViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SynchronizationViewModel.kt) | the three pumps' key pair |
+| [RelaysSocketManager.kt:68](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/network/relays/RelaysSocketManager.kt) | the pubkey whose relay list to follow |
+| [NavigationViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NavigationViewModel.kt) | the pubkey whose account to observe |
+| [DkgRitualViewModel.kt:476](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/DkgRitualViewModel.kt), 516, 570 | the ChillDKG host key, derived from the nostr key |
+| [SelectChatRoomTypeViewModel.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SelectChatRoomTypeViewModel.kt) | same |
+| [SelectSubgroupAdminsViewModel.kt:208](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SelectSubgroupAdminsViewModel.kt) | same |
+| [NostrNotaryRepository.kt:70](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/repository/NostrNotaryRepository.kt) | signs — but nothing constructs this class; it only has to compile |
 
 And that is the whole list. There is no call into `peerManager`, `paymentsManager`,
 `balanceManager`, `sendManager` or `lnurlManager` anywhere in the app. The
@@ -106,7 +106,7 @@ watchers `schedulePlatformLogic` sets up — is started on every cold boot as a
 
 Everything downstream of the key is already independent of the seed.
 `ChillDkgRitualManager.deriveHostSecretKey` hashes the nostr key
-([ChillDkgRitualManager.kt:117](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/ChillDkgRitualManager.kt));
+([ChillDkgRitualManager.kt:117](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/ChillDkgRitualManager.kt));
 `nsecPassword` is `hash160` of it; the notary and pumps build a quartz `KeyPair`
 from its bytes. None of them would notice where the key came from.
 
@@ -125,16 +125,16 @@ the only way in.
 
 | piece | where | state |
 |---|---|---|
-| `signInToProfile(pubkey)` — plants a kind‑0 `UnsignedNostrEvent` stamped `signedAt = GENESIS_AT`, so the notary skips it and the navigation machine treats the account as "signed, needs syncing" | [DatabaseNostrRepository.kt:215](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt) | built, no caller |
-| the state machine that takes it from there: `UnqueuedProfileSynchronization → UnsyncedProfile → UnindexedProfile → ProfileLoaded` | [NavigationViewModel.kt:96](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NavigationViewModel.kt) | built |
-| the `purpose = "sign-in"` relay sync for kinds 0, 3, 10002, 10005, 10007, 10012, 10050 and 10086 — profile, contacts, and every relay list the app reads | [UnqueuedProfileSynchronizationViewModel.kt:57](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/UnqueuedProfileSynchronizationViewModel.kt) | built, asks one relay — see [Phase 5](#phase-5--finding-the-profile-and-not-finding-it) |
-| a `SignInToProfileViewModel` that parses `nsec1…`/`npub1…`/`nostr:` with quartz's `Nip19Parser` and calls `signInToProfile`; a `SignInToProfileUIState` with `InputPrompt`, `ConfirmNsecSignIn(nsec, hexKey)`, `ConfirmNpubSignIn`, `Error`; a `SignInToProfileFormState` | [SignInToProfileViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SignInToProfileViewModel.kt) | built, unreferenced — and it **drops the nsec on the floor**; nothing ever stored it |
-| `String.extractKeyPairFromPrivateKeyOrThrow()` — hex or bech32 in, `(nsec, npub)` out, `InvalidNostrPrivateKeyException` otherwise | [Credentials.kt:60](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/extensions/Credentials.kt) | built |
+| `signInToProfile(pubkey)` — plants a kind‑0 `UnsignedNostrEvent` stamped `signedAt = GENESIS_AT`, so the notary skips it and the navigation machine treats the account as "signed, needs syncing" | [DatabaseNostrRepository.kt:215](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt) | built, no caller |
+| the state machine that takes it from there: `UnqueuedProfileSynchronization → UnsyncedProfile → UnindexedProfile → ProfileLoaded` | [NavigationViewModel.kt:96](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NavigationViewModel.kt) | built |
+| the `purpose = "sign-in"` relay sync for kinds 0, 3, 10002, 10005, 10007, 10012, 10050 and 10086 — profile, contacts, and every relay list the app reads | [UnqueuedProfileSynchronizationViewModel.kt:57](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/UnqueuedProfileSynchronizationViewModel.kt) | built, asks one relay — see [Phase 5](#phase-5--finding-the-profile-and-not-finding-it) |
+| a `SignInToProfileViewModel` that parses `nsec1…`/`npub1…`/`nostr:` with quartz's `Nip19Parser` and calls `signInToProfile`; a `SignInToProfileUIState` with `InputPrompt`, `ConfirmNsecSignIn(nsec, hexKey)`, `ConfirmNpubSignIn`, `Error`; a `SignInToProfileFormState` | [SignInToProfileViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SignInToProfileViewModel.kt) | built, unreferenced — and it **drops the nsec on the floor**; nothing ever stored it |
+| `String.extractKeyPairFromPrivateKeyOrThrow()` — hex or bech32 in, `(nsec, npub)` out, `InvalidNostrPrivateKeyException` otherwise | [Credentials.kt:60](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/extensions/Credentials.kt) | built |
 | strings: `enter_the_nsec_or_npub_read_only_that_you`, `sign_in_to_nsec`, `sign_in_with_an_npub`, `be_sure_to_keep_this_nsec_safe`, `sign_in_to_torch_via_nsec_or_remote_signer` | `strings.xml` | present, unused |
 | `ActiveWallet.business` is already `PhoenixBusiness?` | [Wallet.kt:50](../lightning-kmp-app/library/src/commonMain/kotlin/fr/acinq/phoenix/data/Wallet.kt) | nullable today |
 | `keyStoreEncryption` / `keyStoreDecryption` — public `expect` functions with android, jvm and ios actuals, parameterised by key alias | [KeyStoreFunctions.kt](../lightning-kmp-app/library/src/commonMain/kotlin/fr/acinq/phoenix/security/KeyStoreFunctions.kt) | usable as-is |
-| `platformWriteSeed(…, isRestoringWallet = …)` — the seed writer already has a restore flag | [NavigationViewModel.android.kt:64](../composeApp/src/androidMain/kotlin/com/machankura/bennu/compose/ui/view/model/NavigationViewModel.android.kt) | built; recovery-phrase sign-in is nearly free once a screen exists |
-| `SignInToProfileScreen` | [SignInScreen.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/SignInScreen.kt) | a sentence saying sign in is not available |
+| `platformWriteSeed(…, isRestoringWallet = …)` — the seed writer already has a restore flag | [NavigationViewModel.android.kt:64](../composeApp/src/androidMain/kotlin/com/machankura/dedun/compose/ui/view/model/NavigationViewModel.android.kt) | built; recovery-phrase sign-in is nearly free once a screen exists |
+| `SignInToProfileScreen` | [SignInScreen.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/SignInScreen.kt) | a sentence saying sign in is not available |
 
 The gap, then, is exactly two things: **somewhere for the nsec to live**, and
 **something for the app to read the key from that is not the node**. Everything
@@ -156,22 +156,22 @@ says why it should not be given one.
 
 **The identity is carried by the node.** `activeWalletInUI:
 StateFlow<ActiveWallet?>` is set only from `StartBusinessResult.Success`
-([SovereignWalletViewModel.kt:118](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt)),
+([SovereignWalletViewModel.kt:118](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt)),
 and twenty-five parameters across eighteen files are typed on it.
 
 **Startup only knows about wallets.** `SovereignWalletStartupScreen` sends an
 empty `availableWallets` to the landing page
-([SovereignWalletStartupScreen.kt:91](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/SovereignWalletStartupScreen.kt))
+([SovereignWalletStartupScreen.kt:91](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/SovereignWalletStartupScreen.kt))
 and starts whatever is selected with `startupNode(words)` (line 171). An nsec
 stored anywhere else is invisible to it, and `NavigationViewModel.observeProfile`
 answers a null `business` by navigating back to startup
-([NavigationViewModel.kt:187](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/NavigationViewModel.kt))
+([NavigationViewModel.kt:187](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/NavigationViewModel.kt))
 — a loop, for an identity that will never have one.
 
 **The bootstrap asks the wrong relay.** The sign-in sync queues its `REQ` at
 `Relays.DefaultDMRelayList`, which is `listOf(ephemeral)` —
 `wss://ephemeral.mantra.press`
-([Relays.kt:61](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/nostr/Relays.kt)).
+([Relays.kt:61](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/nostr/Relays.kt)).
 That is the right relay for a profile *this app* created. An identity that has
 lived on Damus for three years has never heard of it, and the machine has no exit
 for "nothing came back".
@@ -182,7 +182,7 @@ Should a mnemonic identity still start the Lightning node to reach its key?
 
 `CreateProfileViewModel` already derives the pubkey without one — it constructs
 `LocalKeyManager(seed)` locally and reads `nostrPublicKey()` off it
-([CreateProfileViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/CreateProfileViewModel.kt)).
+([CreateProfileViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/CreateProfileViewModel.kt)).
 Doing the same at startup would make both kinds of identity symmetric — secret →
 key in memory, node optional — and would take the Electrum and LSP connections off
 every cold boot of what is, today, a chat application.
@@ -210,7 +210,7 @@ and it should land alone so that its diff is boring.
 ### The type
 
 ```kotlin
-package com.machankura.bennu.compose.identity
+package com.machankura.dedun.compose.identity
 
 enum class IdentityKind {
     /** Twelve words. The nostr key is derived from them, and so is a wallet. */
@@ -347,7 +347,7 @@ private fun getKeyForName(keyName: String): SecretKey = when (keyName) {
 A new alias is a library change on that platform regardless, and both existing
 aliases already resolve to the one key. On the jvm, `JvmKeyStore.unlock` runs in
 `Main.kt` before anything reads
-([Main.kt:146](../composeApp/src/jvmMain/kotlin/com/machankura/bennu/desktop/Main.kt)), so a
+([Main.kt:146](../composeApp/src/jvmMain/kotlin/com/machankura/dedun/desktop/Main.kt)), so a
 second file under the same alias costs nothing there either; the ios keychain
 helper is likewise keyed by alias.
 
@@ -413,7 +413,7 @@ and have both result types map from it.
 **`LocalKeyManager.nostrPublicKey()` in the library is not a nostr public key.**
 It returns `nostrPrivateKey().publicKey().toHex()` — the 33-byte compressed
 encoding, sixty-six hex characters. Nostr keys are x-only, sixty-four. Nothing in
-the app calls it (the app has its own, correct, `com.machankura.bennu.compose.extensions.nostrPublicKey`),
+the app calls it (the app has its own, correct, `com.machankura.dedun.compose.extensions.nostrPublicKey`),
 which is the only reason it has not mattered. Fix it or delete it; a helper this
 plan does want is
 
@@ -483,7 +483,7 @@ is not done here.
 
 Metadata registration is unchanged: the loop that saves a `UserWalletMetadata`
 with a random avatar for every id it has not seen
-([SovereignWalletViewModel.kt:128](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt))
+([SovereignWalletViewModel.kt:128](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt))
 works on `WalletId` and does not care what is behind it.
 
 ### Starting
@@ -575,7 +575,7 @@ means. `NavigationRoutingTest` gains the fixture it is missing: an account whose
 
 The app's `WalletsSelector` takes `Map<WalletId, UserWallet>` and shows
 `userWallet.nodeId` in monospace
-([WalletsSelector.kt:55](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/wallet/WalletsSelector.kt)).
+([WalletsSelector.kt:55](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/wallet/WalletsSelector.kt)).
 It takes `Map<WalletId, StoredIdentity>` and shows the npub for an nsec identity
 and the node id for a mnemonic one — or the npub for both, which is the identifier
 the rest of the app uses and the one a user might actually recognise. The
@@ -669,7 +669,7 @@ sovereignWalletViewModel.listIdentities {
 ```
 
 The tail is the one `CreateProfileRoute` already uses after `writeSeed`
-([BennuNavHost.kt:505](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/navigation/BennuNavHost.kt)):
+([DedunNavHost.kt:505](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/navigation/DedunNavHost.kt)):
 re-list, select, go to startup. Startup finds a `StoredIdentity.NostrSecret`,
 activates it, `NavigationViewModel` observes its pubkey, finds the placeholder
 account with `signedAt != null` and no sync requests, and lands on
@@ -744,7 +744,7 @@ it a caller.**
 `UnqueuedProfileSynchronizationViewModel.queueSynchronization` fans the sign-in
 `REQ` out over `Relays.DefaultDMRelayList` — one relay, ours. Change it to
 `Relays.DefaultIndexerRelayList`
-([Relays.kt:65](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/nostr/Relays.kt):
+([Relays.kt:65](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/nostr/Relays.kt):
 purplepag.es, indexer.coracle.social, user.kindpag.es, directory.yabu.me,
 nostr1) **plus** `ephemeral`. Indexer relays exist to hold everyone's kinds 0, 3
 and 10002; that is the whole of their purpose, and it is exactly the list the
@@ -769,7 +769,7 @@ unsignedNostrEvent.signedAt != null && synchronizeNostrEventRequests.isNotEmpty(
 and `UnsyncedProfile` shows "we are searching the internet to find your profile"
 with a spinner, forever. Nothing records that a search *finished empty*. A
 request goes `pending → sent` when its `REQ` is dispatched
-([DatabaseNostrRepository.kt:489](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt))
+([DatabaseNostrRepository.kt:489](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt))
 and `sent → processed` only when an event arrives for it (line 532, which also
 stamps the `nostrEventId`). A relay that answers with EOSE and nothing else
 leaves its request at `sent` for good; the EOSE branch in
@@ -821,7 +821,7 @@ one request goes `processed` instead, asserting it never flips at all.
 `KeyRecoveryScreen` offers one backup: *recovery phrase*, routing to
 `RecoveryPhraseRoute`, whose view model reads `userWallet.words` out of the
 decrypted seed map
-([RecoveryPhraseViewModel.kt:114](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/RecoveryPhraseViewModel.kt)).
+([RecoveryPhraseViewModel.kt:114](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/RecoveryPhraseViewModel.kt)).
 For an nsec identity there are no words, and `NoPhraseForThisWallet` is the
 honest error it would show. Instead:
 

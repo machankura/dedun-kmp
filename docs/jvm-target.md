@@ -457,15 +457,15 @@ unit tests, not just the compile.
 
 Curare declares 16 expects across 8 files. They split cleanly:
 
-**Six platform basics.** `getPlatform` ([Platform.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/Platform.kt)),
+**Six platform basics.** `getPlatform` ([Platform.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/Platform.kt)),
 `PlatformContext`, `AppVersion`, `themeColorScheme`
-([Theme.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/theme/Theme.kt)),
+([Theme.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/theme/Theme.kt)),
 and `PlatformDatabaseBuilder`'s two functions. The deleted Aux files from Phase 0
-are a working skeleton for five of these — repackage to `com.machankura.bennu.compose`,
+are a working skeleton for five of these — repackage to `com.machankura.dedun.compose`,
 update Room 2 → Room 3 (`androidx.room` → `androidx.room3`), and point at
-`BennuDatabase` instead of `AuxDatabase`.
+`DedunDatabase` instead of `AuxDatabase`.
 
-`BennuDatabaseConstructor` needs no hand-written actual; Room's KSP generates it
+`DedunDatabaseConstructor` needs no hand-written actual; Room's KSP generates it
 once `kspJvm` is wired above.
 
 For `PlatformDatabaseBuilder.getDatabaseBuilder`, use the real application data
@@ -487,10 +487,10 @@ is exactly what the jvm can do. `NavigationViewModel.ios.kt` is likewise portabl
 one changed import.
 
 **Nine lightning wrappers.** Four in
-[Phoenix.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/extensions/Phoenix.kt)
+[Phoenix.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/extensions/Phoenix.kt)
 (`platformStartupLogic`, `schedulePlatformLogic`, `getShowIntroFlow`,
 `getGlobalPrefs`) and five declared in
-[SovereignWalletViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/SovereignWalletViewModel.kt)
+[SovereignWalletViewModel.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/SovereignWalletViewModel.kt)
 (`updateBusinessActiveInUI`, `loadAndDecryptSeed`, `getAvailableWalletsMeta`, and
 the two `saveAvailableWalletMeta` overloads, plus `platformWriteSeed`) whose
 android actuals live in `NavigationViewModel.android.kt`.
@@ -521,7 +521,7 @@ dependency-substitution surprises to land here rather than earlier.
 **~1–2 days. Blocked by Phase 4.**
 
 [composeApp/build.gradle.kts:221](../composeApp/build.gradle.kts) already names
-`com.machankura.bennu.desktop.MainKt` as the desktop main class. **That file does not
+`com.machankura.dedun.desktop.MainKt` as the desktop main class. **That file does not
 exist.** Write it: a `application { Window { ... } }` entry point constructing
 `PlatformContext` and handing it to the same root composable android uses.
 
@@ -545,7 +545,7 @@ the protection, so the window opens onto a gate rather than onto the app.
 
 **Verification:** `./gradlew :composeApp:run`, and then a jvm test that opens the
 database. The run proves the window paints; it does not prove Room works, because the
-gate stops before anything touches the database. `BennuDatabaseJvmTest` covers what
+gate stops before anything touches the database. `DedunDatabaseJvmTest` covers what
 the compiler cannot see — that Room's KSP output for this target is usable, that the
 **host** SQLite native loads (the android artifact ships only android-ABI `.so` files
 and would fail here), that the schema is created, and that the queries forced from
@@ -607,8 +607,8 @@ no-`Context` builder overload:
 inMemoryDatabaseBuilder(kotlin.jvm.functions.Function0<? extends T>)
 ```
 
-and [BennuDatabaseConstructor.kt](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/BennuDatabaseConstructor.kt)
-already supplies what it needs. So `Room.inMemoryDatabaseBuilder<BennuDatabase>()`
+and [DedunDatabaseConstructor.kt](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/DedunDatabaseConstructor.kt)
+already supplies what it needs. So `Room.inMemoryDatabaseBuilder<DedunDatabase>()`
 compiles in `commonTest` and runs under `testDebugUnitTest`.
 
 The one trap is native, and it is the same shape as the secp256k1 problem

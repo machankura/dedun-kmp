@@ -20,7 +20,7 @@ reasoning; where the implementation chose differently the table below says so:
 | a new string, `no_profile_was_found_for_this_npub` | the sign-in screen's `we_could_not_find_a_profile_for_this_key` — "We could not find a profile for this key on the relays we asked." One string, two screens, one meaning, as the npub plan found with `use_a_different_key` |
 | a new string, `open_chat` | it existed: `SelectChatRoomTypeScreen`'s. The build failed on the duplicate key, which is the catalogue doing its job |
 | `findDirectMessageRoom` as "the rule `initiateNewChat` applied" | the rule's *intent*: a room whose members are exactly the two keys, or the one key when they are the same. The old size-one branch would have opened any room in which the peer sat alone, whoever the peer was; the new rule needs that lone member to be you, and the repository test pins a room the peer has with somebody else as not yours |
-| `retry()` from `NotYetOnBennu` | from any `Loaded`: it re-asks the DM relays alone and touches the readiness only when it was `NotYetOnBennu`, so a retry never takes an "Open chat" back to "Checking" |
+| `retry()` from `NotYetOnDedun` | from any `Loaded`: it re-asks the DM relays alone and touches the readiness only when it was `NotYetOnDedun`, so a retry never takes an "Open chat" back to "Checking" |
 | the timeout "fires with a person on screen" | a flag, `relaysHadTheirTime`, because the profile can arrive *after* the timeout and has to read not-yet-on-Curare rather than checking; cleared by a retry, and `@Volatile` because the timeout and the collect are different coroutines |
 | the view model tested on `TestScope` virtual time | real time, as the other view-model tests: `Dispatchers.setMain(UnconfinedTestDispatcher())`, a poll under `withTimeout`, and the twenty seconds cut to three hundred milliseconds through the constructor |
 | `initiate()` "runs from a `LaunchedEffect`" | and is idempotent besides: a recomposition that calls it again opens no second collect, which the view-model test asserts |
@@ -36,20 +36,20 @@ edit — which is what made the `nostr:npub1…` row a four-line test.
 ## The flow today
 
 1. The "New chat" button on the home screen opens the sheet
-   ([HomeScreen.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/HomeScreen.kt),
+   ([HomeScreen.kt:193](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/HomeScreen.kt),
    and again at 300 for the two-pane layout).
 2. `NewChatBottomSheetDialog` — titled "Create new chat" — offers two cards. The
    first, "Direct message via npub", hides the sheet and opens a dialog
-   ([HomeScreen.kt:353](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/HomeScreen.kt)).
+   ([HomeScreen.kt:353](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/HomeScreen.kt)).
 3. `StartDirectMessageToNpubOrNip05Dialog` is one field and a "Start chat" button.
    The button is enabled when the text starts with `npub1` or `nostr:npub1`, or parses
    as an email-like address
-   ([StartDirectMessageToNpubOrNip05Dialog.kt:125](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/dialogs/StartDirectMessageToNpubOrNip05Dialog.kt)).
+   ([StartDirectMessageToNpubOrNip05Dialog.kt:125](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/dialogs/StartDirectMessageToNpubOrNip05Dialog.kt)).
 4. "Start chat" decodes the npub and pushes `ChatRoomMessagingRoute(chatRoomId = <pubkey>)`
    (line 162). A nip05 goes to `ImplementationPendingRoute` (line 153).
 5. `ChatRoomMessagingScreen` finds no room under that id and moves to
    `InitiatingNewChat`
-   ([ChatRoomMessagingViewModel.kt:52](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/ChatRoomMessagingViewModel.kt)),
+   ([ChatRoomMessagingViewModel.kt:52](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/ChatRoomMessagingViewModel.kt)),
    and `initiateNewChat` (line 69) looks for a room that already has the two of you
    in it, otherwise waits on the peer's profile *and* key package, with a twenty-second
    timeout, then calls `createMlsDirectMessage` (line 153) and replaces itself with the
@@ -63,7 +63,7 @@ twenty seconds and "Couldn't find this profile's chat details on the relays yet"
 and in neither case a way to tell *wrong npub* from *right person, not on Curare yet*.
 The one place in the app that shows a person and offers "Send message",
 `MetadataEventDetail`
-([MetadataEventDetail.kt:296](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/widgets/detail/MetadataEventDetail.kt)),
+([MetadataEventDetail.kt:296](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/widgets/detail/MetadataEventDetail.kt)),
 is reached by the *event id* of a kind 0 the device already holds, and a pasted npub
 has neither.
 
@@ -84,17 +84,17 @@ Almost all of it. The preview is a new screen over pieces that exist.
 
 | piece | where | state |
 |---|---|---|
-| a person plus one action, reached by pubkey: `AddMemberToChatRoomConfirmationScreen` waits on a key package with a timeout and shows the profile's name over a bottom-bar button | [AddMemberToChatRoomConfirmationViewModel.kt:74](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/AddMemberToChatRoomConfirmationViewModel.kt) | the shape, whole |
-| the existing-room check, the profile-and-key-package wait, the timeout, the creation, the self-replacement | [ChatRoomMessagingViewModel.kt:69](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/view/model/ChatRoomMessagingViewModel.kt) | stays exactly where it is; the preview hands over to it |
+| a person plus one action, reached by pubkey: `AddMemberToChatRoomConfirmationScreen` waits on a key package with a timeout and shows the profile's name over a bottom-bar button | [AddMemberToChatRoomConfirmationViewModel.kt:74](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/AddMemberToChatRoomConfirmationViewModel.kt) | the shape, whole |
+| the existing-room check, the profile-and-key-package wait, the timeout, the creation, the self-replacement | [ChatRoomMessagingViewModel.kt:69](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/view/model/ChatRoomMessagingViewModel.kt) | stays exactly where it is; the preview hands over to it |
 | the three-kind filter a chat needs — kind 0, key package, DM relay list — on the DM relays | `ChatRoomMessagingViewModel.scheduleProfileAndKeyPackageSync`, line 182 | private; lifted out in Phase 1 |
-| a sync object with tests, and the rule that a placeholder is not a profile: `createdAt > GENESIS_AT` | [MemberProfileSync.kt:52](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/nostr/MemberProfileSync.kt) | the precedent for both |
-| where a kind 0 is found for a key that has lived elsewhere: the indexer relays plus our own | [SignInSync.kt:53](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/nostr/SignInSync.kt), `bootstrapRelays` | reused as is |
-| the full npub validation — `nostr:` stripped, case folded, hrp checked, thirty-two bytes, a point on the curve | [CredentialParser.kt:139](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/identity/CredentialParser.kt) | private; exposed in Phase 3 |
+| a sync object with tests, and the rule that a placeholder is not a profile: `createdAt > GENESIS_AT` | [MemberProfileSync.kt:52](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/nostr/MemberProfileSync.kt) | the precedent for both |
+| where a kind 0 is found for a key that has lived elsewhere: the indexer relays plus our own | [SignInSync.kt:53](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/nostr/SignInSync.kt), `bootstrapRelays` | reused as is |
+| the full npub validation — `nostr:` stripped, case folded, hrp checked, thirty-two bytes, a point on the curve | [CredentialParser.kt:139](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/identity/CredentialParser.kt) | private; exposed in Phase 3 |
 | `observeProfileWithPublicKey`, `observeMarmotKeyPackageForPublicKey`, `getAllParticipantsWithPubKey`, `getChatRoomByIdentifier` | `NostrRepository`, `ChatRepository` | built |
-| the queue stamps the asking identity on every request | [DatabaseNostrRepository.kt:686](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/repository/DatabaseNostrRepository.kt) | nothing for a view model to do |
-| a re-queued negentropy request inside the same minute re-arms the row rather than being ignored | [NegentropySynchronizeRequestDao.kt:32](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NegentropySynchronizeRequestDao.kt) | "try again" works |
-| a kind 0 arriving overwrites the placeholder row | [NostrDao.kt:424](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt) | the observed flow emits it |
-| the stack shape for "a profile becomes a chat": push the room, pop the profile | [BennuNavHost.kt:1706](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/ui/composable/navigation/BennuNavHost.kt), `NostrEventDetailRoute`'s DM exit | copied |
+| the queue stamps the asking identity on every request | [DatabaseNostrRepository.kt:686](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/repository/DatabaseNostrRepository.kt) | nothing for a view model to do |
+| a re-queued negentropy request inside the same minute re-arms the row rather than being ignored | [NegentropySynchronizeRequestDao.kt:32](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NegentropySynchronizeRequestDao.kt) | "try again" works |
+| a kind 0 arriving overwrites the placeholder row | [NostrDao.kt:424](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt) | the observed flow emits it |
+| the stack shape for "a profile becomes a chat": push the room, pop the profile | [DedunNavHost.kt:1706](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui/composable/navigation/DedunNavHost.kt), `NostrEventDetailRoute`'s DM exit | copied |
 | `ProfileAvatar`, `humanReadableNameOrPubkey()`, `staticIdentifier()`, `hexToNpubHrp()` | `Profile.kt`, `Credentials.kt` | built |
 | a constant app bar with the state transition inside it | `GroupNostrProfileScreen`, since removed with the group's nostr profile | the layout to copy |
 | `LoadingDataIndicator(text = …)`, `EmptyState(message, icon, action)`, `ErrorState(onRetry)`, `NavigateBackButton`, `LocalCanSign` | `widgets/` | built |
@@ -127,7 +127,7 @@ link and, once one exists, a resolved nip05: every one of them arrives as a key.
 
 A pubkey gets a `Profile` row the moment the device first sees it, and that row is
 the "LOADING..." placeholder stamped `GENESIS_AT`
-([NostrDao.kt:273](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt)).
+([NostrDao.kt:273](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt)).
 The preview shows a profile only when a kind 0 has been read for it — the rule
 `ChatRoomMessagingViewModel` already applies at line 136 and `MemberProfileSync` at
 line 58, given a name in Phase 1 so that it is applied once.
@@ -187,7 +187,7 @@ screen will read, testable without a composition.
 ### `DirectMessagePeerSync`
 
 `ChatRoomMessagingViewModel.scheduleProfileAndKeyPackageSync` lifted into
-`com.machankura.bennu.compose.nostr`, beside `MemberProfileSync` and shaped like it, with the
+`com.machankura.dedun.compose.nostr`, beside `MemberProfileSync` and shaped like it, with the
 kind 0 request the preview adds:
 
 ```kotlin
@@ -225,7 +225,7 @@ asks for the key package alone under a different purpose and is left as it is.
 Level 0 on both, for the reason `MemberProfileSync` gives: it marks a request as one
 somebody is waiting on, and a kind 0 arriving at level 0 over a placeholder queues the
 rest of that person's profile kinds off the back of it
-([NostrDao.kt:1243](../composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/database/dao/NostrDao.kt)).
+([NostrDao.kt:1243](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt)).
 From an indexer that follow-up asks the indexer for key packages it does not hold,
 which is harmless and is why the DM-relay request is queued explicitly rather than
 relied on.
@@ -430,7 +430,7 @@ is the record that `Don't` survives the round trip and `Don\'t` does not.
 
 ### The host
 
-In `BennuNavHost`, after `NostrEventDetailRoute`:
+In `DedunNavHost`, after `NostrEventDetailRoute`:
 
 ```kotlin
 composable<ProfilePreviewRoute> { backStackEntry ->
@@ -456,7 +456,7 @@ same two steps the dialog produces today, with the preview gone from between the
 ### Tests
 
 `ProfilePreviewScreenJvmTest`, on the pattern of `GroupNostrProfileScreenJvmTest`
-— `runDesktopComposeUiTest` at a phone's width, `BennuTheme`, `ProvideSnackbarHost`,
+— `runDesktopComposeUiTest` at a phone's width, `DedunTheme`, `ProvideSnackbarHost`,
 the state passed in, the NO_OP repository never asked:
 
 - `Loaded` draws the name, the nip05, the whole of the about, and the npub;
@@ -597,7 +597,7 @@ sealed interface Readiness {
     /** Asked, not answered yet. */
     data object Checking : Readiness
     /** The relays have had their time and no key package came. */
-    data object NotYetOnBennu : Readiness
+    data object NotYetOnDedun : Readiness
 }
 ```
 
@@ -606,13 +606,13 @@ The view model takes `chatRepository` and, in `initiate`, reads
 `ChatRoomMessagingViewModel` does at line 130, the profile flow *combined with*
 `observeMarmotKeyPackageForPublicKey`, and on each emission with a resolved profile
 sets `Loaded(profile, readiness)` where readiness is `ExistingChat` if the room was
-found, else `CanStartChat` if the key package is non-null, else `NotYetOnBennu` if
+found, else `CanStartChat` if the key package is non-null, else `NotYetOnDedun` if
 the timeout has fired, else `Checking`. The one timeout now does two things when it
 fires: `Loading` becomes `NotFound`, and `Loaded(_, Checking)` becomes
-`Loaded(_, NotYetOnBennu)`. A key package cancels it only if the profile has also
+`Loaded(_, NotYetOnDedun)`. A key package cancels it only if the profile has also
 arrived; a profile cancels nothing on its own, since the key package is still owed.
 
-`retry()` from `NotYetOnBennu` keeps the profile on screen — it is found; it is the
+`retry()` from `NotYetOnDedun` keeps the profile on screen — it is found; it is the
 key package being asked for again — sets readiness back to `Checking`, restarts the
 timeout and queues `DirectMessagePeerSync.requests` alone.
 
@@ -636,7 +636,7 @@ factory hands it to the view model. The button reads its state:
 | `ExistingChat` | `open_chat`, enabled → `ChatRoomMessagingRoute(chatRoomId = room id, relayHint)` | `you_already_have_a_chat_with_s` |
 | `CanStartChat` | `start_new_chat`, enabled → as Phase 2 | nothing; the button is the answer |
 | `Checking` | `start_new_chat`, disabled | a `LoadingIndicator` and `checking_whether_s_can_receive_messages_here` |
-| `NotYetOnBennu` | `start_new_chat`, disabled | `s_hasn_t_set_up_messaging_on_curare_yet`, and a `TextButton(try_again)` → `retry()` |
+| `NotYetOnDedun` | `start_new_chat`, disabled | `s_hasn_t_set_up_messaging_on_curare_yet`, and a `TextButton(try_again)` → `retry()` |
 
 `%1$s` is `humanReadableNameOrPubkey()` in every one. The line under the button is
 `bodySmall` in `onSurfaceVariant` — a supporting line, not a second message. A
@@ -677,9 +677,9 @@ key package flow a `MutableStateFlow<MarmotKeyPackage?>`:
 - profile then key package: `Checking` then `CanStartChat`, and the timeout is
   cancelled;
 - key package then profile: `Loading` until the profile, then `CanStartChat` at once;
-- profile and no key package: `Checking` until the timeout, then `NotYetOnBennu`,
+- profile and no key package: `Checking` until the timeout, then `NotYetOnDedun`,
   and a late key package still flips it to `CanStartChat`;
-- `retry` from `NotYetOnBennu` queues `requests` alone, not `profileRequests`, and
+- `retry` from `NotYetOnDedun` queues `requests` alone, not `profileRequests`, and
   the profile stays on screen.
 
 `ProfilePreviewScreenJvmTest` grows the four rows of the table above: the label,

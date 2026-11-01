@@ -7,7 +7,7 @@ app; no schema, wire-kind or fork change.
 
 ## The finding
 
-`GroupLightningCoSigner.checkClosing` (`composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/managers/GroupLightningCoSigner.kt:408-417`)
+`GroupLightningCoSigner.checkClosing` (`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/GroupLightningCoSigner.kt:408-417`)
 is the whole of Phase 9's check 7 ("its amount is our balance minus a capped fee",
 `docs/group-lightning-wallet.md:799-800`). It reads:
 
@@ -62,7 +62,7 @@ a closing transaction.
 Check 7 was implemented as an *internal consistency* check — the transaction must match
 the context it arrives with — on the one path where consistency is not enough, because
 both halves of the comparison come from the operator. The device holds the truth the check
-needs: `CoSignerPolicy.Ledger` (`composeApp/src/commonMain/kotlin/com/machankura/bennu/compose/wallet/lightning/CoSignerPolicy.kt:32-43`)
+needs: `CoSignerPolicy.Ledger` (`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/wallet/lightning/CoSignerPolicy.kt:32-43`)
 tracks exactly what the group can claim (`oursMsat` plus offered HTLCs, `valueMsat`)
 against a floor that only authorised payments lower, and it is persisted per channel in
 `IcebergChannelLedger` and loadable with `load(pinned.ledger)`. The closing path was never

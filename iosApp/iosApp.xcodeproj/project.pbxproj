@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		41CB266BF907B985085BE6EC /* Bennu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bennu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		41CB266BF907B985085BE6EC /* Dedun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dedun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		ECDAFDDED408A506DEFE0AF1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				41CB266BF907B985085BE6EC /* Bennu.app */,
+				41CB266BF907B985085BE6EC /* Dedun.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = 41CB266BF907B985085BE6EC /* Bennu.app */;
+			productReference = 41CB266BF907B985085BE6EC /* Dedun.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

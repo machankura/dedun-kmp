@@ -2,7 +2,7 @@
 # "The regtest run"): bitcoind, electrs for the group's Electrum client, an eclair LSP speaking
 # Phoenix's taproot channels and on-the-fly funding, and a second eclair that pays the group and is
 # paid by it. Every port is bound to localhost, in a range nothing else on a development machine uses.
-name: bennu-regtest
+name: dedun-regtest
 
 services:
   bitcoind:
