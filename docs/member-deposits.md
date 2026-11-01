@@ -44,14 +44,16 @@ pointer to `5478993`. Both branches are pushed. Neither is merged into the fork'
 `threshold` or the app library's `master` yet, which is what the two `.gitmodules`
 files track.
 
-**Reverted, 2026-11-01.** The node answers offer requests again. This
-repository's pointer is back on `67a0376` (lightning-kmp `688d36ad`), the commits
-before the change, and `GroupLightningNode` no longer sets `answerOfferRequests`.
+**Reverted, 2026-11-01.** The node answers offer requests again. The fork's
+`threshold` reverts `3ae9302a` in `86f0eb3a`, whose tree is `688d36ad`'s, and the app
+library's `master` bumps to it in `7aaacad`. This repository points there.
+`GroupLightningNode` no longer sets `answerOfferRequests`. The change was
+reverted rather than rewound because this repository's history from `dea80221`
+on points at `5478993`.
 The rest of Phase 7 stands: the app shows no offer, snapshots carry none, and
 members drop one an older operator sends. So nobody is handed an offer to pay.
 A payment that reaches one anyway is *unattributed* until the group signs whose it
-is (D10), as Spike B's fixture payments already were. The fork's `threshold` and
-the app library's `master` still carry the change. The pointer is what decides.
+is (D10), as Spike B's fixture payments already were.
 
 ### Spike B: receiving BOLT11 on regtest
 
