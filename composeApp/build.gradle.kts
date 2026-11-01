@@ -194,8 +194,13 @@ android {
         // The store identity and the namespace are one value again. They were split when
         // the app was com.it.curated so the base package could land verbatim as the
         // applicationId; the rebrand collapsed them, so `BuildConfig` and the manifest's
-        // relative `android:name=".BennuApplication"` resolve against this same package.
-        applicationId = "com.machankura.bennu.android"
+        // relative `android:name=".DedunApplication"` resolve against this same package.
+        //
+        // Dedun is a new app to Play and to the device, not an update of Bennu: the old
+        // `com.machankura.bennu.android` sandbox, its database and its keys stay where they
+        // were and nothing here reads them. That is deliberate -- Dedun's users are new
+        // users (docs/dedun-rename.md, D5).
+        applicationId = "com.machankura.dedun.android"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 9
@@ -326,7 +331,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.machankura.bennu.desktop"
+            packageName = "com.machankura.dedun.desktop"
             packageVersion = "1.0.0"
         }
     }

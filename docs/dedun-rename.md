@@ -32,6 +32,7 @@ differently, this table says so.
 | 2 | done. The generated package is `dedun.composeapp.generated.resources` (confirmed from the build output, not inferred). 86 files and the two extractors were rewritten. The audit still reads 1090 and 191 |
 | 3 | done. The rename also covers each type's logger tag, since a tag is the class name. 1650 tests, none failing |
 | 4 | done. `ProfilePreviewScreenJvmTest` renders one of the changed strings and passes. The desktop window and launcher labels were not looked at on screen: no display was available to the build |
+| 5 | done. The merged debug manifest reads `com.machankura.dedun.android.debug`, with `DedunApplication` and `MainActivity` under `com.machankura.dedun.android`. `packageDeb` builds `com.machankura.dedun.desktop_1.0.0_amd64.deb`. No `upgradeUuid` was pinned, because under D5 there is no Bennu MSI to upgrade. The iOS bundle id was changed but not built, because this was a Linux machine. Registering the App ID is still the owner's to do. `versionCode` stays at 9: Play starts counting afresh for a new listing anyway |
 
 ## What the name is attached to
 
