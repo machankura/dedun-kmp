@@ -198,7 +198,7 @@ class SwapInWalletViewJvmTest {
     // ---- why ready coins wait ----
 
     private fun coinIn(status: SwapInCoin.Status) = SwapInCoin(OutPoint(TxId(randomBytes32()), 0), Satoshi(10_000), 0, 10, status)
-    private val overLimit = SwapInRefusal.OverLimit(6_200.sat, 5_000.sat)
+    private val overLimit = SwapInRefusal.OverLimit(6_200.sat, 5_000.sat, 50_000.sat)
 
     @Test
     fun `only a ready coin has anything to wait for`() {
@@ -220,7 +220,7 @@ class SwapInWalletViewJvmTest {
     fun `each of the node's reasons maps to a refusal, in sats`() {
         val amount = MilliSatoshi(50_000_000)
         val fee = MilliSatoshi(6_200_500)
-        assertEquals(SwapInRefusal.OverLimit(6_200.sat, 5_000.sat), SwapInRefusal.of(LiquidityEvents.Rejected.Reason.TooExpensive.OverAbsoluteFee(5_000.sat), amount, fee))
+        assertEquals(SwapInRefusal.OverLimit(6_200.sat, 5_000.sat, 50_000.sat), SwapInRefusal.of(LiquidityEvents.Rejected.Reason.TooExpensive.OverAbsoluteFee(5_000.sat), amount, fee))
         assertEquals(SwapInRefusal.OverShare(6_200.sat, 50_000.sat, 50_00), SwapInRefusal.of(LiquidityEvents.Rejected.Reason.TooExpensive.OverRelativeFee(50_00), amount, fee))
         assertEquals(SwapInRefusal.Disabled, SwapInRefusal.of(LiquidityEvents.Rejected.Reason.PolicySetToDisabled, amount, fee))
         assertEquals(SwapInRefusal.Other, SwapInRefusal.of(LiquidityEvents.Rejected.Reason.NoMatchingFundingRate, amount, fee))
@@ -229,7 +229,7 @@ class SwapInWalletViewJvmTest {
     @Test
     fun `a filed notification reads as the event it was filed for`() {
         val filed = Notification.OverAbsoluteFee(UUID.randomUUID(), 0, null, MilliSatoshi(50_000_000), MilliSatoshi(6_200_000), LiquidityEvents.Source.OnChainWallet, 5_000.sat)
-        assertEquals(SwapInRefusal.OverLimit(6_200.sat, 5_000.sat), SwapInRefusal.of(filed))
+        assertEquals(SwapInRefusal.OverLimit(6_200.sat, 5_000.sat, 50_000.sat), SwapInRefusal.of(filed))
         val disabled = Notification.FeePolicyDisabled(UUID.randomUUID(), 0, null, MilliSatoshi(50_000_000), LiquidityEvents.Source.OnChainWallet)
         assertEquals(SwapInRefusal.Disabled, SwapInRefusal.of(disabled))
     }

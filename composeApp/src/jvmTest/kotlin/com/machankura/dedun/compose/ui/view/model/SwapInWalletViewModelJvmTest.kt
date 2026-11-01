@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.wallet.lightning.GroupLightningNodes
 import com.machankura.dedun.compose.ui.view.state.SwapInWalletUIState
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
+import com.machankura.dedun.compose.wallet.SwapInFeeLimit
 import com.machankura.dedun.compose.wallet.SwapInNotice
 import com.machankura.dedun.compose.wallet.SwapInRefusal
 import com.machankura.dedun.compose.wallet.SwapInSnapshot
@@ -17,7 +18,10 @@ import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import fr.acinq.lightning.DefaultSwapInParams
+import fr.acinq.lightning.MilliSatoshi
+import fr.acinq.lightning.payment.LiquidityPolicy
 import fr.acinq.lightning.Lightning.randomBytes32
 import fr.acinq.lightning.SwapInParams
 import fr.acinq.lightning.blockchain.electrum.SwapInWallet
@@ -40,6 +44,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -139,7 +144,7 @@ class SwapInWalletViewModelJvmTest {
     @Test
     fun `a ready coin the node refused to move says why`() {
         val mined = utxo(50_000, 0, blockHeight = 100)
-        val refusal = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000))
+        val refusal = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000), Satoshi(7_000))
         val node = MutableStateFlow(snapshot(used(0, mined), unused(1), tip = 110).copy(refusal = refusal))
         val viewModel = SwapInWalletViewModel(SwapInSource { node }).also { it.initiate() }
         assertEquals(SwapInWaiting.Refused(refusal), assertIs<SwapInWalletUIState.Loaded>(viewModel.uiState).waiting)
@@ -159,6 +164,73 @@ class SwapInWalletViewModelJvmTest {
         events.emit(SwapInNotice.Moving(Satoshi(50_000)))
         events.emit(SwapInNotice.Received(Satoshi(48_713)))
         assertEquals(listOf(SwapInNotice.Moving(Satoshi(50_000)), SwapInNotice.Received(Satoshi(48_713))), withTimeout(5_000) { viewModel.notices.take(2).toList() })
+    }
+
+    private class FakeFeeLimit(var stored: LiquidityPolicy) : SwapInFeeLimit {
+        val allowed = mutableListOf<LiquidityPolicy.Auto>()
+        override suspend fun saved() = stored
+        override suspend fun allowOnce(policy: LiquidityPolicy.Auto) { allowed += policy }
+        override suspend fun save(policy: LiquidityPolicy.Auto) { stored = policy }
+    }
+
+    private val savedPolicy = LiquidityPolicy.Auto(null, Satoshi(5_000), 50_00, skipAbsoluteFeeCheck = false, maxAllowedFeeCredit = MilliSatoshi(0))
+    private val overLimit = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000), Satoshi(50_000))
+
+    @Test
+    fun `reviewing a refused fee offers the fee plus the margin as the new limit`() {
+        val viewModel = SwapInWalletViewModel(source = null, feeLimit = FakeFeeLimit(savedPolicy))
+        viewModel.review(overLimit)
+        assertEquals(overLimit, viewModel.reviewing)
+        assertEquals("6820", viewModel.limitField.text.toString())
+        assertNull(viewModel.limitProblem())
+    }
+
+    @Test
+    fun `a limit of nothing, or of more than the coins, is not saved`() {
+        val fees = FakeFeeLimit(savedPolicy)
+        val viewModel = SwapInWalletViewModel(source = null, feeLimit = fees)
+        viewModel.review(overLimit)
+
+        viewModel.limitField.setTextAndPlaceCursorAtEnd("0")
+        assertEquals(SwapInWalletViewModel.LimitProblem.Zero, viewModel.limitProblem())
+        viewModel.limitField.setTextAndPlaceCursorAtEnd("60,000")
+        assertEquals(SwapInWalletViewModel.LimitProblem.OverAmount(Satoshi(50_000)), viewModel.limitProblem())
+        viewModel.saveLimit {}
+        assertEquals(savedPolicy, fees.stored)
+    }
+
+    @Test
+    fun `allowing a fee once raises the running limit only, and closes the sheet`() {
+        val fees = FakeFeeLimit(savedPolicy)
+        val viewModel = SwapInWalletViewModel(source = null, feeLimit = fees)
+        var done = 0
+        viewModel.review(overLimit)
+        viewModel.allowOnce { done++ }
+        assertEquals(listOf(savedPolicy.copy(maxAbsoluteFee = Satoshi(6_820))), fees.allowed)
+        assertEquals(savedPolicy, fees.stored)
+        assertNull(viewModel.reviewing)
+        assertEquals(1, done)
+    }
+
+    @Test
+    fun `saving a limit stores it`() {
+        val fees = FakeFeeLimit(savedPolicy)
+        val viewModel = SwapInWalletViewModel(source = null, feeLimit = fees)
+        viewModel.review(overLimit)
+        viewModel.limitField.setTextAndPlaceCursorAtEnd("8,000")
+        viewModel.saveLimit {}
+        assertEquals(savedPolicy.copy(maxAbsoluteFee = Satoshi(8_000)), fees.stored)
+        assertNull(viewModel.reviewing)
+    }
+
+    @Test
+    fun `a policy that is off has no fee to allow`() {
+        val fees = FakeFeeLimit(LiquidityPolicy.Disable)
+        val viewModel = SwapInWalletViewModel(source = null, feeLimit = fees)
+        viewModel.review(overLimit)
+        viewModel.allowOnce {}
+        assertTrue(fees.allowed.isEmpty())
+        assertEquals(overLimit, viewModel.reviewing)
     }
 
     /**

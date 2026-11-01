@@ -1026,4 +1026,16 @@
     <string name="waiting_for_your_node_to_move_them">Waiting for your node to move them.</string>
     <string name="moving_s_sats_into_lightning">Moving %1$s sats into Lightning</string>
     <string name="s_sats_added_to_your_lightning_balance">%1$s sats added to your Lightning balance</string>
+    <string name="review_fee_limit">Review fee limit</string>
+    <string name="fee_limit">Fee limit</string>
+    <string name="moving_these_coins_costs_s_your_limit_is_s">Moving these coins costs about %1$s sats. Your limit is %2$s sats.</string>
+    <string name="moving_these_coins_costs_s_more_than_s_of_s">Moving these coins costs about %1$s sats, more than %2$s of the %3$s sats being moved.</string>
+    <string name="allow_this_fee_once">Allow this fee once</string>
+    <string name="allowing_a_fee_once_explainer">Your node tries again straight away. The limit goes back to what it was once these coins have moved, or when the app restarts.</string>
+    <string name="or_raise_your_limit_for_every_deposit">Or raise your limit for every deposit from now on:</string>
+    <string name="save_as_my_limit">Save as my limit</string>
+    <string name="fee_allowed_for_these_coins">Fee allowed for these coins</string>
+    <string name="fee_limit_saved">Fee limit saved</string>
+    <string name="a_limit_of_0_sats_lets_nothing_through">A limit of 0 sats lets nothing through.</string>
+    <string name="the_limit_can_t_be_more_than_the_s_sats_being_moved">The limit can't be more than the %1$s sats being moved.</string>
 </resources>

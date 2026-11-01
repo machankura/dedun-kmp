@@ -7,7 +7,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
+import com.machankura.dedun.compose.ui.view.model.SwapInWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.SwapInWalletUIState
+import androidx.compose.foundation.text.input.TextFieldState
 import com.machankura.dedun.compose.wallet.FirstDeposit
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
@@ -97,7 +99,7 @@ class SwapInWalletScreenJvmTest {
         setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = ready, waiting = waiting), onRetry = {}) } } }
         onNodeWithText("Waiting for your node to connect to the LSP.").assertIsDisplayed()
 
-        waiting = SwapInWaiting.Refused(SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000)))
+        waiting = SwapInWaiting.Refused(SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000), Satoshi(7_000)))
         onNodeWithText("Waiting: moving these coins costs about 6,200 sats, more than your limit of 5,000 sats.").assertIsDisplayed()
 
         waiting = SwapInWaiting.Refused(SwapInRefusal.OverShare(Satoshi(6_200), Satoshi(7_000), 50_00))
@@ -108,6 +110,82 @@ class SwapInWalletScreenJvmTest {
 
         waiting = SwapInWaiting.ForNode
         onNodeWithText("Waiting for your node to move them.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refused fee can be reviewed, and nothing else can`() = runDesktopComposeUiTest(400, 1400) {
+        val ready = listOf(coin(3_000, SwapInCoin.Status.Ready, 10))
+        val refusal = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000), Satoshi(3_000))
+        var waiting by mutableStateOf<SwapInWaiting>(SwapInWaiting.Refused(refusal))
+        val reviewed = mutableListOf<SwapInRefusal>()
+        setContent { DedunTheme { ProvideSnackbarHost { SwapInWalletContent(loaded(coins = ready, waiting = waiting), onRetry = {}, onReview = { reviewed += it }) } } }
+        onNodeWithText("Review fee limit").performClick()
+        assertEquals(listOf<SwapInRefusal>(refusal), reviewed)
+
+        waiting = SwapInWaiting.Refused(SwapInRefusal.Disabled)
+        onNodeWithText("Review fee limit").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the fee-limit sheet offers the fee once, or a new limit`() = runDesktopComposeUiTest(400, 1400) {
+        var once = 0
+        var saved = 0
+        setContent {
+            DedunTheme {
+                FeeLimitSheet(
+                    refusal = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000), Satoshi(50_000)),
+                    limitField = TextFieldState("6820"),
+                    problem = null,
+                    isApplying = false,
+                    onAllowOnce = { once++ },
+                    onSave = { saved++ },
+                    onDismiss = {},
+                )
+            }
+        }
+        onNodeWithText("Moving these coins costs about 6,200 sats. Your limit is 5,000 sats.").assertIsDisplayed()
+        onNodeWithText("Allow this fee once").performClick()
+        onNodeWithText("Save as my limit").performClick()
+        assertEquals(1, once)
+        assertEquals(1, saved)
+    }
+
+    @Test
+    fun `a fee over the share is allowed once only, since a limit in sats would not change it`() = runDesktopComposeUiTest(400, 1400) {
+        setContent {
+            DedunTheme {
+                FeeLimitSheet(
+                    refusal = SwapInRefusal.OverShare(Satoshi(1_287), Satoshi(2_000), 50_00),
+                    limitField = TextFieldState(),
+                    problem = null,
+                    isApplying = false,
+                    onAllowOnce = {},
+                    onSave = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        onNodeWithText("Moving these coins costs about 1,287 sats, more than 50% of the 2,000 sats being moved.").assertIsDisplayed()
+        onNodeWithText("Allow this fee once").assertIsDisplayed()
+        onNodeWithText("Save as my limit").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a limit over the coins says so under the field`() = runDesktopComposeUiTest(400, 1400) {
+        setContent {
+            DedunTheme {
+                FeeLimitSheet(
+                    refusal = SwapInRefusal.OverLimit(Satoshi(6_200), Satoshi(5_000), Satoshi(50_000)),
+                    limitField = TextFieldState("60000"),
+                    problem = SwapInWalletViewModel.LimitProblem.OverAmount(Satoshi(50_000)),
+                    isApplying = false,
+                    onAllowOnce = {},
+                    onSave = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        onNodeWithText("The limit can't be more than the 50,000 sats being moved.").assertIsDisplayed()
     }
 
     @Test

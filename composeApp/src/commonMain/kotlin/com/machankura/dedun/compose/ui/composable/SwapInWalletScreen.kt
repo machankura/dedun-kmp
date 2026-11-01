@@ -13,7 +13,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.machankura.dedun.compose.text.GroupedSats
+import com.machankura.dedun.compose.text.SatsInput
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -63,6 +73,23 @@ import com.machankura.dedun.compose.wallet.SwapInRefusal
 import com.machankura.dedun.compose.wallet.SwapInWaiting
 import com.machankura.dedun.compose.wallet.bip21Uri
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.that_isn_t_an_amount_in_sats
+import dedun.composeapp.generated.resources.that_is_more_sats_than_there_will_ever_be
+import dedun.composeapp.generated.resources.sats_are_whole_numbers
+import dedun.composeapp.generated.resources.sats
+import dedun.composeapp.generated.resources.fee_limit_in_sats
+import dedun.composeapp.generated.resources.the_limit_can_t_be_more_than_the_s_sats_being_moved
+import dedun.composeapp.generated.resources.a_limit_of_0_sats_lets_nothing_through
+import dedun.composeapp.generated.resources.fee_limit_saved
+import dedun.composeapp.generated.resources.fee_allowed_for_these_coins
+import dedun.composeapp.generated.resources.save_as_my_limit
+import dedun.composeapp.generated.resources.or_raise_your_limit_for_every_deposit
+import dedun.composeapp.generated.resources.allowing_a_fee_once_explainer
+import dedun.composeapp.generated.resources.allow_this_fee_once
+import dedun.composeapp.generated.resources.moving_these_coins_costs_s_more_than_s_of_s
+import dedun.composeapp.generated.resources.moving_these_coins_costs_s_your_limit_is_s
+import dedun.composeapp.generated.resources.fee_limit
+import dedun.composeapp.generated.resources.review_fee_limit
 import dedun.composeapp.generated.resources.s_sats_added_to_your_lightning_balance
 import dedun.composeapp.generated.resources.moving_s_sats_into_lightning
 import dedun.composeapp.generated.resources.waiting_for_your_node_to_move_them
@@ -147,7 +174,22 @@ fun SwapInWalletScreen(
         SwapInWalletContent(
             uiState = swapInViewModel.uiState,
             onRetry = swapInViewModel::initiate,
+            onReview = if (swapInViewModel.canReviewFees) swapInViewModel::review else null,
             modifier = Modifier.padding(padding),
+        )
+    }
+
+    swapInViewModel.reviewing?.let { refusal ->
+        val allowed = stringResource(Res.string.fee_allowed_for_these_coins)
+        val saved = stringResource(Res.string.fee_limit_saved)
+        FeeLimitSheet(
+            refusal = refusal,
+            limitField = swapInViewModel.limitField,
+            problem = swapInViewModel.limitProblem(),
+            isApplying = swapInViewModel.isApplying,
+            onAllowOnce = { swapInViewModel.allowOnce { notify(allowed) } },
+            onSave = { swapInViewModel.saveLimit { notify(saved) } },
+            onDismiss = swapInViewModel::dismissReview,
         )
     }
 }
@@ -157,6 +199,8 @@ fun SwapInWalletScreen(
 fun SwapInWalletContent(
     uiState: SwapInWalletUIState,
     onRetry: () -> Unit,
+    /** Opens the fee-limit sheet for a refusal over the fee; null where nothing can change the limit. */
+    onReview: ((SwapInRefusal) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val notify = rememberNotifier(rememberCoroutineScope())
@@ -175,7 +219,7 @@ fun SwapInWalletContent(
                 ErrorState(modifier = modifier, onRetry = onRetry)
 
             is SwapInWalletUIState.Loaded -> {
-                SwapInWalletList(state = state, notify = notify, onShow = { shown = it }, modifier = modifier)
+                SwapInWalletList(state = state, notify = notify, onShow = { shown = it }, onReview = onReview, modifier = modifier)
                 // Read from the latest state, so a sheet left open follows its coin as it confirms.
                 shown?.let { coin -> state.coins.firstOrNull { it.outPoint == coin.outPoint } }?.let { coin ->
                     CoinSheet(coin = coin, notify = notify, onDismiss = { shown = null })
@@ -190,6 +234,7 @@ private fun SwapInWalletList(
     state: SwapInWalletUIState.Loaded,
     notify: (String) -> Unit,
     onShow: (SwapInCoin) -> Unit,
+    onReview: ((SwapInRefusal) -> Unit)?,
     modifier: Modifier,
 ) {
     val clipboardManager = LocalClipboardManager.current
@@ -211,7 +256,7 @@ private fun SwapInWalletList(
             SectionHeading(stringResource(Res.string.deposits))
         }
         state.waiting?.let { waiting ->
-            item(key = "waiting") { WaitingLine(waiting) }
+            item(key = "waiting") { WaitingLine(waiting, onReview) }
         }
         if (state.coins.isEmpty()) {
             item(key = "no-deposits") { EmptyState(message = stringResource(Res.string.nothing_has_been_sent_to_your_deposit_addresses_yet)) }
@@ -289,13 +334,95 @@ private fun FirstDeposit.sentence(): String = when (val limit = overLimit) {
  * them, since the node moves every ready coin in one request and refuses them together.
  */
 @Composable
-private fun WaitingLine(waiting: SwapInWaiting) {
-    val refused = waiting is SwapInWaiting.Refused && waiting.refusal != SwapInRefusal.Other
-    Text(
-        text = waiting.sentence(),
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (refused) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+private fun WaitingLine(waiting: SwapInWaiting, onReview: ((SwapInRefusal) -> Unit)?) {
+    val refusal = (waiting as? SwapInWaiting.Refused)?.refusal
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+        Text(
+            text = waiting.sentence(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (refusal != null && refusal != SwapInRefusal.Other) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Only a fee a higher limit would let through is offered one (Phase 5).
+        if (onReview != null && (refusal is SwapInRefusal.OverLimit || refusal is SwapInRefusal.OverShare)) {
+            TextButton(onClick = { onReview(refusal) }) { Text(stringResource(Res.string.review_fee_limit)) }
+        }
+    }
+}
+
+/**
+ * The refused fee, and the two ways past it (D6): allow it for these coins only, or save a higher limit
+ * for every deposit. Only a fee over the absolute cap offers the second: the share is a fraction of
+ * each deposit, and a cap typed in sats does not change it.
+ */
+@Composable
+fun FeeLimitSheet(
+    refusal: SwapInRefusal,
+    limitField: TextFieldState,
+    problem: SwapInWalletViewModel.LimitProblem?,
+    isApplying: Boolean,
+    onAllowOnce: () -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismiss = onDismiss, skipPartiallyExpanded = true) {
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+            Text(text = stringResource(Res.string.fee_limit), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = when (refusal) {
+                    is SwapInRefusal.OverLimit -> stringResource(Res.string.moving_these_coins_costs_s_your_limit_is_s, refusal.fee.grouped(), refusal.limit.grouped())
+                    is SwapInRefusal.OverShare -> stringResource(
+                        Res.string.moving_these_coins_costs_s_more_than_s_of_s,
+                        refusal.fee.grouped(),
+                        "${refusal.basisPoints / 100}%",
+                        refusal.amount.grouped(),
+                    )
+                    else -> ""
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(modifier = Modifier.fillMaxWidth(), onClick = onAllowOnce, enabled = !isApplying) {
+                Text(stringResource(Res.string.allow_this_fee_once))
+            }
+            Text(
+                text = stringResource(Res.string.allowing_a_fee_once_explainer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (refusal is SwapInRefusal.OverLimit) {
+                Text(
+                    text = stringResource(Res.string.or_raise_your_limit_for_every_deposit),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = MaterialTheme.spacing.sectionGap),
+                )
+                val input = (problem as? SwapInWalletViewModel.LimitProblem.Input)?.input
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = limitField,
+                    outputTransformation = GroupedSats,
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    label = { Text(stringResource(Res.string.fee_limit_in_sats)) },
+                    suffix = { Text(stringResource(Res.string.sats)) },
+                    isError = problem != null && input != SatsInput.Empty,
+                    supportingText = problem?.takeIf { input != SatsInput.Empty }?.let { p -> { Text(p.sentence()) } },
+                )
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onSave, enabled = problem == null && !isApplying) {
+                    Text(stringResource(Res.string.save_as_my_limit))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwapInWalletViewModel.LimitProblem.sentence(): String = when (this) {
+    SwapInWalletViewModel.LimitProblem.Zero -> stringResource(Res.string.a_limit_of_0_sats_lets_nothing_through)
+    is SwapInWalletViewModel.LimitProblem.OverAmount -> stringResource(Res.string.the_limit_can_t_be_more_than_the_s_sats_being_moved, amount.grouped())
+    is SwapInWalletViewModel.LimitProblem.Input -> when (input) {
+        SatsInput.NotWhole -> stringResource(Res.string.sats_are_whole_numbers)
+        SatsInput.TooLarge -> stringResource(Res.string.that_is_more_sats_than_there_will_ever_be)
+        else -> stringResource(Res.string.that_isn_t_an_amount_in_sats)
+    }
 }
 
 @Composable

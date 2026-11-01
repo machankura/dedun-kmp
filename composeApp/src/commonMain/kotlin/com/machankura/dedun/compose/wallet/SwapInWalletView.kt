@@ -210,8 +210,8 @@ data class FirstDeposit(val fee: Satoshi, val minimum: Satoshi?, val overLimit: 
  * notification `PeerManager` filed for one (docs/personal-swap-in-wallet.md, Phase 4).
  */
 sealed interface SwapInRefusal {
-    /** The fee was over the policy's absolute cap. */
-    data class OverLimit(val fee: Satoshi, val limit: Satoshi) : SwapInRefusal
+    /** The fee to move [amount] was over the policy's absolute cap. */
+    data class OverLimit(val fee: Satoshi, val limit: Satoshi, val amount: Satoshi) : SwapInRefusal
 
     /** The fee was more than the policy's share of the [amount] being moved. */
     data class OverShare(val fee: Satoshi, val amount: Satoshi, val basisPoints: Int) : SwapInRefusal
@@ -224,14 +224,14 @@ sealed interface SwapInRefusal {
 
     companion object {
         fun of(reason: LiquidityEvents.Rejected.Reason, amount: MilliSatoshi, fee: MilliSatoshi): SwapInRefusal = when (reason) {
-            is LiquidityEvents.Rejected.Reason.TooExpensive.OverAbsoluteFee -> OverLimit(fee.truncateToSatoshi(), reason.maxAbsoluteFee)
+            is LiquidityEvents.Rejected.Reason.TooExpensive.OverAbsoluteFee -> OverLimit(fee.truncateToSatoshi(), reason.maxAbsoluteFee, amount.truncateToSatoshi())
             is LiquidityEvents.Rejected.Reason.TooExpensive.OverRelativeFee -> OverShare(fee.truncateToSatoshi(), amount.truncateToSatoshi(), reason.maxRelativeFeeBasisPoints)
             LiquidityEvents.Rejected.Reason.PolicySetToDisabled -> Disabled
             else -> Other
         }
 
         fun of(notification: Notification.PaymentRejected): SwapInRefusal = when (notification) {
-            is Notification.OverAbsoluteFee -> OverLimit(notification.fee.truncateToSatoshi(), notification.maxAbsoluteFee)
+            is Notification.OverAbsoluteFee -> OverLimit(notification.fee.truncateToSatoshi(), notification.maxAbsoluteFee, notification.amount.truncateToSatoshi())
             is Notification.OverRelativeFee -> OverShare(notification.fee.truncateToSatoshi(), notification.amount.truncateToSatoshi(), notification.maxRelativeFeeBasisPoints)
             is Notification.FeePolicyDisabled -> Disabled
             else -> Other
