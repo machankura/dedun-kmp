@@ -34,6 +34,10 @@ Where the build chose differently, phase by phase:
 | 5 | *Board* offered on the receive screen | on the wallet screen, as *Move onto Ark*, because that is where the onchain balance is shown. It boards everything (`boardAll`) after a confirmation that the fee comes out of the amount. The receive screen's *Onchain* tab says an onchain payment lands there first |
 | 5 | Share as well as Copy | Copy only: the app has no share sheet on any platform yet |
 | 5 | the cap is checked against the balance | against the spendable balance plus what is pending, so two invoices in a row cannot each pass on their own |
+| 6 | after *Send*, the movement's detail screen in its pending state | back to the wallet screen with a snackbar, where the payment is the top row and its status follows `MovementUpdated`. The send call returns a movement id only for Ark payments, a payment hash for Lightning and a txid for onchain, so the detail screen could not be opened by id for two of the three rails |
+| 6 | a Lightning send Bark marks stuck is explained | not built: a stuck send shows as *Pending* in the history. Explaining it, and offering `allow_lightning_send_to_exit`, goes with Phase 9's advanced screen |
+| 6 | scanning, if the app has a camera path | it has none (no scanner anywhere in the tree), so the form is paste-only and the open question is answered |
+| 6 | an amount the request names is passed to Bark | it is not: Bark refuses a second amount for an invoice that names one, so the amount goes only to a method that `requiresAmount` |
 | 4 | checked on Android and Linux desktop with a signet profile | checked in compose tests over every state, at phone width and at 1280 dp for the two panes. Not yet run in the app, because that would mean a passphrase and a profile in this host's real desktop data directory |
 
 The headline: **a seed profile already holds the twelve words Bark needs. Bark's keys sit at
@@ -640,7 +644,7 @@ profiles as before.
 2. Should the wallet be on by default for new seed profiles once mainnet is on, or stay behind the
    first-open sheet for good? (D10)
 3. Is the 100,000 sat cap right for a wallet whose money is the user's own and not a group's?
-4. Is there a camera path for scanning? If not, Phase 6 ships paste-only.
+4. ~~Is there a camera path for scanning?~~ No: Phase 6 shipped paste-only. A scanner is its own piece of work, for every send screen in the app.
 5. Is Second's server the only one offered, or should a profile be able to choose another Ark
    server? An Ark address is per server, so a choice also means a migration story.
 

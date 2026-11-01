@@ -20,3 +20,9 @@ data class ArkMovementRoute(
 data class ArkReceiveRoute(
     val activeUserPublicKey: String,
 ): Route()
+
+/** Paying from the profile's Ark wallet. `docs/bark-wallet.md`, Phase 6. */
+@Serializable
+data class ArkSendRoute(
+    val activeUserPublicKey: String,
+): Route()

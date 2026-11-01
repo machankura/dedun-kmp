@@ -76,8 +76,12 @@ internal class FakeArkWallet(
         return ArkFee(amount + fee, fee, amount)
     }
 
+    /** Every send, with the amount and comment it was given. */
+    val sent = mutableListOf<Triple<ArkPaymentMethod, Satoshi?, String?>>()
+
     override suspend fun send(method: ArkPaymentMethod, amount: Satoshi?, comment: String?): ArkSendResult {
         call("send")
+        sent += Triple(method, amount, comment)
         return when (method.rail) {
             ArkRail.Lightning -> ArkSendResult.Lightning("11".repeat(32))
             ArkRail.Onchain -> ArkSendResult.Onchain("22".repeat(32))
