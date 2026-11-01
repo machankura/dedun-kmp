@@ -940,4 +940,5 @@
     <string name="correct">Correct</string>
     <string name="whose_deposit_is_this_question">Whose deposit is this?</string>
     <string name="the_group_s_own">The group's own</string>
+    <string name="payout_destination_saved_the_group_is_asked_to_open_your_deposits">Payout destination saved. The group is asked to open your deposits.</string>
 </resources>

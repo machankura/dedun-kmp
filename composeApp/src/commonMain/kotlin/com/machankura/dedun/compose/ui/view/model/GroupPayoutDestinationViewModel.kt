@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
@@ -39,6 +40,8 @@ class GroupPayoutDestinationViewModel(
     private val chain: Chain,
     initialUIState: GroupPayoutDestinationUIState,
     private val repository: PayoutDestinationRepository,
+    /** What a first destination leads to: the group asked to open this profile's deposits (`docs/member-deposits.md`). */
+    private val depositRepository: DepositRepository = DepositRepository.NO_OP,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -125,9 +128,11 @@ class GroupPayoutDestinationViewModel(
     /**
      * Reads both fields, checks both addresses at once, and -- when neither is refused -- signs
      * and sends the destination. [onSaved] is told whether the Lightning address went unchecked
-     * because Tor is on, so the screen can say so.
+     * because Tor is on, so the screen can say so, and -- when this was the destination the
+     * profile's deposits were waiting on and this device holds a share -- the signing session
+     * that asks the group to open them, for the screen to move onto.
      */
-    fun save(onSaved: (notChecked: Boolean) -> Unit, onFailure: () -> Unit) {
+    fun save(onSaved: (notChecked: Boolean, depositsSession: String?) -> Unit, onFailure: () -> Unit) {
         if (!canSave()) return
         lightningProblem = null
         onchainProblem = null
@@ -180,6 +185,14 @@ class GroupPayoutDestinationViewModel(
             } else {
                 false
             }
+            // Saved, so nothing stands between this profile and depositing but the group: ask it now,
+            // rather than leaving the member to find the wallet's card. A refusal here is not a failed
+            // save; the card still offers to start.
+            val depositsSession = if (sent) {
+                runCatching { depositRepository.openOwnIfReady(chatRoomId, chain) }
+                    .onFailure { logger.e("Couldn't ask $chatRoomId to open this profile's deposits", it) }
+                    .getOrNull()?.id
+            } else null
 
             withContext(Dispatchers.Main) {
                 lightningProblem = lightning
@@ -188,7 +201,7 @@ class GroupPayoutDestinationViewModel(
                 when {
                     sent -> {
                         lightningFromProfile = false
-                        onSaved(resolution == Resolution.NotCheckedTor)
+                        onSaved(resolution == Resolution.NotCheckedTor, depositsSession)
                     }
                     lightning == null && onchainRefusal == null -> onFailure()
                 }
@@ -227,8 +240,9 @@ class GroupPayoutDestinationViewModel(
             chain: Chain,
             initialUIState: GroupPayoutDestinationUIState = GroupPayoutDestinationUIState.Loading,
             repository: PayoutDestinationRepository,
+            depositRepository: DepositRepository = DepositRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { GroupPayoutDestinationViewModel(chatRoomId, chain, initialUIState, repository) }
+            initializer { GroupPayoutDestinationViewModel(chatRoomId, chain, initialUIState, repository, depositRepository) }
         }
     }
 }
