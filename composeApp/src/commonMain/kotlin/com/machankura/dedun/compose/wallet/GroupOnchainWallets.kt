@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.wallet
 
 import com.machankura.dedun.compose.managers.GroupWalletDerivation
+import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Chain
 import com.machankura.dedun.compose.managers.GuardianManager
 import fr.acinq.bitcoin.Crypto
@@ -109,6 +110,14 @@ class GroupOnchainWallets(
 
     /** How deep [tx] is on [chain]: 0 in the mempool, null while Electrum has not heard of it or cannot be asked. */
     suspend fun confirmationsOf(tx: Transaction, chain: Chain): Int? = runCatching { clients.clientFor(chain).getConfirmations(tx) }.getOrNull()
+
+    /**
+     * Whether [script] has ever been paid on [chain], or is one of [ownWallet]'s addresses: what a
+     * member's onchain payout address is checked against before it is published, and again before
+     * the group pays it. `docs/group-payout-destination.md`, D7.
+     */
+    suspend fun usageOf(chain: Chain, script: ByteVector, ownWallet: GroupWalletState? = null): UnusedAddressCheck.Usage =
+        UnusedAddressCheck.check(clients.clientFor(chain), script, isTheGroups = { ownWallet?.derivationOf(it) != null })
 
     suspend fun stop() = mutex.withLock {
         wallets.values.forEach { it.stop() }

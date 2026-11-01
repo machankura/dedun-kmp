@@ -33,6 +33,7 @@ import java.net.http.HttpResponse
 import java.util.Base64
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.seconds
@@ -42,7 +43,7 @@ import kotlin.time.Duration.Companion.seconds
  * starts: what `startScriptHashSubscription` answers for an address nobody has paid, one paid in the
  * mempool, one paid and confirmed, and when no server answers at all. D7 rests on the four answers
  * being null, a status, a status and a timeout -- unlike `getScriptHashHistory`, whose failure reads
- * as no history.
+ * as no history -- and `UnusedAddressCheck` turns them into unused, used and unknown (Phase 3).
  *
  * Skipped unless `DEDUN_REGTEST=1`.
  */
@@ -112,6 +113,22 @@ class PayoutAddressRegtestJvmTest {
         assertNotNull(statusOf(electrum, confirmed, expectSeen = true), "an address paid and confirmed")
 
         electrum.disconnect()
+    }
+
+    @Test
+    fun theCheckSeesAnAddressGoFromUnusedToUsed() = runBlocking {
+        assumeTrue("set DEDUN_REGTEST=1 with testing/regtest/regtest.sh up", enabled)
+        val electrum = connected()
+        val address = newAddress()
+        val script = PayoutAddress.parseOrNull(Chain.Regtest, address)!!.script
+
+        assertEquals(UnusedAddressCheck.Usage.Unused, UnusedAddressCheck.check(electrum, script))
+        btc("sendtoaddress", address, 0.0001, wallet = "miner")
+        statusOf(electrum, address, expectSeen = true)
+        assertEquals(UnusedAddressCheck.Usage.Used, UnusedAddressCheck.check(electrum, script))
+
+        electrum.disconnect()
+        assertEquals(UnusedAddressCheck.Usage.Unknown, UnusedAddressCheck.check(ElectrumClient(scope, loggerFactory), script, timeout = 3.seconds))
     }
 
     @Test
