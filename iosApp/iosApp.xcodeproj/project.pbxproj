@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BA4C0DE5A1B2C3D4E5F60001 /* Bark in Frameworks */ = {isa = PBXBuildFile; productRef = BA4C0DE5A1B2C3D4E5F60002 /* Bark */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		41CB266BF907B985085BE6EC /* Dedun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dedun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -41,6 +45,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BA4C0DE5A1B2C3D4E5F60001 /* Bark in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,6 +90,7 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
+				BA4C0DE5A1B2C3D4E5F60002 /* Bark */,
 			);
 			productName = iosApp;
 			productReference = 41CB266BF907B985085BE6EC /* Dedun.app */;
@@ -114,6 +120,9 @@
 			);
 			mainGroup = E28E5948C7A59A192A667773;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BA4C0DE5A1B2C3D4E5F60003 /* XCRemoteSwiftPackageReference "bark-ffi-bindings" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = ECDAFDDED408A506DEFE0AF1 /* Products */;
 			projectDirPath = "";
@@ -368,6 +377,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BA4C0DE5A1B2C3D4E5F60003 /* XCRemoteSwiftPackageReference "bark-ffi-bindings" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://gitlab.com/ark-bitcoin/bark-ffi-bindings.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.26.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BA4C0DE5A1B2C3D4E5F60002 /* Bark */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BA4C0DE5A1B2C3D4E5F60003 /* XCRemoteSwiftPackageReference "bark-ffi-bindings" */;
+			productName = Bark;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7B228E3BC6A3A024E46D1BD1 /* Project object */;
 }
