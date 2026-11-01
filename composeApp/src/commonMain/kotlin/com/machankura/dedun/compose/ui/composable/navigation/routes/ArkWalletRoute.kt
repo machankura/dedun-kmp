@@ -26,3 +26,9 @@ data class ArkReceiveRoute(
 data class ArkSendRoute(
     val activeUserPublicKey: String,
 ): Route()
+
+/** Leaving Ark: offboard and emergency exit. `docs/bark-wallet.md`, Phase 9. */
+@Serializable
+data class ArkAdvancedRoute(
+    val activeUserPublicKey: String,
+): Route()

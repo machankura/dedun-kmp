@@ -32,6 +32,7 @@ import dedun.composeapp.generated.resources.ark_renew_explainer
 import dedun.composeapp.generated.resources.ark_renew_failed
 import dedun.composeapp.generated.resources.ark_renew_nothing_due
 import dedun.composeapp.generated.resources.ark_renew_now
+import dedun.composeapp.generated.resources.ark_advanced
 import dedun.composeapp.generated.resources.ark_renew_s_sats_question
 import dedun.composeapp.generated.resources.ark_renew_started
 import com.machankura.dedun.compose.wallet.ark.ArkFee
@@ -146,6 +147,7 @@ fun ArkWalletScreen(
     onReceive: () -> Unit,
     onNavigateBack: () -> Unit,
     onSend: (() -> Unit)? = null,
+    onAdvanced: (() -> Unit)? = null,
 ) {
     val viewModel: ArkWalletViewModel = viewModel(factory = ArkWalletViewModel.factory(identityArk))
     LaunchedEffect(true) { viewModel.refresh() }
@@ -203,6 +205,7 @@ fun ArkWalletScreen(
                 onClick = { viewModel.renewalFee(onFee = { fee -> if (fee == null) notify(nothingDue) else confirmingRenewal = fee }, onFailure = { notify(renewFailed) }) },
             ) { Text(stringResource(Res.string.ark_renew_now)) }
         }
+        onAdvanced?.let { advanced -> TextButton(onClick = advanced) { Text(stringResource(Res.string.ark_advanced)) } }
     }
 
     Scaffold(

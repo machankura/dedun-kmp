@@ -44,6 +44,12 @@ Where the build chose differently, phase by phase:
 | 7 | *Renew now* calls `maintenance_refresh` | `refresh_vtxos_delegated` for the coins Bark says are due, after `estimate_refresh_fee` for the same coins. Shown when the deadline is inside the threshold or past it |
 | 7 | iOS's `BGAppRefreshTask` | moved to Phase 8 with the rest of iOS. The worker's body is `maintainInBackground`, which the iOS task will call |
 | 7 | checked by running the worker with `adb shell cmd jobscheduler run` | not run on a device. The worker builds into the debug APK, and its logic is `maintainInBackground`, whose three cases are tested in `IdentityArkJvmTest`. The signet test runs Bark's delegated maintenance, renewal fee, renewal and claim against Second's server, and maintenance returns without waiting for a round |
+| 9 | the exit calls on `ArkWallet` | on `ArkExits`, which `ArkWallet` extends, so the everyday screens' fakes and readers do not carry ten calls they never make |
+| 9 | *Claim* | `drain_exits` builds the claim, `sign_exit_claim_inputs` signs the exit outputs, and `extract_tx_from_psbt` and `broadcast_tx` send it. The claim is enabled once an exit is *Ready to claim* and the tip has reached `all_exits_claimable_at_height` |
+| 9 | *Move everything onchain* behind a confirmation | two taps on one button: the first prices the offboard for the address typed and shows the fee, the second moves. The emergency exit has a dialog of its own, because it cannot be undone |
+| 9 | a profile switch warns while an exit is under way | not built. Forget already cannot reach a seed profile (Phase 3), and the warning belongs with the switcher's own screen |
+| 9 | re-scanning a partial recovery's failed ids | not built. The card from Phase 4 still says some coins could not be restored yet |
+| 9 | checked on regtest with captaind stopped | the view model's paths are tested over the fake, and the adapter's exit calls run against Second's signet server for a wallet with no coins. A real exit waits for Phase 12's regtest harness |
 | 4 | checked on Android and Linux desktop with a signet profile | checked in compose tests over every state, at phone width and at 1280 dp for the two panes. Not yet run in the app, because that would mean a passphrase and a profile in this host's real desktop data directory |
 
 The headline: **a seed profile already holds the twelve words Bark needs. Bark's keys sit at

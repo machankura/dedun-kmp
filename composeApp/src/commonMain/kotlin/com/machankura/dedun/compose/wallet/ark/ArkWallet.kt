@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
  * and the screens and the lifecycle are tested against a fake of this. Every call may
  * throw an [ArkError]; none of them may be made after [close].
  */
-interface ArkWallet {
+interface ArkWallet : ArkExits {
     val network: ArkNetwork
 
     /** Movements as they are created and updated, while the wallet is open. */

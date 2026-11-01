@@ -102,6 +102,29 @@ internal class FakeArkWallet(
 
     override suspend fun tipHeight(): Long { call("tipHeight"); return tip }
 
+    var vtxoList: List<ArkVtxo> = emptyList()
+    var exitFee = ArkExitFee(Satoshi(3_000), fundable = true)
+    var exitStatuses: List<ArkExitStatus> = emptyList()
+    var claimableAt: Long? = null
+
+    override suspend fun vtxos(): List<ArkVtxo> { call("vtxos"); return vtxoList }
+
+    override suspend fun onchainAddress(): String { call("onchainAddress"); return "tb1qfake" }
+
+    override suspend fun offboardAllFee(address: String): ArkFee { call("offboardAllFee"); return ArkFee(balance.spendable, Satoshi(200), balance.spendable - Satoshi(200)) }
+
+    override suspend fun offboardAll(address: String): String { call("offboardAll"); return "33".repeat(32) }
+
+    override suspend fun emergencyExitFee(): ArkExitFee { call("emergencyExitFee"); return exitFee }
+
+    override suspend fun startEmergencyExit() = call("startEmergencyExit")
+
+    override suspend fun progressExits(): List<ArkExitStatus> { call("progressExits"); return exitStatuses }
+
+    override suspend fun exitsClaimableAt(): Long? { call("exitsClaimableAt"); return claimableAt }
+
+    override suspend fun claimExits(address: String): String { call("claimExits"); return "44".repeat(32) }
+
     override suspend fun close() {
         calls += "close"
         closed = true

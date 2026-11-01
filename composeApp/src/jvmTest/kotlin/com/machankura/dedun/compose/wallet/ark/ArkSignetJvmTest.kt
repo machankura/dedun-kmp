@@ -67,6 +67,12 @@ class ArkSignetJvmTest {
             assertEquals(null, wallet.renewalFee())
             wallet.renew()
             wallet.claimLightningReceives()
+
+            // The ways out, with nothing to take: Phase 9's adapter against the real thing.
+            assertTrue(wallet.vtxos().isEmpty())
+            assertTrue(wallet.progressExits().isEmpty())
+            assertEquals(null, wallet.exitsClaimableAt())
+            assertTrue(wallet.onchainAddress().startsWith("tb1"))
         } finally {
             wallet.close()
         }

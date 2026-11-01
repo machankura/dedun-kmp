@@ -15,6 +15,9 @@ import uniffi.bark.RecoveryStatus
 import uniffi.bark.Wallet
 import uniffi.bark.WalletNotification
 import uniffi.bark.WalletOpenArgs
+import uniffi.bark.ExitState
+import uniffi.bark.VtxoState
+import uniffi.bark.extractTxFromPsbt
 import uniffi.bark.Exception as BarkException
 
 /*
@@ -207,6 +210,61 @@ private class BarkArkWallet(
     override suspend fun firstExpiryHeight(): Long? = bark { wallet.getFirstExpiringVtxoBlockheight() }?.toLong()
 
     override suspend fun tipHeight(): Long = bark { onchain.tipHeight() }.toLong()
+
+    override suspend fun vtxos(): List<ArkVtxo> = bark { wallet.vtxos() }.map { vtxo ->
+        ArkVtxo(
+            id = vtxo.id,
+            amount = vtxo.amountSats.sat(),
+            expiryHeight = vtxo.expiryHeight.toLong(),
+            state = when (vtxo.state) {
+                is VtxoState.Spendable -> ArkVtxo.State.Spendable
+                is VtxoState.Locked -> ArkVtxo.State.Locked
+                is VtxoState.Spent -> ArkVtxo.State.Spent
+                is VtxoState.Exited -> ArkVtxo.State.Exited
+            },
+        )
+    }
+
+    override suspend fun onchainAddress(): String = bark { onchain.newAddress() }
+
+    override suspend fun offboardAllFee(address: String): ArkFee =
+        bark { wallet.estimateOffboardAllFee(address) }.let { ArkFee(it.grossAmountSats.sat(), it.feeSats.sat(), it.netAmountSats.sat()) }
+
+    override suspend fun offboardAll(address: String): String = bark { wallet.offboardAll(address) }.txid
+
+    override suspend fun emergencyExitFee(): ArkExitFee {
+        val ids = bark { wallet.spendableVtxos() }.map { it.id }
+        val estimate = bark { wallet.estimateEmergencyExitFee(ids, null, null, null) }
+        return ArkExitFee(estimate.totalFeeSats.sat(), estimate.fundable)
+    }
+
+    override suspend fun startEmergencyExit() = bark { wallet.startExitForEntireWallet() }
+
+    override suspend fun progressExits(): List<ArkExitStatus> = bark { wallet.progressExits(null) }.map { status ->
+        ArkExitStatus(
+            vtxoId = status.vtxoId,
+            state = when (status.state) {
+                is ExitState.Start -> ArkExitStatus.State.Starting
+                is ExitState.Processing -> ArkExitStatus.State.Broadcasting
+                is ExitState.AwaitingDelta -> ArkExitStatus.State.AwaitingDelay
+                is ExitState.Claimable -> ArkExitStatus.State.Claimable
+                is ExitState.ClaimInProgress -> ArkExitStatus.State.Claiming
+                is ExitState.Claimed -> ArkExitStatus.State.Claimed
+                is ExitState.Canceled -> ArkExitStatus.State.Canceled
+                is ExitState.VtxoAlreadySpent -> ArkExitStatus.State.AlreadySpent
+                is ExitState.VtxoSwept -> ArkExitStatus.State.Swept
+            },
+            error = status.error,
+        )
+    }
+
+    override suspend fun exitsClaimableAt(): Long? = bark { wallet.allExitsClaimableAtHeight() }?.toLong()
+
+    override suspend fun claimExits(address: String): String {
+        val claim = bark { wallet.drainExits(emptyList(), true, address, null) }
+        val signed = bark { wallet.signExitClaimInputs(claim.psbtBase64) }
+        return bark { wallet.broadcastTx(extractTxFromPsbt(signed)) }
+    }
 
     override suspend fun close() {
         try {

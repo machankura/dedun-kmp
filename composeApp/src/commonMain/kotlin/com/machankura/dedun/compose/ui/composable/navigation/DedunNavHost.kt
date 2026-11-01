@@ -200,6 +200,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkWalletRou
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkReceiveRoute
 import com.machankura.dedun.compose.ui.composable.ArkReceiveScreen
 import com.machankura.dedun.compose.ui.composable.ArkSendScreen
+import com.machankura.dedun.compose.ui.composable.ArkAdvancedScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkSendRoute
 import com.machankura.dedun.compose.identity.StoredIdentity
 import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
@@ -1210,6 +1212,13 @@ fun DedunNavHost(
                     },
                     onReceive = { navController.navigate(route = ArkReceiveRoute(activeUserPublicKey = route.activeUserPublicKey)) },
                     onSend = { navController.navigate(route = ArkSendRoute(activeUserPublicKey = route.activeUserPublicKey)) },
+                    onAdvanced = { navController.navigate(route = ArkAdvancedRoute(activeUserPublicKey = route.activeUserPublicKey)) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<ArkAdvancedRoute> {
+                ArkAdvancedScreen(
+                    identityArk = identityArk,
                     onNavigateBack = { navController.popBackStack() },
                 )
             }
