@@ -10,6 +10,12 @@ LSP. What the run checks, what it found, and why each LSP setting is there is in
 funding key buys inbound liquidity from the LSP, with its signatures delayed, to see what eclair accepts
 and how long it waits. The group run buys liquidity too, between receiving and paying.
 
+`SwapInRefundRegtestJvmTest` uses bitcoind and electrs only, for the swap-in plan's Phase 7
+([docs/personal-swap-in-wallet.md](../../docs/personal-swap-in-wallet.md)): a coin on a personal swap-in
+address is followed from the mempool to refundable and refunded with the user's key alone, in about
+twenty seconds. Its keys use a 144-block refund delay rather than the real 25,920, which bitcoind here
+mines at about eight blocks a second. The LSP takes no part: open-source eclair cannot co-sign a swap-in.
+
 The run is **not** part of `./gradlew check` or CI. Without `DEDUN_REGTEST=1` the test is reported as
 skipped, so a green `jvmTest` says nothing about it.
 

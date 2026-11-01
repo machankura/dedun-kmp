@@ -9,6 +9,7 @@ import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.byteVector
 import fr.acinq.lightning.SwapInParams
+import fr.acinq.lightning.blockchain.electrum.IElectrumClient
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import fr.acinq.lightning.crypto.SwapInOnChainKeys
@@ -75,5 +76,18 @@ class NodeRefunder(private val business: PhoenixBusiness) : SwapInRefunder {
     // PeerManager's recommendation: mempool.space's half-hour estimate, else the LSP's, else 3 sat/vB.
     override suspend fun feerate(): FeeratePerKw = FeeratePerKw(business.peerManager.recommendedFeerateFlow.value)
     override suspend fun usage(script: ByteVector): UnusedAddressCheck.Usage = UnusedAddressCheck.check(business.electrumClient, script)
-    override suspend fun broadcast(tx: Transaction): TxId = business.electrumClient.broadcastTransaction(tx)
+    override suspend fun broadcast(tx: Transaction): TxId = broadcastAndCheck(business.electrumClient, tx)
+
+    companion object {
+        /**
+         * Sends [tx] and asks for it back. lightning-kmp's `broadcastTransaction` answers with the
+         * transaction's id whether or not the server took it, so a refund the server refused would
+         * otherwise read as sent; a server that took it can hand it back.
+         */
+        suspend fun broadcastAndCheck(electrum: IElectrumClient, tx: Transaction): TxId {
+            electrum.broadcastTransaction(tx)
+            checkNotNull(electrum.getTx(tx.txid)) { "the server does not have refund ${tx.txid}" }
+            return tx.txid
+        }
+    }
 }

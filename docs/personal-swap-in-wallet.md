@@ -5,8 +5,33 @@ it hands out for onchain deposits, the coins that have arrived on them, and wher
 each coin is on its way into a channel. It also says why a coin that ought to have
 moved has not.
 
-**Planned; Phase 0 has run.** Written against `d8f44154`, with the `lightning-kmp-app` submodule at
-`67a0376` and its `lightning-kmp` at `688d36ad`.
+**Built**, phases 0-7, one commit per phase. Written against `d8f44154`, with the
+`lightning-kmp-app` submodule at `67a0376` and its `lightning-kmp` at `688d36ad`.
+`SwapInWalletScreen` is the screen, reached from *Onchain deposits* on the profile
+screen. `PeerSwapInSource` reads the node, and `SwapInWalletView`, `SwapInFeeLimits`
+and `SwapInRefund` hold the rules. The phases below are kept as written. Where the
+build chose differently, this table says so:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| D2: coins come from `BalanceManager.swapInWallet` | from the `Peer` directly, through `PeerSwapInSource`. `BalanceManager` drops the coins a funding attempt holds, which is right for a balance but would hide every *Moving into Lightning* row. The reserved set is computed as `PeerManager` computes it, from the boot channels until the live ones arrive |
+| `swapInCoins(wallet: WalletWithConfirmations, reserved)` | `SwapInWalletView.coins(state, tip, params, reserved)`: the raw state, because confirmations are counted from it and the reserved coins have to stay in |
+| the receive section shows the smallest first deposit | and the fee, and that a deposit over the limit will wait. The fee is priced by `SwapInWalletView.openingFee` exactly as `Peer` prices it, and a test pins it to the 1,287 sat the spike measured |
+| a `Ready` coin's row reads as the reason it waits | one line under *Deposits* says why, for all of them. The node moves every ready coin in one request and refuses them together, so the same sentence on each row only repeats itself |
+| the reason is the latest `LiquidityEvents.Rejected` | the node's events are not replayed, so a refusal from before the screen opened would be lost. It starts from the newest unread refusal `PeerManager` filed through `NotificationsManager`. Each new event replaces it, and `SwapInEvents.Requested` clears it. The refusals lightning-kmp only logs (no funding rate, too little after fees) read as *Waiting for your node to move them* |
+| *Change my limit* for any fee refusal | only for a fee over the absolute cap. A fee over the share can only be allowed once, because a limit typed in sats does not change a share. `SwapInRefusal.OverLimit` carries the amount, so the limit cannot be set above the coins |
+| the one-off allowance is restored after `SwapInEvents.Accepted` or on restart | it is, in `PeerManager`'s own scope so that leaving the screen does not leave the raise behind. A raise refused again, because fees moved past the 10 % margin, stays until the next acceptance or restart |
+| the expiry banner whenever the profile opens | on this screen only. A warning on opening the profile needs a home outside the profile screen, and none exists yet |
+| a locked coin says when, as a date as well as a block count | as *about 2 months*, from `approximateDuration`. A date would need the block time, which is a target and not a promise |
+| refused if the destination is used | also refused when Electrum can't say, as *Couldn't check*, because unknown is never read as unused |
+| broadcast through the node's Electrum client | and then asked back with `getTx`. lightning-kmp's `broadcastTransaction` returns the transaction's id even when the server refused it, so without the check a refund the server turned down would read as sent. The regtest run sends one a block early to prove it |
+| Phase 7: the swap-in end to end | the refund only, over a bare `SwapInWallet` on regtest: see Phase 0's third outcome |
+| Phase 7 mines the 25,920-block refund delay | the keys take a 144-block delay (`SwapInOnChainKeys.copy(refundDelay = 144)`, swap window 72). bitcoind on the development machine mined about eight blocks a second, so the real delay was a fifty-minute run, and the refund script is the same at any delay. With a 72-block window every ready coin is also *expiring*, and the run checks that instead of *ready* |
+
+No device has drawn this screen yet. Every phase was checked with `:composeApp:jvmTest`,
+`:composeApp:compileDebugKotlinAndroid` and `m3Audit`, and the screen's states with
+desktop Compose tests, but nobody has paid a real deposit address and watched it
+move.
 
 The headline: **the swap-in already happens, and nobody can see it.** Every
 profile with a seed runs a Phoenix node (`PhoenixBusiness`), and `BusinessManager`
@@ -341,6 +366,16 @@ and is gated on `DEDUN_REGTEST=1`. It runs:
 
 The refund at 25,920 blocks is mined in the same run, since regtest blocks are
 free.
+
+**Ran**, cut down to the refund (Phase 0, third outcome), as
+`SwapInRefundRegtestJvmTest`: twice, about twenty seconds each, against
+`regtest.sh up`. A 50,000-sat coin on the first swap-in address read as
+unconfirmed, then *1 of 3*, then expiring (the short window), then locked at 72
+confirmations. At 143 confirmations bitcoind's `testmempoolaccept` refused the
+refund as not final, and `NodeRefunder.broadcastAndCheck` reported that
+broadcast as failed. At 144 the coin read as refundable, the refund was
+accepted, and once it was mined the destination had received 50,000 sats less a
+234-sat fee at 2 sat/vB.
 
 If the fork change is too wide, this phase is cut, and the note says so in its
 table of where the build chose differently.
