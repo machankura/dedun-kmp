@@ -197,6 +197,8 @@ import com.machankura.dedun.compose.ui.composable.ArkMovementScreen
 import com.machankura.dedun.compose.ui.composable.ArkWalletScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkMovementRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkWalletRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkReceiveRoute
+import com.machankura.dedun.compose.ui.composable.ArkReceiveScreen
 import com.machankura.dedun.compose.AppVersion
 import com.machankura.dedun.compose.identity.StoredIdentity
 import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
@@ -1210,6 +1212,13 @@ fun DedunNavHost(
                     onOpenMovement = { movementId ->
                         navController.navigate(route = ArkMovementRoute(activeUserPublicKey = route.activeUserPublicKey, movementId = movementId))
                     },
+                    onReceive = { navController.navigate(route = ArkReceiveRoute(activeUserPublicKey = route.activeUserPublicKey)) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<ArkReceiveRoute> {
+                ArkReceiveScreen(
+                    identityArk = identityArk,
                     onNavigateBack = { navController.popBackStack() },
                 )
             }

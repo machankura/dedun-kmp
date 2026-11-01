@@ -104,6 +104,20 @@ class ArkWalletViewModel(
         }
     }
 
+    /** Moves the onchain balance onto Ark. The board then shows in the history as it progresses. */
+    fun board(onStarted: () -> Unit, onFailure: () -> Unit) {
+        val wallet = open ?: return
+        viewModelScope.launch {
+            try {
+                wallet.boardAll()
+                onStarted()
+                refresh()
+            } catch (e: ArkError) {
+                onFailure()
+            }
+        }
+    }
+
     /** Reads everything again, as a screen is shown. */
     fun refresh() {
         val wallet = open ?: return

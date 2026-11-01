@@ -30,6 +30,10 @@ Where the build chose differently, phase by phase:
 | 4 | `ArkMovementScreen` reads one movement | it reuses `ArkWalletViewModel` on its own back-stack entry and finds the id in the history. Bark's history is one call, and a view model per movement would duplicate the event handling |
 | 4 | the row names the reason for every `Unavailable` | and only *Not turned on* acts: a *Turn on* button opens the sheet. Tor, this device and a profile without a phrase are rows that say why and do nothing, because nothing on this screen changes them |
 | 4 | a partial recovery is a retry | it is a card that says some coins could not be restored yet. A reopen would not rerun the scan (`recoveryStatus` is `NotRun` after the first open), so a retry would promise what it cannot do |
+| 5 | a cancel of receives older than their invoice's expiry on every open | not built: Bark cancels an expired receive itself when it syncs, and `cancel_lightning_receive` is for one the user gives up on. The open claims only (`claimLightningReceives`, inside the holder's lock) |
+| 5 | *Board* offered on the receive screen | on the wallet screen, as *Move onto Ark*, because that is where the onchain balance is shown. It boards everything (`boardAll`) after a confirmation that the fee comes out of the amount. The receive screen's *Onchain* tab says an onchain payment lands there first |
+| 5 | Share as well as Copy | Copy only: the app has no share sheet on any platform yet |
+| 5 | the cap is checked against the balance | against the spendable balance plus what is pending, so two invoices in a row cannot each pass on their own |
 | 4 | checked on Android and Linux desktop with a signet profile | checked in compose tests over every state, at phone width and at 1280 dp for the two panes. Not yet run in the app, because that would mean a passphrase and a profile in this host's real desktop data directory |
 
 The headline: **a seed profile already holds the twelve words Bark needs. Bark's keys sit at

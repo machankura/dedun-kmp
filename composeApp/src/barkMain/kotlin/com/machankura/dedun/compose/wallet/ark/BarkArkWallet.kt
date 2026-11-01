@@ -165,6 +165,10 @@ private class BarkArkWallet(
         bark { wallet.tryClaimAllLightningReceives(false) }
     }
 
+    override suspend fun boardAll() {
+        bark { wallet.boardAll() }
+    }
+
     override suspend fun parse(text: String): ArkPaymentRequest {
         val request = bark { wallet.parsePaymentRequest(text.trim()) }
         val options = request.options.mapNotNull { it.toArk() }

@@ -22,6 +22,7 @@ class IdentityArkJvmTest {
     /** What happened, in order, across every wallet the opener made. */
     private val log = mutableListOf<String>()
     private var failOpen: ArkError? = null
+    private var lastOpened: FakeArkWallet? = null
 
     private val files = object : ArkFiles {
         val created = mutableSetOf<String>()
@@ -45,7 +46,8 @@ class IdentityArkJvmTest {
             assertEquals(words.joinToString(" "), phrase)
             log += "open $datadir"
             files.created += datadir
-            object : ArkWallet by FakeArkWallet() {
+            val fake = FakeArkWallet().also { lastOpened = it }
+            object : ArkWallet by fake {
                 override suspend fun close() { log += "close $datadir" }
             }
         },
@@ -155,6 +157,15 @@ class IdentityArkJvmTest {
         advanceUntilIdle()
         assertEquals("borrowed", ark.withOpenWallet(alice) { "borrowed" })
         assertEquals(null, ark.withOpenWallet(bob) { "borrowed" })
+    }
+
+    @Test
+    fun `an open claims the Lightning payments that arrived while the wallet was closed`() = runTest {
+        files.consents += alice
+        val ark = identityArk()
+        ark.activate(profile(alice))
+        advanceUntilIdle()
+        assertEquals<List<String>?>(listOf("claimLightningReceives"), lastOpened?.calls)
     }
 
     @Test

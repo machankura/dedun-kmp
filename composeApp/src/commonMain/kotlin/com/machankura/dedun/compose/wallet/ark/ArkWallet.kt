@@ -36,6 +36,9 @@ interface ArkWallet {
     /** Claims every Lightning payment that has arrived and not been claimed -- D12. */
     suspend fun claimLightningReceives()
 
+    /** Moves everything in the onchain wallet onto Ark: a board, which waits for a confirmation. */
+    suspend fun boardAll()
+
     suspend fun parse(text: String): ArkPaymentRequest
 
     suspend fun estimateFee(method: ArkPaymentMethod, amount: Satoshi): ArkFee

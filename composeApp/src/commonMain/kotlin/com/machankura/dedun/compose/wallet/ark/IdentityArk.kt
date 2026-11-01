@@ -137,9 +137,23 @@ class IdentityArk(
             wallet = opened
             _state.value = ArkWalletState.Open(opened, opened.recovery())
             logger.i { "opened the Ark wallet for ${next.id} on ${config.network}" }
+            claimWaiting(opened)
         } catch (e: ArkError) {
             logger.w { "could not open the Ark wallet for ${next.id}: ${e.message}" }
             _state.value = ArkWalletState.Failed(e)
+        }
+    }
+
+    /**
+     * A Lightning payment is an HTLC only this wallet can claim, so one that arrived while
+     * the app was closed waits for the next open -- D12. Bark's call does not wait for the
+     * server, so it runs here, inside the lock, before anything can close the wallet.
+     */
+    private suspend fun claimWaiting(opened: ArkWallet) {
+        try {
+            opened.claimLightningReceives()
+        } catch (e: ArkError) {
+            logger.w { "claiming waiting Lightning payments: ${e.message}" }
         }
     }
 

@@ -63,6 +63,8 @@ internal class FakeArkWallet(
 
     override suspend fun claimLightningReceives() = call("claimLightningReceives")
 
+    override suspend fun boardAll() = call("boardAll")
+
     override suspend fun parse(text: String): ArkPaymentRequest {
         call("parse")
         return requests[text] ?: throw ArkError.InvalidRequest("nothing in '$text' can be paid")

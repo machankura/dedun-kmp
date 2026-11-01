@@ -18,7 +18,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import fr.acinq.bitcoin.Satoshi
+import dedun.composeapp.generated.resources.ark_board
+import dedun.composeapp.generated.resources.ark_board_explainer
+import dedun.composeapp.generated.resources.ark_board_failed
+import dedun.composeapp.generated.resources.ark_board_s_sats_question
+import dedun.composeapp.generated.resources.ark_board_started
+import dedun.composeapp.generated.resources.cancel
+import dedun.composeapp.generated.resources.receive
+import dedun.composeapp.generated.resources.send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -125,14 +136,42 @@ import org.jetbrains.compose.resources.stringResource
 fun ArkWalletScreen(
     identityArk: IdentityArk,
     onOpenMovement: (Long) -> Unit,
+    onReceive: () -> Unit,
     onNavigateBack: () -> Unit,
-    actions: @Composable (ArkWalletUIState.Loaded) -> Unit = {},
+    onSend: (() -> Unit)? = null,
 ) {
     val viewModel: ArkWalletViewModel = viewModel(factory = ArkWalletViewModel.factory(identityArk))
     LaunchedEffect(true) { viewModel.refresh() }
     var consenting by remember { mutableStateOf(false) }
     if (consenting) {
         ArkConsentSheet(onTurnOn = { consenting = false; viewModel.turnOn() }, onDismiss = { consenting = false })
+    }
+    val notify = rememberNotifier(rememberCoroutineScope())
+    val boardStarted = stringResource(Res.string.ark_board_started)
+    val boardFailed = stringResource(Res.string.ark_board_failed)
+    var confirmingBoard by remember { mutableStateOf<Satoshi?>(null) }
+    confirmingBoard?.let { amount ->
+        AlertDialog(
+            onDismissRequest = { confirmingBoard = null },
+            title = { Text(stringResource(Res.string.ark_board_s_sats_question, amount.grouped())) },
+            text = { Text(stringResource(Res.string.ark_board_explainer)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingBoard = null
+                    viewModel.board(onStarted = { notify(boardStarted) }, onFailure = { notify(boardFailed) })
+                }) { Text(stringResource(Res.string.ark_board)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmingBoard = null }) { Text(stringResource(Res.string.cancel)) } },
+        )
+    }
+    val actions: @Composable (ArkWalletUIState.Loaded) -> Unit = { state ->
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+            Button(modifier = Modifier.weight(1f), onClick = onReceive) { Text(stringResource(Res.string.receive)) }
+            onSend?.let { send -> Button(modifier = Modifier.weight(1f), onClick = send, enabled = state.balance.spendable.sat > 0) { Text(stringResource(Res.string.send)) } }
+        }
+        if (state.balance.onchain.sat > 0) {
+            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { confirmingBoard = state.balance.onchain }) { Text(stringResource(Res.string.ark_board)) }
+        }
     }
 
     Scaffold(
