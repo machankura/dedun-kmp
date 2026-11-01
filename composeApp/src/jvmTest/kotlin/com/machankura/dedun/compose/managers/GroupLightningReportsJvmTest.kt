@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import kotlin.time.Instant
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.IcebergChannelLedger
@@ -151,6 +153,7 @@ class GroupLightningReportsJvmTest {
     fun `a member asks for an invoice, and the operator's node makes one that pays the group's node`() = runBlocking<Unit> {
         val (all, node) = running()
         val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
+        fixture.openDeposits(all, all[3])
         val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "lunch")
         fixture.pump(all, setOf(GroupLightningEvents.INVOICE_REQUEST))
         node.answerInvoiceRequests()
@@ -179,11 +182,75 @@ class GroupLightningReportsJvmTest {
         // The poll is ten minutes off: only the node's watch on the room can answer in time.
         val (all, _) = running()
         val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
+        fixture.openDeposits(all, all[3])
         GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "lunch")
         fixture.pump(all, setOf(GroupLightningEvents.INVOICE_REQUEST))
         withTimeout(5.seconds) { while (nodes.single().invoices.isEmpty()) delay(20) }
         delay(200)
         assertEquals(1, nodes.single().invoices.size, "a request is answered once")
+    }
+
+    @Test
+    fun `an invoice is issued only against the requester's own depositor statement, and says whose it is`() = runBlocking<Unit> {
+        val (all, node) = running()
+        val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
+        assertFailsWith<IllegalStateException>("no statement, no request") {
+            GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "lunch")
+        }
+
+        // A request naming somebody else's statement, as an older or a dishonest device could send it.
+        fixture.openDeposits(all, all[2])
+        val someoneElses = Depositors.statementOf(all[3].db, fixture.roomId, fixture.chain, all[2].publicKey)!!.event.id
+        GroupLightningWalletManager.queue(
+            all[3].db, all[3].room, all[3].publicKey, GroupLightningEvents.INVOICE_REQUEST,
+            CommonJson.encodeToString(WalletWire.InvoiceRequest.serializer(), WalletWire.InvoiceRequest(key, "borrowed", 1_000_000, "x", depositor = someoneElses)),
+        )
+        fixture.pump(all, setOf(GroupLightningEvents.INVOICE_REQUEST))
+        node.answerInvoiceRequests()
+        assertTrue(nodes.single().invoices.isEmpty(), "a request under another member's statement is never answered")
+
+        fixture.openDeposits(all, all[3])
+        val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "lunch")
+        fixture.pump(all, setOf(GroupLightningEvents.INVOICE_REQUEST))
+        node.answerInvoiceRequests()
+        fixture.pump(all, setOf(GroupLightningEvents.INVOICE))
+        all.forEach { d ->
+            val row = assertNotNull(d.db.groupLightningRecordsDao().invoice(key, requestId))
+            assertEquals(all[3].publicKey, row.requester, "device ${d.index} knows whose invoice it is")
+            assertEquals(Bolt11Invoice.read(row.bolt11).get().paymentHash.toHex(), row.paymentHash)
+        }
+
+        // Paid: the snapshot joins the payment to the request it paid, for a device that missed it.
+        val hash = nodes.single().invoices.single().paymentHash.toHex()
+        nodes.single().payments += WalletWire.PaymentView("in-deposit", incoming = true, amountMsat = 20_000_000, feesMsat = 1_000_000, paymentHash = hash, completedAt = 1, succeeded = true)
+        node.report(term = 1, force = true)
+        fixture.pump(all, setOf(GroupLightningEvents.SNAPSHOT))
+        assertEquals(requestId, GroupLightningReports.latest(all[0].db, key)!!.snapshot.payments.single { it.id == "in-deposit" }.requestId)
+    }
+
+    @Test
+    fun `a reply that is not the invoice its request asked for is not filed`() = runBlocking<Unit> {
+        val (all, _) = running()
+        val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
+        fixture.openDeposits(all, all[3])
+        val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "lunch")
+        val nodeKey = GroupLightningCoSigner.keyManagerOf(ByteVector(wallet.seed!!.seed), fixture.chain).nodeKeys.nodeKey.privateKey
+        fun invoice(amount: Long, description: String) = Bolt11Invoice.create(fixture.chain, amount.msat, randomBytes32(), nodeKey, Either.Left(description), CltvExpiryDelta(144), INVOICE_FEATURES)
+        fun reply(bolt11: Bolt11Invoice, requester: String? = all[3].publicKey, hash: String? = bolt11.paymentHash.toHex()) = Event(
+            randomBytes32().toHex(), all[1].publicKey, Clock.System.now().epochSeconds, GroupLightningEvents.INVOICE, emptyArray(),
+            CommonJson.encodeToString(WalletWire.InvoiceReply.serializer(), WalletWire.InvoiceReply(key, requestId, bolt11.write(), requester, hash)), "",
+        )
+        val good = invoice(21_000_000, "lunch")
+        listOf(
+            reply(invoice(1_000, "lunch")),
+            reply(invoice(21_000_000, "dinner")),
+            reply(good, requester = all[2].publicKey),
+            reply(good, hash = "ab".repeat(32)),
+        ).forEach { GroupLightningReports.process(all[3].db, all[3].room, it) }
+        assertNull(all[3].db.groupLightningRecordsDao().invoice(key, requestId), "another amount, description, requester or hash")
+
+        GroupLightningReports.process(all[3].db, all[3].room, reply(good))
+        assertEquals(all[3].publicKey, all[3].db.groupLightningRecordsDao().invoice(key, requestId)?.requester)
     }
 
     @Test

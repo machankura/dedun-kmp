@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.managers
 
+import kotlin.time.Instant
+import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
+import com.machankura.dedun.compose.text.LightningAddress
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.database.model.ChatMessage
 import androidx.room3.Room
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -152,6 +156,27 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
         val template = GroupWalletStatementEvent.template(account)
         sign(all, all[0], template.kind, template.tags, template.content)
         all.forEach { assertNotNull(GroupWalletManager.walletFor(it.db, roomId, chain), "device ${it.index} has the onchain wallet") }
+    }
+
+    /**
+     * [member] sets a payout destination and the group opens their deposits, on every device in
+     * [all]: what a member needs before the operator's node issues them an invoice
+     * (`docs/member-deposits.md`, Phase 6).
+     */
+    suspend fun openDeposits(all: List<Device>, member: Device) {
+        val signed = GroupPayoutDestinationEvent.build(
+            PrivateKey(ByteVector32(member.privateKey)), roomId, chain, LightningAddress("member${member.index}", "example.com"),
+        )
+        val tags = arrayOf(arrayOf("h", roomId))
+        val id = EventHasher.hashId(signed.pubKey, signed.createdAt, GroupPayoutDestinationEvent.KIND, tags, signed.toJson())
+        all.forEach { d ->
+            d.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(id = id, publicKey = signed.pubKey, kind = GroupPayoutDestinationEvent.KIND, createdAt = Instant.fromEpochSeconds(signed.createdAt), tags = tags, content = signed.toJson(), chatRoomId = roomId)
+            )
+        }
+        val session = Depositors.propose(member.db, member.room, member.publicKey, member.publicKey, chain)
+        signSession(all, member, session.id)
+        all.forEach { assertNotNull(Depositors.statementOf(it.db, roomId, chain, member.publicKey), "device ${it.index} holds ${member.index}'s statement") }
     }
 
     /** Four devices with an onchain wallet open. */

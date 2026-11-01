@@ -927,4 +927,5 @@
     <string name="before_deposits_were_attributed">Before deposits were attributed</string>
     <string name="open_deposits">Open deposits</string>
     <string name="couldn_t_ask_the_group_to_open_their_deposits">Couldn't ask the group to open their deposits.</string>
+    <string name="no_reply_from_the_operator_s_device_yet">No reply from the operator's device yet. It may be off.</string>
 </resources>

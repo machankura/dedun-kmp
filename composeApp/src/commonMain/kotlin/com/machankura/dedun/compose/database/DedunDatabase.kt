@@ -188,7 +188,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 35,
+    version = 36,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -420,6 +420,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // keeps a ledger beside its parent's, and adds fundingTxIndex (0 on every row before it, all of
         // them first outputs), parentOutPoint and purchaseId (docs/group-lightning-liquidity.md, Phase 5).
         AutoMigration(from = 34, to = 35),
+        // v36 adds the nullable GroupLightningInvoiceRow.requester and .paymentHash, and an index on
+        // (wallet, paymentHash): whose deposit an invoice is, and the hash a payment joins it by
+        // (docs/member-deposits.md, Phase 6). Null on every row before it.
+        AutoMigration(from = 35, to = 36),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

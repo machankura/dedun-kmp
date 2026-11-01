@@ -777,6 +777,8 @@ fun DedunNavHost(
                     chatRoomId = route.chatRoomId,
                     chatRepository = databaseChatRepository,
                     lightningRepository = databaseGroupLightningRepository,
+                    depositRepository = databaseDepositRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()
                     }

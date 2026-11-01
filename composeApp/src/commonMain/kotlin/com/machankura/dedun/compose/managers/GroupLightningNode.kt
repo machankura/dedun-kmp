@@ -250,6 +250,17 @@ class GroupLightningNode(
 
     private val walletKey get() = GroupLightningCoSigner.walletKey(localChatRoom.chatRoom.id, chain, wallet.statement.wallet)
 
+    /**
+     * [payments] with each incoming one joined to the invoice request it paid, by hash: the
+     * operator's word on whose deposit it is (`docs/member-deposits.md`, D6). A payment no invoice
+     * of this node's explains -- an offer's, from before offers were off -- joins nothing.
+     */
+    private suspend fun withRequests(payments: List<WalletWire.PaymentView>): List<WalletWire.PaymentView> = payments.map { payment ->
+        val hash = payment.paymentHash?.takeIf { payment.incoming } ?: return@map payment
+        val invoice = database.groupLightningRecordsDao().invoicesByHash(walletKey, hash).singleOrNull() ?: return@map payment
+        payment.copy(requestId = invoice.requestId)
+    }
+
     /** Sends the room a snapshot when the channels or payments have changed, or when the last is [reportEvery] old. */
     internal suspend fun report(term: Long, force: Boolean = false) {
         val handle = peer ?: return
@@ -260,7 +271,7 @@ class GroupLightningNode(
         if (!due) return
         val snapshot = WalletWire.Snapshot(
             wallet = walletKey, term = term, nodeId = wallet.statement.nodeId, sentAt = now.epochSeconds,
-            channels = current.first, payments = current.second.takeLast(REPORTED_PAYMENTS),
+            channels = current.first, payments = withRequests(current.second.takeLast(REPORTED_PAYMENTS)),
             assignments = transport?.assignments().orEmpty(),
             heldOutputs = current.third,
             offer = handle.offer(),
@@ -277,9 +288,9 @@ class GroupLightningNode(
     /** Makes an invoice for every request in the room that has none yet. */
     internal suspend fun answerInvoiceRequests() = acting.withLock {
         val handle = peer ?: return@withLock
-        GroupLightningReports.unanswered(database, localChatRoom.chatRoom.id, walletKey).forEach { request ->
-            val bolt11 = handle.createInvoice(request.amountMsat, request.description)
-            GroupLightningReports.answer(database, localChatRoom, userPublicKey, request, bolt11)
+        GroupLightningReports.unanswered(database, localChatRoom.chatRoom.id, walletKey).forEach { pending ->
+            val bolt11 = handle.createInvoice(pending.request.amountMsat, pending.request.description)
+            GroupLightningReports.answer(database, localChatRoom, userPublicKey, pending, bolt11)
         }
     }
 

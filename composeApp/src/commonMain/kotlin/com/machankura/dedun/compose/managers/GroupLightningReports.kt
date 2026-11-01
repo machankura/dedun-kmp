@@ -211,7 +211,13 @@ object GroupLightningReports {
         return Report(snapshot, snapshot.channels.map { ChannelCheck(it, GroupLightningCoSigner.signedOursMsat(database, walletKey, it.channelId)) })
     }
 
-    /** Asks the operator for an invoice; the answer arrives under the returned request id. */
+    /**
+     * Asks the operator for an invoice; the answer arrives under the returned request id. Only for a
+     * depositor: the request names the group's statement for [userPublicKey], which the invoice is
+     * issued against, so the deposit is theirs. `docs/member-deposits.md`, Phase 6.
+     *
+     * @throws IllegalStateException when the group has not opened [userPublicKey]'s deposits
+     */
     suspend fun requestInvoice(
         database: DedunDatabase,
         localChatRoom: LocalChatRoom,
@@ -220,9 +226,11 @@ object GroupLightningReports {
         amountMsat: Long?,
         description: String,
     ): String {
+        val depositor = Depositors.statementOf(database, localChatRoom.chatRoom.id, wallet.statement.chain, userPublicKey)
+            ?: throw IllegalStateException("The group has not opened ${userPublicKey.take(8)}'s deposits")
         val key = GroupLightningCoSigner.walletKey(localChatRoom.chatRoom.id, wallet.statement.chain, wallet.statement.wallet)
         val requestId = RandomInstance.bytes(16).toHex()
-        val request = WalletWire.InvoiceRequest(key, requestId, amountMsat, description)
+        val request = WalletWire.InvoiceRequest(key, requestId, amountMsat, description, depositor = depositor.event.id)
         val queued = GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupLightningEvents.INVOICE_REQUEST, CommonJson.encodeToString(WalletWire.InvoiceRequest.serializer(), request))
         GroupLightningLines.write(database, localChatRoom.chatRoom.id, queued.id, ChatMessage.TYPE_LIGHTNING_INVOICE_REQUESTED, userPublicKey, asked(request), queued.createdAt)
         return requestId
@@ -254,18 +262,37 @@ object GroupLightningReports {
         return if (asker == null) "The operator's node made an invoice." else "The operator's node made @${ChatMessage.memberName(database, asker)}'s invoice."
     }
 
-    /** The invoice requests for [walletKey] in the room that no invoice answers yet, oldest first. */
-    suspend fun unanswered(database: DedunDatabase, chatRoomId: String, walletKey: String): List<WalletWire.InvoiceRequest> =
-        database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupLightningEvents.INVOICE_REQUEST))
-            .sortedBy { it.createdAt }
-            .mapNotNull { runCatching { CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), it.content) }.getOrNull() }
-            .filter { it.wallet == walletKey && database.groupLightningRecordsDao().invoice(walletKey, it.requestId) == null }
+    /** An invoice request, and the member who asked: the MLS sender, which `mip03Rejection` has made its author. */
+    data class Pending(val request: WalletWire.InvoiceRequest, val requester: HexKey)
 
-    /** Sends the room the operator's invoice for [request], and files it here. */
-    suspend fun answer(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, request: WalletWire.InvoiceRequest, bolt11: String) {
-        val reply = WalletWire.InvoiceReply(request.wallet, request.requestId, bolt11)
+    /**
+     * The invoice requests for [walletKey] in the room that no invoice answers yet, oldest first --
+     * only those that name the group's depositor statement for the member who sent them. A request
+     * naming none, or somebody else's, is never answered: an invoice is issued against a depositor,
+     * or not at all. `docs/member-deposits.md`, D5.
+     */
+    suspend fun unanswered(database: DedunDatabase, chatRoomId: String, walletKey: String): List<Pending> {
+        val chain = GroupLightningCoSigner.walletOf(database, chatRoomId, walletKey)?.statement?.chain ?: return emptyList()
+        val depositors = Depositors.statementsIn(database, chatRoomId, chain)
+        return database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupLightningEvents.INVOICE_REQUEST))
+            .sortedBy { it.createdAt }
+            .mapNotNull { row ->
+                runCatching { CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), row.content) }.getOrNull()
+                    ?.let { Pending(it, row.publicKey.lowercase()) }
+            }
+            .filter { (request, requester) ->
+                request.wallet == walletKey && database.groupLightningRecordsDao().invoice(walletKey, request.requestId) == null &&
+                    depositors[requester]?.event?.id == request.depositor
+            }
+    }
+
+    /** Sends the room the operator's invoice for [pending], naming whose it is and its hash, and files it here. */
+    suspend fun answer(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, pending: Pending, bolt11: String) {
+        val request = pending.request
+        val paymentHash = Bolt11Invoice.read(bolt11).get().paymentHash.toHex()
+        val reply = WalletWire.InvoiceReply(request.wallet, request.requestId, bolt11, requester = pending.requester, paymentHash = paymentHash)
         val queued = GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupLightningEvents.INVOICE, CommonJson.encodeToString(WalletWire.InvoiceReply.serializer(), reply))
-        database.groupLightningRecordsDao().upsertInvoice(GroupLightningInvoiceRow(request.wallet, request.requestId, bolt11))
+        database.groupLightningRecordsDao().upsertInvoice(GroupLightningInvoiceRow(request.wallet, request.requestId, bolt11, requester = pending.requester, paymentHash = paymentHash))
         GroupLightningLines.write(
             database, localChatRoom.chatRoom.id, queued.id, ChatMessage.TYPE_LIGHTNING_INVOICE_ISSUED,
             userPublicKey, invoiceIssued(database, localChatRoom.chatRoom.id, request.requestId), queued.createdAt,
@@ -280,10 +307,46 @@ object GroupLightningReports {
         // Whoever sent it, an invoice that pays some other node is not the group's.
         val invoice = Bolt11Invoice.read(reply.bolt11).get()
         if (invoice.nodeId.toString() != wallet.statement.nodeId) return logger.w("Invoice ${innerEvent.id} pays a node that is not the group's")
-        database.groupLightningRecordsDao().upsertInvoice(GroupLightningInvoiceRow(reply.wallet, reply.requestId, reply.bolt11))
+        // And it has to be the invoice for the request it answers: whose it is decides whose deposit
+        // its payment is. docs/member-deposits.md, D5.
+        refuseReply(database, localChatRoom.chatRoom.id, reply, invoice)?.let { reason ->
+            return logger.w("Invoice ${innerEvent.id} for request ${reply.requestId.take(8)} $reason; not filed")
+        }
+        val requester = requesterOf(database, localChatRoom.chatRoom.id, reply.requestId)
+        database.groupLightningRecordsDao().upsertInvoice(
+            GroupLightningInvoiceRow(reply.wallet, reply.requestId, reply.bolt11, requester = requester, paymentHash = invoice.paymentHash.toHex())
+        )
         GroupLightningLines.write(
             database, localChatRoom.chatRoom.id, innerEvent.id, ChatMessage.TYPE_LIGHTNING_INVOICE_ISSUED,
             innerEvent.pubKey, invoiceIssued(database, localChatRoom.chatRoom.id, reply.requestId), Instant.fromEpochSeconds(innerEvent.createdAt),
         )
+    }
+
+    /** Who sent the invoice request [requestId] in [chatRoomId], when this device holds it. */
+    private suspend fun requesterOf(database: DedunDatabase, chatRoomId: String, requestId: String): HexKey? =
+        database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupLightningEvents.INVOICE_REQUEST))
+            .firstOrNull { runCatching { CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), it.content) }.getOrNull()?.requestId == requestId }
+            ?.publicKey?.lowercase()
+
+    /**
+     * Why [reply] is not the invoice for the request it names, or null when it is (D5): it names the
+     * member who asked and the hash it is paid by, as the invoice says; it is for the amount and the
+     * description that were asked for; and no other request's invoice has its hash. A device that
+     * doesn't hold the request checks what it can -- the hash, and that it is unique.
+     */
+    internal suspend fun refuseReply(database: DedunDatabase, chatRoomId: String, reply: WalletWire.InvoiceReply, invoice: Bolt11Invoice): String? {
+        val hash = invoice.paymentHash.toHex()
+        if (reply.paymentHash != null && reply.paymentHash != hash) return "names a hash its invoice is not paid by"
+        val others = database.groupLightningRecordsDao().invoicesByHash(reply.wallet, hash).filter { it.requestId != reply.requestId }
+        if (others.isNotEmpty()) return "is paid by the hash of another request's invoice"
+
+        val row = database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupLightningEvents.INVOICE_REQUEST))
+            .firstOrNull { runCatching { CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), it.content) }.getOrNull()?.requestId == reply.requestId }
+            ?: return null
+        val request = CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), row.content)
+        if (reply.requester != null && !reply.requester.equals(row.publicKey, ignoreCase = true)) return "names somebody other than the member who asked"
+        if (request.amountMsat != null && invoice.amount?.msat != request.amountMsat) return "is not for the amount that was asked for"
+        if (request.description.isNotBlank() && invoice.description != request.description) return "does not carry the description that was asked for"
+        return null
     }
 }
