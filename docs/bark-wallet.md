@@ -5,7 +5,7 @@ history, on the profile tab above the member wallets. It is an Ark wallet, run o
 Second's Bark SDK. One balance can be spent to an Ark address, a Lightning invoice or an onchain
 address, and paid into the same three ways. There are no channels and no inbound liquidity.
 
-**Planned.** Written against `7658c8ed` (`dedun`), with the `lightning-kmp-app` submodule at
+**Planned; Phase 0 has run.** Written against `7658c8ed` (`dedun`), with the `lightning-kmp-app` submodule at
 `7aaacadc`, and against the Bark FFI bindings `v0.26.1+bark-0.8.0`. Those bindings wrap
 `bark-ffi` `0.30.1`, which pins `bark` `0.8.0` and uniffi `0.31.1`.
 
@@ -175,12 +175,13 @@ key, is a separate decision. It is listed under open questions. Removing the nod
 `setActiveWallet`, `BusinessManager` and the forget sequence, and none of that is needed to add a
 wallet.
 
-**D12. Coins are kept alive in four layers, and the deadline is shown in time:**
+**D12. Coins are kept alive in three layers, and the deadline is shown in time:**
 1. Bark's daemon, while the app is open.
-2. `maintenance()` on every foreground.
-3. A scheduled delegated refresh, arranged ahead of expiry, if Phase 0 confirms that it needs no
-   device online at the scheduled height.
-4. A platform job: WorkManager on Android, `BGAppRefreshTask` on iOS, nothing on desktop.
+2. `maintenance_delegated()` on open and on every foreground. Phase 0 found that a delegated
+   refresh needs no device online during the round, and that the interactive `maintenance()` blocks
+   until the next round starts, which is up to an hour on mainnet. So the app never calls
+   `maintenance()`.
+3. A platform job: WorkManager on Android, `BGAppRefreshTask` on iOS, nothing on desktop.
 
 The wallet screen states the earliest deadline (`get_first_expiring_vtxo_blockheight`) as a date,
 the way guardian-delay states blocks as time. Inside the refresh threshold it becomes a warning with
@@ -241,6 +242,24 @@ in the form the swap-in plan's Phase 0 used.
 
 **Done when** this note carries the eight answers, and D4, D6 and D12 are amended where the
 answers differ from what is written here.
+
+#### What the spikes found
+
+Run on 2 November 2026 from a Linux x86-64 host (glibc 2.39, JDK 17), against
+`bark-jvm`/`bark-android` `0.26.1+bark-0.8.0` and Second's signet server. The probe was a
+throwaway Gradle project outside the repo, opening wallets in temporary datadirs.
+
+| spike | answer |
+|---|---|
+| 1. Android packaging | The AAR carries `libbark_ffi_kotlin.so` for `arm64-v8a` (13.8 MB), `armeabi-v7a` (10.7 MB), `x86` (14.8 MB) and `x86_64` (15.1 MB) uncompressed: 31.8 MB as a compressed AAR, so about 8 MB per ABI in a split APK. **Every `LOAD` segment is aligned to `0x4000`**, so 16 KB pages are fine. It depends on `jna:5.15.0` (no other JNA on the app's classpath), `kotlin-stdlib:1.9.24` and `kotlinx-coroutines-android:1.8.1`, all of which the app's newer versions supersede. R8 keep rules are checked in Phase 2 against the release build |
+| 2. Linux desktop | `Wallet.open` against signet takes about 4 s on a first open and creates the datadir. Address, sync (0.7 s), balance, BOLT11 (0.2 s) and a BIP321 URI with an amount (Ark address, BOLT11 and no onchain address) all work with no funds. **The server refuses a `userAgent` with no `/`** (`invalid x-user-agent: no slash present`), so it is `dedun/<version>`. A second open of an open datadir fails with `failed to instantiate platform default lock manager: another process is already using datadir … (holder PID: <our own pid>)`. Reopening a datadir with other words fails in the onchain wallet first, with `Descriptor mismatch for External keychain`, not "incorrect mnemonic". Errors cross the FFI as **one class, `uniffi.bark.Exception.Inner`, carrying a flattened message**, so `ArkError` classifies by message, with the messages above as test fixtures. The funded half (a faucet payment, a Lightning payment) is moved to Phase 12's regtest: the faucet is a web app, not an API |
+| signet's parameters | `arkInfo`: rounds every 300 s; VTXO lifetime 144 blocks (about a day on signet, against 28 days on mainnet); exit delta 12; minimum board 10,000 sat; maximum VTXO 1 BTC; Lightning receive fee 0 at 10,000 sat |
+| 3. Recovery | A fresh datadir opened with the same words runs the mailbox scan inside `open`, which then takes about 4.4 s, and reports `Completed(isComplete = true)` with empty buckets for an unfunded wallet. `recoveryStatus()` on an open that did not create the wallet is `NotRun`, as documented |
+| 4. Delegated refresh | **Delegated means non-interactive.** `maintenance_delegated` syncs, progresses pending rounds and submits every VTXO due for refresh to the *next* round in delegated mode (`maybe_schedule_maintenance_refresh_delegated`, `bark/src/lib.rs:1910`). The server includes the participation without the device online, and the device collects the new VTXOs on its next sync (`progress_delegated`, `bark/src/round/mod.rs:744`). The interactive `maintenance()` instead **waits for the next round to start** (`maintenance_refresh`, `:1984`): up to an hour on mainnet. So the foreground and background paths call `maintenance_delegated`, never `maintenance`. Hand-scheduling `refresh_vtxos_scheduled` adds nothing. D12 is amended |
+| 5. Lightning receive with the app killed | Not run: it needs funds. Moved to Phase 12 |
+| 6. iOS route | **Gobley is out.** Its latest release, `gobley-uniffi-bindgen` 0.3.7, pins `uniffi_bindgen =0.29.4`, and `bark-ffi` is built with uniffi 0.31.1. The generated scaffolding has to match the Rust side's uniffi version. The Swift bridge in D4 stands. The prototype needs a macOS host, which this spike did not have, so Phase 8 starts with it |
+| 7. macOS and Windows natives | This host has the `aarch64-apple-darwin` and `x86_64-apple-darwin` rust targets, but no Apple linker (osxcross) and no MinGW. The libraries have to be built on macOS and Windows runners, not cross-built here. Phase 11 builds them in CI |
+| 8. A proxy fork | Small: add `"bark/socks5-proxy"` to `bark-ffi`'s uniffi feature list (`bark`'s feature is `socks5-proxy = ["bark-bitcoin-ext/rpc-socks5-proxy", "bark-server-rpc/socks5-proxy", "http"]`), add `socks5_proxy: Option<String>` to `bark-ffi`'s `Config`, and map it in its `From` impl. That is about ten lines, plus building and publishing the bindings ourselves. That cost is the reason not to do it before the app has a proxy |
 
 ### Phase 1: the port, pure
 
@@ -443,14 +462,11 @@ two wallets.
 
 ### Phase 7: keeping coins alive
 
-- **Foreground:** `IdentityArk` calls `maintenance()` on open and on every `AppLifecycle`
-  foreground, at most once an hour.
-- **Scheduled delegated renewal:** if spike 4 confirmed it, after each movement that creates
-  VTXOs, call `refresh_vtxos_scheduled` for them at `expiry − threshold`. If spike 4 did not
-  confirm it, this step is dropped and D12 is amended.
+- **Foreground:** `IdentityArk` calls `maintenance_delegated()` on open and on every
+  `AppLifecycle` foreground, at most once an hour.
 - **Android:** `ArkMaintenanceWorker`, a `CoroutineWorker` scheduled periodically (daily, with
   network required) from `schedulePlatformLogic`. Through `IdentityArk` it opens the *default*
-  profile's wallet if it is not already open, runs `maintenance()` and
+  profile's wallet if it is not already open, runs `maintenance_delegated()` and
   `try_claim_all_lightning_receives`, and closes only what it opened. It needs the seed, which
   means decrypting `seed.dat` headless. `ChannelsWatcher` already does this through
   `BusinessManager`, so the worker reuses that path.
@@ -460,8 +476,9 @@ two wallets.
 - **Desktop:** nothing scheduled, as `Phoenix.jvm.kt:104-124` argues for the node. The warning
   carries it.
 - **The warning:** inside the refresh threshold (default from Bark's config, shown in days), the
-  profile row and the wallet screen turn to an error-container style with *Renew now*, which calls
-  `maintenance_refresh` and shows the fee. Past expiry the screen says the coins now depend on the
+  profile row and the wallet screen turn to an error-container style with *Renew now*. That
+  shows `estimate_refresh_fee`, then calls `refresh_vtxos_delegated` for the VTXOs due and shows
+  the renewal as pending until a sync collects it. Past expiry the screen says the coins now depend on the
   server and offers the recovery call.
 
 Tests: the threshold-to-warning mapping across tip heights; the worker opening and closing only
