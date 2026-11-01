@@ -5,7 +5,7 @@ there is spliced into the group's channel once it has 3 confirmations, and it is
 member as a Lightning deposit, like every invoice they are issued. Phoenix calls this swap-in. This
 note plans it for a node whose keys nobody holds alone.
 
-**Planned.** Written against `00b723a0` (`dedun`, after the revert below), with the
+**Planned; Phase 0 has run.** Written against `00b723a0` (`dedun`, after the revert below), with the
 `lightning-kmp-app` submodule at `7aaacadc` and its `lightning-kmp` at `86f0eb3a`.
 
 **Where this comes from.** A first attempt built swap-in for the *profile's personal* node instead: a
@@ -143,6 +143,40 @@ and `m3Audit`, and the fork's phases also on `lightning-kmp`'s own `jvmTest`.
    Phase 4's rules are written against this.
 
 Done when the answers are under *Phase 0 outcomes* in this note.
+
+#### Phase 0 outcomes
+
+1. **Ran, and it holds.** `IcebergSwapInSpikeJvmTest`, four tests:
+   - A 2-of-4 group (round one from members 1-3, round two from 1 and 3) builds the outer cache over
+     `[groupKey, server]`, unsorted, tweaked with `ScriptPathTweak(refundLeaf.hash())`.
+     `Iceberg.keyAggregationCheck` passes it.
+   - The group signs the key path of `SwapInProtocol(groupKey, server, refund, 144)`. A stock server
+     signs too, with `signSwapInputServer`, and `SwapInProtocol.witness` combines the two.
+   - `Transaction.correctlySpends`, under the standard script flags, accepts the spend. The
+     transaction has a second, P2WPKH input, so a sighash over one spent output instead of all of
+     them would have failed.
+   - The two negative controls both fail, as they should. Under the channel's `KeyPathTweak` the
+     shares spend nothing, and with the keys in the other order they spend nothing either. So a
+     signer has to get the order and the tweak right, and `keyAggregationCheck` alone cannot catch a
+     wrong tweak, just as `IcebergTaprootSessionTestsCommon` found for channels.
+   - The test also rebuilds the refund leaf and checks that the address's output key equals
+     `aggregate([group, server]).outputKey(ScriptPathTweak(leaf))`. So the tweak is checked against
+     the address, not copied from it.
+
+   **The plan is possible.**
+2. **Not run yet, and moved to Phase 8.** A node can only sign a swap-in input with Iceberg once
+   Phase 2's signer exists. Today `SharedTransaction.sign` reaches for `userPrivateKey`. And it needs
+   coins sent on ACINQ's network, which only the group's owner can do. The live run is Phase 8's.
+3. **Answered from the code.** The co-signer request belongs to Phase 4 and is captured there, once
+   Phase 2 exists. What lands is known now: a splice-in is recorded as `SpliceInIncomingPayment`
+   (`Peer.kt:1006`). It has:
+   - `amountReceived`, the coins less our mining fee;
+   - `miningFee`, `liquidityPurchase` (null for a plain splice-in), `channelId` and `txId`;
+   - **`localInputs`, the outpoints of the swap-in coins it spent.**
+
+   So Phase 5 attributes by those outpoints, with no new field from lightning-kmp. A channel opened
+   from a swap-in would be a `NewChannelIncomingPayment` with the same `localInputs`, which D6
+   leaves out.
 
 ### Phase 1: the addresses, pure
 
