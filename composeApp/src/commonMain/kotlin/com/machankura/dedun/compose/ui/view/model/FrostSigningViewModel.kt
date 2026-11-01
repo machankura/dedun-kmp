@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.wallet.PayoutRule
+import com.machankura.dedun.compose.repository.PayoutRepository
 import com.machankura.dedun.compose.wallet.GroupSpend
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.database.model.types.FrostSigningSubject
@@ -42,6 +44,8 @@ class FrostSigningViewModel(
     val frostSigningRepository: FrostSigningRepository,
     /** Where the group pays its members, for naming a spend's outputs. The no-op names none. */
     val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    /** Whose each coin is, for reading a spend as a payout: `docs/payouts-only.md`. The no-op reads none. */
+    val payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
 ): ViewModel() {
 
     var frostSigningUIState: FrostSigningUIState by mutableStateOf(initialFrostSigningUIState)
@@ -96,6 +100,8 @@ class FrostSigningViewModel(
                     if (session?.subject == FrostSigningSubject.TRANSACTION && checkedSpend == null) {
                         checkedSpend = frostSigningRepository.checkedSpend(session.id)
                         checkedSpend?.let { payees = payeesOf(it, localChatRoom) }
+                        // A spend from the room's own wallet, read as every signer reads it.
+                        payout = checkedSpend?.takeIf { it.spender == GroupSpend.Spender.Owner }?.let { payoutRepository.payoutOf(chatRoomId, it) }
                     }
                     if (session?.subject == FrostSigningSubject.SWEEP && checkedSweep == null) {
                         checkedSweep = frostSigningRepository.checkedSweep(session.id)
@@ -122,6 +128,11 @@ class FrostSigningViewModel(
                         spend = checkedSpend,
                         sweep = checkedSweep,
                         payees = payees,
+                        payout = payout,
+                        names = localChatRoom.localParticipants.associate { participant ->
+                            participant.participant.participantPublicKey.lowercase() to
+                                (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
+                        },
                     )
                 }
         }
@@ -129,6 +140,7 @@ class FrostSigningViewModel(
 
     private var checkedSpend: GroupSpend.Checked? = null
     private var payees: Map<String, String> = emptyMap()
+    private var payout: PayoutRule.Result? = null
 
     /**
      * Which of [spend]'s payments go to a member's payout address, by script: each current
@@ -241,6 +253,7 @@ class FrostSigningViewModel(
             chatRepository: ChatRepository,
             frostSigningRepository: FrostSigningRepository,
             payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+            payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 FrostSigningViewModel(
@@ -251,6 +264,7 @@ class FrostSigningViewModel(
                     chatRepository = chatRepository,
                     frostSigningRepository = frostSigningRepository,
                     payoutDestinationRepository = payoutDestinationRepository,
+                    payoutRepository = payoutRepository,
                 )
             }
         }

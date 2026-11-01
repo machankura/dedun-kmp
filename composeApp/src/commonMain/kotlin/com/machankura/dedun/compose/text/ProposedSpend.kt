@@ -1,6 +1,8 @@
 package com.machankura.dedun.compose.text
 
 import com.machankura.dedun.compose.wallet.GroupSpend
+import com.machankura.dedun.compose.wallet.PayoutRule
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import fr.acinq.bitcoin.Bitcoin
 import fr.acinq.bitcoin.ByteVector
@@ -13,6 +15,26 @@ import fr.acinq.bitcoin.Satoshi
  * signing screen and the room's list of proposals say it the same way.
  */
 object ProposedSpend {
+    /**
+     * [spend] in words, as a payout when [payout] says it is one -- this device's own reading of whose
+     * coins it spends and whose addresses it pays, never the proposer's -- with members named by
+     * [nameOf]. `docs/payouts-only.md`, Phase 4.
+     */
+    fun summarize(spend: GroupSpend.Checked, chain: Chain, payout: PayoutRule.Result.Payout?, nameOf: (HexKey) -> String?): ProposedEvent.Summary {
+        if (payout == null) return summarize(spend, chain)
+        fun name(member: HexKey) = "@" + (nameOf(member) ?: member.take(8))
+        return when (val only = payout.members.singleOrNull()) {
+            null -> ProposedEvent.Summary(
+                label = "Pay out ${payout.members.size} members",
+                detail = payout.members.joinToString { "${name(it.member)} ${Satoshi(it.paid).grouped()} sats" },
+            )
+            else -> ProposedEvent.Summary(
+                label = "Pay out ${name(only.member)}",
+                detail = "${Satoshi(only.paid).grouped()} sats to their onchain address, ${addressOf(only.script, chain)}",
+            )
+        }
+    }
+
     fun summarize(spend: GroupSpend.Checked, chain: Chain): ProposedEvent.Summary =
         ProposedEvent.Summary(
             // A guardian's spend takes a descendant's coins, so whose they are

@@ -1,5 +1,17 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.s_sats_nobody_s_yet
+import dedun.composeapp.generated.resources.s_sats_shared_by_s
+import dedun.composeapp.generated.resources.s_sats_s_s
+import dedun.composeapp.generated.resources.s_sats_of_theirs_less_s_sats_of_the_fee
+import dedun.composeapp.generated.resources.not_a_payout_it_s
+import dedun.composeapp.generated.resources.every_output_pays_a_member_their_own_coins
+import dedun.composeapp.generated.resources.pay_out_s_members
+import dedun.composeapp.generated.resources.pay_out_s
+import fr.acinq.bitcoin.Satoshi
+import com.machankura.dedun.compose.wallet.CoinOwnership
+import com.machankura.dedun.compose.wallet.PayoutRule
+import com.machankura.dedun.compose.repository.PayoutRepository
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -126,6 +138,7 @@ fun FrostSigningScreen(
     chatRepository: ChatRepository,
     frostSigningRepository: FrostSigningRepository,
     payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    payoutRepository: PayoutRepository = PayoutRepository.NO_OP,
     onNavigateBack: () -> Unit,
 ) {
     val frostSigningViewModel: FrostSigningViewModel = viewModel(
@@ -137,6 +150,7 @@ fun FrostSigningScreen(
             chatRepository = chatRepository,
             frostSigningRepository = frostSigningRepository,
             payoutDestinationRepository = payoutDestinationRepository,
+            payoutRepository = payoutRepository,
         )
     )
 
@@ -229,7 +243,7 @@ fun FrostSigningScreen(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space200)
                 ) {
                     when {
-                        isSpend -> WhatIsBeingSpent(state.spend, state.payees)
+                        isSpend -> WhatIsBeingSpent(state.spend, state.payees, state.payout, state.names)
                         isSweep -> WhatIsBeingSwept(state.sweep)
                         else -> WhatIsBeingSigned(proposed, state.items.size) { member ->
                             state.localChatRoom.localParticipants
@@ -563,7 +577,12 @@ private fun WhatIsBeingSwept(sweep: GroupSweep.Checked?) {
 }
 
 @Composable
-private fun WhatIsBeingSpent(spend: GroupSpend.Checked?, payees: Map<String, String> = emptyMap()) {
+private fun WhatIsBeingSpent(
+    spend: GroupSpend.Checked?,
+    payees: Map<String, String> = emptyMap(),
+    payout: PayoutRule.Result? = null,
+    names: Map<HexKey, String> = emptyMap(),
+) {
     if (spend == null) {
         Text(
             text = stringResource(Res.string.this_spend_could_not_be_checked),
@@ -572,11 +591,33 @@ private fun WhatIsBeingSpent(spend: GroupSpend.Checked?, payees: Map<String, Str
         return
     }
 
+    fun name(member: HexKey) = "@" + (names[member.lowercase()] ?: member.take(8))
+    val paid = (payout as? PayoutRule.Result.Payout)?.members?.associateBy { it.outputIndex }.orEmpty()
+
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space200)) {
         Text(
-            text = stringResource(Res.string.spend_from_the_group_s_wallet),
+            text = when (payout) {
+                is PayoutRule.Result.Payout -> payout.members.singleOrNull()
+                    ?.let { stringResource(Res.string.pay_out_s, name(it.member)) }
+                    ?: stringResource(Res.string.pay_out_s_members, payout.members.size.toString())
+                else -> stringResource(Res.string.spend_from_the_group_s_wallet)
+            },
             style = MaterialTheme.typography.labelMedium
         )
+        // This device's own reading of whose coins these are and whose addresses it pays, never
+        // the proposer's. docs/payouts-only.md, Phase 4.
+        when (payout) {
+            is PayoutRule.Result.Payout -> Text(
+                text = stringResource(Res.string.every_output_pays_a_member_their_own_coins),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            is PayoutRule.Result.Refused -> Text(
+                text = stringResource(Res.string.not_a_payout_it_s, payout.reason),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            null -> Unit
+        }
 
         spend.outputs.forEach { output ->
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space50)) {
@@ -589,6 +630,13 @@ private fun WhatIsBeingSpent(spend: GroupSpend.Checked?, payees: Map<String, Str
                 payees[output.txOut.publicKeyScript.toHex()]?.takeIf { !output.isChange }?.let { name ->
                     Text(
                         text = stringResource(Res.string.s_payout_address, "@$name"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                paid[output.index]?.let { member ->
+                    Text(
+                        text = stringResource(Res.string.s_sats_of_theirs_less_s_sats_of_the_fee, Satoshi(member.owned).grouped(), Satoshi(member.feeShare).grouped()),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -619,6 +667,19 @@ private fun WhatIsBeingSpent(spend: GroupSpend.Checked?, payees: Map<String, Str
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        // Whose each coin is: by its branch, or the group's own word. docs/payouts-only.md, D2.
+        (payout as? PayoutRule.Result.Payout)?.inputs?.forEach { (index, owner) ->
+            val amount = spend.inputs[index].txOut.amount.grouped()
+            Text(
+                text = when (owner) {
+                    is CoinOwnership.Owner.Member -> stringResource(Res.string.s_sats_s_s, amount, name(owner.member))
+                    is CoinOwnership.Owner.Shares -> stringResource(Res.string.s_sats_shared_by_s, amount, owner.shares.keys.joinToString { name(it) })
+                    is CoinOwnership.Owner.Nobody -> stringResource(Res.string.s_sats_nobody_s_yet, amount)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Text(
             text = stringResource(Res.string.signed_by_the_group_any_member_can_send_it),
             style = MaterialTheme.typography.bodySmall,

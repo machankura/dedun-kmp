@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.GroupPayoutsScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import com.machankura.dedun.compose.ui.composable.DepositsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DepositsRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupAssignCoinsRoute
@@ -1428,6 +1430,24 @@ fun DedunNavHost(
                     }
                 )
             }
+            composable<GroupPayoutsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupPayoutsRoute>()
+
+                GroupPayoutsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    payoutRepository = databasePayoutRepository,
+                    payoutDestinationRepository = databasePayoutDestinationRepository,
+                    wallets = groupOnchainWallets,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
             composable<GroupAssignCoinsRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<GroupAssignCoinsRoute>()
 
@@ -1561,6 +1581,7 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     frostSigningRepository = databaseFrostSigningRepository,
                     payoutDestinationRepository = databasePayoutDestinationRepository,
+                    payoutRepository = databasePayoutRepository,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

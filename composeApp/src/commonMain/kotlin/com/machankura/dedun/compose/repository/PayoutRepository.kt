@@ -4,7 +4,10 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.MemberBalances
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import com.machankura.dedun.compose.wallet.CoinOwnership
+import com.machankura.dedun.compose.wallet.GroupSpend
 import com.machankura.dedun.compose.wallet.GroupWalletState
+import com.machankura.dedun.compose.wallet.PayoutRule
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 
@@ -26,6 +29,13 @@ interface PayoutRepository {
     /** Proposes that the group sign whose [coins] are, as the active profile, which has to hold a share. */
     suspend fun assign(localChatRoom: LocalChatRoom, chain: Chain, coins: List<CoinAssignmentEvent.Coin>): FrostSigningSession
 
+    /** What a payout of [chatRoomId] on [chain] is checked against: whose each coin is, and every member's payout address (Phase 4). */
+    suspend fun payoutContext(chatRoomId: String, chain: Chain): PayoutRule.Context
+
+    /** Whether [spend] is a payout, and to whom, as every signer reads it (Phase 4). */
+    suspend fun payoutOf(chatRoomId: String, spend: GroupSpend.Checked): PayoutRule.Result =
+        PayoutRule.check(spend, payoutContext(chatRoomId, spend.account.chain))
+
     companion object {
         val NO_OP = object : PayoutRepository {
             override suspend fun balances(chatRoomId: String, chain: Chain, state: GroupWalletState?) = MemberBalances.Balances(emptyMap(), emptyList())
@@ -33,6 +43,7 @@ interface PayoutRepository {
             override suspend fun depositors(chatRoomId: String, chain: Chain): List<HexKey> = emptyList()
             override suspend fun assign(localChatRoom: LocalChatRoom, chain: Chain, coins: List<CoinAssignmentEvent.Coin>): FrostSigningSession =
                 throw UnsupportedOperationException("no repository")
+            override suspend fun payoutContext(chatRoomId: String, chain: Chain) = PayoutRule.Context(CoinOwnership.Records.NONE, emptyMap())
         }
     }
 }

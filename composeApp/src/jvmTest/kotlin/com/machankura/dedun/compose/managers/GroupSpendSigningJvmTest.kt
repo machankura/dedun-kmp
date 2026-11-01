@@ -1,5 +1,11 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.wallet.PayoutRule
+import com.machankura.dedun.compose.wallet.PayoutBuilder
+import com.machankura.dedun.compose.wallet.MemberBranch
+import com.machankura.dedun.compose.text.LightningAddress
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
+import com.machankura.dedun.compose.database.model.Participant
 import androidx.room3.Room
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -451,6 +457,79 @@ class GroupSpendSigningJvmTest {
         assertTrue(signedLine.content.startsWith("The group signed a transaction sending 30000 sats, with ${seen.fee.sat} sats in fees."), signedLine.content)
         val confirmedLine = lines.single { it.messageType == ChatMessage.TYPE_GROUP_TRANSACTION_CONFIRMED }
         assertEquals("The group's transaction confirmed: 30000 sats sent.", confirmedLine.content)
+    }
+
+    // ---- A payout --------------------------------------------------------
+
+    @Test
+    fun `a payout of a member's coins to their address is signed by the group, read as one on every device, and counted as paid`() = runBlocking {
+        val proposer = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+        openWallet(proposer, other)
+
+        // Alice says where to be paid, and the group opens her deposits on a branch of her own.
+        val aliceKey = PrivateKey(ByteVector32("a11ce".padStart(64, '0')))
+        val alice = aliceKey.xOnlyPublicKey().value.toHex()
+        val aliceAddress = ProposedSpend.addressOf(elsewhere, chain)
+        val destination = GroupPayoutDestinationEvent.build(aliceKey, roomId, chain, LightningAddress("alice", "example.com"), onchainAddress = aliceAddress, createdAt = 1_700_000_000)
+        listOf(proposer, other).forEach { device ->
+            val nostrEventId = "e$alice".take(64)
+            device.db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = alice, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
+            device.db.profileDao().upsert(Profile(publicKey = alice, nostrEventId = nostrEventId))
+            device.db.participantDao().upsert((members + alice).map { Participant(participantPublicKey = it, chatRoomId = roomId, relayHint = null) })
+            val tags = arrayOf(arrayOf("h", roomId))
+            device.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(
+                    id = EventHasher.hashId(alice, destination.createdAt, GroupPayoutDestinationEvent.KIND, tags, destination.toJson()),
+                    publicKey = alice, kind = GroupPayoutDestinationEvent.KIND, createdAt = Instant.fromEpochSeconds(destination.createdAt),
+                    tags = tags, content = destination.toJson(), chatRoomId = roomId,
+                )
+            )
+        }
+        val opening = Depositors.propose(proposer.db, proposer.room, proposer.publicKey, alice, chain)
+        pump(proposer, other)
+        FrostSigningManager.approve(other.db, other.room, opening.id)
+        pump(proposer, other)
+        val branch = assertNotNull(Depositors.statementOf(other.db, roomId, chain, alice)).branch
+
+        // Two coins on her branch.
+        val deposits = listOf(0, 1).map { GroupWalletDerivation.derive(account, branch, it.toLong()) }
+        val paidIn = Transaction(
+            2, listOf(TxIn(OutPoint(TxId(ByteVector32(ByteArray(32) { 0x44 })), 0), ByteVector.empty, 0xffffffffL)),
+            listOf(TxOut(Satoshi(70_000), deposits[0].pubkeyScript), TxOut(Satoshi(50_000), deposits[1].pubkeyScript)), 0,
+        )
+        val state = fundedState().copy(
+            members = mapOf(alice to MemberBranch(branch, WalletState(deposits.mapIndexed { index, derived ->
+                val meta = WalletState.AddressMeta.Derived(index)
+                derived.address(chain) to WalletState.AddressState(meta, true, listOf(WalletState.Utxo(paidIn.txid, index, 100, paidIn, meta)))
+            }.toMap()))),
+        )
+
+        val built = assertIs<PayoutBuilder.Result.Built>(
+            PayoutBuilder.build(state, setOf(alice), MemberBalances.payoutContextOf(proposer.db, roomId, chain), 3, FrostSigningManager.reservedOutPoints(proposer.db, roomId))
+        )
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, built.psbt, chain)
+        pump(proposer, other)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(proposer, other)
+
+        // The device that did not build it reads the same payout, from its own signed history.
+        val seen = assertNotNull(FrostSigningManager.checkedSpend(other.db, session.id))
+        val payout = assertIs<PayoutRule.Result.Payout>(PayoutRule.check(seen, MemberBalances.payoutContextOf(other.db, roomId, chain)))
+        assertEquals(built.payout.members, payout.members)
+        assertEquals(120_000, payout.members.single().owned)
+
+        listOf(proposer, other).forEach { device ->
+            assertEquals(FrostSigningStage.COMPLETE, device.session(session.id)?.stage)
+            val signed = Transaction.read(assertNotNull(device.transaction(session.id)?.signedTransaction))
+            signed.correctlySpends(mapOf(OutPoint(paidIn, 0) to paidIn.txOut[0], OutPoint(paidIn, 1) to paidIn.txOut[1]), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+        }
+
+        FrostSigningManager.recordConfirmed(other.db, session.id)
+        assertEquals(payout.members.single().paid * 1000, DepositLedger.tallies(other.db, roomId, chain).members[alice]?.paidOutMsat)
+        val lines = other.db.chatMessageDao().getChatMessagesByChatRoomId(roomId).map { it.chatMessage }
+        assertTrue(lines.any { it.messageType == ChatMessage.TYPE_FROST_COMPLETE && it.content.startsWith("The group signed a payout of ${payout.members.single().paid} sats to @") })
+        assertTrue(lines.any { it.messageType == ChatMessage.TYPE_GROUP_TRANSACTION_CONFIRMED && it.content.startsWith("The group's payout confirmed: ${payout.members.single().paid} sats paid to @") })
     }
 
     // ---- A guarded wallet -----------------------------------------------

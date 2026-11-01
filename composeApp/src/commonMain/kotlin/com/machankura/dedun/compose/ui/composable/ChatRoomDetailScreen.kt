@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.members_balances_and_payouts
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
 import dedun.composeapp.generated.resources.all_deposits
 import dedun.composeapp.generated.resources.deposits
@@ -662,6 +664,13 @@ fun ChatRoomDetailScreen(
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
                                     }
+                                }
+                                // Every member's balance and destination, and paying them out.
+                                // docs/payouts-only.md, Phase 4.
+                                item {
+                                    TextButton(onClick = {
+                                        onNavigateToRoute.invoke(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
+                                    }) { Text(stringResource(Res.string.members_balances_and_payouts)) }
                                 }
                                 item {
                                     PayoutDestinationRow(

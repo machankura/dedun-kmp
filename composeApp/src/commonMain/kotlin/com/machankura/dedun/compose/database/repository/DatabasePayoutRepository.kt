@@ -11,6 +11,7 @@ import com.machankura.dedun.compose.managers.MemberBalances
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.repository.PayoutRepository
 import com.machankura.dedun.compose.wallet.GroupWalletState
+import com.machankura.dedun.compose.wallet.PayoutRule
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,4 +40,7 @@ class DatabasePayoutRepository(
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
         return CoinAssignments.propose(database, localChatRoom, me, chain, coins)
     }
+
+    override suspend fun payoutContext(chatRoomId: String, chain: Chain): PayoutRule.Context =
+        MemberBalances.payoutContextOf(database, chatRoomId, chain)
 }

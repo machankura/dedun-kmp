@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.members_balances_and_payouts
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_open_your_deposits
 import dedun.composeapp.generated.resources.unattributed
 import dedun.composeapp.generated.resources.from_s
@@ -415,6 +417,15 @@ fun GroupWalletScreen(
                             onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
                         },
                         onStartDepositing = { groupWalletViewModel.openMyDeposits(onSuccess = toSession, onFailure = { notify(couldNotOpenDeposits) }) },
+                        onOpenPayouts = {
+                            onNavigateToRoute(
+                                GroupPayoutsRoute(
+                                    activeUserPublicKey = activeUserPublicKey,
+                                    chatRoomId = chatRoomId,
+                                    chain = GroupWalletStatementEvent.chainName(chain),
+                                )
+                            )
+                        },
                         onAssignCoins = {
                             onNavigateToRoute(
                                 GroupAssignCoinsRoute(
@@ -534,6 +545,7 @@ private fun OpenWallet(
     onOpenAddresses: () -> Unit,
     onSetDestination: () -> Unit,
     onStartDepositing: () -> Unit,
+    onOpenPayouts: () -> Unit,
     onAssignCoins: () -> Unit,
     onOpenSpend: (sessionId: String) -> Unit,
     onSendAgain: ((sessionId: String) -> Unit)?,
@@ -555,6 +567,11 @@ private fun OpenWallet(
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)
     ) {
         item { BalanceCard(walletState) }
+
+        // Every member's balance and destination, and paying them out: docs/payouts-only.md.
+        item {
+            OutlinedButton(onClick = onOpenPayouts) { Text(stringResource(Res.string.members_balances_and_payouts)) }
+        }
 
         if (state.wallet.account.isGuarded) {
             item {
@@ -655,6 +672,7 @@ private fun OpenWallet(
                 SpendRowCard(
                     row = row,
                     chain = state.wallet.chain,
+                    memberNames = state.memberNames,
                     onOpen = { onOpenSpend(row.transaction.frostSigningSessionId) },
                     onSendAgain = onSendAgain?.takeIf { row.canSendAgain }?.let { { it(row.transaction.frostSigningSessionId) } },
                     onBump = onBump?.takeIf { row.canBump }?.let { { it(row.transaction.frostSigningSessionId) } },
@@ -706,6 +724,7 @@ private fun OpenWallet(
 private fun SpendRowCard(
     row: SpendRow,
     chain: Chain,
+    memberNames: Map<HexKey, String> = emptyMap(),
     onOpen: () -> Unit,
     onSendAgain: (() -> Unit)?,
     onBump: (() -> Unit)?,
@@ -714,7 +733,7 @@ private fun SpendRowCard(
         ListItem(
             headlineContent = {
                 Text(
-                    text = (row.spend?.let { ProposedSpend.summarize(it, chain) } ?: row.sweep?.let(ProposedSpend::summarize) ?: ProposedSpend.UNREADABLE).detail,
+                    text = (row.spend?.let { ProposedSpend.summarize(it, chain, row.payout, memberNames::get) } ?: row.sweep?.let(ProposedSpend::summarize) ?: ProposedSpend.UNREADABLE).detail,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

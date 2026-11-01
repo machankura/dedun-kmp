@@ -10,6 +10,7 @@ import fr.acinq.lightning.utils.sum
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.wallet.GroupSpend
+import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.database.model.GroupTransaction
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
@@ -186,6 +187,8 @@ data class SpendRow(
     val spend: GroupSpend.Checked?,
     /** A sweep from the Lightning wallet into this one, checked again; null for a spend. */
     val sweep: GroupSweep.Checked? = null,
+    /** The spend as a payout, as this device reads it, or null when it is not one: `docs/payouts-only.md`. */
+    val payout: PayoutRule.Result.Payout? = null,
 ) {
     /** Signed, never reported back: the one moment sending it again is worth anything. */
     val canSendAgain: Boolean get() = status == SpendStatus.SIGNED

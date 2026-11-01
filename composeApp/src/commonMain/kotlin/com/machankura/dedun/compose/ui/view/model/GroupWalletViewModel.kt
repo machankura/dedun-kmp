@@ -3,6 +3,8 @@ package com.machankura.dedun.compose.ui.view.model
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.repository.PayoutRepository
+import com.machankura.dedun.compose.wallet.PayoutBuilder
+import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.isDecided
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
@@ -250,7 +252,9 @@ class GroupWalletViewModel(
         val spend = checkedSpends.getOrPut(sessionId) { frostSigningRepository.checkedSpend(sessionId) }
         val sweep = if (spend == null) checkedSweeps.getOrPut(sessionId) { frostSigningRepository.checkedSweep(sessionId) } else null
         val stage = frostSigningRepository.getSessionById(sessionId)?.stage
-        return SpendRow(transaction = transaction, status = SpendStatus.of(stage, transaction), spend = spend, sweep = sweep)
+        val payout = spend?.takeIf { transaction.guardedChatRoomId == null }
+            ?.let { payoutRepository.payoutOf(chatRoomId, it) as? PayoutRule.Result.Payout }
+        return SpendRow(transaction = transaction, status = SpendStatus.of(stage, transaction), spend = spend, sweep = sweep, payout = payout)
     }
 
     /** Sends a signed spend again now. Only worth anything while Electrum has not reported it back. */
@@ -271,26 +275,30 @@ class GroupWalletViewModel(
      */
     fun bumpFee(sessionId: String, onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
         val state = groupWalletUIState as? GroupWalletUIState.Loaded ?: return
-        val spend = state.spends.firstOrNull { it.transaction.frostSigningSessionId == sessionId }?.spend ?: return
+        val row = state.spends.firstOrNull { it.transaction.frostSigningSessionId == sessionId } ?: return
+        val spend = row.spend ?: return
         if (isActionPending.value) return
-
-        val built = GroupSpendBuilder.bump(spend, spend.feeratePerVbyte * 2) as? GroupSpendBuilder.Result.Built
-        if (built == null) {
-            onFailure()
-            return
-        }
         isActionPending.value = true
 
         // A guardian's spend is bumped as one: the same leaf, the same descendant.
-        val guardedChatRoomId = state.spends.first { it.transaction.frostSigningSessionId == sessionId }.transaction.guardedChatRoomId
+        val guardedChatRoomId = row.transaction.guardedChatRoomId
 
         viewModelScope.launch(Dispatchers.IO) {
-            val session = runCatching {
-                when (guardedChatRoomId) {
-                    null -> frostSigningRepository.proposeSpend(state.localChatRoom, activeUserPublicKey, built.psbt, chain)
-                    else -> frostSigningRepository.proposeGuardianSpend(state.localChatRoom, activeUserPublicKey, built.psbt, guardedChatRoomId, chain)
-                }
-            }.onFailure { logger.e("Failed to bump $sessionId", it) }.getOrNull()
+            // A payout is bumped as a payout: the same coins and members, the larger fee split
+            // again over all of them. docs/payouts-only.md, Phase 4.
+            val psbt = if (row.payout != null) {
+                (PayoutBuilder.bump(spend, payoutRepository.payoutContext(chatRoomId, chain), spend.feeratePerVbyte * 2) as? PayoutBuilder.Result.Built)?.psbt
+            } else {
+                (GroupSpendBuilder.bump(spend, spend.feeratePerVbyte * 2) as? GroupSpendBuilder.Result.Built)?.psbt
+            }
+            val session = psbt?.let {
+                runCatching {
+                    when (guardedChatRoomId) {
+                        null -> frostSigningRepository.proposeSpend(state.localChatRoom, activeUserPublicKey, it, chain)
+                        else -> frostSigningRepository.proposeGuardianSpend(state.localChatRoom, activeUserPublicKey, it, guardedChatRoomId, chain)
+                    }
+                }.onFailure { logger.e("Failed to bump $sessionId", it) }.getOrNull()
+            }
 
             withContext(Dispatchers.Main) {
                 if (session != null) onSuccess(session.id) else onFailure()

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
@@ -1421,6 +1422,18 @@ object FrostSigningManager {
      * Once per transaction, by the read of `confirmedAt` before the write; the
      * transcript line rides on the same guard.
      */
+    /**
+     * The members [checked] pays out, named for a transcript line -- *@alice*, *@alice and @bob* --
+     * or null when it is not a payout. Read on the device writing the line, from its own signed
+     * history, as a signer reads it. `docs/payouts-only.md`, Phase 4.
+     */
+    private suspend fun payeesOf(database: DedunDatabase, chatRoomId: String, checked: GroupSpend.Checked): String? {
+        val payout = PayoutRule.check(checked, MemberBalances.payoutContextOf(database, chatRoomId, checked.account.chain)) as? PayoutRule.Result.Payout
+            ?: return null
+        val names = payout.members.map { "@" + ChatMessage.memberName(database, it.member) }
+        return if (names.size == 1) names.single() else names.dropLast(1).joinToString() + " and " + names.last()
+    }
+
     suspend fun recordConfirmed(database: DedunDatabase, sessionId: String, at: Instant = Clock.System.now()) {
         val confirmed = database.groupTransactionDao().getBySessionId(sessionId) ?: return
         if (confirmed.confirmedAt != null) return
@@ -1430,13 +1443,18 @@ object FrostSigningManager {
 
         settleSpendsOf(database, confirmed.chatRoomId, coinsOf(confirmed), byTxid = confirmed.txid, except = sessionId)
 
-        val sent = checkedSpend(database, sessionId)?.amountSent
+        val checked = checkedSpend(database, sessionId)
+        val sent = checked?.amountSent
+        val payees = checked?.takeIf { confirmed.guardedChatRoomId == null }?.let { payeesOf(database, confirmed.chatRoomId, it) }
         announce(
             database = database,
             session = session,
             messageType = ChatMessage.TYPE_GROUP_TRANSACTION_CONFIRMED,
-            content = if (sent != null) "The group's transaction confirmed: ${sent.sat} sats sent."
-                else "The group's transaction confirmed.",
+            content = when {
+                payees != null -> "The group's payout confirmed: ${sent!!.sat} sats paid to $payees."
+                sent != null -> "The group's transaction confirmed: ${sent.sat} sats sent."
+                else -> "The group's transaction confirmed."
+            },
             actor = session.coordinatorPublicKey
         )
     }
@@ -1567,7 +1585,8 @@ object FrostSigningManager {
             session = session,
             messageType = ChatMessage.TYPE_FROST_COMPLETE,
             content = when (val guardian = checked.spender as? GroupSpend.Spender.Guardian) {
-                null -> "The group signed a transaction sending ${checked.amountSent.sat} sats, "
+                null -> payeesOf(database, session.chatRoomId, checked)?.let { "The group signed a payout of ${checked.amountSent.sat} sats to $it, " }
+                    ?: "The group signed a transaction sending ${checked.amountSent.sat} sats, "
                 else -> "The group signed a transaction sending ${checked.amountSent.sat} sats from " +
                     "${com.machankura.dedun.compose.text.ProposedSpend.guardedWallet(guardian.name, guardian.label)}, "
             } + "with ${checked.fee.sat} sats in fees. It took ${session.threshold} of " +
