@@ -681,17 +681,12 @@ class GroupLightningNode(
             scope: CoroutineScope,
             /** Whether the identity reaches the network over Tor, read as each node starts, as Phoenix reads it as its peer is made. */
             torIsEnabled: suspend () -> Boolean = { false },
-            /**
-             * Whether the node answers requests for its offers. Never in the app: an offer can be paid by
-             * anybody any number of times, so no payment to one is any member's deposit
-             * (`docs/member-deposits.md`, D7). The regtest fixture turns it on, since public eclair can't
-             * pay the node's BOLT11 route hint, and attributes what arrives with a signed attribution.
-             */
-            answerOfferRequests: Boolean = false,
         ): suspend (NodeConfiguration) -> PeerHandle = { configuration ->
             val base = NodeParams(configuration.chain, loggerFactory, configuration.keyManager)
+            // The node answers requests for its offers, as every lightning-kmp node does. The app shows no
+            // offer, so nobody is handed one to pay; a payment to one that arrives anyway is unattributed
+            // until the group signs whose it is (`docs/member-deposits.md`, D7).
             val nodeParams = base.copy(
-                answerOfferRequests = answerOfferRequests,
                 zeroConfPeers = setOf(configuration.lspNodeId),
                 // Phoenix's default policy, except that the most one payment's liquidity may cost is the group's,
                 // from the statement it signed, rather than one member's setting.
