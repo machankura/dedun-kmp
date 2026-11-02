@@ -1112,6 +1112,8 @@
     <string name="ark_receive_lightning">Lightning</string>
     <string name="ark_receive_onchain">Onchain</string>
     <string name="ark_receive_ask_for_this_amount">Ask for this amount</string>
+    <string name="ark_receive_lightning_needs_an_amount">To be paid over Lightning, ask for an amount.</string>
+    <string name="ark_receive_leave_empty_ark_or_onchain">Leave it empty to let the payer choose, over Ark or onchain only.</string>
     <string name="ark_receive_lightning_fee_s_sats">Receiving it over Lightning costs %1$s sats.</string>
     <string name="ark_receive_above_cap_s_sats">That would take the wallet past %1$s sats, the most it can hold while it is new.</string>
     <string name="ark_receive_keep_open">Keep Dedun open until the payment arrives.</string>

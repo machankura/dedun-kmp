@@ -69,13 +69,14 @@ import dedun.composeapp.generated.resources.ark_receive_ask_for_this_amount
 import dedun.composeapp.generated.resources.ark_receive_could_not_make_a_request
 import dedun.composeapp.generated.resources.ark_receive_keep_open
 import dedun.composeapp.generated.resources.ark_receive_lightning
+import dedun.composeapp.generated.resources.ark_receive_leave_empty_ark_or_onchain
 import dedun.composeapp.generated.resources.ark_receive_lightning_fee_s_sats
+import dedun.composeapp.generated.resources.ark_receive_lightning_needs_an_amount
 import dedun.composeapp.generated.resources.ark_receive_onchain
 import dedun.composeapp.generated.resources.ark_receive_onchain_arrives_onchain
 import dedun.composeapp.generated.resources.ark_wallet_not_turned_on
 import dedun.composeapp.generated.resources.copied
 import dedun.composeapp.generated.resources.copy
-import dedun.composeapp.generated.resources.leave_the_amount_empty_to_let_the_payer_choose
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.received_s_sats
 import dedun.composeapp.generated.resources.sats
@@ -134,7 +135,7 @@ fun ArkReceiveScreen(
 }
 
 @Composable
-private fun ArkReceiveReady(state: ArkReceiveUIState.Ready, viewModel: ArkReceiveViewModel, modifier: Modifier) {
+internal fun ArkReceiveReady(state: ArkReceiveUIState.Ready, viewModel: ArkReceiveViewModel, modifier: Modifier) {
     val clipboard = LocalClipboardManager.current
     val notify = rememberNotifier(rememberCoroutineScope())
     val copied = stringResource(Res.string.copied)
@@ -192,6 +193,11 @@ private fun ArkReceiveReady(state: ArkReceiveUIState.Ready, viewModel: ArkReceiv
             Text(stringResource(Res.string.copy))
         }
 
+        // Bark makes an invoice only for an amount, so a request without one has no Lightning
+        // choice to offer: said here, where that choice would be, rather than left to be noticed.
+        if (request.bolt11 == null && state.received == null) {
+            Text(stringResource(Res.string.ark_receive_lightning_needs_an_amount), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (request.bolt11 != null && state.received == null) {
             Text(stringResource(Res.string.ark_receive_keep_open), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -211,7 +217,7 @@ private fun ArkReceiveReady(state: ArkReceiveUIState.Ready, viewModel: ArkReceiv
             label = { Text(stringResource(Res.string.amount_in_sats)) },
             suffix = { Text(stringResource(Res.string.sats)) },
             isError = amountProblem != null || capProblem != null,
-            supportingText = { Text(amountProblem ?: capProblem ?: stringResource(Res.string.leave_the_amount_empty_to_let_the_payer_choose)) },
+            supportingText = { Text(amountProblem ?: capProblem ?: stringResource(Res.string.ark_receive_leave_empty_ark_or_onchain)) },
         )
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
