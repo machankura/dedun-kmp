@@ -349,6 +349,7 @@ tasks.withType<Test>().configureEach {
     // The Ark wallet's signet run (docs/bark-wallet.md, Phase 2), for the same reason.
     inputs.property("dedunArkSignet", providers.environmentVariable("DEDUN_ARK_SIGNET").orElse(""))
     inputs.property("dedunArkRegtest", providers.environmentVariable("DEDUN_ARK_REGTEST").orElse(""))
+    inputs.property("dedunArkMainnet", providers.environmentVariable("DEDUN_ARK_MAINNET").orElse(""))
 }
 
 compose.desktop {

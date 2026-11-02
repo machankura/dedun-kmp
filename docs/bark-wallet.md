@@ -5,17 +5,22 @@ history, on the profile tab above the member wallets. It is an Ark wallet, run o
 Second's Bark SDK. One balance can be spent to an Ark address, a Lightning invoice or an onchain
 address, and paid into the same three ways. There are no channels and no inbound liquidity.
 
-**Built on signet, phases 0 to 13, one commit each; not on mainnet.** Written against `7658c8ed`
+**Built, phases 0 to 13, one commit each, and on mainnet by decision.** Written against `7658c8ed`
 (`dedun`), with the `lightning-kmp-app` submodule at `7aaacadc`, which the build did not touch, and
 against the Bark FFI bindings `v0.26.1+bark-0.8.0`. Those bindings wrap `bark-ffi` `0.30.1`, which pins
 `bark` `0.8.0` and uniffi `0.31.1`. What is checked and what is not:
-- Android and Linux desktop compile, and the JVM suite passes (1,958 tests).
+- Android and Linux desktop compile, and the JVM suite passes (2,014 tests after `dedun`'s group
+  swap-in was merged in).
 - The adapter runs against Second's signet server, and end to end against `captaind` on regtest,
-  emergency exit included.
+  emergency exit included. `ArkMainnetJvmTest` (`DEDUN_ARK_MAINNET=1`) opens a wallet with no money
+  against the mainnet server with the endpoints the app ships, and asks for an Ark address, an
+  invoice and an onchain address; it passes.
 - Not checked: the app run on a device; iOS (its Kotlin actual and Swift half have not been
   compiled); macOS and Windows natives (the script has not been run); Lightning with money.
-- `ArkWalletRollout.NETWORK` is still signet. The mainnet flip waits on Phase 12's hand-made
-  mainnet checks.
+- `ArkWalletRollout.NETWORK` is mainnet. It was switched by decision, ahead of Phase 12's
+  hand-made mainnet receive, send and renewal, which have still not been made; `MAINNET_CAP`
+  (100,000 sats a send or request) is what bounds that. With the group wallets also on mainnet,
+  the two group bridges of Phase 10 now show.
 
 The phases are kept as written; the table below says where the build chose differently.
 
@@ -66,7 +71,7 @@ Where the build chose differently, phase by phase:
 | 12 | a short VTXO lifetime so expiry is reachable in minutes | the default 4,320 blocks: the vtxopool's settings are tied to it, and the test reaches renewal through delegated maintenance rather than through expiry |
 | 12 | Lightning send to the eclair payer and receive from it | not in the run: the Ark network's Core Lightning has no channel to anything. Lightning is the one rail that has run only on signet, without money |
 | 12 | the run: board, Ark send, Lightning, renewal, offboard, an exit with captaind stopped, a restore | two tests, both passing on this host: `boardPayRenewOffboardAndRestore` (66 s) and `anEmergencyExitWithTheServerGoneIsClaimedOnchain` (175 s: the exit broadcast, the 144-block wait mined through, the claim signed and broadcast) |
-| 12 | then flip `ArkWalletRollout.NETWORK` to mainnet | **not flipped.** The plan's own condition is a mainnet receive, send and renewal made by hand on Android, which needs a device and real money and has not been done. The wallet stays on signet |
+| 12 | then flip `ArkWalletRollout.NETWORK` to mainnet | **flipped by decision, ahead of its condition.** The plan's condition was a mainnet receive, send and renewal made by hand on Android, which needs a device and real money and has not been done. The wallet was left on signet, then switched to mainnet when asked; `ArkMainnetJvmTest` checks the shipped endpoints with an empty wallet |
 | 13 | the phrase screen reached from the wallet's advanced screen | it is, and only for an nsec profile: a seed profile's wallet has no words of its own, and its phrase is the profile's |
 | 13 | forget deletes the Ark seed with the datadir | forget is refused while an nsec has Ark words (`ForgetIdentity.Outcome.ArkWalletAttached`, checked before anything is touched), because those words are the only way back to that money. The refusal says to move the money out first. Deleting the words and the datadir once the wallet is empty is not built |
 | 13 | `ArkSeedManager` next to `SeedManager` | `ArkSeedStore` in composeApp, with the keystore calls injected so the encryption is tested on the JVM. The file is `node-data/ark-seeds.dat`, written through the library's `AtomicFileWrite` |
@@ -77,7 +82,7 @@ Where the build chose differently, phase by phase:
 | 9 | a profile switch warns while an exit is under way | not built. Forget already cannot reach a seed profile (Phase 3), and the warning belongs with the switcher's own screen |
 | 9 | re-scanning a partial recovery's failed ids | not built. The card from Phase 4 still says some coins could not be restored yet |
 | 9 | checked on regtest with captaind stopped | the view model's paths are tested over the fake, and the adapter's exit calls run against Second's signet server for a wallet with no coins. A real exit waits for Phase 12's regtest harness |
-| 10 | both bridges shown whenever the wallet is open | only when the Ark wallet's network is the group wallet's (`ArkNetwork.matches`). Today the Ark wallet is on signet and the group wallets on mainnet, so neither bridge is visible until Phase 12's flip; on regtest they line up |
+| 10 | both bridges shown whenever the wallet is open | only when the Ark wallet's network is the group wallet's (`ArkNetwork.matches`). With both on mainnet since the flip, both bridges show; on regtest they line up too |
 | 10 | an `ArkMovementNote` row, so the history reads *Deposit to Treasury* | not built: no Room table yet. The payment shows as *Sent over Lightning* with the group's invoice as its counterparty. The label is the first thing that would need the table D9 kept in reserve |
 | 10 | the payout address is filled in one tap | it is, from the wallet's onchain side (BDK, a new address each time, so unused by construction), and the form's own unused-address check then runs on it as on anything typed |
 | 10 | checked on regtest against the group Lightning wallet's harness | the bridge is tested over the fake on mainnet and regtest networks; a real deposit paid from the Ark wallet waits for Phase 12's harness, which adds an Ark server beside the LSP |
@@ -198,7 +203,7 @@ The row on the profile says so in words. It does not hide.
 
 **D5. Its own network and its own gate.** `ArkWalletRollout` holds:
 - `ENABLED`;
-- `NETWORK`: **signet** until Phase 12 passes, then mainnet;
+- `NETWORK`: **signet** until Phase 12 passes, then mainnet (switched to mainnet by decision; see the status above);
 - server and Esplora URLs per network;
 - `MAINNET_CAP = Satoshi(100_000)`, the same figure as `GroupWalletRollout`.
 

@@ -33,17 +33,18 @@ data class ArkEndpoints(val server: String, val esplora: String)
  * one place, each with the condition that lifts it.
  *
  * Its network is its own and not `NodeParamsManager.chain`: the Ark wallet shares
- * no LSP with the profile's node, and is on signet while the node is on mainnet.
+ * no LSP with the profile's node, and was on signet while the node was on mainnet.
  */
 object ArkWalletRollout {
     /** Whether a seed profile is offered an Ark wallet at all. */
     const val ENABLED: Boolean = true
 
     /**
-     * The network every profile's Ark wallet is opened on. Signet until Phase 12's
-     * regtest run passes and one mainnet receive, send and renewal have been made by hand.
+     * The network every profile's Ark wallet is opened on. Mainnet by decision, after
+     * Phase 12's regtest run and ahead of the hand-made mainnet receive, send and renewal
+     * that were its condition; [MAINNET_CAP] bounds what that leaves at stake.
      */
-    val NETWORK: ArkNetwork = ArkNetwork.Signet
+    val NETWORK: ArkNetwork = ArkNetwork.Mainnet
 
     /**
      * The most one send may move, and the balance an invoice or amount request may
