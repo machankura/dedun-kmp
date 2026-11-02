@@ -51,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.deposit_onchain_instead
 import dedun.composeapp.generated.resources.amount_in_sats
 import dedun.composeapp.generated.resources.ask_for_an_invoice
 import dedun.composeapp.generated.resources.copy_invoice
@@ -102,6 +103,8 @@ fun GroupLightningReceiveScreen(
     lightningRepository: GroupLightningRepository,
     depositRepository: DepositRepository = DepositRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit = {},
+    /** Opens the member's swap-in address, where the network has a swap-in; null where it has none. */
+    onDepositOnchain: (() -> Unit)? = null,
     onNavigateBack: () -> Unit,
     // The profile's own Ark wallet, to pay the invoice from: docs/bark-wallet.md, Phase 10.
     identityArk: IdentityArk? = null,
@@ -174,6 +177,13 @@ fun GroupLightningReceiveScreen(
                             Icon(Icons.Default.Bolt, contentDescription = Decorative)
                             Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
                             Text(stringResource(Res.string.ask_for_an_invoice))
+                        }
+                        // The same deposit, from an onchain wallet: the member's own swap-in address.
+                        // docs/group-lightning-swap-in.md, Phase 6.
+                        if (onDepositOnchain != null) {
+                            TextButton(modifier = Modifier.fillMaxWidth(), onClick = onDepositOnchain) {
+                                Text(stringResource(Res.string.deposit_onchain_instead))
+                            }
                         }
                     }
                 }

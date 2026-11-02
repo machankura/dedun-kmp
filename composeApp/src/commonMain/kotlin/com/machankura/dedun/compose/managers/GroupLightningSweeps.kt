@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.OutPoint
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -44,6 +46,39 @@ object GroupLightningSweeps {
             ?: throw IllegalStateException("The onchain wallet this Lightning wallet closes to is not open")
         val sweep = GroupSweep.build(statement.wallet, inputs, onchain.account, receiveIndex = 0, feeratePerVbyte = FEERATE_SAT_PER_VBYTE)
             ?: throw IllegalArgumentException("There is too little to sweep to pay its fee")
+        return FrostSigningManager.proposeSweep(database, localChatRoom, userPublicKey, sweep, statement.chain, statement.onchainAccount)
+    }
+
+    /** One refundable swap-in coin, as its depositor's swap-in wallet saw it. */
+    data class RefundableCoin(val outPoint: OutPoint, val amount: Satoshi, val index: Long)
+
+    /**
+     * Proposes refunding [member]'s swap-in [coins], each past its refund delay, to their own deposit branch's
+     * address [toIndex] (`docs/group-lightning-swap-in.md`, D9 and Phase 7). Every member checks it as a sweep:
+     * the refund keys derived from the depositor's statement, and the output on their branch.
+     */
+    suspend fun proposeSwapInRefund(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        userPublicKey: HexKey,
+        wallet: GroupLightningWalletManager.Wallet,
+        member: HexKey,
+        coins: List<RefundableCoin>,
+        toIndex: Long,
+        feeratePerVbyte: Long = FEERATE_SAT_PER_VBYTE,
+    ): FrostSigningSession {
+        val statement = wallet.statement
+        val chatRoomId = localChatRoom.chatRoom.id
+        val onchain = GroupWalletManager.walletFor(database, chatRoomId, statement.chain, statement.onchainAccount)
+            ?: throw IllegalStateException("The onchain wallet this Lightning wallet closes to is not open")
+        val branch = Depositors.statementsIn(database, chatRoomId, statement.chain)[member.lowercase()]?.branch
+            ?: throw IllegalArgumentException("${member.take(8)} is not a depositor")
+        val roomKey = GroupWalletManager.thresholdKeyFor(database, chatRoomId) ?: throw IllegalStateException("This group has no shared key")
+        val xpub = GroupSwapInDerivation.lspSwapInXpub(statement.chain) ?: throw IllegalStateException("This network has no swap-in")
+        val keys = GroupSwapInDerivation.keys(roomKey, statement.chain, statement.wallet, statement.icebergKey, statement.nodeId, xpub)
+        val inputs = coins.map { GroupSweep.refundInputOf(it.outPoint, it.amount, keys.address(branch, it.index), member) }
+        val sweep = GroupSweep.build(statement.wallet, inputs, onchain.account, receiveIndex = toIndex, feeratePerVbyte = feeratePerVbyte, branch = branch)
+            ?: throw IllegalArgumentException("There is too little to refund to pay its fee")
         return FrostSigningManager.proposeSweep(database, localChatRoom, userPublicKey, sweep, statement.chain, statement.onchainAccount)
     }
 }

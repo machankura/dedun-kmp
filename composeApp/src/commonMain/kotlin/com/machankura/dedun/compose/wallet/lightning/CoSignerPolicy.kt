@@ -85,6 +85,23 @@ object CoSignerPolicy {
     }
 
     /**
+     * The ledger for the first commitment on a swap-in splice's new funding output, from [parent]
+     * (`docs/group-lightning-swap-in.md`, Phase 4): the same number and HTLCs, and the group's balance
+     * higher -- by what the splice adds, which the shared input's check (W7) holds it to. The floor rises
+     * with the value, so the money that came in is guarded like the rest.
+     */
+    fun openSwapIn(parent: Ledger, commitIndex: Long, commitTxId: String, remoteSpec: CommitmentSpec): Verdict {
+        if (commitIndex != parent.commitIndex) return Verdict.Refuse("the swap-in's first commitment is number $commitIndex, not ${parent.commitIndex} as the channel's")
+        val offered = offeredBy(remoteSpec)
+        val incoming = incomingTo(remoteSpec)
+        if (offered != parent.offered || incoming != parent.incoming) return Verdict.Refuse("the swap-in's first commitment carries other HTLCs than the channel's")
+        val ours = remoteSpec.toRemote.toLong()
+        val rise = ours - parent.oursMsat
+        if (rise <= 0) return Verdict.Refuse("the swap-in's first commitment does not give the group more than the channel did")
+        return Verdict.Sign(Ledger(commitIndex, commitTxId, ours, offered, incoming, parent.floorMsat + rise), emptyMap())
+    }
+
+    /**
      * @param budgets what each authorisation has left to spend, by payment hash, in millisatoshi.
      * @param closed the payment hashes whose authorisations have expired: an HTLC already in flight for
      *   one still settles against its budget, and no new one is offered.

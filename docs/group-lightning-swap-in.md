@@ -5,8 +5,43 @@ there is spliced into the group's channel once it has 3 confirmations, and it is
 member as a Lightning deposit, like every invoice they are issued. Phoenix calls this swap-in. This
 note plans it for a node whose keys nobody holds alone.
 
-**Planned.** Written against `00b723a0` (`dedun`, after the revert below), with the
-`lightning-kmp-app` submodule at `7aaacadc` and its `lightning-kmp` at `86f0eb3a`.
+**Built, phases 0-7; Phase 8 not run yet.** Written against `00b723a0` (`dedun`, after the revert below), with the
+`lightning-kmp-app` submodule at `7aaacadc` and its `lightning-kmp` at `86f0eb3a`. Built on
+`claude/group-lightning-swap-in`, one commit per phase. The fork's change is on local branches
+`claude/group-swap-in-signer` in `lightning-kmp-app` (`949bfcb`) and in its `lightning-kmp` (`065dcf89`).
+Neither is pushed, so the superproject's submodule pointer resolves only on this machine until they are.
+
+The entry points:
+- `GroupSwapInDerivation`: the addresses;
+- `SwapInSigner` and `SwapInKeys` in the fork;
+- `GroupSwapInWallet` and `GroupSwapInWallets`: the watcher;
+- `GroupLightningCoSigner.checkSwapInSplice` and `checkSwapInInput`: rules W1-W8;
+- `DepositLedger.recordSwapIns`: attribution;
+- `GroupSwapInScreen`;
+- `GroupSweep`'s `SWAP_IN` input: refunds.
+
+The phases are kept as written. Where the build chose differently, the table says so:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 0 runs three spikes first | the Iceberg spike ran and holds. The live LSP spike needs the fork's signer, so it is Phase 8's. The co-signer request is captured by Phase 4's test, and what lands is answered from `Peer.kt` |
+| Phase 1's vectors run on Android and the JVM | on the JVM only (`GroupSwapInDerivationJvmTest`, with one address pinned) |
+| a `SwapInKeys` that `KeyManager.swapInOnChainWallet` returns | the property keeps its name and changes type. `SwapInOnChainKeys` is the phone's implementation. Local nonce sessions live in a map of their own, `localSwapInNonces`, beside the server-role `swapInSecretNonces`. Three lightning-kmp tests needed a cast to the concrete type |
+| `RemoteIcebergSwapInSigner` checks the group's signature | it checks the key aggregation (`Iceberg.keyAggregationCheck`). Unlike the funding signer, it does not verify the aggregated partial signature against the outer session before returning it: a bad one is refused by the LSP |
+| the node takes the depositors' coins | numbered `ordinal × 65,536 + index`, with the ordinal this device's own and never sent. `GroupSwapInKeys` turns the number back into an address from the watcher's latest state. With no swap-in wallet the node runs on `NoSwapInKeys`, which refuse everything, so `Peer` never builds the node seed's own wallet (D10) |
+| Phase 3 starts the node watching | Phase 4 does. Before that no co-signer could answer, and every attempt would have failed |
+| a swap-in input is a request of its own kind | it is kind `SWAP_IN` on the existing signing request (30358), with the swap-in coin as its `input` and the splice's context. The context names each coin's depositor and index (`CoSigningWire.SwapInCoin`), and the transport remembers it from the shared input's request. The co-signer runs the shared input's checks again on the same transaction |
+| W7 at the first commitment | any first commitment that raises the group's balance opens as a swap-in's, with its floor raised by the rise. The rise is held to the coins less the fee at the shared input, where the splice transaction is known |
+| a test LSP | the LSP's swap-in xpub is read through `GroupSwapInDerivation.lspSwapInXpub`, which the co-signing test points at a key it holds |
+| matched against `GroupSwapInWallet` | reports are filed in the database layer, which has no Electrum client. So the operator's payment record names each coin: its outpoint, depositor, index, amount and script. Every device derives that member's address and counts the coin only when the script is theirs: `BY_SWAP_IN`, as strong as `BY_OPERATOR`. The outpoint and amount are the operator's word |
+| the waiting line names one of five reasons | one line for every ready coin: they move while the operator's device and enough co-signers are online. Which reason applies is the operator's node's to know, and the snapshot does not carry it yet. A member's device never shows *Moving into Lightning*, for the same reason |
+| a transcript line for an expiring coin | a warning at the top of the swap-in screen |
+| the refund goes to an address on the depositor's branch | address 0 of it, which the onchain wallet always watches, so the refund shows as it lands. It reuses the address |
+| a regtest run of the refund | the four fixture devices FROST-sign a real refund and bitcoin's interpreter accepts it (`GroupSwapInRefundJvmTest`). The block-height side of BIP68 was run on regtest for the reverted personal swap-in, with the same leaf shape |
+
+Checked at each phase with `:composeApp:jvmTest` (the whole suite: 1,930 tests by Phase 7),
+`:composeApp:compileDebugKotlinAndroid` and `m3Audit`, and the fork with its own 1,002 JVM tests. No
+device has deposited to one of these addresses yet: that is Phase 8.
 
 **Where this comes from.** A first attempt built swap-in for the *profile's personal* node instead: a
 screen of personal deposit addresses. It was merged into `dedun` as `316fc153` and reverted in
@@ -143,6 +178,40 @@ and `m3Audit`, and the fork's phases also on `lightning-kmp`'s own `jvmTest`.
    Phase 4's rules are written against this.
 
 Done when the answers are under *Phase 0 outcomes* in this note.
+
+#### Phase 0 outcomes
+
+1. **Ran, and it holds.** `IcebergSwapInSpikeJvmTest`, four tests:
+   - A 2-of-4 group (round one from members 1-3, round two from 1 and 3) builds the outer cache over
+     `[groupKey, server]`, unsorted, tweaked with `ScriptPathTweak(refundLeaf.hash())`.
+     `Iceberg.keyAggregationCheck` passes it.
+   - The group signs the key path of `SwapInProtocol(groupKey, server, refund, 144)`. A stock server
+     signs too, with `signSwapInputServer`, and `SwapInProtocol.witness` combines the two.
+   - `Transaction.correctlySpends`, under the standard script flags, accepts the spend. The
+     transaction has a second, P2WPKH input, so a sighash over one spent output instead of all of
+     them would have failed.
+   - The two negative controls both fail, as they should. Under the channel's `KeyPathTweak` the
+     shares spend nothing, and with the keys in the other order they spend nothing either. So a
+     signer has to get the order and the tweak right, and `keyAggregationCheck` alone cannot catch a
+     wrong tweak, just as `IcebergTaprootSessionTestsCommon` found for channels.
+   - The test also rebuilds the refund leaf and checks that the address's output key equals
+     `aggregate([group, server]).outputKey(ScriptPathTweak(leaf))`. So the tweak is checked against
+     the address, not copied from it.
+
+   **The plan is possible.**
+2. **Not run yet, and moved to Phase 8.** A node can only sign a swap-in input with Iceberg once
+   Phase 2's signer exists. Today `SharedTransaction.sign` reaches for `userPrivateKey`. And it needs
+   coins sent on ACINQ's network, which only the group's owner can do. The live run is Phase 8's.
+3. **Answered from the code.** The co-signer request belongs to Phase 4 and is captured there, once
+   Phase 2 exists. What lands is known now: a splice-in is recorded as `SpliceInIncomingPayment`
+   (`Peer.kt:1006`). It has:
+   - `amountReceived`, the coins less our mining fee;
+   - `miningFee`, `liquidityPurchase` (null for a plain splice-in), `channelId` and `txId`;
+   - **`localInputs`, the outpoints of the swap-in coins it spent.**
+
+   So Phase 5 attributes by those outpoints, with no new field from lightning-kmp. A channel opened
+   from a swap-in would be a `NewChannelIncomingPayment` with the same `localInputs`, which D6
+   leaves out.
 
 ### Phase 1: the addresses, pure
 
@@ -295,6 +364,25 @@ from the fixture:
 
 It is run by hand, like the mainnet co-signing suite, and the result is written into this note. It
 is not part of `check`.
+
+**Not run yet.** It needs real coins sent to a real address, which is the group's owner's to do. What to
+check, in order:
+
+1. On a build with the fork's branches pushed and the superproject at `claude/group-lightning-swap-in`,
+   open a group Lightning wallet on mainnet. Make one member a depositor, and give the group a channel
+   by paying it an invoice: D6 means a swap-in only splices into a channel that exists.
+2. On that member's device, open the Lightning wallet, then *Receive*, then *Deposit onchain instead*.
+   Note the address, and check that another member's device lists the same address among that member's
+   once it is used.
+3. Send a small amount, a few thousand sats over the fee. Watch it go *Waiting for its first
+   confirmation*, then *1 of 3*, then *Ready*.
+4. Keep the operator's device online. In the operator's log, look for the swap-in attempt
+   (`SwapInEvents.Requested`) and the co-signers' answers. On another device, the transcript must show
+   no `TYPE_LIGHTNING_REFUSED` line.
+5. After the splice confirms, the member's Lightning balance (`MemberBalances`) rises by the coin less
+   its fee, and the deposit row is `swapin:<txid>:<vout>`, `BY_SWAP_IN`.
+
+Record the fee ACINQ charged, and any refusal with its reason, here.
 
 ---
 

@@ -41,6 +41,7 @@ object DepositAttributionEvent {
     /** No member's: the group's own. */
     const val GROUP = "group"
     private const val LIGHTNING_PREFIX = "ln:"
+    private const val SWAP_IN_PREFIX = "swapin:"
 
     /** A deposit, by what identifies it: an onchain output, or a Lightning payment's hash. */
     sealed interface DepositKey {
@@ -54,12 +55,20 @@ object DepositAttributionEvent {
             override val text: String get() = "$LIGHTNING_PREFIX$paymentHash"
         }
 
+        /** A swap-in coin spliced into the Lightning wallet: a Lightning deposit, known by the coin it was. */
+        data class SwapIn(val txid: String, val vout: Long) : DepositKey {
+            override val text: String get() = "$SWAP_IN_PREFIX$txid:$vout"
+        }
+
         companion object {
             private val HEX64 = Regex("^[0-9a-f]{64}$")
 
             fun parse(text: String): DepositKey? {
                 if (text.startsWith(LIGHTNING_PREFIX)) {
                     return text.removePrefix(LIGHTNING_PREFIX).takeIf { HEX64.matches(it) }?.let(::Lightning)
+                }
+                if (text.startsWith(SWAP_IN_PREFIX)) {
+                    return (parse(text.removePrefix(SWAP_IN_PREFIX)) as? Onchain)?.let { SwapIn(it.txid, it.vout) }
                 }
                 val parts = text.split(':')
                 if (parts.size != 2 || !HEX64.matches(parts[0])) return null

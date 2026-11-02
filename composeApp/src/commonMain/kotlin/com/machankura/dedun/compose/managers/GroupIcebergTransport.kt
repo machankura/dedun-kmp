@@ -1,5 +1,12 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.wallet.lightning.WalletWire
+import kotlinx.coroutines.flow.StateFlow
+import fr.acinq.lightning.blockchain.electrum.WalletState
+import fr.acinq.bitcoin.Transaction
+import fr.acinq.bitcoin.OutPoint
+import fr.acinq.lightning.crypto.IcebergSwapInRoundTwoRequest
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInState
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.IcebergLabelAssignment
@@ -58,6 +65,8 @@ class GroupIcebergTransport private constructor(
     private val wallet: GroupLightningWalletManager.Wallet,
     private val term: Long,
     private val scope: CoroutineScope,
+    /** The room's swap-in coins, which a splice's context names (`docs/group-lightning-swap-in.md`, Phase 4); null with none. */
+    private val swapIns: StateFlow<GroupSwapInState?>? = null,
 ) : IcebergGroupTransport {
     private val logger = Logger.withTag("GroupIcebergTransport")
     private val key = GroupLightningCoSigner.walletKey(localChatRoom.chatRoom.id, wallet.statement.chain, wallet.statement.wallet)
@@ -68,6 +77,15 @@ class GroupIcebergTransport private constructor(
     private val labelsByCounter = mutableMapOf<Long, ByteVector32>()
     private val countersByLabel = mutableMapOf<ByteVector32, Long>()
     private val assignments = mutableMapOf<String, Long>()
+
+    /** Each splice's context as its shared input was asked for, by txid: a swap-in input of it is asked for under the same. */
+    private val spliceContexts = mutableMapOf<TxId, CoSigningWire.Context>()
+
+    /** Every swap-in coin a splice was asked to spend, as this device's swap-in wallet saw it: what its payment names. */
+    private val swapInCredits = mutableMapOf<OutPoint, WalletWire.SwapInCredit>()
+
+    /** The coin at [outPoint], if a splice this transport asked for spent it as a depositor's swap-in coin. */
+    fun swapInCredit(outPoint: OutPoint): WalletWire.SwapInCredit? = swapInCredits[outPoint]
     private val pool = mutableMapOf<Long, List<NonceContribution>>()
     private var nextCounter = 0L
     private var refresher: Job? = null
@@ -158,6 +176,9 @@ class GroupIcebergTransport private constructor(
     override suspend fun roundTwo(request: IcebergRoundTwoRequest): Either<Throwable, List<SignatureShare>> {
         val counter = countersByLabel[request.label] ?: return Either.Left(IllegalStateException("label ${request.label} is not from this wallet's pool"))
         val requestId = RandomInstance.bytes(16).toHex()
+        val context = CoSigningWire.context(request.context)?.let { c ->
+            if (c.type != GroupLightningCoSigner.SPLICE) c else c.copy(swapIns = swapInCoinsOf(request.tx.tx, request.tx.input.outPoint)).also { spliceContexts[request.tx.tx.txid] = it }
+        }
         val wire = CoSigningWire.SigningRequest(
             wallet = key,
             term = term,
@@ -172,9 +193,62 @@ class GroupIcebergTransport private constructor(
             commitIndex = request.commitIndex,
             contributions = request.contributions.map { it.toByteArray().toHex() },
             cosignerAggregatedNonce = request.cosignerAggregatedNonce.data.toHex(),
-            context = CoSigningWire.context(request.context),
+            context = context,
             extraUtxos = request.extraUtxos.map { (outPoint, txOut) -> CoSigningWire.input(Transactions.InputInfo(outPoint, txOut)) },
         )
+        return ask(wire)
+    }
+
+    /** A swap-in input gets a fresh pool label of its own, persisted before it is handed out, as a fresh nonce's is. */
+    override fun nextSwapInLabel(outPoint: OutPoint): ByteVector32 = assign(null)
+
+    /**
+     * Asks the group to sign a swap-in input of a splice whose shared input it was already asked to sign,
+     * under that splice's context, which names the coin's depositor and address.
+     */
+    override suspend fun roundTwoSwapIn(request: IcebergSwapInRoundTwoRequest): Either<Throwable, List<SignatureShare>> {
+        val counter = countersByLabel[request.label] ?: return Either.Left(IllegalStateException("label ${request.label} is not from this wallet's pool"))
+        val context = spliceContexts[request.tx.txid] ?: return Either.Left(IllegalStateException("the group was not asked for the shared input of splice ${request.tx.txid}"))
+        val input = Transactions.InputInfo(request.tx.txIn[request.inputIndex].outPoint, request.spentOutputs[request.inputIndex])
+        val extra = request.tx.txIn.indices.filter { it != request.inputIndex }.map { i -> CoSigningWire.input(Transactions.InputInfo(request.tx.txIn[i].outPoint, request.spentOutputs[i])) }
+        val wire = CoSigningWire.SigningRequest(
+            wallet = key,
+            term = term,
+            requestId = RandomInstance.bytes(16).toHex(),
+            kind = CoSigningWire.SWAP_IN,
+            label = request.label.toHex(),
+            counter = counter,
+            tx = CoSigningWire.tx(request.tx),
+            input = CoSigningWire.input(input),
+            fundingTxId = request.tx.txid.toString(),
+            remoteFundingPubKey = request.protocol.serverPublicKey.toString(),
+            contributions = request.contributions.map { it.toByteArray().toHex() },
+            cosignerAggregatedNonce = request.cosignerAggregatedNonce.data.toHex(),
+            context = context,
+            extraUtxos = extra,
+        )
+        return ask(wire)
+    }
+
+    /** Each input of [tx] but [funding] that spends a depositor's swap-in coin, with whose and which address. */
+    private fun swapInCoinsOf(tx: Transaction, funding: OutPoint): List<CoSigningWire.SwapInCoin>? {
+        val state = swapIns?.value ?: return null
+        return tx.txIn.map { it.outPoint }.filter { it != funding }.mapNotNull { outPoint ->
+            state.depositors.values.firstNotNullOfOrNull { depositor ->
+                depositor.state.utxos.firstOrNull { it.outPoint == outPoint }?.let { utxo ->
+                    (utxo.addressMeta as? WalletState.AddressMeta.Derived)?.let { meta ->
+                        val text = "${outPoint.txid}:${outPoint.index}"
+                        swapInCredits[outPoint] = WalletWire.SwapInCredit(text, depositor.member, meta.index.toLong(), utxo.amount.sat, utxo.txOut.publicKeyScript.toHex())
+                        CoSigningWire.SwapInCoin(text, depositor.member, meta.index.toLong())
+                    }
+                }
+            }
+        }.takeIf { it.isNotEmpty() }
+    }
+
+    /** Sends [wire] to the room, answers it as this device's own co-signer, and waits for enough shares. */
+    private suspend fun ask(wire: CoSigningWire.SigningRequest): Either<Throwable, List<SignatureShare>> {
+        val requestId = wire.requestId
         val content = CommonJson.encodeToString(CoSigningWire.SigningRequest.serializer(), wire)
         GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupLightningEvents.SIGNING_REQUEST, content)
         // This device is a co-signer too, and answers its own request the way the inbound path would.
@@ -211,7 +285,15 @@ class GroupIcebergTransport private constructor(
          * The transport for [wallet], with its pool and assignments loaded. The first counter it hands out
          * is past every one this device has recorded assigning.
          */
-        suspend fun create(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, term: Long, scope: CoroutineScope): GroupIcebergTransport =
-            GroupIcebergTransport(database, localChatRoom, userPublicKey, wallet, term, scope).also { it.reload() }
+        suspend fun create(
+            database: DedunDatabase,
+            localChatRoom: LocalChatRoom,
+            userPublicKey: HexKey,
+            wallet: GroupLightningWalletManager.Wallet,
+            term: Long,
+            scope: CoroutineScope,
+            swapIns: StateFlow<GroupSwapInState?>? = null,
+        ): GroupIcebergTransport =
+            GroupIcebergTransport(database, localChatRoom, userPublicKey, wallet, term, scope, swapIns).also { it.reload() }
     }
 }

@@ -18,7 +18,7 @@ data class DepositRow(
     val chatRoomId: String,
     /** The network, as `GroupWalletStatementEvent.chainName` spells it. */
     val chain: String,
-    /** `<txid>:<vout>`, or `ln:<payment hash>`: `DepositAttributionEvent.DepositKey.text`. */
+    /** `<txid>:<vout>`, `ln:<payment hash>` or `swapin:<txid>:<vout>`: `DepositAttributionEvent.DepositKey.text`. */
     val depositKey: String,
     /** [ONCHAIN] or [LIGHTNING]. */
     val source: String,
@@ -26,7 +26,7 @@ data class DepositRow(
     val amountMsat: Long,
     /** Whose deposit it is, or null for nobody's yet. */
     val member: HexKey? = null,
-    /** How [member] is known: [BY_BRANCH], [BY_INVOICE], [BY_OPERATOR] or [BY_GROUP]; null while unattributed. */
+    /** How [member] is known: [BY_BRANCH], [BY_INVOICE], [BY_OPERATOR], [BY_SWAP_IN] or [BY_GROUP]; null while unattributed. */
     val attributedBy: String? = null,
     val seenAt: Instant = Clock.System.now(),
     val confirmedAt: Instant? = null,
@@ -41,6 +41,11 @@ data class DepositRow(
         const val BY_INVOICE = "invoice"
         /** Paid an invoice the operator's snapshot said was the member's: its word, for a device that missed the pair. */
         const val BY_OPERATOR = "operator"
+        /**
+         * A swap-in coin the operator's snapshot named, on an address this device derived as that member's:
+         * the address is checked, the outpoint and amount are the operator's word (`docs/group-lightning-swap-in.md`, Phase 5).
+         */
+        const val BY_SWAP_IN = "swap-in"
         /** The group's signed attribution (30340) says whose it is. */
         const val BY_GROUP = "signed"
 
@@ -48,7 +53,7 @@ data class DepositRow(
         fun strength(attributedBy: String?): Int = when (attributedBy) {
             BY_GROUP -> 4
             BY_BRANCH, BY_INVOICE -> 3
-            BY_OPERATOR -> 2
+            BY_OPERATOR, BY_SWAP_IN -> 2
             else -> 0
         }
     }

@@ -141,6 +141,7 @@ class GroupLightningWalletViewModelJvmTest {
         override suspend fun proposeCloseAll(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, channelIds: List<String>): FrostSigningSession = error("unused")
         override suspend fun unswept(chatRoomId: String, report: GroupLightningReports.Report?): List<GroupSweep.Input> = report?.snapshot?.heldOutputs.orEmpty()
         override suspend fun proposeSweep(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, inputs: List<GroupSweep.Input>): FrostSigningSession = error("unused")
+        override suspend fun proposeSwapInRefund(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, member: HexKey, coins: List<com.machankura.dedun.compose.managers.GroupLightningSweeps.RefundableCoin>, toIndex: Long): FrostSigningSession = error("unused")
     }
 
     private val chat = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
