@@ -71,10 +71,11 @@ kotlin {
 
             // The profile's Ark wallet (docs/bark-wallet.md, Phase 2). bark-android's Gradle metadata
             // asks for JNA's jar, which carries no Android natives: without the aar, libjnidispatch.so
-            // is missing and the first Bark call fails at runtime. So the jar is excluded and the aar,
-            // same version, named here.
+            // is missing and the first Bark call fails at runtime. So the jar is excluded and the aar
+            // named here -- at 5.17.0 or later, the first whose x86_64 libjnidispatch.so is aligned
+            // for 16 KB pages (5.15.0's is 4 KB; Bark's own libraries are 16 KB on every ABI).
             implementation(libs.bark.android.get().toString()) { exclude(group = "net.java.dev.jna", module = "jna") }
-            implementation("net.java.dev.jna:jna:5.15.0@aar")
+            implementation("net.java.dev.jna:jna:5.19.1@aar")
             // The Ark wallet's background renewal. The library already ships WorkManager for its
             // channels watcher; this names it for the app's own worker, at the library's version.
             implementation("androidx.work:work-runtime-ktx:2.11.1")

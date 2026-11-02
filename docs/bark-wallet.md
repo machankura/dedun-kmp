@@ -27,7 +27,7 @@ Where the build chose differently, phase by phase:
 | 1 | strings for each `ArkUnavailability` in Phase 1 | added in Phase 4 with the row that shows them, so the catalogue never holds a string nothing reads |
 | 1 | the warning threshold is "Bark's config" | `ArkExpiry.thresholdFor`: 144 blocks on mainnet and 12 elsewhere, which are `bark`'s own `network_default`s |
 | 2 | `expect fun openArkWallet(...)` | `expect object ArkPlatform { supported; open(...) }`, so the setup can ask whether the platform has a library without trying to open anything |
-| 2 | add `bark-android` | add it with JNA's jar excluded and `jna:5.15.0@aar` named. Bark's Gradle metadata asks for the jar, which has no `libjnidispatch.so`, so the first call would fail on a device. The debug APK now carries both libraries for every ABI |
+| 2 | add `bark-android` | add it with JNA's jar excluded and `jna:5.15.0@aar` named. Bark's Gradle metadata asks for the jar, which has no `libjnidispatch.so`, so the first call would fail on a device. The debug APK now carries both libraries for every ABI. Later raised to `jna:5.19.1@aar`: 5.15.0's x86_64 `libjnidispatch.so` is 4 KB aligned, which fails to load where pages are 16 KB; 5.17.0 is the first with 16 KB on both 64-bit ABIs |
 | 2 | R8 keep rules from spike 1 | none: release builds are not minified (`isMinifyEnabled = false`) |
 | 2 | the signet test pays itself from a second wallet | it cannot: there is no faucet API. It covers everything a wallet with no money can do, and the funded flows are Phase 12's |
 | 2 | the debug APK starts on an emulator | not done: the emulators on the build host belong to other work, and nothing calls the binding until Phase 3 |
