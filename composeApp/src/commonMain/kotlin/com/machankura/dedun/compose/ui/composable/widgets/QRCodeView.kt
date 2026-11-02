@@ -79,7 +79,7 @@ fun QRCodeView(
         painter = painterResource(
             Res.drawable.compose_multiplatform
         ),
-        backgroundColor = LocalExtendedColors.current.bluePill.color,
+        backgroundColor = Color.Black,
     )
 
     val painter = rememberQrCodePainter(
