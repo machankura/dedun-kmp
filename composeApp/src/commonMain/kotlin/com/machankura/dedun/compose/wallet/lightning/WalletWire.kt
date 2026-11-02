@@ -47,7 +47,17 @@ object WalletWire {
         val requestId: String? = null,
         /** Who asked for that invoice, as the operator's node recorded it: so a device that missed the request can attribute it, saying whose word it is. */
         val requester: String? = null,
+        /**
+         * For a splice-in, each swap-in coin it spent: whose address it was on, and what it held
+         * (`docs/group-lightning-swap-in.md`, Phase 5). An older device ignores it, and reads the payment as
+         * it always has.
+         */
+        val swapIns: List<SwapInCredit> = emptyList(),
     )
+
+    /** One swap-in coin a splice-in spent: its outpoint, the depositor and index of its address, its amount and script. */
+    @Serializable
+    data class SwapInCredit(val outPoint: String, val member: String, val index: Long, val amountSat: Long, val script: String)
 
     const val PAYMENT = "payment"
     const val LIQUIDITY = "liquidity"

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.managers.GroupLightningSweeps
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.GroupLightningInvoiceRow
@@ -109,6 +110,9 @@ interface GroupLightningRepository {
     /** Proposes sweeping [inputs] into the onchain wallet. */
     suspend fun proposeSweep(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, inputs: List<GroupSweep.Input>): FrostSigningSession
 
+    /** Proposes refunding [member]'s swap-in [coins] to their deposit branch's address [toIndex] (`docs/group-lightning-swap-in.md`, Phase 7). */
+    suspend fun proposeSwapInRefund(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, member: HexKey, coins: List<GroupLightningSweeps.RefundableCoin>, toIndex: Long): FrostSigningSession
+
     companion object {
         /**
          * For previews and for screens that only read: every flow empty, every read empty or
@@ -147,6 +151,7 @@ interface GroupLightningRepository {
             override suspend fun proposeCloseAll(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, channelIds: List<String>): FrostSigningSession = error("No room to propose in")
             override suspend fun unswept(chatRoomId: String, report: GroupLightningReports.Report?): List<GroupSweep.Input> = emptyList()
             override suspend fun proposeSweep(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, inputs: List<GroupSweep.Input>): FrostSigningSession = error("No room to propose in")
+            override suspend fun proposeSwapInRefund(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, member: HexKey, coins: List<GroupLightningSweeps.RefundableCoin>, toIndex: Long): FrostSigningSession = error("No room to propose in")
         }
     }
 }

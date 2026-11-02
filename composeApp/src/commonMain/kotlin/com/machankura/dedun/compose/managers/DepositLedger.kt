@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.network.serialization.CommonJson
+import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -31,7 +33,12 @@ object DepositLedger {
      * signs whose (Phase 9).
      */
     suspend fun recordOnchain(database: DedunDatabase, chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) {
-        val own = database.groupTransactionDao().getByChatRoomId(chatRoomId).map { it.txid.lowercase() }.toSet()
+        // The room's own spends pay the room, so their outputs are no deposits -- except a swap-in refund, which
+        // returns a coin to its depositor's branch that was never counted as a Lightning deposit, and is
+        // their deposit there (docs/group-lightning-swap-in.md, D9).
+        val own = database.groupTransactionDao().getByChatRoomId(chatRoomId)
+            .filterNot { row -> runCatching { CommonJson.decodeFromString(GroupSweep.Sweep.serializer(), row.psbt) }.getOrNull()?.isSwapInRefund == true }
+            .map { it.txid.lowercase() }.toSet()
         val byBranch = Depositors.statementsIn(database, chatRoomId, chain).values.associate { it.branch to it.member }
         deposits.filter { it.outPoint.txid.toString().lowercase() !in own }.forEach { deposit ->
             val member = byBranch[deposit.branch]
@@ -79,6 +86,51 @@ object DepositLedger {
                 ),
             )
         }
+    }
+
+    /**
+     * Files each swap-in coin a snapshot's splice-ins spent (`docs/group-lightning-swap-in.md`, Phase 5): a
+     * Lightning deposit of the coin less its share of the splice's fee (D5), shared by amount. The operator
+     * names the coin's depositor and address; this device derives that address and counts the coin to the
+     * member only when the script is theirs -- a coin named on another member's address is nobody's.
+     */
+    suspend fun recordSwapIns(database: DedunDatabase, chatRoomId: String, wallet: GroupLightningWalletManager.Wallet, payments: List<WalletWire.PaymentView>) {
+        val statement = wallet.statement
+        val keys = GroupWalletManager.thresholdKeyFor(database, chatRoomId)?.let { roomKey ->
+            GroupSwapInDerivation.lspSwapInXpub(statement.chain)?.let { xpub -> GroupSwapInDerivation.keys(roomKey, statement.chain, statement.wallet, statement.icebergKey, statement.nodeId, xpub) }
+        }
+        val depositors = Depositors.statementsIn(database, chatRoomId, statement.chain)
+        payments.filter { it.incoming && it.succeeded && it.swapIns.isNotEmpty() }.forEach { payment ->
+            val totalMsat = payment.swapIns.sumOf { it.amountSat * 1000 }
+            val shares = feeShares(payment.swapIns.map { it.amountSat * 1000 }, (totalMsat - payment.amountMsat).coerceAtLeast(0))
+            payment.swapIns.zip(shares).forEach { (coin, share) ->
+                val verified = keys?.let { k ->
+                    depositors[coin.member.lowercase()]?.let { d -> k.address(d.branch, coin.index).protocol.serializedPubkeyScript.toHex() == coin.script.lowercase() }
+                } == true
+                val (txid, vout) = coin.outPoint.split(':').let { it[0] to (it.getOrNull(1)?.toLongOrNull() ?: return@forEach) }
+                merge(
+                    database,
+                    DepositRow(
+                        chatRoomId = chatRoomId,
+                        chain = GroupWalletStatementEvent.chainName(statement.chain),
+                        depositKey = DepositAttributionEvent.DepositKey.SwapIn(txid.lowercase(), vout).text,
+                        source = DepositRow.LIGHTNING,
+                        amountMsat = coin.amountSat * 1000 - share,
+                        member = coin.member.lowercase().takeIf { verified },
+                        attributedBy = DepositRow.BY_SWAP_IN.takeIf { verified },
+                        confirmedAt = Clock.System.now(),
+                    ),
+                )
+            }
+        }
+    }
+
+    /** [feeMsat] shared over [amountsMsat] in proportion, the remainder on the last, so the shares add up to the fee. */
+    fun feeShares(amountsMsat: List<Long>, feeMsat: Long): List<Long> {
+        val total = amountsMsat.sum()
+        if (total == 0L) return amountsMsat.map { 0L }
+        val shares = amountsMsat.dropLast(1).map { feeMsat * it / total }
+        return shares + (feeMsat - shares.sum())
     }
 
     /**

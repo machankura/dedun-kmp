@@ -1259,7 +1259,17 @@ object FrostSigningManager {
             ?: return GroupSweep.Result.Refused("sweeps a Lightning wallet the group has not opened")
         val onchain = GroupWalletManager.walletFor(database, chatRoomId, thresholdPublicKey, chain, account)
             ?: return GroupSweep.Result.Refused("pays an onchain wallet the group has not opened")
-        return GroupSweep.check(sweep, GroupLightningDerivation.basepoints(thresholdPublicKey, chain, sweep.wallet), onchain.account)
+        // A swap-in refund's keys: every depositor's, from the room's own statements (docs/group-lightning-swap-in.md, Phase 7).
+        val swapIns = if (!sweep.isSwapInRefund) null else {
+            val lightning = GroupLightningWalletManager.walletFor(database, chatRoomId, chain, sweep.wallet)!!.statement
+            GroupSwapInDerivation.lspSwapInXpub(chain)?.let { xpub ->
+                GroupSweep.SwapInRefunds(
+                    GroupSwapInDerivation.keys(thresholdPublicKey, chain, sweep.wallet, lightning.icebergKey, lightning.nodeId, xpub),
+                    Depositors.statementsIn(database, chatRoomId, chain).mapValues { (_, d) -> d.branch },
+                )
+            }
+        }
+        return GroupSweep.check(sweep, GroupLightningDerivation.basepoints(thresholdPublicKey, chain, sweep.wallet), onchain.account, swapIns)
     }
 
     private suspend fun writeSweep(database: DedunDatabase, session: FrostSigningSession, checked: GroupSweep.Checked, chain: Chain, account: Long) {

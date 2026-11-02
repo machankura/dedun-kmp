@@ -1,5 +1,13 @@
 package com.machankura.dedun.compose.managers
 
+import fr.acinq.lightning.db.OnChainIncomingPayment
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
+import fr.acinq.lightning.blockchain.electrum.WalletState
+import fr.acinq.lightning.crypto.RemoteIcebergSwapInSigner
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInKeys
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInState
+import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallet
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -107,6 +115,8 @@ class GroupLightningNode(
     private val linkSettle: Duration = LINK_SETTLE,
     /** The least time between two snapshots a change of the link makes due. */
     private val linkReportMin: Duration = LINK_REPORT_MIN,
+    /** The room's swap-in wallet for [wallet], or null where it has none (`docs/group-lightning-swap-in.md`, Phase 3). */
+    private val swapIns: (suspend (chatRoomId: String, wallet: GroupLightningWalletManager.Wallet) -> GroupSwapInWallet?)? = null,
 ) {
     private val logger = Logger.withTag("GroupLightningNode")
     private val chain = wallet.statement.chain
@@ -119,6 +129,8 @@ class GroupLightningNode(
         val transport: GroupIcebergTransport,
         /** The most the group agreed to pay the LSP for the liquidity a payment needs: its statement's policy. */
         val maxLiquidityFee: Satoshi = Satoshi(GroupLightningWalletStatementEvent.Policy.DEFAULT.maxLiquidityFeeSat),
+        /** Every depositor's swap-in coins, numbered for the node ([GroupSwapInState.forNode]), or null with no swap-in wallet. */
+        val swapInCoins: Flow<WalletState>? = null,
     )
 
     /** What this class needs of a running node. */
@@ -136,6 +148,9 @@ class GroupLightningNode(
          * first, false. Only after `init` is a connection any use (`docs/lsp-connection-status.md`, D2).
          */
         suspend fun awaitInit(): Boolean
+
+        /** Starts splicing in the swap-in coins the node was handed; nothing for a handle without them. */
+        suspend fun startSwapIns() {}
         /** Each channel's local commitment number, by channel id: what the stopped message reports. */
         fun commitmentNumbers(): Map<String, Long>
         /** The node's channels, as a snapshot reports them. */
@@ -278,7 +293,8 @@ class GroupLightningNode(
         val term = operator!!.term
         _status.value = GroupLightningNodeStatus.Starting
 
-        val transport = GroupIcebergTransport.create(database, localChatRoom, userPublicKey, wallet, term, scope).also { it.start() }
+        val swapIn = swapIns?.invoke(roomId, wallet)
+        val transport = GroupIcebergTransport.create(database, localChatRoom, userPublicKey, wallet, term, scope, swapIn?.latest).also { it.start() }
         transport.provision(GroupLightningCoSigner.POOL_WINDOW)
         // Round one is served synchronously from the pool, so the pool has to be there before the LSP can
         // ask for anything: a channel that needs a label the pool lacks is aborted.
@@ -293,10 +309,11 @@ class GroupLightningNode(
             fundingSigner = RemoteIcebergFundingSigner(PublicKey.fromHex(wallet.statement.icebergKey), transport, SIGNING_DEADLINE),
             basepoints = wallet.basepoints.forChannel,
             finalScriptPubKey = GroupWalletDerivation.derive(onchain.account, GroupWalletDerivation.RECEIVE, 0).pubkeyScript,
+            swapInKeys = swapIn?.let { GroupSwapInKeys(it, RemoteIcebergSwapInSigner(PublicKey.fromHex(wallet.statement.icebergKey), transport, SIGNING_DEADLINE)) },
         )
         check(keyManager.nodeKeys.nodeKey.publicKey.toString() == wallet.statement.nodeId) { "the seed does not produce the statement's node" }
 
-        val handle = peerFactory(NodeConfiguration(keyManager, chain, PublicKey.fromHex(wallet.statement.lspNodeId), transport, Satoshi(wallet.statement.policy.maxLiquidityFeeSat)))
+        val handle = peerFactory(NodeConfiguration(keyManager, chain, PublicKey.fromHex(wallet.statement.lspNodeId), transport, Satoshi(wallet.statement.policy.maxLiquidityFeeSat), swapIn?.state?.map { it.forNode }))
         this.transport = transport
         peer = handle
         link = LspLink.Connecting(1)
@@ -306,6 +323,9 @@ class GroupLightningNode(
         linkReportedAt = null
         enter(State.Running(term))
         stayConnected(handle, runCatching { handle.connect(attempt = 1) })
+        // Co-signers answer a swap-in from here on (`docs/group-lightning-swap-in.md`, Phase 4), so the node
+        // splices each depositor's ready coins in. It waits for the LSP itself.
+        if (swapIn != null) scope.launch { runCatching { handle.startSwapIns() }.onFailure { logger.e("The group's node could not start swapping in", it) } }
         lastReported = null
         report(term, force = true)
         watchForHandover(term)
@@ -563,7 +583,7 @@ class GroupLightningNode(
 
     companion object {
         /** A lightning-kmp payment as the room hears of it. */
-        internal fun paymentView(payment: WalletPayment, incoming: Boolean) = WalletWire.PaymentView(
+        internal fun paymentView(payment: WalletPayment, incoming: Boolean, swapIns: List<WalletWire.SwapInCredit> = emptyList()) = WalletWire.PaymentView(
             id = payment.id.toString(),
             incoming = incoming,
             amountMsat = payment.amount.msat,
@@ -572,6 +592,7 @@ class GroupLightningNode(
             description = ((payment as? LightningOutgoingPayment)?.details as? LightningOutgoingPayment.Details.Normal)?.paymentRequest?.description,
             completedAt = payment.completedAt,
             succeeded = payment.succeededAt != null,
+            swapIns = swapIns,
         )
 
         /** How long a signature may take the group. Phase 0 was to measure what the LSP tolerates; until it is, a minute. */
@@ -706,7 +727,7 @@ class GroupLightningNode(
             val client = clients.clientFor(configuration.chain)
             val watcher = ElectrumWatcher(client, scope, loggerFactory)
             val databases = databasesFor(nodeParams.nodeId, configuration.chain)
-            val peer = Peer(nodeParams, walletParams, client, watcher, databases, TcpSocket.Builder(), scope)
+            val peer = Peer(nodeParams, walletParams, client, watcher, databases, TcpSocket.Builder(), scope, configuration.swapInCoins)
             // The peer learns the chain's height only from header notifications, and a shared client that
             // subscribed long ago sends the next one at the next block: until then the node can answer no
             // invoice request and take no payment. So it is told the current height as it starts.
@@ -732,13 +753,18 @@ class GroupLightningNode(
                 nodeParams.nodeEvents.collect { event ->
                     when (event) {
                         is PeerConnected -> lspInit.value = event.theirInit
-                        is PaymentEvents.PaymentReceived -> payments += paymentView(event.payment, incoming = true)
+                        // A splice-in names the swap-in coins it spent: whose they were is what the ledger counts.
+                        is PaymentEvents.PaymentReceived -> payments += paymentView(
+                            event.payment, incoming = true,
+                            swapIns = (event.payment as? OnChainIncomingPayment)?.localInputs?.mapNotNull { configuration.transport.swapInCredit(it) }.orEmpty(),
+                        )
                         is PaymentEvents.PaymentSent -> payments += paymentView(event.payment, incoming = false)
                         else -> {}
                     }
                 }
             }
             object : PeerHandle {
+                override suspend fun startSwapIns() = peer.startWatchSwapInWallet()
                 override suspend fun connect(attempt: Int): Boolean {
                     // As Phoenix refuses to: over Tor, a clearnet address would leave Tor for the one connection
                     // that says the most about the group's money.

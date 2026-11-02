@@ -1040,4 +1040,27 @@
     <string name="pays_s_s_sats_up_to_s_in_fees_to_s">Pays %1$s %2$s sats, and up to %3$s sats in routing fees, to %4$s.</string>
     <string name="pay_out">Pay out</string>
     <string name="your_device_signs_only_payouts">Your device signs only payouts: each member's own coins, to the address they gave.</string>
+
+    <!-- Onchain deposits into the group's Lightning wallet: docs/group-lightning-swap-in.md -->
+    <string name="deposit_onchain">Deposit onchain</string>
+    <string name="deposit_onchain_instead">Deposit onchain instead</string>
+    <string name="your_swap_in_address">Your deposit address</string>
+    <string name="coins_sent_here_move_into_the_group_s_lightning">Coins sent here move into the group's Lightning balance once they have %1$d confirmations, and count as your deposit, less the network fee.</string>
+    <string name="nothing_has_been_sent_to_your_swap_in_addresses_yet">Nothing has been sent to your deposit addresses yet.</string>
+    <string name="used_addresses">Used addresses</string>
+    <string name="s_s_used_addresses">%1$s's used addresses</string>
+    <string name="waiting_for_its_first_confirmation">Waiting for its first confirmation</string>
+    <string name="n_of_n_confirmations">%1$d of %2$d confirmations</string>
+    <string name="ready_to_move_into_lightning">Ready to move into Lightning</string>
+    <string name="must_move_into_lightning_within_s">Must move into Lightning within %1$s</string>
+    <string name="can_be_refunded_in_s">Too old to move into Lightning. Can be refunded in %1$s</string>
+    <string name="can_be_refunded_now">Too old to move into Lightning. Can be refunded now</string>
+    <string name="ready_coins_move_while_the_operator">Ready coins move into Lightning while the operator's device is online, and enough of the group's devices are online to co-sign.</string>
+    <string name="s_sats_must_move_into_lightning_within_s">%1$s sats must move into Lightning within %2$s. After that they can only come back as a refund, %3$s after they were sent.</string>
+    <string name="the_group_s_wallet_takes_no_onchain_deposits_on_this_network">The group's Lightning wallet takes no onchain deposits on this network.</string>
+    <string name="you_need_to_be_a_depositor">The group opens your deposits first. Ask for an invoice to start.</string>
+    <string name="finding_your_deposits">Finding your deposits</string>
+    <string name="ask_the_group_to_refund_s_sats">Ask the group to refund %1$s sats</string>
+    <string name="the_group_was_asked_to_refund">The group was asked to sign your refund</string>
+    <string name="couldn_t_ask_the_group_to_refund">Couldn't ask the group to refund. Try again.</string>
 </resources>

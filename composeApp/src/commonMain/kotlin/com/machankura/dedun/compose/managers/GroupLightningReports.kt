@@ -115,6 +115,7 @@ object GroupLightningReports {
         // Whose each incoming payment is: docs/member-deposits.md, Phase 8.
         GroupLightningCoSigner.walletOf(database, chatRoomId, snapshot.wallet)?.let { wallet ->
             DepositLedger.recordLightning(database, chatRoomId, wallet.statement.chain, snapshot.wallet, snapshot.payments)
+            DepositLedger.recordSwapIns(database, chatRoomId, wallet, snapshot.payments)
         }
                 sayWhatHappened(database, chatRoomId, sentBy, snapshot, previous.takeIf { newer })
     }

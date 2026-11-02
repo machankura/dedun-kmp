@@ -122,12 +122,26 @@ object CoSigningWire {
         val remoteContributionSat: Long? = null,
         val purchase: Purchase? = null,
         val feeratePerKw: Long? = null,
+        /**
+         * A swap-in splice's coins (`docs/group-lightning-swap-in.md`, Phase 4): each input that spends a
+         * depositor's swap-in address, with whose and which. A co-signer derives the address again from
+         * them rather than taking the script on trust.
+         */
+        val swapIns: List<SwapInCoin>? = null,
     )
+
+    /** One swap-in coin a splice spends: the input's outpoint, its depositor, and the address index. */
+    @Serializable
+    data class SwapInCoin(val outPoint: String, val member: String, val index: Long)
 
     @Serializable
     data class Input(val txid: String, val index: Long, val amountSat: Long, val script: String)
 
-    /** Kind 30358, from the operator. [kind] is a [fr.acinq.lightning.crypto.IcebergRoundTwoRequest.Kind] name. */
+    /**
+     * Kind 30358, from the operator. [kind] is a [fr.acinq.lightning.crypto.IcebergRoundTwoRequest.Kind] name,
+     * or [SWAP_IN] for a swap-in input of a splice: then [input] is the swap-in coin, [remoteFundingPubKey]
+     * the LSP's swap-in key, and [context] the splice's own (`docs/group-lightning-swap-in.md`, Phase 4).
+     */
     @Serializable
     data class SigningRequest(
         val wallet: String,
@@ -271,6 +285,9 @@ object CoSigningWire {
     }
 
     const val FROM_CHANNEL_BALANCE = "from_channel_balance"
+
+    /** The request kind of a swap-in input, beside lightning-kmp's three for the funding input. */
+    const val SWAP_IN = "SWAP_IN"
 
     /** What every input of [tx] spends, [input] among them, in input order; null when one is not known. */
     fun spentOutputs(tx: Transaction, input: Transactions.InputInfo, extra: List<Input>): List<TxOut>? {

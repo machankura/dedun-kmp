@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.wallet.lightning
 
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.managers.GroupSwapInDerivation
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.GroupLightningDerivation
 import com.machankura.dedun.compose.managers.GroupWalletDerivation
@@ -54,6 +56,15 @@ object GroupSweep {
     const val PAYMENT = "payment"
     const val DELAYED = "delayed"
 
+    /**
+     * A swap-in coin past its refund delay (`docs/group-lightning-swap-in.md`, Phase 7): spent by its refund
+     * leaf, under the depositor's refund key for [Input.swapInIndex], into that depositor's own branch (D9).
+     */
+    const val SWAP_IN = "swap-in"
+
+    /** What a member derives a swap-in refund's keys from: the wallet's swap-in keys and each depositor's branch. */
+    class SwapInRefunds(val keys: GroupSwapInDerivation.Keys, val branches: Map<HexKey, Long>)
+
     /** One output to sweep, as a proposal carries it. [tweak] is null for an output under the payment basepoint itself. */
     @Serializable
     data class Input(
@@ -66,11 +77,20 @@ object GroupSweep {
         val leafScript: String,
         val controlBlock: String,
         val csvDelay: Long,
+        /** For a [SWAP_IN] input: whose swap-in address it was on, and which. */
+        val member: String? = null,
+        val swapInIndex: Long? = null,
     )
 
-    /** A sweep proposal: the unsigned transaction, what each input spends, and which receive address each output is. */
+    /**
+     * A sweep proposal: the unsigned transaction, what each input spends, and which address each output is --
+     * on the receive branch, or on [branch] when it names one: a swap-in refund's depositor's (D9).
+     */
     @Serializable
-    data class Sweep(val wallet: Long, val tx: String, val inputs: List<Input>, val receiveIndices: List<Long>)
+    data class Sweep(val wallet: Long, val tx: String, val inputs: List<Input>, val receiveIndices: List<Long>, val branch: Long? = null) {
+        /** Whether this is a swap-in refund: every input a swap-in coin. */
+        val isSwapInRefund: Boolean get() = inputs.isNotEmpty() && inputs.all { it.basepoint == SWAP_IN }
+    }
 
     data class CheckedInput(
         val index: Int,
@@ -98,8 +118,11 @@ object GroupSweep {
     fun leafScript(leafKey: XonlyPublicKey, csvDelay: Long): ByteVector =
         ByteVector(Script.write(listOf(OP_PUSHDATA(leafKey), OP_CHECKSIGVERIFY, Scripts.encodeNumber(csvDelay), OP_CHECKSEQUENCEVERIFY)))
 
-    /** Checks [sweep] against the group's [basepoints] and the onchain [account] it must pay. */
-    fun check(sweep: Sweep, basepoints: GroupLightningDerivation.Basepoints, account: GroupWalletDerivation.Account): Result {
+    /**
+     * Checks [sweep] against the group's [basepoints] and the onchain [account] it must pay, and a swap-in
+     * refund also against [swapIns]: without them a member cannot derive a refund key, and refuses one.
+     */
+    fun check(sweep: Sweep, basepoints: GroupLightningDerivation.Basepoints, account: GroupWalletDerivation.Account, swapIns: SwapInRefunds? = null): Result {
         val tx = runCatching { Transaction.read(sweep.tx) }.getOrElse { return Result.Refused("is not a transaction") }
         if (tx.txIn.isEmpty()) return Result.Refused("spends nothing")
         if (tx.txIn.size != sweep.inputs.size) return Result.Refused("describes ${sweep.inputs.size} inputs of ${tx.txIn.size}")
@@ -107,9 +130,24 @@ object GroupSweep {
         if (tx.version != 2L) return Result.Refused("is version ${tx.version}, not 2")
         if (tx.lockTime != 0L) return Result.Refused("has a lock time")
         if (tx.txOut.isEmpty() || tx.txOut.size != sweep.receiveIndices.size) return Result.Refused("does not say where every output goes")
+        // A swap-in refund is one depositor's coins, back to that depositor's own branch (D9); anything else
+        // goes to the receive branch, as every sweep has.
+        val refundOf = if (sweep.inputs.any { it.basepoint == SWAP_IN }) {
+            if (!sweep.isSwapInRefund) return Result.Refused("mixes swap-in coins with a channel's outputs")
+            val members = sweep.inputs.map { it.member?.lowercase() }.toSet()
+            val member = members.singleOrNull() ?: return Result.Refused("refunds more than one depositor's coins at once")
+            val refunds = swapIns ?: return Result.Refused("refunds swap-in coins this device cannot derive the keys of")
+            val branch = refunds.branches[member] ?: return Result.Refused("refunds coins of a member who is no depositor")
+            if (sweep.branch != branch) return Result.Refused("refunds a depositor's coins anywhere but their own deposit branch")
+            member to branch
+        } else {
+            if (sweep.branch != null && sweep.branch != GroupWalletDerivation.RECEIVE) return Result.Refused("sweeps a channel's outputs to a branch that is not the receive branch")
+            null
+        }
+        val outputBranch = refundOf?.second ?: GroupWalletDerivation.RECEIVE
         tx.txOut.zip(sweep.receiveIndices).forEach { (out, index) ->
             if (index !in 0..com.machankura.dedun.compose.wallet.GroupSpend.MAX_ADDRESS_INDEX) return Result.Refused("names receive address $index")
-            if (out.publicKeyScript != GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, index).pubkeyScript) {
+            if (out.publicKeyScript != GroupWalletDerivation.derive(account, outputBranch, index).pubkeyScript) {
                 return Result.Refused("pays somewhere that is not the group's onchain wallet")
             }
         }
@@ -120,14 +158,25 @@ object GroupSweep {
             if (txIn.outPoint != OutPoint(TxId(input.txid), input.index)) return Result.Refused("input $i is not the output it describes")
             if (input.csvDelay !in 1..0xFFFF) return Result.Refused("input $i has a delay of ${input.csvDelay}")
             if (txIn.sequence != input.csvDelay) return Result.Refused("input $i does not wait the ${input.csvDelay} blocks its leaf asks")
-            val basepoint = when (input.basepoint) {
-                PAYMENT -> basepoints.payment
-                DELAYED -> basepoints.delayedPayment
-                else -> return Result.Refused("input $i names no basepoint of the group's")
+            val cache = if (input.basepoint == SWAP_IN) {
+                // The depositor's refund key for this address, derived here: never the proposer's.
+                val (_, branch) = refundOf!!
+                val refunds = swapIns!!
+                val index = input.swapInIndex ?: return Result.Refused("input $i names no swap-in address")
+                if (input.csvDelay != refunds.keys.refundDelay.toLong()) return Result.Refused("input $i waits ${input.csvDelay} blocks, not the swap-in's ${refunds.keys.refundDelay}")
+                val address = refunds.keys.address(branch, index)
+                if (ByteVector(input.script) != address.protocol.serializedPubkeyScript) return Result.Refused("input $i is not on the depositor's swap-in address $index")
+                address.refundKey.cache
+            } else {
+                val basepoint = when (input.basepoint) {
+                    PAYMENT -> basepoints.payment
+                    DELAYED -> basepoints.delayedPayment
+                    else -> return Result.Refused("input $i names no basepoint of the group's")
+                }
+                val tweak = input.tweak?.let { runCatching { ByteVector32(it) }.getOrElse { return Result.Refused("input $i has an unreadable tweak") } }
+                if (input.basepoint == DELAYED && tweak == null) return Result.Refused("input $i is a delayed output with no per-commitment tweak")
+                GroupLightningDerivation.leafCache(basepoint, tweak)
             }
-            val tweak = input.tweak?.let { runCatching { ByteVector32(it) }.getOrElse { return Result.Refused("input $i has an unreadable tweak") } }
-            if (input.basepoint == DELAYED && tweak == null) return Result.Refused("input $i is a delayed output with no per-commitment tweak")
-            val cache = GroupLightningDerivation.leafCache(basepoint, tweak)
             val leaf = leafScript(cache.tweakedPublicKey, input.csvDelay)
             if (ByteVector(input.leafScript) != leaf) return Result.Refused("input $i is not spent by the group's own leaf")
             val sighash = tx.hashForSigningTaprootScriptPath(i, spent, SigHash.SIGHASH_DEFAULT, ScriptTree.Leaf(leaf.toByteArray().let(Script::parse)).hash())
@@ -165,12 +214,32 @@ object GroupSweep {
     }
 
     /**
-     * A sweep of [inputs] to the onchain wallet's receive address [receiveIndex], paying [feeratePerVbyte],
-     * or null when there is nothing left after the fee.
+     * What a refund proposal carries for a swap-in coin at [outPoint] holding [amount], on [address], which
+     * is [member]'s: the refund leaf and its control block, as lightning-kmp's own refund witness has them.
      */
-    fun build(wallet: Long, inputs: List<Input>, account: GroupWalletDerivation.Account, receiveIndex: Long, feeratePerVbyte: Long): Sweep? {
+    fun refundInputOf(outPoint: OutPoint, amount: Satoshi, address: GroupSwapInDerivation.Address, member: HexKey): Input {
+        val witness = address.protocol.witnessRefund(ByteVector64.Zeroes)
+        return Input(
+            txid = outPoint.txid.toString(),
+            index = outPoint.index,
+            amountSat = amount.sat,
+            script = Hex.encode(address.protocol.serializedPubkeyScript.toByteArray()),
+            basepoint = SWAP_IN,
+            leafScript = Hex.encode(witness.stack[1].toByteArray()),
+            controlBlock = Hex.encode(witness.stack[2].toByteArray()),
+            csvDelay = address.protocol.refundDelay.toLong(),
+            member = member.lowercase(),
+            swapInIndex = address.index,
+        )
+    }
+
+    /**
+     * A sweep of [inputs] to the onchain wallet's receive address [receiveIndex] -- or, with [branch], that
+     * branch's address [receiveIndex] -- paying [feeratePerVbyte], or null when there is nothing left after the fee.
+     */
+    fun build(wallet: Long, inputs: List<Input>, account: GroupWalletDerivation.Account, receiveIndex: Long, feeratePerVbyte: Long, branch: Long? = null): Sweep? {
         if (inputs.isEmpty()) return null
-        val to = GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, receiveIndex).pubkeyScript
+        val to = GroupWalletDerivation.derive(account, branch ?: GroupWalletDerivation.RECEIVE, receiveIndex).pubkeyScript
         val total = inputs.sumOf { it.amountSat }
         fun txPaying(amount: Long) = Transaction(
             version = 2,
@@ -186,7 +255,7 @@ object GroupSweep {
         }
         val fee = feeratePerVbyte * ((draft.weight().toLong() + 3) / 4)
         if (total - fee < DUST_SAT) return null
-        return Sweep(wallet, Hex.encode(Transaction.write(txPaying(total - fee))), inputs, listOf(receiveIndex))
+        return Sweep(wallet, Hex.encode(Transaction.write(txPaying(total - fee))), inputs, listOf(receiveIndex), branch)
     }
 
     /** The smallest output a sweep leaves: anything under is not worth the fee to sweep. */
