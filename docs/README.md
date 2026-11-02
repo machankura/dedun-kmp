@@ -44,7 +44,7 @@ silent, or a decision that looked arbitrary and was not.
 | [member-deposits.md](./member-deposits.md) | whose deposit it is, built: no address or invoice shown until it is a member's, through a group-signed depositor statement that embeds their payout destination and gives them a wallet branch of their own; per-member tallies kept as a ledger rather than read off the unspent coins; and BOLT12 switched off, in the app and in the lightning-kmp fork, because an offer belongs to nobody |
 | [payouts-only.md](./payouts-only.md) | the group's wallet paying only a member's own coins to that member's own payout destination, built: why a payout has no change, whose a coin is by branch and by the group's word, a coin assignment (30341) for the coins nobody owns, shared coins paid to all their owners at once, and why a Lightning payout is bounded by the member's balance but its payee is still the proposer's word |
 | [group-lightning-swap-in.md](./group-lightning-swap-in.md) | onchain deposits into the group's Lightning wallet, planned: a swap-in address per member whose key path is the group's Iceberg key with the LSP's, and whose refund leaf is a FROST key derived per member and index. Covers the swap-in signer the fork lacks, the co-signer rule for a splice that only adds group coins, why the depositor pays the fee and why there is no channel opening from a swap-in, and the personal swap-in that was built and reverted |
-| [bark-wallet.md](./bark-wallet.md) | a personal wallet under the profile, planned: an Ark wallet run on the device by Second's Bark SDK, opened with the seed profile's own twelve words. Covers why Bark's `m/350'` and BIP86 paths share the words safely, one open wallet per datadir and per process, a port because iOS has no Kotlin binding, why Tor on means no Ark wallet, and coins that must be renewed within 28 days |
+| [bark-wallet.md](./bark-wallet.md) | a personal wallet under the profile, built on signet: an Ark wallet run on the device by Second's Bark SDK, opened with the seed profile's own twelve words. Covers why Bark's `m/350'` and BIP86 paths share the words safely, one open wallet per datadir and per process, a port because iOS has no Kotlin binding, why Tor on means no Ark wallet, and coins that must be renewed within 28 days |
 | [lightning/README.md](./lightning/README.md) | the remediation plans for the review of the group Lightning wallet — seven findings, one phased plan each, and the order to build them in |
 | [../testing/regtest/README.md](../testing/regtest/README.md) | running the group Lightning wallet end to end on a regtest network of bitcoind, electrs and two eclair nodes — the prerequisites and ports, where the run's output and eclair's log end up, and what each failure means. Not part of `check` or CI |
 | [marmot-v2.md](./marmot-v2.md) | bringing the group layer onto the Marmot current profile after the quartz 1.15.2 bump — the nine rules that reach this app, why the room's id and the routing id have to become two values, nine phases from reading both profiles to publishing before applying, and the one fork the library cannot yet settle |
@@ -166,10 +166,12 @@ constraints and eight decisions before any phase, and its table of what
 Phase 0 found against eclair before the code: the minute eclair allows a whole
 splice is what every group signature in it has to fit inside.
 
-The Bark wallet note is a phased plan that has not been built. It is the first
-personal wallet the profile shows. Read the multiple-profiles note's vocabulary
-and the standalone-electrum note's D4 and D5 first, then its table of what Bark
-asks, its fourteen decisions, and its Phase 0, whose answers may amend D4, D6 and D12.
+The Bark wallet note is a phased plan that has been built on signet and not
+switched to mainnet. It is the first personal wallet the profile shows. Read the
+multiple-profiles note's vocabulary and the standalone-electrum note's D4 and D5
+first, then its table of what Bark asks, its fourteen decisions, its Phase 0's
+findings, and its table of where the build chose differently, whose rows say what
+has not been checked: iOS, the macOS and Windows libraries, and the app on a device.
 
 The standalone-electrum note is a phased plan that has been built, and is the
 group chain wallet note's *An identity without a node* answered: read that

@@ -77,6 +77,7 @@ class SignOutViewModel(
                     withContext(Dispatchers.Main) { onSignedOut() }
                 }
                 is ForgetIdentity.Outcome.WalletAttached,
+                is ForgetIdentity.Outcome.ArkWalletAttached,
                 is ForgetIdentity.Outcome.CannotForget -> {
                     _state.value = State.Failed
                 }

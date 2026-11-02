@@ -52,12 +52,13 @@ class ForgetIdentityJvmTest {
         }
     }
 
-    private suspend fun forget(recorder: Recorder, result: IdentityWriter.ForgetNostrCredentialResult) =
+    private suspend fun forget(recorder: Recorder, result: IdentityWriter.ForgetNostrCredentialResult, hasArkWallet: Boolean = false) =
         ForgetIdentity.forget(
             identity = readOnlyIdentity(),
             nostrRepository = recorder,
             forgetNostrCredential = { recorder.effects += "forgetNostrCredential"; result },
             hideIdentityMetadata = { recorder.effects += "hideIdentityMetadata" },
+            hasArkWallet = { hasArkWallet },
         )
 
     @Test
@@ -81,6 +82,16 @@ class ForgetIdentityJvmTest {
 
         assertEquals(ForgetIdentity.Outcome.WalletAttached, outcome)
         assertEquals(listOf("forgetNostrCredential"), recorder.effects)
+    }
+
+    @Test
+    fun `a key with an Ark wallet of its own is not forgotten, and nothing is touched`() = runBlocking {
+        val recorder = Recorder()
+
+        val outcome = forget(recorder, IdentityWriter.ForgetNostrCredentialResult.Forgotten, hasArkWallet = true)
+
+        assertEquals(ForgetIdentity.Outcome.ArkWalletAttached, outcome)
+        assertEquals(emptyList(), recorder.effects)
     }
 
     @Test

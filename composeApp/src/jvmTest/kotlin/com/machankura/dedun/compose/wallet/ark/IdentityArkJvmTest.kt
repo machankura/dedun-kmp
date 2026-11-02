@@ -26,6 +26,7 @@ class IdentityArkJvmTest {
     private val log = mutableListOf<String>()
     private var failOpen: ArkError? = null
     private var lastOpened: FakeArkWallet? = null
+    private val created = mutableListOf<WalletId>()
     private var clock = Instant.parse("2026-11-02T08:00:00Z")
 
     private val files = object : ArkFiles {
@@ -45,6 +46,7 @@ class IdentityArkJvmTest {
         network = ArkNetwork.Signet,
         rolloutEnabled = true,
         now = { clock },
+        createSeed = { id -> created += id; words },
         opener = { config, phrase, datadir ->
             failOpen?.let { failOpen = null; throw it }
             assertEquals("dedun/test", config.userAgent)
@@ -210,6 +212,20 @@ class IdentityArkJvmTest {
         assertEquals(listOf("open /ark/signet/${alice.nodeIdHash}", "close /ark/signet/${alice.nodeIdHash}"), log)
         assertTrue("maintenance" in lastOpened!!.calls)
         assertEquals(ArkWalletState.None, ark.state.value)
+    }
+
+    @Test
+    fun `an nsec turning its wallet on gets words made for it, and opens with them`() = runTest {
+        val ark = identityArk()
+        ark.activate(ArkProfile(bob, words = null, torEnabled = false, canCreateSeed = true))
+        advanceUntilIdle()
+        assertEquals(ArkWalletState.Unavailable(ArkUnavailability.NotConsented), ark.state.value)
+        assertTrue(created.isEmpty())
+
+        ark.consent()
+        advanceUntilIdle()
+        assertEquals(listOf(bob), created)
+        assertIs<ArkWalletState.Open>(ark.state.value)
     }
 
     @Test

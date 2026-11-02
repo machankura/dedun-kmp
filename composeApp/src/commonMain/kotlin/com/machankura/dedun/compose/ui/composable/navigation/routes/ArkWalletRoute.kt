@@ -32,3 +32,9 @@ data class ArkSendRoute(
 data class ArkAdvancedRoute(
     val activeUserPublicKey: String,
 ): Route()
+
+/** The words of a wallet that has its own: an nsec profile's. `docs/bark-wallet.md`, Phase 13. */
+@Serializable
+data class ArkRecoveryPhraseRoute(
+    val activeUserPublicKey: String,
+): Route()

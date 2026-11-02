@@ -5,7 +5,7 @@ enum class ArkUnavailability {
     /** The rollout gate is shut. */
     RolloutOff,
 
-    /** The profile has no words: an nsec or npub -- D13. */
+    /** The profile cannot have words: an npub, which cannot sign -- D13. */
     NoSeed,
 
     /** The first-open sheet has not been accepted -- D10. */
@@ -49,12 +49,14 @@ sealed interface ArkSetup {
             appVersion: String,
             network: ArkNetwork = ArkWalletRollout.NETWORK,
             rolloutEnabled: Boolean = ArkWalletRollout.ENABLED,
+            /** An nsec: no words of its own, but turning the wallet on makes some -- Phase 13. */
+            canCreateSeed: Boolean = false,
         ): ArkSetup = when {
             !rolloutEnabled -> Unavailable(ArkUnavailability.RolloutOff)
-            !hasSeed -> Unavailable(ArkUnavailability.NoSeed)
+            !hasSeed && !canCreateSeed -> Unavailable(ArkUnavailability.NoSeed)
             !platformSupported -> Unavailable(ArkUnavailability.UnsupportedPlatform)
             torEnabled -> Unavailable(ArkUnavailability.TorOn)
-            !consented -> Unavailable(ArkUnavailability.NotConsented)
+            !consented || !hasSeed -> Unavailable(ArkUnavailability.NotConsented)
             else -> Ready(ArkConfig(network, ArkWalletRollout.endpointsFor(network), userAgent(appVersion)))
         }
 

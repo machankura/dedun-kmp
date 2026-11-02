@@ -40,6 +40,16 @@ class ArkSetupTest {
     }
 
     @Test
+    fun `an nsec has no words yet and is offered the wallet, and an npub is not`() {
+        val nsec = ArkSetup.resolve(hasSeed = false, platformSupported = true, torEnabled = false, consented = false, appVersion = "1", network = ArkNetwork.Signet, rolloutEnabled = true, canCreateSeed = true)
+        assertEquals(ArkSetup.Unavailable(ArkUnavailability.NotConsented), nsec)
+        // Consent recorded but the words gone -- a reinstall that kept the consent file: offered again.
+        val lost = ArkSetup.resolve(hasSeed = false, platformSupported = true, torEnabled = false, consented = true, appVersion = "1", network = ArkNetwork.Signet, rolloutEnabled = true, canCreateSeed = true)
+        assertEquals(ArkSetup.Unavailable(ArkUnavailability.NotConsented), lost)
+        assertEquals(ArkSetup.Unavailable(ArkUnavailability.NoSeed), resolve(hasSeed = false))
+    }
+
+    @Test
     fun `the user agent always has a slash and never a space`() {
         assertEquals("dedun/1.4.0-beta", ArkSetup.userAgent(" 1.4.0 beta "))
         assertEquals("dedun/0", ArkSetup.userAgent(""))

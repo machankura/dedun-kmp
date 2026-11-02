@@ -1046,7 +1046,7 @@
     <string name="ark_wallet_not_turned_on">Not turned on</string>
     <string name="ark_wallet_unavailable_with_tor">Not available with Tor on</string>
     <string name="ark_wallet_unavailable_on_this_device">Not available on this device</string>
-    <string name="ark_wallet_unavailable_without_a_phrase">Profiles without a recovery phrase have no wallet yet</string>
+    <string name="ark_wallet_unavailable_without_a_phrase">A read-only profile can't have a wallet</string>
     <string name="ark_wallet_unavailable_yet">Not available yet</string>
     <string name="ark_wallet_opening">Opening…</string>
     <string name="ark_wallet_restoring">Restoring your balance…</string>
@@ -1160,6 +1160,11 @@
     <string name="ark_pay_s_sats_from_your_wallet_question">Pay %1$s sats from your wallet?</string>
     <string name="ark_pay_with_a_fee_of_s_sats">With a fee of %1$s sats.</string>
     <string name="ark_use_my_wallet_s_onchain_address">Use my wallet's onchain address</string>
+    <string name="ark_recovery_phrase">Wallet recovery phrase</string>
+    <string name="ark_recovery_phrase_explainer">This profile was signed in with a key, so its wallet has words of its own. They restore the wallet's balance, with the Ark server's help, and nothing else: the key that signs as you is not among them. Write them down and keep them somewhere that is not this device.</string>
+    <string name="ark_recovery_phrase_show">Show the words</string>
+    <string name="ark_recovery_phrase_none">This profile's wallet has no words of its own: its recovery phrase is the profile's.</string>
+    <string name="could_not_forget_the_key_it_has_a_wallet">This profile has a wallet. Move its money out of it first, then forget the key.</string>
     <string name="ark_movement_payment_details">Payment details</string>
     <string name="ark_movement_amount">Amount</string>
     <string name="ark_movement_fee">Fee</string>

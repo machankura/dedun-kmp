@@ -19,8 +19,14 @@ import kotlin.time.Instant
  * What the active profile asks of its Ark wallet. [words] is null for a profile with no
  * seed. Never logged: [toString] leaves the words out.
  */
-class ArkProfile(val id: WalletId, val words: List<String>?, val torEnabled: Boolean) {
-    override fun toString(): String = "ArkProfile(id=$id, words=${if (words == null) "none" else "***"}, tor=$torEnabled)"
+class ArkProfile(
+    val id: WalletId,
+    val words: List<String>?,
+    val torEnabled: Boolean,
+    /** An nsec profile, whose words are made for it when it turns the wallet on -- D13. */
+    val canCreateSeed: Boolean = false,
+) {
+    override fun toString(): String = "ArkProfile(id=$id, words=${if (words == null) "none" else "***"}, tor=$torEnabled, canCreateSeed=$canCreateSeed)"
 }
 
 /** Where the active profile's Ark wallet is. */
@@ -62,6 +68,8 @@ class IdentityArk(
     private val rolloutEnabled: Boolean = ArkWalletRollout.ENABLED,
     private val opener: suspend (ArkConfig, String, String) -> ArkWallet = ArkPlatform::open,
     private val now: () -> Instant = { Clock.System.now() },
+    /** Makes and stores words for a profile with none: `ArkSeedStore.create` -- Phase 13. */
+    private val createSeed: (WalletId) -> List<String> = { error("no seed store") },
 ) {
     private val logger = Logger.withTag("IdentityArk")
     private val mutex = Mutex()
@@ -82,7 +90,10 @@ class IdentityArk(
     fun consent() {
         scope.launch {
             mutex.withLock {
-                val current = profile ?: return@withLock
+                var current = profile ?: return@withLock
+                if (current.words == null && current.canCreateSeed) {
+                    current = ArkProfile(current.id, createSeed(current.id), current.torEnabled, canCreateSeed = true)
+                }
                 files.recordConsent(current.id)
                 switchTo(current, force = true)
             }
@@ -163,6 +174,7 @@ class IdentityArk(
             appVersion = appVersion,
             network = network,
             rolloutEnabled = rolloutEnabled,
+            canCreateSeed = next.canCreateSeed,
         )
         when (setup) {
             is ArkSetup.Unavailable -> _state.value = ArkWalletState.Unavailable(setup.reason)

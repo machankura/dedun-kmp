@@ -191,6 +191,8 @@ import com.machankura.dedun.compose.database.repository.DatabaseMemberWalletRepo
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.ark.ArkProcess
+import kotlinx.coroutines.withContext
+import com.machankura.dedun.compose.identity.IdentityKind
 import com.machankura.dedun.compose.wallet.ark.ArkProfile
 import com.machankura.dedun.compose.wallet.ark.IdentityArk
 import com.machankura.dedun.compose.ui.composable.ArkMovementScreen
@@ -202,6 +204,8 @@ import com.machankura.dedun.compose.ui.composable.ArkReceiveScreen
 import com.machankura.dedun.compose.ui.composable.ArkSendScreen
 import com.machankura.dedun.compose.ui.composable.ArkAdvancedScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkAdvancedRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkRecoveryPhraseRoute
+import com.machankura.dedun.compose.ui.composable.ArkRecoveryPhraseScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkSendRoute
 import com.machankura.dedun.compose.identity.StoredIdentity
 import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
@@ -336,6 +340,7 @@ fun DedunNavHost(
     // from the seed the selector already decrypted; they are handed to IdentityArk and kept
     // nowhere else. Tor is followed, so turning it on closes the wallet.
     val identityArk = remember { ArkProcess.holder(getApplicationFilesDirectoryPath(phoenixGlobal.ctx)) }
+    val arkSeeds = remember { ArkProcess.seeds(getApplicationFilesDirectoryPath(phoenixGlobal.ctx)) }
     // Each return to the foreground renews what is due, at most hourly (D12).
     LaunchedEffect(identityArk) {
         AppLifecycle.isForeground.collect { foreground -> if (foreground) identityArk.maintain() }
@@ -346,9 +351,12 @@ fun DedunNavHost(
             identityArk.activate(null)
             return@LaunchedEffect
         }
+        // A seed profile's own words; an nsec's, made when it first turned the wallet on (D13).
+        val nsec = identity.kind == IdentityKind.NostrSecret
         val words = (sovereignWalletViewModel.availableIdentities.value[identity.id] as? StoredIdentity.Mnemonic)?.userWallet?.words
+            ?: if (nsec) withContext(Dispatchers.Default) { runCatching { arkSeeds.words(identity.id) }.getOrNull() } else null
         identity.userPrefs.getIsTorEnabled.collect { tor ->
-            identityArk.activate(ArkProfile(identity.id, words, tor))
+            identityArk.activate(ArkProfile(identity.id, words, tor, canCreateSeed = nsec))
         }
     }
 
@@ -1217,9 +1225,23 @@ fun DedunNavHost(
                     onNavigateBack = { navController.popBackStack() },
                 )
             }
-            composable<ArkAdvancedRoute> {
+            composable<ArkAdvancedRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<ArkAdvancedRoute>()
                 ArkAdvancedScreen(
                     identityArk = identityArk,
+                    onNavigateBack = { navController.popBackStack() },
+                    // Only a wallet with words of its own has a phrase to show here (D13).
+                    onRecoveryPhrase = if (activeIdentityForWallets?.kind == IdentityKind.NostrSecret) {
+                        { navController.navigate(route = ArkRecoveryPhraseRoute(activeUserPublicKey = route.activeUserPublicKey)) }
+                    } else null,
+                )
+            }
+            composable<ArkRecoveryPhraseRoute> {
+                ArkRecoveryPhraseScreen(
+                    loadWords = {
+                        val identity = activeIdentityForWallets
+                        if (identity == null) null else withContext(Dispatchers.Default) { runCatching { arkSeeds.words(identity.id) }.getOrNull() }
+                    },
                     onNavigateBack = { navController.popBackStack() },
                 )
             }

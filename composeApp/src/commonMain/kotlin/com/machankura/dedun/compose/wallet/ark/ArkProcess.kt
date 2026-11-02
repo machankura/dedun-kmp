@@ -21,6 +21,9 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 object ArkProcess {
     private val holder = AtomicReference<IdentityArk?>(null)
 
+    /** Words made for profiles with none of their own -- Phase 13 -- in `node-data`, beside `seed.dat`. */
+    fun seeds(applicationFilesDirectory: String): ArkSeedStore = ArkSeedStore.forApp(applicationFilesDirectory.toPath() / "node-data")
+
     /**
      * The holder, made on the first call with the app's files directory. Two first calls at
      * once -- the activity and the worker, at a cold start -- both make one and the loser's is
@@ -32,6 +35,7 @@ object ArkProcess {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             files = ArkFiles.under(applicationFilesDirectory.toPath()),
             appVersion = AppVersion.versionName,
+            createSeed = seeds(applicationFilesDirectory)::create,
         )
         return if (holder.compareAndSet(null, made)) made else holder.load()!!
     }

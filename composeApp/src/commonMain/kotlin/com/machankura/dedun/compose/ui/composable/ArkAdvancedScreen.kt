@@ -51,6 +51,7 @@ import com.machankura.dedun.compose.wallet.ark.IdentityArk
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.ark_advanced
 import dedun.composeapp.generated.resources.ark_advanced_explainer
+import dedun.composeapp.generated.resources.ark_recovery_phrase
 import dedun.composeapp.generated.resources.ark_claim_exits
 import dedun.composeapp.generated.resources.ark_claim_failed
 import dedun.composeapp.generated.resources.ark_claim_started
@@ -98,6 +99,7 @@ import org.jetbrains.compose.resources.stringResource
 fun ArkAdvancedScreen(
     identityArk: IdentityArk,
     onNavigateBack: () -> Unit,
+    onRecoveryPhrase: (() -> Unit)? = null,
 ) {
     val viewModel: ArkAdvancedViewModel = viewModel(factory = ArkAdvancedViewModel.factory(identityArk))
     LaunchedEffect(true) { viewModel.load() }
@@ -124,14 +126,14 @@ fun ArkAdvancedScreen(
                     message = stringResource(Res.string.ark_wallet_could_not_read),
                     onRetry = viewModel::load,
                 )
-                is ArkAdvancedUIState.Loaded -> ArkAdvancedLoaded(state, viewModel, Modifier.padding(padding))
+                is ArkAdvancedUIState.Loaded -> ArkAdvancedLoaded(state, viewModel, Modifier.padding(padding), onRecoveryPhrase)
             }
         }
     }
 }
 
 @Composable
-private fun ArkAdvancedLoaded(state: ArkAdvancedUIState.Loaded, viewModel: ArkAdvancedViewModel, modifier: Modifier) {
+private fun ArkAdvancedLoaded(state: ArkAdvancedUIState.Loaded, viewModel: ArkAdvancedViewModel, modifier: Modifier, onRecoveryPhrase: (() -> Unit)?) {
     val notify = rememberNotifier(rememberCoroutineScope())
     val offboardStarted = stringResource(Res.string.ark_offboard_started)
     val offboardFailed = stringResource(Res.string.ark_offboard_failed)
@@ -159,6 +161,9 @@ private fun ArkAdvancedLoaded(state: ArkAdvancedUIState.Loaded, viewModel: ArkAd
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
     ) {
         item { Text(stringResource(Res.string.ark_advanced_explainer), style = MaterialTheme.typography.bodyMedium) }
+        onRecoveryPhrase?.let { open ->
+            item { TextButton(onClick = open) { Text(stringResource(Res.string.ark_recovery_phrase)) } }
+        }
 
         item {
             OutlinedTextField(

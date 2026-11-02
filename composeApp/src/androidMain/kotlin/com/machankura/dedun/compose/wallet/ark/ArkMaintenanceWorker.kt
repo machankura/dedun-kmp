@@ -39,9 +39,12 @@ class ArkMaintenanceWorker(context: Context, params: WorkerParameters) : Corouti
         val id = (applicationContext as DedunApplication).getGlobalPrefs().getDefaultWallet.first() as? WalletId
             ?: return Result.success()
         if (!ArkFiles.under(getApplicationFilesDirectoryPath(ctx).toPath()).consented(id)) return Result.success()
-        val words = SeedManager.loadAndDecryptOrNull(PhoenixGlobal(ctx))?.get(id)?.words ?: return Result.success()
+        // A seed profile's words, or an nsec's own (D13).
+        val words = SeedManager.loadAndDecryptOrNull(PhoenixGlobal(ctx))?.get(id)?.words
+            ?: ArkProcess.seeds(getApplicationFilesDirectoryPath(ctx)).words(id)
+            ?: return Result.success()
         val tor = DataStoreManager(ctx, NodeParamsManager.chain).loadUserPrefsForWallet(id).getIsTorEnabled.first()
-        val ran = ArkProcess.holder(getApplicationFilesDirectoryPath(ctx)).maintainInBackground(ArkProfile(id, words, tor))
+        val ran = ArkProcess.holder(getApplicationFilesDirectoryPath(ctx)).maintainInBackground(ArkProfile(id, words, tor, canCreateSeed = true))
         logger.i { if (ran) "maintained the Ark wallet for $id" else "left $id's Ark wallet to the app" }
         return Result.success()
     }

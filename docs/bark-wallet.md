@@ -5,9 +5,19 @@ history, on the profile tab above the member wallets. It is an Ark wallet, run o
 Second's Bark SDK. One balance can be spent to an Ark address, a Lightning invoice or an onchain
 address, and paid into the same three ways. There are no channels and no inbound liquidity.
 
-**Planned; Phase 0 has run.** Written against `7658c8ed` (`dedun`), with the `lightning-kmp-app` submodule at
-`7aaacadc`, and against the Bark FFI bindings `v0.26.1+bark-0.8.0`. Those bindings wrap
-`bark-ffi` `0.30.1`, which pins `bark` `0.8.0` and uniffi `0.31.1`.
+**Built on signet, phases 0 to 13, one commit each; not on mainnet.** Written against `7658c8ed`
+(`dedun`), with the `lightning-kmp-app` submodule at `7aaacadc`, which the build did not touch, and
+against the Bark FFI bindings `v0.26.1+bark-0.8.0`. Those bindings wrap `bark-ffi` `0.30.1`, which pins
+`bark` `0.8.0` and uniffi `0.31.1`. What is checked and what is not:
+- Android and Linux desktop compile, and the JVM suite passes (1,958 tests).
+- The adapter runs against Second's signet server, and end to end against `captaind` on regtest,
+  emergency exit included.
+- Not checked: the app run on a device; iOS (its Kotlin actual and Swift half have not been
+  compiled); macOS and Windows natives (the script has not been run); Lightning with money.
+- `ArkWalletRollout.NETWORK` is still signet. The mainnet flip waits on Phase 12's hand-made
+  mainnet checks.
+
+The phases are kept as written; the table below says where the build chose differently.
 
 Where the build chose differently, phase by phase:
 
@@ -57,6 +67,10 @@ Where the build chose differently, phase by phase:
 | 12 | Lightning send to the eclair payer and receive from it | not in the run: the Ark network's Core Lightning has no channel to anything. Lightning is the one rail that has run only on signet, without money |
 | 12 | the run: board, Ark send, Lightning, renewal, offboard, an exit with captaind stopped, a restore | two tests, both passing on this host: `boardPayRenewOffboardAndRestore` (66 s) and `anEmergencyExitWithTheServerGoneIsClaimedOnchain` (175 s: the exit broadcast, the 144-block wait mined through, the claim signed and broadcast) |
 | 12 | then flip `ArkWalletRollout.NETWORK` to mainnet | **not flipped.** The plan's own condition is a mainnet receive, send and renewal made by hand on Android, which needs a device and real money and has not been done. The wallet stays on signet |
+| 13 | the phrase screen reached from the wallet's advanced screen | it is, and only for an nsec profile: a seed profile's wallet has no words of its own, and its phrase is the profile's |
+| 13 | forget deletes the Ark seed with the datadir | forget is refused while an nsec has Ark words (`ForgetIdentity.Outcome.ArkWalletAttached`, checked before anything is touched), because those words are the only way back to that money. The refusal says to move the money out first. Deleting the words and the datadir once the wallet is empty is not built |
+| 13 | `ArkSeedManager` next to `SeedManager` | `ArkSeedStore` in composeApp, with the keystore calls injected so the encryption is tested on the JVM. The file is `node-data/ark-seeds.dat`, written through the library's `AtomicFileWrite` |
+| 13 | an nsec is `NoSeed` | `NoSeed` is an npub's alone now. An nsec without words is *Not turned on*, and *Turn on* makes its words, records the consent and opens, in that order and under the holder's lock |
 | 9 | the exit calls on `ArkWallet` | on `ArkExits`, which `ArkWallet` extends, so the everyday screens' fakes and readers do not carry ten calls they never make |
 | 9 | *Claim* | `drain_exits` builds the claim, `sign_exit_claim_inputs` signs the exit outputs, and `extract_tx_from_psbt` and `broadcast_tx` send it. The claim is enabled once an exit is *Ready to claim* and the tip has reached `all_exits_claimable_at_height` |
 | 9 | *Move everything onchain* behind a confirmation | two taps on one button: the first prices the offboard for the address typed and shows the fee, the second moves. The emergency exit has a dialog of its own, because it cannot be undone |
