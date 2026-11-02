@@ -75,6 +75,8 @@ fun QRCodeView(
         Color.Black
     }
 
+    // m3-color-exempt: the logo is part of the QR code's image, not the app's surface, and
+    // sits on a fixed black backdrop so it looks the same in every scheme.
     val logoPainter = QRCodeBackgroundPainter(
         painter = painterResource(
             Res.drawable.compose_multiplatform
