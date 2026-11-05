@@ -198,18 +198,6 @@ import kotlinx.coroutines.withContext
 import com.machankura.dedun.compose.identity.IdentityKind
 import com.machankura.dedun.compose.wallet.ark.ArkProfile
 import com.machankura.dedun.compose.wallet.ark.IdentityArk
-import com.machankura.dedun.compose.ui.composable.ArkMovementScreen
-import com.machankura.dedun.compose.ui.composable.ArkWalletScreen
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkMovementRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkWalletRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkReceiveRoute
-import com.machankura.dedun.compose.ui.composable.ArkReceiveScreen
-import com.machankura.dedun.compose.ui.composable.ArkSendScreen
-import com.machankura.dedun.compose.ui.composable.ArkAdvancedScreen
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkAdvancedRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkRecoveryPhraseRoute
-import com.machankura.dedun.compose.ui.composable.ArkRecoveryPhraseScreen
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ArkSendRoute
 import com.machankura.dedun.compose.identity.StoredIdentity
 import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
@@ -1237,61 +1225,6 @@ fun DedunNavHost(
                     signOut = signOutOfReadOnlyIdentity,
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = groupOnchainWallets,
-                    identityArk = identityArk,
-                )
-            }
-            composable<ArkWalletRoute> { backStackEntry ->
-                val route = backStackEntry.toRoute<ArkWalletRoute>()
-                ArkWalletScreen(
-                    identityArk = identityArk,
-                    onOpenMovement = { movementId ->
-                        navController.navigate(route = ArkMovementRoute(activeUserPublicKey = route.activeUserPublicKey, movementId = movementId))
-                    },
-                    onReceive = { navController.navigate(route = ArkReceiveRoute(activeUserPublicKey = route.activeUserPublicKey)) },
-                    onSend = { navController.navigate(route = ArkSendRoute(activeUserPublicKey = route.activeUserPublicKey)) },
-                    onAdvanced = { navController.navigate(route = ArkAdvancedRoute(activeUserPublicKey = route.activeUserPublicKey)) },
-                    onNavigateBack = { navController.popBackStack() },
-                )
-            }
-            composable<ArkAdvancedRoute> { backStackEntry ->
-                val route = backStackEntry.toRoute<ArkAdvancedRoute>()
-                ArkAdvancedScreen(
-                    identityArk = identityArk,
-                    onNavigateBack = { navController.popBackStack() },
-                    // Only a wallet with words of its own has a phrase to show here (D13).
-                    onRecoveryPhrase = if (activeIdentityForWallets?.kind == IdentityKind.NostrSecret) {
-                        { navController.navigate(route = ArkRecoveryPhraseRoute(activeUserPublicKey = route.activeUserPublicKey)) }
-                    } else null,
-                )
-            }
-            composable<ArkRecoveryPhraseRoute> {
-                ArkRecoveryPhraseScreen(
-                    loadWords = {
-                        val identity = activeIdentityForWallets
-                        if (identity == null) null else withContext(Dispatchers.Default) { runCatching { arkSeeds.words(identity.id) }.getOrNull() }
-                    },
-                    onNavigateBack = { navController.popBackStack() },
-                )
-            }
-            composable<ArkSendRoute> {
-                ArkSendScreen(
-                    identityArk = identityArk,
-                    onSent = { navController.popBackStack() },
-                    onNavigateBack = { navController.popBackStack() },
-                )
-            }
-            composable<ArkReceiveRoute> {
-                ArkReceiveScreen(
-                    identityArk = identityArk,
-                    onNavigateBack = { navController.popBackStack() },
-                )
-            }
-            composable<ArkMovementRoute> { backStackEntry ->
-                val route = backStackEntry.toRoute<ArkMovementRoute>()
-                ArkMovementScreen(
-                    identityArk = identityArk,
-                    movementId = route.movementId,
-                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<ShareProfileRoute> { backStackEntry ->
