@@ -67,7 +67,10 @@ sealed interface WavelengthAdvancedUIState {
  * Exits belong to the daemon, in its database, and carry on across restarts. This only starts them
  * and shows how they stand, which is why [load] is all it needs after one.
  */
-class WavelengthAdvancedViewModel(private val walletState: StateFlow<WalletState>) : ViewModel() {
+class WavelengthAdvancedViewModel(
+    private val walletState: StateFlow<WalletState>,
+    private val onLookForMoreCoins: () -> Unit = {},
+) : ViewModel() {
     var uiState: WavelengthAdvancedUIState by mutableStateOf(
         if (walletState.value is WalletState.Open) WavelengthAdvancedUIState.Loading else WavelengthAdvancedUIState.NoWallet,
     )
@@ -92,6 +95,9 @@ class WavelengthAdvancedViewModel(private val walletState: StateFlow<WalletState
     fun onAddressChange(text: String) {
         loaded?.let { uiState = it.copy(address = text.trim(), problem = null) }
     }
+
+    /** Reopens the wallet with a wide recovery scan. The wallet's own screens show it happening. */
+    fun lookForMoreCoins() = onLookForMoreCoins()
 
     fun dismissStep() {
         loaded?.let { uiState = it.copy(step = null) }
@@ -175,7 +181,7 @@ class WavelengthAdvancedViewModel(private val walletState: StateFlow<WalletState
 
     companion object {
         fun factory(identityWavelength: IdentityWavelength): ViewModelProvider.Factory = viewModelFactory {
-            initializer { WavelengthAdvancedViewModel(identityWavelength.state) }
+            initializer { WavelengthAdvancedViewModel(identityWavelength.state, identityWavelength::lookForMoreCoins) }
         }
     }
 }

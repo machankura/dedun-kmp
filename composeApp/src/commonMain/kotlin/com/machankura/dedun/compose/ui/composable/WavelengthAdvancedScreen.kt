@@ -66,6 +66,8 @@ import dedun.composeapp.generated.resources.wavelength_advanced_exit_stopped
 import dedun.composeapp.generated.resources.wavelength_advanced_exits
 import dedun.composeapp.generated.resources.wavelength_advanced_exits_note
 import dedun.composeapp.generated.resources.wavelength_advanced_explainer
+import dedun.composeapp.generated.resources.wavelength_advanced_look
+import dedun.composeapp.generated.resources.wavelength_advanced_look_explainer
 import dedun.composeapp.generated.resources.wavelength_advanced_move_all
 import dedun.composeapp.generated.resources.wavelength_advanced_move_question
 import dedun.composeapp.generated.resources.wavelength_advanced_move_started
@@ -112,6 +114,10 @@ fun WavelengthAdvancedScreen(
             onSweep = viewModel::priceSweep,
             onConfirm = viewModel::confirm,
             onDismiss = viewModel::dismissStep,
+            onLookForMoreCoins = {
+                viewModel.lookForMoreCoins()
+                onNavigateBack()
+            },
         )
     }
 }
@@ -127,6 +133,7 @@ fun WavelengthAdvancedContent(
     onSweep: () -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    onLookForMoreCoins: () -> Unit = {},
 ) {
     ScreenStateTransition(state) { uiState ->
         when (val current = uiState) {
@@ -173,6 +180,11 @@ fun WavelengthAdvancedContent(
                                 supportingContent = { Text(exitStatusText(exit.status)) },
                             )
                         }
+                    }
+
+                    Text(stringResource(Res.string.wavelength_advanced_look_explainer), style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onLookForMoreCoins, enabled = !current.working) {
+                        Text(stringResource(Res.string.wavelength_advanced_look))
                     }
 
                     Text(stringResource(Res.string.wavelength_advanced_coins), style = MaterialTheme.typography.titleMedium)

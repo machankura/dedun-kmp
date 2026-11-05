@@ -8,6 +8,7 @@ import engineering.lightning.wavelength.WavelengthException
 import engineering.lightning.wavelength.engine.WalletEngine
 import engineering.lightning.wavelength.model.DescriptorWalletOpenResult
 import fr.acinq.phoenix.data.WalletId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -135,6 +136,23 @@ class IdentityWavelength(
         scope.launch { mutex.withLock { profile?.let { switchTo(it, force = true) } } }
     }
 
+    /**
+     * Opens the wallet again with a recovery scan as wide as [WavelengthWalletRollout.FULL_RECOVERY_WINDOW],
+     * for someone restoring a wallet that was used for a while. Slow: it takes minutes, and the wallet
+     * is not usable until it is done.
+     */
+    fun lookForMoreCoins() {
+        asked.value++
+        scope.launch {
+            mutex.withLock {
+                val current = profile ?: return@withLock
+                if (setupFor(current) !is WalletSetup.Ready) return@withLock
+                stopDaemon()
+                open(current, recoveryWindow = WavelengthWalletRollout.FULL_RECOVERY_WINDOW)
+            }
+        }
+    }
+
     /** The app came to the foreground: cancels a pending stop, or reopens what was stopped. */
     fun enteredForeground() {
         asked.value++
@@ -221,11 +239,12 @@ class IdentityWavelength(
         }
     }
 
-    private suspend fun open(next: WalletProfile) {
+    private suspend fun open(next: WalletProfile, recoveryWindow: Long? = null) {
         val client = client ?: return
         val pinned = files.pinnedIdentity(network, next.id)
         val first = pinned == null
-        _state.value = if (first) WalletState.Recovering else WalletState.Opening
+        val window = recoveryWindow ?: if (first) WavelengthWalletRollout.FIRST_OPEN_RECOVERY_WINDOW else null
+        _state.value = if (window != null) WalletState.Recovering else WalletState.Opening
         val config = WavelengthWalletRollout.configFor(network, files.dataDir(network, next.id))
         try {
             val result = withContext(NonCancellable) {
@@ -235,7 +254,8 @@ class IdentityWavelength(
                         descriptors = WalletKeys.descriptors(next.words!!, network),
                         birthday = WavelengthWalletRollout.EARLIEST_BIRTHDAY,
                         expectedIdentityPubKey = pinned,
-                        recoverState = first,
+                        recoverState = window != null,
+                        recoveryWindow = window,
                     ),
                 )
             }
@@ -257,6 +277,14 @@ class IdentityWavelength(
             logger.w { "could not open the wallet for ${next.id}: ${e.code}" }
             stopQuietly()
             _state.value = WalletState.Failed(e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // This runs on the process's own scope, where anything uncaught ends the app. And only
+            // the type is logged: the failure's message may have been built around these words.
+            logger.w { "could not open the wallet for ${next.id}: ${e::class.simpleName}" }
+            stopQuietly()
+            _state.value = WalletState.Failed(WavelengthException.Daemon("could not open the wallet"))
         }
     }
 

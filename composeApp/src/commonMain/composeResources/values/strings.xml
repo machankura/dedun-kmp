@@ -1187,4 +1187,6 @@
     <string name="wavelength_advanced_could_not_move">Couldn't move your coins. Nothing has left the wallet unless your payments say so.</string>
     <string name="wavelength_advanced_could_not_exit">Couldn't start the exit</string>
     <string name="wavelength_advanced_could_not_sweep">Couldn't send the onchain balance</string>
+    <string name="wavelength_advanced_look">Look for more coins</string>
+    <string name="wavelength_advanced_look_explainer">If you restored this profile and coins are missing, Dedun can look further back. It takes several minutes, and the wallet can't be used until it's done.</string>
 </resources>

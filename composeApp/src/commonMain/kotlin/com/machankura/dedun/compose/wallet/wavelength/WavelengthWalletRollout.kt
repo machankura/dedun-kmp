@@ -40,6 +40,17 @@ object WavelengthWalletRollout {
      */
     val EARLIEST_BIRTHDAY: Instant = Instant.parse("2026-11-01T00:00:00Z")
 
+    /**
+     * How many keys a first open looks at in each family. A recovery scan grows with this: on
+     * signet on 6 November 2026, for an empty wallet, 10 took 75 seconds and the daemon's default
+     * of 100 was not done after 400. A first open has to be something a person will wait for, and
+     * a new wallet has nothing to find. A restored one that needs more asks for [FULL_RECOVERY_WINDOW].
+     */
+    const val FIRST_OPEN_RECOVERY_WINDOW: Long = 10
+
+    /** *Look for more coins*. It can be run again, since recovery is idempotent. */
+    const val FULL_RECOVERY_WINDOW: Long = 100
+
     fun capFor(network: Network): Satoshi? = MAINNET_CAP.takeIf { network == Network.MAINNET }
 
     /** Whether receiving [incoming] would take [balance] past the cap on [network]. */

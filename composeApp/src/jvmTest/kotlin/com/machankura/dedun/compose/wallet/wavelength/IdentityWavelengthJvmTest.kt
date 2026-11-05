@@ -234,6 +234,29 @@ class IdentityWavelengthJvmTest {
     }
 
     @Test
+    fun `a first open scans a small window, a later one none, and asking scans a wide one`() = runWallet {
+        files.recordConsent(alice)
+        val bindings = FakeFacadeBindings()
+        val holder = holder(bindings)
+        holder.activate(profile())
+        runCurrent()
+        assertEquals(WavelengthWalletRollout.FIRST_OPEN_RECOVERY_WINDOW, assertNotNull(assertIs<WalletState.Open>(holder.state.value).recovery).let { lastWindow(bindings) })
+
+        holder.stop()
+        holder.activate(profile())
+        runCurrent()
+        assertNull(assertIs<WalletState.Open>(holder.state.value).recovery)
+
+        holder.lookForMoreCoins()
+        runCurrent()
+        assertNotNull(assertIs<WalletState.Open>(holder.state.value).recovery)
+        assertEquals(WavelengthWalletRollout.FULL_RECOVERY_WINDOW, lastWindow(bindings))
+    }
+
+    private fun lastWindow(bindings: FakeFacadeBindings): Long? = bindings.requests.last { it.first == "startDescriptorWallet" }.second
+        .let { Regex("\"recovery_window\":(\\d+)").find(it)?.groupValues?.get(1)?.toLong() }
+
+    @Test
     fun `the words never reach a toString`() {
         assertFalse(profile().toString().contains("abandon"))
     }
