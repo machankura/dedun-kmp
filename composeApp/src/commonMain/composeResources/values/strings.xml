@@ -1111,4 +1111,18 @@
     <string name="wavelength_entry_not_found">This payment isn't in the wallet</string>
     <string name="wavelength_entry_payment_details">Payment details</string>
     <string name="wavelength_entry_select_a_payment">Select a payment to see its details</string>
+    <string name="wavelength_receive_lightning">Lightning</string>
+    <string name="wavelength_receive_onchain">Onchain</string>
+    <string name="wavelength_receive_make_invoice">Make an invoice</string>
+    <string name="wavelength_receive_make_address">Show an address</string>
+    <string name="wavelength_receive_making">Asking the server…</string>
+    <string name="wavelength_receive_needs_amount">To be paid over Lightning, ask for an amount.</string>
+    <string name="wavelength_receive_above_cap_s_sats">That would take the wallet past %1$s sats, the most it can hold while it is new.</string>
+    <string name="wavelength_receive_above_coin_limit">That is more than the server takes in one payment. Ask for less, and ask again for the rest.</string>
+    <string name="wavelength_receive_above_balance_limit">That is more than the server lets one wallet hold.</string>
+    <string name="wavelength_receive_uncertain">The server took too long to answer, so an invoice may already exist. Check your payments before asking for another.</string>
+    <string name="wavelength_receive_could_not_make">Couldn't make a payment request</string>
+    <string name="wavelength_receive_credit">This amount is too small to hold as a coin, so it arrives as credit on Lightning Labs' swap server.</string>
+    <string name="wavelength_receive_keep_open">Keep Dedun open until the payment arrives.</string>
+    <string name="wavelength_receive_onchain_explainer">Bitcoin sent to this address moves onto Ark after several confirmations. Very small amounts can't be moved.</string>
 </resources>

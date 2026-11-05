@@ -65,6 +65,7 @@ import com.machankura.dedun.compose.wallet.wavelength.WavelengthWalletRollout
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.copied
 import dedun.composeapp.generated.resources.copy
+import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.wallet
 import dedun.composeapp.generated.resources.wavelength_amount
@@ -119,8 +120,8 @@ import org.jetbrains.compose.resources.stringResource
 fun WavelengthWalletScreen(
     identityWavelength: IdentityWavelength,
     onOpenEntry: (String) -> Unit,
+    onReceive: () -> Unit,
     onNavigateBack: () -> Unit,
-    actions: @Composable (WavelengthWalletUIState.Loaded) -> Unit = {},
 ) {
     val viewModel: WavelengthWalletViewModel = viewModel(factory = WavelengthWalletViewModel.factory(identityWavelength))
     LaunchedEffect(true) { viewModel.refresh() }
@@ -144,7 +145,11 @@ fun WavelengthWalletScreen(
             onOpenEntry = onOpenEntry,
             onRetry = viewModel::retry,
             onTurnOn = { consenting = true },
-            actions = actions,
+            actions = {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+                    Button(modifier = Modifier.weight(1f), onClick = onReceive) { Text(stringResource(Res.string.receive)) }
+                }
+            },
         )
     }
 }

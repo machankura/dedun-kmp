@@ -14,3 +14,9 @@ data class WavelengthEntryRoute(
     val activeUserPublicKey: String,
     val entryId: String,
 ): Route()
+
+/** Being paid into the profile's wallet. `docs/wavelength-wallet.md`, Phase 6. */
+@Serializable
+data class WavelengthReceiveRoute(
+    val activeUserPublicKey: String,
+): Route()

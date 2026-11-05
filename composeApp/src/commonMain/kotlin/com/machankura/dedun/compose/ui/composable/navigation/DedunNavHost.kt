@@ -21,6 +21,8 @@ import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.wallet.wavelength.WalletProfile
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthProcess
 import com.machankura.dedun.compose.ui.composable.WavelengthEntryScreen
+import com.machankura.dedun.compose.ui.composable.WavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.WavelengthWalletScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthEntryRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthWalletRoute
@@ -1231,8 +1233,12 @@ fun DedunNavHost(
                     onOpenEntry = { entryId ->
                         navController.navigate(route = WavelengthEntryRoute(activeUserPublicKey = route.activeUserPublicKey, entryId = entryId))
                     },
+                    onReceive = { navController.navigate(route = WavelengthReceiveRoute(activeUserPublicKey = route.activeUserPublicKey)) },
                     onNavigateBack = { navController.popBackStack() },
                 )
+            }
+            composable<WavelengthReceiveRoute> {
+                WavelengthReceiveScreen(identityWavelength = identityWavelength, onNavigateBack = { navController.popBackStack() })
             }
             composable<WavelengthEntryRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<WavelengthEntryRoute>()
