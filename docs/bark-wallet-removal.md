@@ -146,10 +146,11 @@ No app code changes.
 3. Decide what happens to `group-ark-wallet.md`. If a group Ark wallet is still wanted soon, removal may
    be the wrong move: pausing it would be cheaper than rebuilding the adapter, registry and regtest
    network. If it isn't, mark that plan shelved.
-4. Record baselines to compare against in Phase 7 and in the final check:
+4. Record baselines to compare against in Phase 7 and in the final check. The nested submodules' own
+   Android builds need `ANDROID_HOME`, because `local.properties` at the root does not reach them:
 
    ```bash
-   git submodule update --init
+   git submodule update --init --recursive
    ```
 
    ```bash
@@ -163,6 +164,14 @@ No app code changes.
    Keep the APK size, the test count and the audit's output.
 
 **Done when** test devices are checked, the group plan's fate is decided, and the baselines exist.
+
+Where it stands, 5 November 2026:
+
+| item | state |
+|---|---|
+| baselines at `56031156` | 2,017 tests, 11 of them skipped, none failing. Debug APK 106,629,985 bytes. All audit budgets met, `adaptive APIs in use` 14, `string literals` 21. On the desktop classpath JNA comes only through `bark-jvm` |
+| the group plan | execution was asked for with the question open, so the removal goes ahead. `group-ark-wallet.md` has not been touched, and it needs marking shelved or rewriting in its own worktree |
+| test devices | **not checked.** This can only be done on the devices, and only while they still have Bark |
 
 ### Phase 2: the group screens let go
 
@@ -274,7 +283,7 @@ something else asks for `net.java.dev.jna`, confirm it still resolves and runs o
 Before the release that carries these phases, on a clean checkout:
 
 ```bash
-git submodule update --init
+git submodule update --init --recursive
 ```
 
 ```bash
