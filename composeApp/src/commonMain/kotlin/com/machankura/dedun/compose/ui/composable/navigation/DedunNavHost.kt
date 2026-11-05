@@ -869,7 +869,6 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     },
-                    identityArk = identityArk,
                 )
             }
             composable<GroupSwapInRoute> { backStackEntry ->
@@ -1628,7 +1627,6 @@ fun DedunNavHost(
                     activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
-                    identityArk = identityArk,
                     repository = databasePayoutDestinationRepository,
                     depositRepository = databaseDepositRepository,
                     onNavigateToRouteAndPopUpInclusive = { signingRoute ->

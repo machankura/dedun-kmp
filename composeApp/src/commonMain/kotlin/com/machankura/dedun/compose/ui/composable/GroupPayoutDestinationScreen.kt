@@ -18,8 +18,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
-import com.machankura.dedun.compose.wallet.ark.IdentityArk
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
@@ -110,8 +108,6 @@ fun GroupPayoutDestinationScreen(
     /** Onto the signing session that opens the member's deposits, in place of this screen. */
     onNavigateToRouteAndPopUpInclusive: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
-    // The profile's own Ark wallet, whose onchain address can fill the field: docs/bark-wallet.md, Phase 10.
-    identityArk: IdentityArk? = null,
 ) {
     val viewModel: GroupPayoutDestinationViewModel = viewModel(
         factory = GroupPayoutDestinationViewModel.factory(
@@ -206,9 +202,6 @@ fun GroupPayoutDestinationScreen(
                                     Text(viewModel.onchainProblem?.let { onchainProblemText(it, chain) } ?: stringResource(Res.string.the_group_sees_this_address))
                                 },
                             )
-                            if (editable) {
-                                ArkUseWalletAddressButton(identityArk, chain) { address -> viewModel.onchainField.setTextAndPlaceCursorAtEnd(address) }
-                            }
 
                             if (!standing.canSet) {
                                 Text(
