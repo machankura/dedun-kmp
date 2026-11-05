@@ -74,7 +74,6 @@ import dedun.composeapp.generated.resources.you_have_not_backed_up_your_nostr_se
 import fr.acinq.phoenix.PhoenixGlobal
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
-import dedun.composeapp.generated.resources.could_not_forget_the_key_it_has_a_wallet
 import com.machankura.dedun.compose.extensions.hexToNpubHrp
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.identity.IdentityWriter
@@ -379,8 +378,6 @@ private fun NostrSecretContent(
                                 text = when (forgetting) {
                                     is NostrSecretUIState.Forgetting.Failed ->
                                         stringResource(Res.string.could_not_forget_the_key_please_try_again)
-                                    is NostrSecretUIState.Forgetting.ArkWalletAttached ->
-                                        stringResource(Res.string.could_not_forget_the_key_it_has_a_wallet)
                                     else -> stringResource(Res.string.remove_the_key_from_this_device_the_profile)
                                 },
                                 style = MaterialTheme.typography.bodySmall

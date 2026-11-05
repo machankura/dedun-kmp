@@ -1,7 +1,5 @@
 package com.machankura.dedun.compose.ui.view.model
 
-import com.machankura.dedun.compose.wallet.ark.ArkProcess
-import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -183,16 +181,10 @@ class NostrSecretViewModel(
         }) {
             // The sequence is ForgetIdentity's, shared with the two exits a read-only
             // identity has; only the state it drives is this screen's.
-            val hasArkWallet: suspend (Identity) -> Boolean = { candidate ->
-                ArkProcess.seeds(getApplicationFilesDirectoryPath(phoenixGlobal.ctx)).has(candidate.id)
-            }
-            when (ForgetIdentity.forget(identity, nostrRepository, forgetNostrCredential, hideIdentityMetadata, hasArkWallet)) {
+            when (ForgetIdentity.forget(identity, nostrRepository, forgetNostrCredential, hideIdentityMetadata)) {
                 is ForgetIdentity.Outcome.Forgotten -> {
                     _forgetting.value = NostrSecretUIState.Forgetting.Idle
                     withContext(Dispatchers.Main) { onForgotten() }
-                }
-                is ForgetIdentity.Outcome.ArkWalletAttached -> {
-                    _forgetting.value = NostrSecretUIState.Forgetting.ArkWalletAttached
                 }
                 is ForgetIdentity.Outcome.WalletAttached,
                 is ForgetIdentity.Outcome.CannotForget -> {

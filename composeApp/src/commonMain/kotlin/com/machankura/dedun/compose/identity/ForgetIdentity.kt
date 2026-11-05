@@ -29,12 +29,6 @@ object ForgetIdentity {
 
         /** The credentials file could not be read; nothing was changed. */
         data object CannotForget : Outcome
-
-        /**
-         * An nsec with an Ark wallet of its own (`docs/bark-wallet.md`, D13): its words are the
-         * only way back to that money, so the key is not forgotten while they are there.
-         */
-        data object ArkWalletAttached : Outcome
     }
 
     suspend fun forget(
@@ -42,8 +36,7 @@ object ForgetIdentity {
         nostrRepository: NostrRepository,
         forgetNostrCredential: suspend (Identity) -> IdentityWriter.ForgetNostrCredentialResult,
         hideIdentityMetadata: suspend (Identity) -> Unit,
-        hasArkWallet: suspend (Identity) -> Boolean = { false },
-    ): Outcome = if (hasArkWallet(identity)) Outcome.ArkWalletAttached else when (forgetNostrCredential(identity)) {
+    ): Outcome = when (forgetNostrCredential(identity)) {
         is IdentityWriter.ForgetNostrCredentialResult.Forgotten -> {
             hideIdentityMetadata(identity)
             // The kind 0 that made it a local account, and anything queued that can now

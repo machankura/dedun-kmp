@@ -31,8 +31,5 @@ sealed interface NostrSecretUIState {
         data object Confirming : Forgetting
         data object InProgress : Forgetting
         data object Failed : Forgetting
-
-        /** Refused: the profile has an Ark wallet of its own (`docs/bark-wallet.md`, D13). */
-        data object ArkWalletAttached : Forgetting
     }
 }
