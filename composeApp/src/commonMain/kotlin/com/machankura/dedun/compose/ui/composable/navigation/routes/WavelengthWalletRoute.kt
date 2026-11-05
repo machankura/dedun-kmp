@@ -26,3 +26,9 @@ data class WavelengthReceiveRoute(
 data class WavelengthSendRoute(
     val activeUserPublicKey: String,
 ): Route()
+
+/** Leaving Ark: with the server's help and without it. `docs/wavelength-wallet.md`, Phase 9. */
+@Serializable
+data class WavelengthAdvancedRoute(
+    val activeUserPublicKey: String,
+): Route()

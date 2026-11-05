@@ -70,6 +70,7 @@ import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.send
 import dedun.composeapp.generated.resources.wallet
+import dedun.composeapp.generated.resources.wavelength_advanced
 import dedun.composeapp.generated.resources.wavelength_amount
 import dedun.composeapp.generated.resources.wavelength_could_not_open
 import dedun.composeapp.generated.resources.wavelength_credit_explainer
@@ -125,6 +126,7 @@ fun WavelengthWalletScreen(
     onOpenEntry: (String) -> Unit,
     onReceive: () -> Unit,
     onSend: () -> Unit,
+    onAdvanced: () -> Unit,
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: WavelengthWalletViewModel = viewModel(factory = WavelengthWalletViewModel.factory(identityWavelength))
@@ -154,6 +156,7 @@ fun WavelengthWalletScreen(
                     Button(modifier = Modifier.weight(1f), onClick = onReceive) { Text(stringResource(Res.string.receive)) }
                     Button(modifier = Modifier.weight(1f), onClick = onSend, enabled = state.balance.confirmedSat > 0 || state.creditSat > 0) { Text(stringResource(Res.string.send)) }
                 }
+                TextButton(onClick = onAdvanced) { Text(stringResource(Res.string.wavelength_advanced)) }
             },
         )
     }
