@@ -107,9 +107,17 @@ class ChatPaneSelectionJvmTest {
         waitUntil(timeoutMillis = 5_000) { listening == setOf(beta.chatRoom.id) }
     }
 
-    /** Taps the room's row. The row is the node with its name that can be clicked. */
-    private fun ComposeUiTest.open(subject: String) =
-        onNode(hasText(subject) and hasClickAction()).performClick()
+    /**
+     * Taps the room's row, once the list has one: the rooms come from an IO thread too.
+     * The row is the node with its name that can be clicked.
+     */
+    private fun ComposeUiTest.open(subject: String) {
+        val row = hasText(subject) and hasClickAction()
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodes(row).fetchSemanticsNodes().isNotEmpty()
+        }
+        onNode(row).performClick()
+    }
 
     /** Waits for the transcript to say something, which it does from an IO thread. */
     private fun ComposeUiTest.awaitLine(text: String) {

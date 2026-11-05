@@ -3,8 +3,7 @@
 The profile's Ark wallet ([bark-wallet.md](./bark-wallet.md)) comes out of the app: its screens, its
 background job, Second's SDK on every platform, its test network and its build wiring.
 
-**Built, phases 0 and 2 to 8, one commit each, on `claude/bark-wallet-removal-plan-571ff4`, not yet
-merged or released.** Written on 5 November 2026 against `56031156` (`dedun`), with the
+**Built, phases 0 and 2 to 8, one commit each, and merged into `dedun`, not yet released.** Written on 5 November 2026 against `56031156` (`dedun`), with the
 `lightning-kmp-app` submodule at `949bfcb9`, which this plan did not touch. Files and lines named below
 are as they stood at that commit. What is checked and what is not:
 - Android and Linux desktop compile, the desktop package builds, the JVM suite passes (1,930 tests, 6
@@ -31,8 +30,9 @@ The phases are kept as written; the table below says where the build chose diffe
 
 `ChatPaneSelectionJvmTest` failed twice in seven full runs, in two of its three tests, and passed every
 time alone. Its `open()` helper clicks a room's row without waiting for the list to load, so it can
-lose that race under a full run's load. Neither the test nor the chat screens changed here. It has not
-been fixed, and it passed on the final run.
+lose that race under a full run's load. The removal did not cause it, and the helper now waits for the
+row. A 500 ms delay on the room list failed all three tests before that and none after, and three more
+full runs passed.
 
 The headline: **the code comes out cleanly, and the money was the hard part.** The port kept Bark behind
 one adapter, so 52 files can be deleted and only 14 surviving source and test files need an edit. But
