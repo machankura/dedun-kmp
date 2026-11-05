@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.extensions
 
 import com.machankura.dedun.android.DedunApplication
+import com.machankura.dedun.compose.wallet.wavelength.WavelengthMaintenanceWorker
 import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.BusinessManager
 import fr.acinq.phoenix.android.services.ChannelsWatcher
@@ -21,6 +22,7 @@ actual suspend fun platformStartupLogic(words: List<String>): StartBusinessResul
 actual fun schedulePlatformLogic(phoenixGlobal: PhoenixGlobal) {
     ChannelsWatcher.schedule(phoenixGlobal.ctx.applicationContext)
     ContactsPhotoCleaner.schedule(phoenixGlobal.ctx.applicationContext)
+    WavelengthMaintenanceWorker.schedule(phoenixGlobal.ctx.applicationContext)
 }
 actual fun getShowIntroFlow(phoenixGlobal: PhoenixGlobal): Flow<Boolean> {
     val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication

@@ -60,6 +60,7 @@ import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.WavelengthWalletUIState
 import com.machankura.dedun.compose.ui.view.model.WavelengthWalletViewModel
 import com.machankura.dedun.compose.wallet.wavelength.IdentityWavelength
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.WalletUnavailability
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthWalletRollout
 import dedun.composeapp.generated.resources.Res
@@ -248,6 +249,16 @@ private fun LazyListScope.walletHeader(state: WavelengthWalletUIState.Loaded, ac
             }
             if (state.syncing) {
                 Text(stringResource(Res.string.wavelength_syncing), style = MaterialTheme.typography.bodyMedium)
+            }
+            wavelengthExpiryText(state.expiry)?.let { text ->
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when (state.expiry) {
+                        is WalletExpiry.Urgent, WalletExpiry.Expired -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
             if (state.network != Network.MAINNET) {
                 Text(stringResource(Res.string.wavelength_test_network_s, state.network.wire), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

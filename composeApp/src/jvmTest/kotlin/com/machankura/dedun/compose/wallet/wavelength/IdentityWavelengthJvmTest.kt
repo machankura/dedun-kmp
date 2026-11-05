@@ -6,6 +6,7 @@ import engineering.lightning.wavelength.testing.FakeFacadeBindings
 import engineering.lightning.wavelength.testing.FakeWavelengthClient
 import fr.acinq.phoenix.data.WalletId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -189,6 +190,47 @@ class IdentityWavelengthJvmTest {
         runCurrent()
         assertTrue(bindings.isRunning())
         assertIs<WalletState.Open>(holder.state.value)
+    }
+
+    @Test
+    fun `the renewal opens the wallet, stays open for its time, and stops`() = runWallet {
+        files.recordConsent(alice)
+        val bindings = FakeFacadeBindings()
+        val holder = holder(bindings)
+        val ran = async { holder.maintainInBackground(profile(), 5.minutes) }
+        runCurrent()
+        assertTrue(bindings.isRunning())
+        advanceTimeBy(6.minutes)
+        runCurrent()
+        assertTrue(ran.await())
+        assertFalse(bindings.isRunning())
+        assertEquals(WalletState.None, holder.state.value)
+    }
+
+    @Test
+    fun `the renewal gives way the moment the app asks`() = runWallet {
+        files.recordConsent(alice)
+        val bindings = FakeFacadeBindings()
+        val holder = holder(bindings)
+        val ran = async { holder.maintainInBackground(profile(), 5.minutes) }
+        runCurrent()
+        holder.activate(profile())
+        runCurrent()
+        assertTrue(ran.await())
+        assertIs<WalletState.Open>(holder.state.value)
+        assertTrue(bindings.isRunning())
+    }
+
+    @Test
+    fun `the renewal leaves an open wallet to the app, and skips a profile with no consent`() = runWallet {
+        files.recordConsent(alice)
+        val holder = holder()
+        holder.activate(profile())
+        runCurrent()
+        assertFalse(holder.maintainInBackground(profile(), 5.minutes))
+
+        val fresh = IdentityWavelength(FakeWavelengthClient(), files, backgroundScope, Network.SIGNET, offered = true)
+        assertFalse(fresh.maintainInBackground(profile(bob), 5.minutes))
     }
 
     @Test

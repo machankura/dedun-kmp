@@ -1149,4 +1149,8 @@
     <string name="wavelength_send_quote_expired">That price is no longer good. Continue again for a new one.</string>
     <string name="wavelength_send_could_not_send">Couldn't send. Nothing has left the wallet unless your payments say so.</string>
     <string name="wavelength_preimage">Proof of payment</string>
+    <string name="wavelength_coins_last_s">Coins renew in %1$s</string>
+    <string name="wavelength_coins_renewing_s">Renewing while Dedun runs: coins expire in %1$s</string>
+    <string name="wavelength_coins_urgent_s">Open Dedun on a good connection and leave it open: coins expire in %1$s</string>
+    <string name="wavelength_coins_expired">Some coins have expired, and now depend on the server to get back. See Advanced.</string>
 </resources>

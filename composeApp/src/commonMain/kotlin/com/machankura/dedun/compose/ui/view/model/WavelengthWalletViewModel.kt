@@ -9,16 +9,20 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.machankura.dedun.compose.wallet.wavelength.IdentityWavelength
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.WalletRecovery
 import com.machankura.dedun.compose.wallet.wavelength.WalletState
 import com.machankura.dedun.compose.wallet.wavelength.WalletUnavailability
+import engineering.lightning.wavelength.ListRequest
 import engineering.lightning.wavelength.Network
+import engineering.lightning.wavelength.WavelengthException
 import engineering.lightning.wavelength.engine.RuntimePhase
 import engineering.lightning.wavelength.engine.WalletEngine
 import engineering.lightning.wavelength.engine.WalletSnapshot
 import engineering.lightning.wavelength.model.Balance
 import engineering.lightning.wavelength.model.Entry
 import engineering.lightning.wavelength.model.EntryStatus
+import engineering.lightning.wavelength.model.ListView
 import engineering.lightning.wavelength.model.ServerInfo
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -50,6 +54,7 @@ sealed interface WavelengthWalletUIState {
         val server: ServerInfo?,
         /** Proofs of payment kept across restarts, by payment hash: the daemon reports each once. */
         val preimages: Map<String, String> = emptyMap(),
+        val expiry: WalletExpiry = WalletExpiry.Nothing,
     ) : WavelengthWalletUIState {
         fun preimageOf(entry: Entry): String? {
             val progress = entry.progress ?: return null
@@ -80,6 +85,8 @@ class WavelengthWalletViewModel(
         private set
 
     private var engine: WalletEngine? = null
+    private var readAt: Balance? = null
+    private var expiry: WalletExpiry = WalletExpiry.Nothing
 
     init {
         viewModelScope.launch {
@@ -92,9 +99,27 @@ class WavelengthWalletViewModel(
                     WalletState.Recovering -> uiState = WavelengthWalletUIState.Restoring
                     is WalletState.Failed -> uiState = WavelengthWalletUIState.Failed
                     WalletState.WrongIdentity -> uiState = WavelengthWalletUIState.WrongIdentity
-                    is WalletState.Open -> state.engine.snapshot.collect { snapshot -> uiState = snapshot.toUIState(state) }
+                    is WalletState.Open -> state.engine.snapshot.collect { snapshot ->
+                        val balance = snapshot.balance
+                        if (balance != readAt) {
+                            readAt = balance
+                            expiry = readExpiry(state, snapshot)
+                        }
+                        uiState = snapshot.toUIState(state, expiry)
+                    }
                 }
             }
+        }
+    }
+
+    /** The coins change only with the balance, so that is when they are read again. */
+    private suspend fun readExpiry(open: WalletState.Open, snapshot: WalletSnapshot): WalletExpiry {
+        val info = snapshot.info ?: return expiry
+        return try {
+            val coins = open.engine.list(ListRequest(ListView.VTXOS)).vtxos?.vtxos.orEmpty()
+            WalletExpiry.of(coins, info.blockHeight, info.serverInfo?.freeRefreshWindowBlocks ?: 0)
+        } catch (e: WavelengthException) {
+            expiry
         }
     }
 
@@ -109,7 +134,7 @@ class WavelengthWalletViewModel(
         viewModelScope.launch {
             try {
                 engine.refresh()
-            } catch (e: engineering.lightning.wavelength.WavelengthException) {
+            } catch (e: WavelengthException) {
                 // The failure is on the snapshot, which is what the screen draws.
             }
         }
@@ -128,7 +153,7 @@ class WavelengthWalletViewModel(
     }
 }
 
-private fun WalletSnapshot.toUIState(open: WalletState.Open): WavelengthWalletUIState {
+private fun WalletSnapshot.toUIState(open: WalletState.Open, expiry: WalletExpiry): WavelengthWalletUIState {
     val balance = balance
     return when {
         phase == RuntimePhase.ERROR -> WavelengthWalletUIState.Failed
@@ -143,6 +168,7 @@ private fun WalletSnapshot.toUIState(open: WalletState.Open): WavelengthWalletUI
             recovery = open.recovery,
             server = info?.serverInfo,
             preimages = open.preimages.value,
+            expiry = expiry,
         )
     }
 }

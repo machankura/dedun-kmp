@@ -16,10 +16,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
@@ -106,13 +108,18 @@ class IdentityWavelength(
     private var foreground = true
     private var leaving: Job? = null
 
+    /** Bumped by anything the app asks for, so the background renewal gives way at once. */
+    private val asked = MutableStateFlow(0)
+
     /** Makes [next] the active profile: stops the last one's daemon, then opens this one's, if it can. */
     fun activate(next: WalletProfile?) {
+        asked.value++
         scope.launch { mutex.withLock { switchTo(next) } }
     }
 
     /** The first-open sheet was accepted for the active profile: record it, and open. */
     fun consent() {
+        asked.value++
         scope.launch {
             mutex.withLock {
                 val current = profile ?: return@withLock
@@ -124,11 +131,13 @@ class IdentityWavelength(
 
     /** Tries the active profile's open again, after a failure. */
     fun retry() {
+        asked.value++
         scope.launch { mutex.withLock { profile?.let { switchTo(it, force = true) } } }
     }
 
     /** The app came to the foreground: cancels a pending stop, or reopens what was stopped. */
     fun enteredForeground() {
+        asked.value++
         scope.launch {
             leaving?.cancel()
             leaving = null
@@ -162,9 +171,10 @@ class IdentityWavelength(
 
     /**
      * The background renewal -- Phase 8. Opens [background]'s wallet, gives the daemon's own
-     * maintenance [stayOpenFor], and stops it, all while holding the lock, so a profile switch or
-     * the app's return waits for a clean stop and never races it for the directory. Does nothing
-     * while the app is using the daemon. Returns whether it ran.
+     * maintenance up to [stayOpenFor], and stops it, all while holding the lock, so a profile
+     * switch or the app's return gets a clean stop and never races it for the directory. It ends
+     * early as soon as the app asks for anything, so nobody waits on a renewal to see their
+     * wallet. Does nothing while the app is using the daemon. Returns whether it ran.
      */
     suspend fun maintainInBackground(background: WalletProfile, stayOpenFor: Duration): Boolean = mutex.withLock {
         if (foreground && profile != null) return@withLock false
@@ -172,11 +182,12 @@ class IdentityWavelength(
         val previous = profile
         val previousState = _state.value
         profile = background
+        val seen = asked.value
         val ran = when (setupFor(background)) {
             is WalletSetup.Ready -> {
                 open(background)
                 val opened = engine != null
-                if (opened) delay(stayOpenFor)
+                if (opened) withTimeoutOrNull(stayOpenFor) { asked.first { it != seen } }
                 opened
             }
             is WalletSetup.Unavailable -> false

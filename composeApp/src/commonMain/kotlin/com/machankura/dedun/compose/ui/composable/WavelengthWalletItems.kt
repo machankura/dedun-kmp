@@ -26,14 +26,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
+import com.machankura.dedun.compose.ui.composable.widgets.approximateDuration
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.WavelengthWalletUIState
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.WalletUnavailability
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthWalletRollout
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.not_now
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.wallet
+import dedun.composeapp.generated.resources.wavelength_coins_expired
+import dedun.composeapp.generated.resources.wavelength_coins_last_s
+import dedun.composeapp.generated.resources.wavelength_coins_renewing_s
+import dedun.composeapp.generated.resources.wavelength_coins_urgent_s
 import dedun.composeapp.generated.resources.wavelength_consent_backup
 import dedun.composeapp.generated.resources.wavelength_consent_early
 import dedun.composeapp.generated.resources.wavelength_consent_one_device
@@ -116,8 +122,18 @@ internal fun wavelengthWalletSupportingLine(state: WavelengthWalletUIState): Str
     is WavelengthWalletUIState.Loaded -> when {
         state.pendingSat > 0 -> stringResource(Res.string.wavelength_pending_s_sats, Satoshi(state.pendingSat).grouped())
         state.syncing -> stringResource(Res.string.wavelength_syncing)
-        else -> null
+        else -> wavelengthExpiryText(state.expiry)
     }
+}
+
+/** The earliest deadline, in time -- D10. Null when no coin has one. */
+@Composable
+internal fun wavelengthExpiryText(expiry: WalletExpiry): String? = when (expiry) {
+    WalletExpiry.Nothing -> null
+    is WalletExpiry.Fine -> stringResource(Res.string.wavelength_coins_last_s, approximateDuration(expiry.blocksLeft))
+    is WalletExpiry.Renewing -> stringResource(Res.string.wavelength_coins_renewing_s, approximateDuration(expiry.blocksLeft))
+    is WalletExpiry.Urgent -> stringResource(Res.string.wavelength_coins_urgent_s, approximateDuration(expiry.blocksLeft))
+    WalletExpiry.Expired -> stringResource(Res.string.wavelength_coins_expired)
 }
 
 @Composable

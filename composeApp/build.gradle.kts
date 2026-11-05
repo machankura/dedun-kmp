@@ -71,6 +71,9 @@ kotlin {
             // module has no jvm target, because upstream ships no desktop runtime, and its iOS
             // targets need a staged xcframework (docs/wavelength-wallet.md, D4).
             implementation("engineering.lightning.wavelength:wavelength-embedded:1.0.0")
+            // The wallet's background renewal. The library already ships WorkManager for its
+            // channels watcher; this names it for the app's own worker, at the library's version.
+            implementation("androidx.work:work-runtime-ktx:2.11.1")
 
             implementation(libs.sqldelight.android.driver)
         }
