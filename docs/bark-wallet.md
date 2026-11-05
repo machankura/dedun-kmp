@@ -5,6 +5,11 @@ history, on the profile tab above the member wallets. It is an Ark wallet, run o
 Second's Bark SDK. One balance can be spent to an Ark address, a Lightning invoice or an onchain
 address, and paid into the same three ways. There are no channels and no inbound liquidity.
 
+**Removed on 5 November 2026** ([bark-wallet-removal.md](./bark-wallet-removal.md)): no build had held
+real sats. The wallet was last whole at `56031156`, and that commit is where to find the files, commands
+and scripts this note names. The note stays for its spikes and findings. Everything below it is as it
+stood.
+
 **Built, phases 0 to 13, one commit each, and on mainnet by decision.** Written against `7658c8ed`
 (`dedun`), with the `lightning-kmp-app` submodule at `7aaacadc`, which the build did not touch, and
 against the Bark FFI bindings `v0.26.1+bark-0.8.0`. Those bindings wrap `bark-ffi` `0.30.1`, which pins

@@ -98,39 +98,3 @@ call eclair's API, for example `./regtest.sh lsp channels` or `./regtest.sh paye
 | `the payment failed: … route not found` | the LSP has no usable route to the payer. Check `./regtest.sh lsp usablebalances` and `./regtest.sh lsp allupdates`: an update with `htlcMaximumMsat` of 1 means eclair's balance thresholds were on when the channel opened (`lsp.conf` turns them off; `./regtest.sh lsp updaterelayfee -d nodeIds=<payer> -d feeBaseMsat=1000 -d feeProportionalMillionths=100` refreshes one) |
 | a port is already in use | another stack has it. Change the host side of that port in `compose.yml`, and the matching port in `GroupLightningRegtestJvmTest` |
 | the LSP refuses to start: `requires Bitcoin Core 31 or higher` | `compose.yml` was changed to an older bitcoind image |
-
-## The profile's Ark wallet
-
-A second, separate network for the Ark wallet ([docs/bark-wallet.md](../../docs/bark-wallet.md),
-Phase 12), in `ark/`: bitcoind, Core Lightning with Boltz's hold plugin, Second's Ark server
-`captaind` and an Esplora. It is Second's own regtest stack with the images pinned, Core Lightning
-taken prebuilt, an Esplora added (the Bark SDK reads the chain through nothing else) and every port
-on localhost. It runs beside the group Lightning network: its bitcoind is on 38443.
-
-```bash
-testing/regtest/ark/ark.sh up
-```
-
-```bash
-DEDUN_ARK_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*ArkRegtestJvmTest'
-```
-
-`ArkRegtestJvmTest` boards onchain coins onto Ark, pays between two profiles over Ark, renews,
-moves everything back onchain, and restores a wallet from its words alone. Its second test stops
-`captaind` (`ark.sh stop-server`), runs an emergency exit to the end and claims it onchain, and
-starts the server again. Both take a minute or three.
-
-| port | what |
-|---|---|
-| 3535 | `captaind`, where `ArkWalletRollout.endpointsFor(Regtest)` looks |
-| 3002 | the Esplora API |
-| 38443 | bitcoind RPC, `second:ark` |
-
-| what you see | what it means |
-|---|---|
-| `captaind` exits with `missing configuration field …` | `ark/captaind.toml` is not mounted. The image's bundled config lacks fields 0.8.0 requires, so `compose.yml` points `CAPTAIND_CONFIG` at this one |
-| `captaind` exits with `Old bitcoind version detected` | the bitcoind image is older than 31. Second's own compose file pins 30.0, which 0.8.0 refuses |
-| Core Lightning restarts with `cannot touch '/root/.lightning/regtest/config'` | the entrypoint lost its `mkdir`: the image's start script assumes the directory exists |
-| `timed out waiting for every exit to be claimable` | the exit's `exits:` list says where each coin stopped. An exit waits 144 blocks after its last transaction, and the test mines ten a try |
-
-`ark.sh down` removes the network and its volumes.

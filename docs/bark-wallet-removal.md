@@ -3,9 +3,36 @@
 The profile's Ark wallet ([bark-wallet.md](./bark-wallet.md)) comes out of the app: its screens, its
 background job, Second's SDK on every platform, its test network and its build wiring.
 
-**Planned, not started.** Written on 5 November 2026 against `56031156` (`dedun`), with the
-`lightning-kmp-app` submodule at `949bfcb9`, which this plan does not touch. Every file and line named
-here was read at that commit. No phase has been tried, and nothing has been compiled.
+**Built, phases 0 and 2 to 8, one commit each, on `claude/bark-wallet-removal-plan-571ff4`, not yet
+merged or released.** Written on 5 November 2026 against `56031156` (`dedun`), with the
+`lightning-kmp-app` submodule at `949bfcb9`, which this plan did not touch. Files and lines named below
+are as they stood at that commit. What is checked and what is not:
+- Android and Linux desktop compile, the desktop package builds, the JVM suite passes (1,930 tests, 6
+  skipped, down from 2,017 and 11), and the audit's budgets and floors are met. Every test that went is
+  in a deleted Ark class, apart from the one forget-guard test Phase 4 removed on purpose.
+- Nothing names Bark outside `docs/`. Neither classpath has `tech.second.bark` or JNA, and the debug APK
+  has neither library.
+- The packaged desktop app starts against a scratch data directory and runs for 30 seconds with no
+  exception in its log. No screen was driven.
+- **Not checked:** the app on Android, including an upgrade over a build that had the wallet on; any
+  screen by hand; iOS, whose project and Swift have not been built because this host is Linux; test
+  devices (Phase 0).
+
+The phases are kept as written; the table below says where the build chose differently.
+
+| phase | what the plan said | what it turned out to be |
+|---|---|---|
+| 0 | `git submodule update --init` | it needs `--recursive`, and `ANDROID_HOME` for the nested Android builds. In a worktree of this checkout the submodule's URL is a local path, so git also had to be allowed the file transport for that one command: `git -c protocol.file.allow=always submodule update --init --recursive` |
+| 3 | `adaptive APIs in use` lands on the floor | it did: 12 against a floor of 12. `string literals` fell from 21 to 20 |
+| 4 | the guard's string goes in Phase 6, if Phase 4 leaves it | it went in Phase 4 with its last reader |
+| 7 | the APK is about 8 MB per ABI smaller | about 14 MB per ABI: 106,629,985 bytes down to 50,476,926 across four ABIs. The 8 MB was an estimate from the compressed AAR |
+| 7 | check that nothing else leans on Bark's JNA | nothing does. On the desktop classpath only `bark-jvm`, its JNA and one edge to coroutines went. WorkManager still resolves on Android, at 2.11.1, through the library |
+| 8 | take the network down where it is running | it was: left by the integration session, three containers exited and Core Lightning restart-looping (6,790 restarts). `ark.sh down` removed it and its volumes |
+
+`ChatPaneSelectionJvmTest` failed twice in seven full runs, in two of its three tests, and passed every
+time alone. Its `open()` helper clicks a room's row without waiting for the list to load, so it can
+lose that race under a full run's load. Neither the test nor the chat screens changed here. It has not
+been fixed, and it passed on the final run.
 
 The headline: **the code comes out cleanly, and the money was the hard part.** The port kept Bark behind
 one adapter, so 52 files can be deleted and only 14 surviving source and test files need an edit. But
@@ -171,7 +198,7 @@ Where it stands, 5 November 2026:
 |---|---|
 | baselines at `56031156` | 2,017 tests, 11 of them skipped, none failing. Debug APK 106,629,985 bytes. All audit budgets met, `adaptive APIs in use` 14, `string literals` 21. On the desktop classpath JNA comes only through `bark-jvm` |
 | the group plan | execution was asked for with the question open, so the removal goes ahead. `group-ark-wallet.md` has not been touched, and it needs marking shelved or rewriting in its own worktree |
-| test devices | **not checked.** This can only be done on the devices, and only while they still have Bark |
+| test devices | **not checked.** This can only be done on the devices, and has to happen before a build from this branch is installed on them, while they still have Bark |
 
 ### Phase 2: the group screens let go
 
@@ -330,7 +357,8 @@ so a revert before release brings back everything as it was.
 
 ## Open questions
 
-1. Is a group Ark wallet still wanted? (Phase 0. A yes argues for pausing, not removing.)
+1. What becomes of `group-ark-wallet.md`? This work went ahead, so that plan now stands on code that is
+   only in history at `56031156`. Shelve it, or rewrite it to bring that code back.
 
 ---
 
