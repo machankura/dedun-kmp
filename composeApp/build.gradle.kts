@@ -165,12 +165,6 @@ kotlin {
             // Linux x86-64 only; ArkPlatform says so on the other desktops (docs/bark-wallet.md, D4).
             implementation(libs.bark.jvm)
         }
-        // The Bark adapter, written once and compiled into both targets whose bindings are the
-        // same generated Kotlin: bark-android and bark-jvm. Not an intermediate source set, which
-        // would need one artifact both could resolve, and Bark publishes none.
-        val barkMain = "src/barkMain/kotlin"
-        androidMain.get().kotlin.srcDir(barkMain)
-        jvmMain.get().kotlin.srcDir(barkMain)
         // Only exists when the ios targets above were declared; the default hierarchy template
         // creates this source set from them.
         if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
