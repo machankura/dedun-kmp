@@ -25,12 +25,6 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        // Second's Bark SDK is published to GitLab's registry, not to Maven Central
-        // (docs/bark-wallet.md, Phase 2). Only its own group may resolve from there.
-        maven {
-            url = uri("https://gitlab.com/api/v4/projects/78057981/packages/maven")
-            mavenContent { includeGroup("tech.second.bark") }
-        }
     }
 }
 
