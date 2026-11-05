@@ -193,13 +193,6 @@ import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallets
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupSwapInRoute
 import com.machankura.dedun.compose.ui.composable.GroupSwapInScreen
 import com.machankura.dedun.compose.wallet.IdentityElectrum
-import com.machankura.dedun.compose.wallet.ark.ArkProcess
-import kotlinx.coroutines.withContext
-import com.machankura.dedun.compose.identity.IdentityKind
-import com.machankura.dedun.compose.wallet.ark.ArkProfile
-import com.machankura.dedun.compose.wallet.ark.IdentityArk
-import com.machankura.dedun.compose.identity.StoredIdentity
-import fr.acinq.phoenix.utils.getApplicationFilesDirectoryPath
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
@@ -322,33 +315,6 @@ fun DedunNavHost(
     }
     val electrum = remember(activeIdentityForWallets?.id, activeIdentityForWallets?.business) {
         identityElectrum.clientFor(activeIdentityForWallets)
-    }
-
-    // The profile's own Ark wallet: docs/bark-wallet.md. One per process, not per
-    // composition: Bark asks that it not be closed when an activity is recreated, and the
-    // background renewal shares its lock. A switch closes the last profile's wallet before
-    // the next one opens, because Bark lets a datadir be open only once. The words come
-    // from the seed the selector already decrypted; they are handed to IdentityArk and kept
-    // nowhere else. Tor is followed, so turning it on closes the wallet.
-    val identityArk = remember { ArkProcess.holder(getApplicationFilesDirectoryPath(phoenixGlobal.ctx)) }
-    val arkSeeds = remember { ArkProcess.seeds(getApplicationFilesDirectoryPath(phoenixGlobal.ctx)) }
-    // Each return to the foreground renews what is due, at most hourly (D12).
-    LaunchedEffect(identityArk) {
-        AppLifecycle.isForeground.collect { foreground -> if (foreground) identityArk.maintain() }
-    }
-    LaunchedEffect(identityArk, activeIdentityForWallets?.id) {
-        val identity = activeIdentityForWallets
-        if (identity == null) {
-            identityArk.activate(null)
-            return@LaunchedEffect
-        }
-        // A seed profile's own words; an nsec's, made when it first turned the wallet on (D13).
-        val nsec = identity.kind == IdentityKind.NostrSecret
-        val words = (sovereignWalletViewModel.availableIdentities.value[identity.id] as? StoredIdentity.Mnemonic)?.userWallet?.words
-            ?: if (nsec) withContext(Dispatchers.Default) { runCatching { arkSeeds.words(identity.id) }.getOrNull() } else null
-        identity.userPrefs.getIsTorEnabled.collect { tor ->
-            identityArk.activate(ArkProfile(identity.id, words, tor, canCreateSeed = nsec))
-        }
     }
 
     // One Electrum connection per network: the identity's own -- its node's, or the one a

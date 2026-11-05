@@ -1,7 +1,6 @@
 package com.machankura.dedun.compose.extensions
 
 import com.machankura.dedun.android.DedunApplication
-import com.machankura.dedun.compose.wallet.ark.ArkMaintenanceWorker
 import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.BusinessManager
 import fr.acinq.phoenix.android.services.ChannelsWatcher
@@ -22,8 +21,6 @@ actual suspend fun platformStartupLogic(words: List<String>): StartBusinessResul
 actual fun schedulePlatformLogic(phoenixGlobal: PhoenixGlobal) {
     ChannelsWatcher.schedule(phoenixGlobal.ctx.applicationContext)
     ContactsPhotoCleaner.schedule(phoenixGlobal.ctx.applicationContext)
-    // The profile's Ark coins, renewed while the app is closed: docs/bark-wallet.md, Phase 7.
-    ArkMaintenanceWorker.schedule(phoenixGlobal.ctx.applicationContext)
 }
 actual fun getShowIntroFlow(phoenixGlobal: PhoenixGlobal): Flow<Boolean> {
     val machankuraApplication = phoenixGlobal.ctx.applicationContext as DedunApplication
