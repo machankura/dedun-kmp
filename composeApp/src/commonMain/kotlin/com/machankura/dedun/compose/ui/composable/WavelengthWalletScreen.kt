@@ -67,6 +67,7 @@ import dedun.composeapp.generated.resources.copied
 import dedun.composeapp.generated.resources.copy
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.s_sats
+import dedun.composeapp.generated.resources.send
 import dedun.composeapp.generated.resources.wallet
 import dedun.composeapp.generated.resources.wavelength_amount
 import dedun.composeapp.generated.resources.wavelength_could_not_open
@@ -97,6 +98,7 @@ import dedun.composeapp.generated.resources.wavelength_mainnet_cap_s_sats
 import dedun.composeapp.generated.resources.wavelength_no_payments_yet
 import dedun.composeapp.generated.resources.wavelength_opening
 import dedun.composeapp.generated.resources.wavelength_pending_s_sats
+import dedun.composeapp.generated.resources.wavelength_preimage
 import dedun.composeapp.generated.resources.wavelength_recovered_s_coins
 import dedun.composeapp.generated.resources.wavelength_restoring
 import dedun.composeapp.generated.resources.wavelength_syncing
@@ -121,6 +123,7 @@ fun WavelengthWalletScreen(
     identityWavelength: IdentityWavelength,
     onOpenEntry: (String) -> Unit,
     onReceive: () -> Unit,
+    onSend: () -> Unit,
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: WavelengthWalletViewModel = viewModel(factory = WavelengthWalletViewModel.factory(identityWavelength))
@@ -145,9 +148,10 @@ fun WavelengthWalletScreen(
             onOpenEntry = onOpenEntry,
             onRetry = viewModel::retry,
             onTurnOn = { consenting = true },
-            actions = {
+            actions = { state ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                     Button(modifier = Modifier.weight(1f), onClick = onReceive) { Text(stringResource(Res.string.receive)) }
+                    Button(modifier = Modifier.weight(1f), onClick = onSend, enabled = state.balance.confirmedSat > 0 || state.creditSat > 0) { Text(stringResource(Res.string.send)) }
                 }
             },
         )
@@ -223,7 +227,7 @@ private fun WavelengthWalletLoaded(
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 val entry = state.entries.firstOrNull { it.id == selected }
                 if (entry != null) {
-                    WavelengthEntryDetail(entry)
+                    WavelengthEntryDetail(entry, preimage = state.preimageOf(entry))
                 } else {
                     EmptyState(message = stringResource(Res.string.wavelength_entry_select_a_payment), icon = Icons.AutoMirrored.Filled.ReceiptLong)
                 }
@@ -344,7 +348,7 @@ private fun signedAmount(entry: Entry): String {
 
 /** One payment, every field it has, the long ones copyable. */
 @Composable
-fun WavelengthEntryDetail(entry: Entry?, modifier: Modifier = Modifier) {
+fun WavelengthEntryDetail(entry: Entry?, modifier: Modifier = Modifier, preimage: String? = entry?.progress?.preimage?.ifEmpty { null }) {
     if (entry == null) {
         EmptyState(modifier = modifier.readableContent(), message = stringResource(Res.string.wavelength_entry_not_found), icon = Icons.AutoMirrored.Filled.ReceiptLong)
         return
@@ -370,6 +374,9 @@ fun WavelengthEntryDetail(entry: Entry?, modifier: Modifier = Modifier) {
         }
         entry.progress?.paymentHash?.ifEmpty { null }?.let { hash ->
             DetailLine(stringResource(Res.string.wavelength_entry_payment_hash), hash, onCopy = { clipboard.setText(AnnotatedString(hash)); notify(copied) })
+        }
+        preimage?.let { proof ->
+            DetailLine(stringResource(Res.string.wavelength_preimage), proof, onCopy = { clipboard.setText(AnnotatedString(proof)); notify(copied) })
         }
         entry.failureReason.ifEmpty { null }?.let { DetailLine(stringResource(Res.string.wavelength_entry_failure), it) }
     }
@@ -404,7 +411,10 @@ fun WavelengthEntryScreen(
     ) { padding ->
         ScreenStateTransition(viewModel.uiState) { uiState ->
             when (val state = uiState) {
-                is WavelengthWalletUIState.Loaded -> WavelengthEntryDetail(state.entries.firstOrNull { it.id == entryId }, Modifier.padding(padding))
+                is WavelengthWalletUIState.Loaded -> {
+                    val entry = state.entries.firstOrNull { it.id == entryId }
+                    WavelengthEntryDetail(entry, Modifier.padding(padding), preimage = entry?.let(state::preimageOf))
+                }
                 WavelengthWalletUIState.Failed -> ErrorState(modifier = Modifier.padding(padding), onRetry = viewModel::retry)
                 else -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
             }

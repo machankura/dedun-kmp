@@ -22,6 +22,8 @@ import com.machankura.dedun.compose.wallet.wavelength.WalletProfile
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthProcess
 import com.machankura.dedun.compose.ui.composable.WavelengthEntryScreen
 import com.machankura.dedun.compose.ui.composable.WavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.WavelengthSendScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthSendRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.WavelengthWalletScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthEntryRoute
@@ -64,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.machankura.dedun.compose.AppLifecycle
+import com.machankura.dedun.compose.network.LightningAddressResolver
 import com.machankura.dedun.compose.identity.StoredIdentity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -1234,11 +1237,20 @@ fun DedunNavHost(
                         navController.navigate(route = WavelengthEntryRoute(activeUserPublicKey = route.activeUserPublicKey, entryId = entryId))
                     },
                     onReceive = { navController.navigate(route = WavelengthReceiveRoute(activeUserPublicKey = route.activeUserPublicKey)) },
+                    onSend = { navController.navigate(route = WavelengthSendRoute(activeUserPublicKey = route.activeUserPublicKey)) },
                     onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<WavelengthReceiveRoute> {
                 WavelengthReceiveScreen(identityWavelength = identityWavelength, onNavigateBack = { navController.popBackStack() })
+            }
+            composable<WavelengthSendRoute> {
+                WavelengthSendScreen(
+                    identityWavelength = identityWavelength,
+                    resolver = remember { LightningAddressResolver() },
+                    onSent = { navController.popBackStack() },
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable<WavelengthEntryRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<WavelengthEntryRoute>()

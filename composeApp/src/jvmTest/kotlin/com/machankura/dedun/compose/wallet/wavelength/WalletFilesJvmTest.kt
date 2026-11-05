@@ -45,4 +45,13 @@ class WalletFilesJvmTest {
         assertNull(files.pinnedIdentity(Network.MAINNET, alice))
         assertNull(files.pinnedIdentity(Network.SIGNET, bob))
     }
+
+    @Test
+    fun `proofs of payment are kept per profile and survive a reread`() {
+        assertEquals(emptyMap(), files.preimages(Network.SIGNET, alice))
+        files.recordPreimage(Network.SIGNET, alice, "h1", "p1")
+        files.recordPreimage(Network.SIGNET, alice, "h2", "p2")
+        assertEquals(mapOf("h1" to "p1", "h2" to "p2"), WalletFiles.under(dir.path.toPath()).preimages(Network.SIGNET, alice))
+        assertEquals(emptyMap(), files.preimages(Network.SIGNET, bob))
+    }
 }

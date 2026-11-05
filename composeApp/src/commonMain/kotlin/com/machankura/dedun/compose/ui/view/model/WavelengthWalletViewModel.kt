@@ -48,7 +48,14 @@ sealed interface WavelengthWalletUIState {
         val syncing: Boolean,
         val recovery: WalletRecovery?,
         val server: ServerInfo?,
+        /** Proofs of payment kept across restarts, by payment hash: the daemon reports each once. */
+        val preimages: Map<String, String> = emptyMap(),
     ) : WavelengthWalletUIState {
+        fun preimageOf(entry: Entry): String? {
+            val progress = entry.progress ?: return null
+            return progress.preimage.ifEmpty { null } ?: preimages[progress.paymentHash]
+        }
+
         val pendingSat: Long get() = balance.pendingInSat + balance.pendingOutSat
 
         /** Held on the swap server's ledger rather than in a coin of the wallet's. Never part of the balance. */
@@ -135,6 +142,7 @@ private fun WalletSnapshot.toUIState(open: WalletState.Open): WavelengthWalletUI
             syncing = phase != RuntimePhase.READY,
             recovery = open.recovery,
             server = info?.serverInfo,
+            preimages = open.preimages.value,
         )
     }
 }

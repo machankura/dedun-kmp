@@ -52,7 +52,13 @@ sealed interface WalletState {
     /** A first open of this directory, whose recovery scan runs inside the open (D12). */
     data object Recovering : WalletState
 
-    data class Open(val engine: WalletEngine, val network: Network, val recovery: WalletRecovery?) : WalletState
+    data class Open(
+        val engine: WalletEngine,
+        val network: Network,
+        val recovery: WalletRecovery?,
+        /** Every proof of payment this wallet has seen, by payment hash. */
+        val preimages: StateFlow<Map<String, String>> = MutableStateFlow(emptyMap()),
+    ) : WalletState
 
     /** It could not open, for a reason a retry might fix: no connection, or the operator. */
     data class Failed(val error: WavelengthException) : WalletState
@@ -229,7 +235,7 @@ class IdentityWavelength(
             opened.start()
             engine = opened
             engineScope = owned
-            _state.value = WalletState.Open(opened, network, result.recovery())
+            _state.value = WalletState.Open(opened, network, result.recovery(), retainPreimages(opened, owned, next.id))
             logger.i { "opened the wallet for ${next.id} on ${network.wire}" }
         } catch (e: WavelengthException.InvalidDescriptor) {
             // The message names keys only by their public identity, but it stays out of the log.
@@ -241,6 +247,26 @@ class IdentityWavelength(
             stopQuietly()
             _state.value = WalletState.Failed(e)
         }
+    }
+
+    /**
+     * The daemon reports a payment's preimage once, on the stream, and the engine holds it in
+     * memory, while the daemon stops and reopens all day here. So each one is written down as it
+     * goes past.
+     */
+    private fun retainPreimages(opened: WalletEngine, owned: CoroutineScope, id: WalletId): StateFlow<Map<String, String>> {
+        val known = MutableStateFlow(files.preimages(network, id))
+        owned.launch {
+            opened.snapshot.collect { snapshot ->
+                snapshot.activity.mapNotNull { it.progress }.forEach { progress ->
+                    if (progress.preimage.isNotEmpty() && progress.paymentHash !in known.value) {
+                        files.recordPreimage(network, id, progress.paymentHash, progress.preimage)
+                        known.value = known.value + (progress.paymentHash to progress.preimage)
+                    }
+                }
+            }
+        }
+        return known
     }
 
     private fun DescriptorWalletOpenResult.recovery(): WalletRecovery? =

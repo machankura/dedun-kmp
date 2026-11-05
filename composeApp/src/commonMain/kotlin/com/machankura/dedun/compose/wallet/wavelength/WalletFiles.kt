@@ -4,6 +4,8 @@ import engineering.lightning.wavelength.Network
 import fr.acinq.phoenix.data.WalletId
 import okio.FileSystem
 import okio.Path
+import okio.buffer
+import okio.use
 
 /**
  * Where a profile's wallet lives on disk -- `docs/wavelength-wallet.md`, D8 and D9, all under
@@ -31,6 +33,11 @@ interface WalletFiles {
 
     fun pinIdentity(network: Network, id: WalletId, identityPubKey: String)
 
+    /** Proofs of payment by payment hash: `wavelength/preimages/<network>/<walletId>`, one a line. */
+    fun preimages(network: Network, id: WalletId): Map<String, String>
+
+    fun recordPreimage(network: Network, id: WalletId, paymentHash: String, preimage: String)
+
     companion object {
         fun under(root: Path, fileSystem: FileSystem = FileSystem.SYSTEM): WalletFiles =
             OkioWalletFiles(root / "wavelength", fileSystem)
@@ -53,6 +60,21 @@ private class OkioWalletFiles(private val root: Path, private val fileSystem: Fi
     override fun pinIdentity(network: Network, id: WalletId, identityPubKey: String) =
         write(identityFile(network, id), identityPubKey + "\n")
 
+    override fun preimages(network: Network, id: WalletId): Map<String, String> {
+        val file = preimagesFile(network, id)
+        if (!fileSystem.exists(file)) return emptyMap()
+        return fileSystem.read(file) { readUtf8() }.lineSequence().mapNotNull { line ->
+            val parts = line.split(' ')
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }.toMap()
+    }
+
+    override fun recordPreimage(network: Network, id: WalletId, paymentHash: String, preimage: String) {
+        val file = preimagesFile(network, id)
+        file.parent?.let(fileSystem::createDirectories)
+        fileSystem.appendingSink(file).buffer().use { it.writeUtf8("$paymentHash $preimage\n") }
+    }
+
     private fun write(file: Path, text: String) {
         file.parent?.let(fileSystem::createDirectories)
         fileSystem.write(file) { writeUtf8(text) }
@@ -61,4 +83,6 @@ private class OkioWalletFiles(private val root: Path, private val fileSystem: Fi
     private fun consentFile(id: WalletId) = root / "consented" / id.nodeIdHash
 
     private fun identityFile(network: Network, id: WalletId) = root / "identity" / network.wire / id.nodeIdHash
+
+    private fun preimagesFile(network: Network, id: WalletId) = root / "preimages" / network.wire / id.nodeIdHash
 }
