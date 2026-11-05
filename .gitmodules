@@ -2,3 +2,7 @@
 	path = lightning-kmp-app
 	url = https://github.com/kngako/lightning-kmp-app.git
 	branch = master
+[submodule "experimental/wavelength-kmp"]
+	path = experimental/wavelength-kmp
+	url = https://github.com/machankura/wavelength-kmp.git
+	branch = descriptors
