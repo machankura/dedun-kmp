@@ -58,6 +58,7 @@ import dedun.composeapp.generated.resources.recovery_phrase
 import dedun.composeapp.generated.resources.the_recovery_phrase_sometimes_called_a_seed
 import dedun.composeapp.generated.resources.this_device_holds_no_phrase_for_the_profile
 import dedun.composeapp.generated.resources.unlocking_your_phrase
+import dedun.composeapp.generated.resources.wavelength_recovery_phrase_also
 import dedun.composeapp.generated.resources.word_position
 import dedun.composeapp.generated.resources.you_have_not_backed_up_your_recovery_phrase
 import org.jetbrains.compose.resources.stringResource
@@ -153,6 +154,15 @@ private fun RecoveryPhraseContent(
                         .fillMaxWidth()
                         .padding(vertical = MaterialTheme.spacing.containerPadding),
                     text = stringResource(Res.string.the_recovery_phrase_sometimes_called_a_seed),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            // The same words open the profile's wallet: docs/wavelength-wallet.md, D1 and D11.
+            item {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(Res.string.wavelength_recovery_phrase_also),
                     style = MaterialTheme.typography.bodyMedium
                 )
             }

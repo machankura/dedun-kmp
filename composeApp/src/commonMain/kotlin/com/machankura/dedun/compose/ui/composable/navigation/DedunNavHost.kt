@@ -18,6 +18,12 @@ import fr.acinq.phoenix.db.createSqliteChannelsDb
 import fr.acinq.phoenix.managers.PhoenixDatabases
 import fr.acinq.phoenix.managers.DatabaseManager
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
+import com.machankura.dedun.compose.wallet.wavelength.WalletProfile
+import com.machankura.dedun.compose.wallet.wavelength.WavelengthProcess
+import com.machankura.dedun.compose.ui.composable.WavelengthEntryScreen
+import com.machankura.dedun.compose.ui.composable.WavelengthWalletScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthEntryRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthWalletRoute
 import com.machankura.dedun.compose.managers.GroupLightningNode
 import com.machankura.dedun.compose.wallet.lightning.GroupLightningNodes
 import com.machankura.dedun.compose.wallet.lightning.GroupLightningNodesStatusSource
@@ -56,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.machankura.dedun.compose.AppLifecycle
+import com.machankura.dedun.compose.identity.StoredIdentity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -315,6 +322,29 @@ fun DedunNavHost(
     }
     val electrum = remember(activeIdentityForWallets?.id, activeIdentityForWallets?.business) {
         identityElectrum.clientFor(activeIdentityForWallets)
+    }
+
+    // The profile's own wallet: docs/wavelength-wallet.md. One per process, not per composition,
+    // because the daemon is a singleton and an activity is destroyed on a rotation. A switch stops
+    // the last profile's daemon before the next opens. The words come from the seed the selector
+    // already decrypted; they are handed to the holder and kept nowhere else. Tor is followed, so
+    // turning it on stops the wallet.
+    val identityWavelength = remember { WavelengthProcess.holder(phoenixGlobal.ctx) }
+    LaunchedEffect(identityWavelength) {
+        AppLifecycle.isForeground.collect { foreground ->
+            if (foreground) identityWavelength.enteredForeground() else identityWavelength.enteredBackground()
+        }
+    }
+    LaunchedEffect(identityWavelength, activeIdentityForWallets?.id) {
+        val identity = activeIdentityForWallets
+        if (identity == null) {
+            identityWavelength.activate(null)
+            return@LaunchedEffect
+        }
+        val words = (sovereignWalletViewModel.availableIdentities.value[identity.id] as? StoredIdentity.Mnemonic)?.userWallet?.words
+        identity.userPrefs.getIsTorEnabled.collect { tor ->
+            identityWavelength.activate(WalletProfile(identity.id, words, tor))
+        }
     }
 
     // One Electrum connection per network: the identity's own -- its node's, or the one a
@@ -1191,6 +1221,25 @@ fun DedunNavHost(
                     signOut = signOutOfReadOnlyIdentity,
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = groupOnchainWallets,
+                    identityWavelength = identityWavelength,
+                )
+            }
+            composable<WavelengthWalletRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<WavelengthWalletRoute>()
+                WavelengthWalletScreen(
+                    identityWavelength = identityWavelength,
+                    onOpenEntry = { entryId ->
+                        navController.navigate(route = WavelengthEntryRoute(activeUserPublicKey = route.activeUserPublicKey, entryId = entryId))
+                    },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<WavelengthEntryRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<WavelengthEntryRoute>()
+                WavelengthEntryScreen(
+                    identityWavelength = identityWavelength,
+                    entryId = route.entryId,
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<ShareProfileRoute> { backStackEntry ->

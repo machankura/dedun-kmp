@@ -34,6 +34,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,6 +93,9 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthWalletRoute
+import com.machankura.dedun.compose.ui.view.model.WavelengthWalletViewModel
+import com.machankura.dedun.compose.wallet.wavelength.IdentityWavelength
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -109,10 +116,22 @@ fun ActiveProfileScreen(
     // and tests, which compose the screen without an identity.
     memberWalletRepository: MemberWalletRepository = MemberWalletRepository.NO_OP,
     wallets: GroupOnchainWallets? = null,
+    // The profile's own wallet (docs/wavelength-wallet.md). Null where the screen is composed
+    // without an identity: previews and tests.
+    identityWavelength: IdentityWavelength? = null,
 ) {
 
     // Whether this identity can sign, which decides which rows below exist.
     val canSign = LocalCanSign.current
+
+    val wavelengthWalletViewModel: WavelengthWalletViewModel? = identityWavelength?.let { viewModel(factory = WavelengthWalletViewModel.factory(it)) }
+    var consentingToWallet by remember { mutableStateOf(false) }
+    if (consentingToWallet && wavelengthWalletViewModel != null) {
+        WavelengthConsentSheet(
+            onTurnOn = { consentingToWallet = false; wavelengthWalletViewModel.turnOn() },
+            onDismiss = { consentingToWallet = false },
+        )
+    }
 
     val signOutViewModel: SignOutViewModel? = signOut?.let {
         viewModel(
@@ -290,6 +309,14 @@ fun ActiveProfileScreen(
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
+                            }
+
+                            wavelengthWalletViewModel?.let { wallet ->
+                                wavelengthWalletItems(
+                                    state = wallet.uiState,
+                                    onOpen = { onNavigateToRoute.invoke(WavelengthWalletRoute(activeUserPublicKey = activeUserPublicKey)) },
+                                    onTurnOn = { consentingToWallet = true },
+                                )
                             }
 
                             memberWalletItems(
