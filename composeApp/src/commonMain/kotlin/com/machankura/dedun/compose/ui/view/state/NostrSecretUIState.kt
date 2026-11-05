@@ -31,5 +31,8 @@ sealed interface NostrSecretUIState {
         data object Confirming : Forgetting
         data object InProgress : Forgetting
         data object Failed : Forgetting
+
+        /** The wallet may hold money, and these words are the way back to it. */
+        data object WalletMayHoldMoney : Forgetting
     }
 }

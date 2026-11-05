@@ -57,6 +57,8 @@ class NostrSecretViewModel(
     private val nostrRepository: NostrRepository,
     private val forgetNostrCredential: suspend (Identity) -> IdentityWriter.ForgetNostrCredentialResult,
     private val hideIdentityMetadata: suspend (Identity) -> Unit,
+    private val walletMayHoldMoney: suspend (Identity) -> Boolean = { false },
+    private val forgetWalletWords: suspend (Identity) -> Unit = {},
 ) : ViewModel() {
 
     private val logger = Logger.withTag(TAG)
@@ -181,10 +183,13 @@ class NostrSecretViewModel(
         }) {
             // The sequence is ForgetIdentity's, shared with the two exits a read-only
             // identity has; only the state it drives is this screen's.
-            when (ForgetIdentity.forget(identity, nostrRepository, forgetNostrCredential, hideIdentityMetadata)) {
+            when (ForgetIdentity.forget(identity, nostrRepository, forgetNostrCredential, hideIdentityMetadata, walletMayHoldMoney, forgetWalletWords)) {
                 is ForgetIdentity.Outcome.Forgotten -> {
                     _forgetting.value = NostrSecretUIState.Forgetting.Idle
                     withContext(Dispatchers.Main) { onForgotten() }
+                }
+                is ForgetIdentity.Outcome.WalletMayHoldMoney -> {
+                    _forgetting.value = NostrSecretUIState.Forgetting.WalletMayHoldMoney
                 }
                 is ForgetIdentity.Outcome.WalletAttached,
                 is ForgetIdentity.Outcome.CannotForget -> {
@@ -203,6 +208,8 @@ class NostrSecretViewModel(
             nostrRepository: NostrRepository,
             forgetNostrCredential: suspend (Identity) -> IdentityWriter.ForgetNostrCredentialResult,
             hideIdentityMetadata: suspend (Identity) -> Unit,
+            walletMayHoldMoney: suspend (Identity) -> Boolean = { false },
+            forgetWalletWords: suspend (Identity) -> Unit = {},
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 NostrSecretViewModel(
@@ -211,6 +218,8 @@ class NostrSecretViewModel(
                     nostrRepository = nostrRepository,
                     forgetNostrCredential = forgetNostrCredential,
                     hideIdentityMetadata = hideIdentityMetadata,
+                    walletMayHoldMoney = walletMayHoldMoney,
+                    forgetWalletWords = forgetWalletWords,
                 )
             }
         }

@@ -51,6 +51,7 @@ import dedun.composeapp.generated.resources.wavelength_not_offered
 import dedun.composeapp.generated.resources.wavelength_not_turned_on
 import dedun.composeapp.generated.resources.wavelength_opening
 import dedun.composeapp.generated.resources.wavelength_pending_s_sats
+import dedun.composeapp.generated.resources.wavelength_recovery_phrase
 import dedun.composeapp.generated.resources.wavelength_restoring
 import dedun.composeapp.generated.resources.wavelength_syncing
 import dedun.composeapp.generated.resources.wavelength_test_network_s
@@ -77,6 +78,8 @@ fun LazyListScope.wavelengthWalletItems(
     state: WavelengthWalletUIState,
     onOpen: () -> Unit,
     onTurnOn: () -> Unit,
+    /** The words of a wallet with its own: an nsec's. Whatever state the wallet is in, since they are the way out of most of them. */
+    onRecoveryPhrase: (() -> Unit)? = null,
 ) {
     item {
         Text(
@@ -107,6 +110,12 @@ fun LazyListScope.wavelengthWalletItems(
                 { TextButton(onClick = onTurnOn) { Text(stringResource(Res.string.wavelength_turn_on)) } }
             } else null,
         )
+    }
+    val consented = !(state is WavelengthWalletUIState.Unavailable && state.reason == WalletUnavailability.NotConsented)
+    if (onRecoveryPhrase != null && consented) {
+        item(key = "wavelength-wallet-phrase") {
+            TextButton(onClick = onRecoveryPhrase) { Text(stringResource(Res.string.wavelength_recovery_phrase)) }
+        }
     }
 }
 

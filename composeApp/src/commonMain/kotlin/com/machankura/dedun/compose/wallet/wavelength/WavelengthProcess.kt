@@ -21,6 +21,10 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 object WavelengthProcess {
     private val holder = AtomicReference<IdentityWavelength?>(null)
 
+    /** Words made for profiles with none of their own (D13), in `node-data`, beside `seed.dat`. */
+    fun seeds(context: PlatformContext): WalletSeedStore =
+        WalletSeedStore.forApp(getApplicationFilesDirectoryPath(context).toPath() / "node-data")
+
     /**
      * The holder, made on the first call. Two first calls at once -- the activity and the worker,
      * at a cold start -- both make one and the loser's is dropped unused: nothing is opened until
@@ -34,6 +38,7 @@ object WavelengthProcess {
             client = WavelengthPlatform.client,
             files = WalletFiles.under(root.toPath()),
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            createSeed = seeds(context)::create,
         )
         return if (holder.compareAndSet(null, made)) made else holder.load()!!
     }

@@ -32,3 +32,9 @@ data class WavelengthSendRoute(
 data class WavelengthAdvancedRoute(
     val activeUserPublicKey: String,
 ): Route()
+
+/** The words of a wallet that has its own: an nsec profile's. `docs/wavelength-wallet.md`, D13. */
+@Serializable
+data class WavelengthRecoveryPhraseRoute(
+    val activeUserPublicKey: String,
+): Route()

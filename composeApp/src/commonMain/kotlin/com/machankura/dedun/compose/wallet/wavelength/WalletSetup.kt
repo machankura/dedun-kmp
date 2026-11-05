@@ -2,7 +2,7 @@ package com.machankura.dedun.compose.wallet.wavelength
 
 /** Why a profile has no wallet open. Each one is a single line on the profile's wallet row. */
 enum class WalletUnavailability {
-    /** No words: an npub, or an nsec until Phase 13 (D13). */
+    /** No words and no way to have any: an npub, which can't sign (D13). */
     NoSeed,
 
     /** Upstream has no runtime for this platform (D4). */
@@ -36,11 +36,13 @@ sealed interface WalletSetup {
             torEnabled: Boolean,
             consented: Boolean,
             offered: Boolean = WavelengthWalletRollout.OFFERED,
+            /** An nsec: no words yet, but accepting the sheet makes some (D13). */
+            canCreateSeed: Boolean = false,
         ): WalletSetup = when {
-            !hasSeed -> Unavailable(WalletUnavailability.NoSeed)
+            !hasSeed && !canCreateSeed -> Unavailable(WalletUnavailability.NoSeed)
             !platformSupported -> Unavailable(WalletUnavailability.UnsupportedPlatform)
             torEnabled -> Unavailable(WalletUnavailability.TorOn)
-            consented -> Ready
+            consented && hasSeed -> Ready
             offered -> Unavailable(WalletUnavailability.NotConsented)
             else -> Unavailable(WalletUnavailability.NotOffered)
         }

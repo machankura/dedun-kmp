@@ -34,8 +34,10 @@ class WalletProfile(
     val id: WalletId,
     val words: List<String>?,
     val torEnabled: Boolean,
+    /** An nsec profile, whose words are made when it turns the wallet on (D13). */
+    val canCreateSeed: Boolean = false,
 ) {
-    override fun toString(): String = "WalletProfile(id=$id, words=${if (words == null) "none" else "***"}, tor=$torEnabled)"
+    override fun toString(): String = "WalletProfile(id=$id, words=${if (words == null) "none" else "***"}, tor=$torEnabled, canCreateSeed=$canCreateSeed)"
 }
 
 /** How a first open's recovery scan went. All zeros is a new wallet, and says nothing. */
@@ -96,6 +98,8 @@ class IdentityWavelength(
     private val network: Network = WavelengthWalletRollout.NETWORK,
     private val offered: Boolean = WavelengthWalletRollout.OFFERED,
     private val backgroundGrace: Duration = 1.minutes,
+    /** Makes and stores words for a profile with none: `WalletSeedStore.create` (D13). */
+    private val createSeed: (WalletId) -> List<String> = { error("no seed store") },
 ) {
     private val logger = Logger.withTag("IdentityWavelength")
     private val mutex = Mutex()
@@ -123,7 +127,10 @@ class IdentityWavelength(
         asked.value++
         scope.launch {
             mutex.withLock {
-                val current = profile ?: return@withLock
+                var current = profile ?: return@withLock
+                if (current.words == null && current.canCreateSeed) {
+                    current = WalletProfile(current.id, createSeed(current.id), current.torEnabled, canCreateSeed = true)
+                }
                 files.recordConsent(current.id)
                 switchTo(current, force = true)
             }
@@ -222,7 +229,26 @@ class IdentityWavelength(
         torEnabled = next.torEnabled,
         consented = files.consented(next.id),
         offered = offered,
+        canCreateSeed = next.canCreateSeed,
     )
+
+    /**
+     * Whether the active wallet could hold anything, for the forget guard: true unless it is open
+     * and the daemon says it holds nothing, has nothing on its way, and has no exit under way. A
+     * wallet that can't be read is assumed to hold money.
+     */
+    suspend fun mayHoldMoney(id: WalletId): Boolean = mutex.withLock {
+        val running = engine?.takeIf { profile?.id == id } ?: return@withLock true
+        try {
+            val client = running.client
+            val balance = client.balance()
+            val empty = balance.confirmedSat == 0L && balance.pendingInSat == 0L && balance.pendingOutSat == 0L &&
+                balance.creditAvailableSat == 0L && balance.creditReservedSat == 0L
+            !empty || client.exitSummary().exits.isNotEmpty()
+        } catch (e: WavelengthException) {
+            true
+        }
+    }
 
     private suspend fun switchTo(next: WalletProfile?, force: Boolean = false) {
         val unchanged = next?.id == profile?.id && next?.torEnabled == profile?.torEnabled

@@ -61,6 +61,48 @@ class ForgetIdentityJvmTest {
         )
 
     @Test
+    fun `a wallet that may hold money refuses before anything is touched`() = runBlocking {
+        val recorder = Recorder()
+
+        val outcome = ForgetIdentity.forget(
+            identity = readOnlyIdentity(),
+            nostrRepository = recorder,
+            forgetNostrCredential = { recorder.effects += "forgetNostrCredential"; IdentityWriter.ForgetNostrCredentialResult.Forgotten },
+            hideIdentityMetadata = { recorder.effects += "hideIdentityMetadata" },
+            walletMayHoldMoney = { true },
+            forgetWalletWords = { recorder.effects += "forgetWalletWords" },
+        )
+
+        assertEquals(ForgetIdentity.Outcome.WalletMayHoldMoney, outcome)
+        assertEquals(emptyList(), recorder.effects)
+    }
+
+    @Test
+    fun `an empty wallet's words go with the credential, and stay if the credential does`() = runBlocking {
+        val recorder = Recorder()
+        val forgotten = ForgetIdentity.forget(
+            identity = readOnlyIdentity(),
+            nostrRepository = recorder,
+            forgetNostrCredential = { recorder.effects += "forgetNostrCredential"; IdentityWriter.ForgetNostrCredentialResult.Forgotten },
+            hideIdentityMetadata = {},
+            forgetWalletWords = { recorder.effects += "forgetWalletWords" },
+        )
+        assertEquals(ForgetIdentity.Outcome.Forgotten, forgotten)
+        assertEquals(listOf("forgetNostrCredential", "forgetWalletWords", "forgetLocalAccount:${privateKey.nostrPublicKeyHex()}"), recorder.effects)
+
+        val kept = Recorder()
+        val refused = ForgetIdentity.forget(
+            identity = readOnlyIdentity(),
+            nostrRepository = kept,
+            forgetNostrCredential = { IdentityWriter.ForgetNostrCredentialResult.CannotLoadKeys },
+            hideIdentityMetadata = {},
+            forgetWalletWords = { kept.effects += "forgetWalletWords" },
+        )
+        assertEquals(ForgetIdentity.Outcome.CannotForget, refused)
+        assertEquals(emptyList(), kept.effects)
+    }
+
+    @Test
     fun `the credential comes out first, then the metadata, then the account`() = runBlocking {
         val recorder = Recorder()
 

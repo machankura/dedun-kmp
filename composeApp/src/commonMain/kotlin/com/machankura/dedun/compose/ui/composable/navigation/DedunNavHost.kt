@@ -23,6 +23,8 @@ import com.machankura.dedun.compose.wallet.wavelength.WavelengthProcess
 import com.machankura.dedun.compose.ui.composable.WavelengthEntryScreen
 import com.machankura.dedun.compose.ui.composable.WavelengthAdvancedScreen
 import com.machankura.dedun.compose.ui.composable.WavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.WavelengthRecoveryPhraseScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthRecoveryPhraseRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.WavelengthSendScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthSendRoute
@@ -68,7 +70,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.machankura.dedun.compose.AppLifecycle
+import kotlinx.coroutines.withContext
 import com.machankura.dedun.compose.network.LightningAddressResolver
+import com.machankura.dedun.compose.identity.IdentityKind
 import com.machankura.dedun.compose.identity.StoredIdentity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -337,6 +341,7 @@ fun DedunNavHost(
     // already decrypted; they are handed to the holder and kept nowhere else. Tor is followed, so
     // turning it on stops the wallet.
     val identityWavelength = remember { WavelengthProcess.holder(phoenixGlobal.ctx) }
+    val walletSeeds = remember { WavelengthProcess.seeds(phoenixGlobal.ctx) }
     LaunchedEffect(identityWavelength) {
         AppLifecycle.isForeground.collect { foreground ->
             if (foreground) identityWavelength.enteredForeground() else identityWavelength.enteredBackground()
@@ -348,9 +353,12 @@ fun DedunNavHost(
             identityWavelength.activate(null)
             return@LaunchedEffect
         }
+        // A seed profile's own words; an nsec's, made when it first turned the wallet on (D13).
+        val nsec = identity.kind == IdentityKind.NostrSecret
         val words = (sovereignWalletViewModel.availableIdentities.value[identity.id] as? StoredIdentity.Mnemonic)?.userWallet?.words
+            ?: if (nsec) withContext(Dispatchers.Default) { runCatching { walletSeeds.words(identity.id) }.getOrNull() } else null
         identity.userPrefs.getIsTorEnabled.collect { tor ->
-            identityWavelength.activate(WalletProfile(identity.id, words, tor))
+            identityWavelength.activate(WalletProfile(identity.id, words, tor, canCreateSeed = nsec))
         }
     }
 
@@ -1229,6 +1237,15 @@ fun DedunNavHost(
                     memberWalletRepository = databaseMemberWalletRepository,
                     wallets = groupOnchainWallets,
                     identityWavelength = identityWavelength,
+                    onWalletRecoveryPhrase = if (activeIdentityForWallets?.kind == IdentityKind.NostrSecret) {
+                        { navController.navigate(route = WavelengthRecoveryPhraseRoute(activeUserPublicKey = route.activeUserPublicKey)) }
+                    } else null,
+                )
+            }
+            composable<WavelengthRecoveryPhraseRoute> {
+                WavelengthRecoveryPhraseScreen(
+                    loadWords = { activeIdentityForWallets?.id?.let { id -> withContext(Dispatchers.Default) { walletSeeds.words(id) } } },
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<WavelengthWalletRoute> { backStackEntry ->
@@ -1364,6 +1381,10 @@ fun DedunNavHost(
                     nostrRepository = databaseNostrRepository,
                     forgetNostrCredential = { identity -> sovereignWalletViewModel.forgetNostrCredential(identity) },
                     hideIdentityMetadata = { identity -> sovereignWalletViewModel.hideIdentityMetadata(identity) },
+                    walletMayHoldMoney = { identity ->
+                        withContext(Dispatchers.Default) { walletSeeds.has(identity.id) } && identityWavelength.mayHoldMoney(identity.id)
+                    },
+                    forgetWalletWords = { identity -> withContext(Dispatchers.Default) { walletSeeds.remove(identity.id) } },
                     onNavigateBack = {
                         navController.popBackStack()
                     },

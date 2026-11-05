@@ -1189,4 +1189,9 @@
     <string name="wavelength_advanced_could_not_sweep">Couldn't send the onchain balance</string>
     <string name="wavelength_advanced_look">Look for more coins</string>
     <string name="wavelength_advanced_look_explainer">If you restored this profile and coins are missing, Dedun can look further back. It takes several minutes, and the wallet can't be used until it's done.</string>
+    <string name="wavelength_recovery_phrase">Wallet recovery phrase</string>
+    <string name="wavelength_recovery_phrase_explainer">This profile was signed in with a key, so its wallet has words of its own. They restore the wallet's balance, with the Ark server's help, and nothing else. Your key doesn't. Write them down.</string>
+    <string name="wavelength_recovery_phrase_show">Show the words</string>
+    <string name="wavelength_recovery_phrase_none">This profile's wallet has no words yet. They are made when you turn the wallet on.</string>
+    <string name="could_not_forget_the_key_wallet_may_hold_money">The key was not forgotten: this profile's wallet may still hold money. Open the wallet and move everything out first.</string>
 </resources>

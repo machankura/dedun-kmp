@@ -57,6 +57,7 @@ import dedun.composeapp.generated.resources.display_nostr_secret_key
 import dedun.composeapp.generated.resources.forget
 import dedun.composeapp.generated.resources.forget_this_key
 import dedun.composeapp.generated.resources.forget_this_key_question
+import dedun.composeapp.generated.resources.could_not_forget_the_key_wallet_may_hold_money
 import dedun.composeapp.generated.resources.hide
 import dedun.composeapp.generated.resources.i_have_saved_my_nostr_secret_key_somewhere
 import dedun.composeapp.generated.resources.i_understand_that_if_i_lose_this_phone_and_my_key
@@ -106,6 +107,9 @@ fun NostrSecretScreen(
     nostrRepository: NostrRepository,
     forgetNostrCredential: suspend (Identity) -> IdentityWriter.ForgetNostrCredentialResult,
     hideIdentityMetadata: suspend (Identity) -> Unit,
+    // The wallet's words, if this profile has any (docs/wavelength-wallet.md, D13).
+    walletMayHoldMoney: suspend (Identity) -> Boolean = { false },
+    forgetWalletWords: suspend (Identity) -> Unit = {},
     onNavigateBack: () -> Unit,
     onForgotten: () -> Unit,
 ) {
@@ -116,6 +120,8 @@ fun NostrSecretScreen(
             nostrRepository = nostrRepository,
             forgetNostrCredential = forgetNostrCredential,
             hideIdentityMetadata = hideIdentityMetadata,
+            walletMayHoldMoney = walletMayHoldMoney,
+            forgetWalletWords = forgetWalletWords,
         )
     )
 
@@ -378,6 +384,8 @@ private fun NostrSecretContent(
                                 text = when (forgetting) {
                                     is NostrSecretUIState.Forgetting.Failed ->
                                         stringResource(Res.string.could_not_forget_the_key_please_try_again)
+                                    is NostrSecretUIState.Forgetting.WalletMayHoldMoney ->
+                                        stringResource(Res.string.could_not_forget_the_key_wallet_may_hold_money)
                                     else -> stringResource(Res.string.remove_the_key_from_this_device_the_profile)
                                 },
                                 style = MaterialTheme.typography.bodySmall

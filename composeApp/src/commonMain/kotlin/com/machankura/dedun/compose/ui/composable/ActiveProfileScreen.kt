@@ -119,6 +119,8 @@ fun ActiveProfileScreen(
     // The profile's own wallet (docs/wavelength-wallet.md). Null where the screen is composed
     // without an identity: previews and tests.
     identityWavelength: IdentityWavelength? = null,
+    // An nsec profile's: its wallet has words of its own. Null for everyone else.
+    onWalletRecoveryPhrase: (() -> Unit)? = null,
 ) {
 
     // Whether this identity can sign, which decides which rows below exist.
@@ -316,6 +318,7 @@ fun ActiveProfileScreen(
                                     state = wallet.uiState,
                                     onOpen = { onNavigateToRoute.invoke(WavelengthWalletRoute(activeUserPublicKey = activeUserPublicKey)) },
                                     onTurnOn = { consentingToWallet = true },
+                                    onRecoveryPhrase = onWalletRecoveryPhrase,
                                 )
                             }
 

@@ -32,6 +32,14 @@ class WalletSetupTest {
     }
 
     @Test
+    fun `an nsec can be offered a wallet before it has words, and an npub can't`() {
+        assertEquals(WalletSetup.Unavailable(WalletUnavailability.NotConsented), WalletSetup.resolve(false, true, false, false, true, canCreateSeed = true))
+        // Consented with no words would be a wallet with nothing to open it: it asks again.
+        assertEquals(WalletSetup.Unavailable(WalletUnavailability.NotConsented), WalletSetup.resolve(false, true, false, true, true, canCreateSeed = true))
+        assertEquals(WalletSetup.Unavailable(WalletUnavailability.NoSeed), WalletSetup.resolve(false, true, false, false, true, canCreateSeed = false))
+    }
+
+    @Test
     fun `the cap is for mainnet`() {
         assertTrue(WavelengthWalletRollout.sendExceedsCap(Network.MAINNET, Satoshi(100_001)))
         assertFalse(WavelengthWalletRollout.sendExceedsCap(Network.MAINNET, Satoshi(100_000)))

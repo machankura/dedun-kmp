@@ -257,6 +257,45 @@ class IdentityWavelengthJvmTest {
         .let { Regex("\"recovery_window\":(\\d+)").find(it)?.groupValues?.get(1)?.toLong() }
 
     @Test
+    fun `an nsec makes words on consent, and only then`() = runWallet {
+        val made = mutableListOf<WalletId>()
+        val holder = IdentityWavelength(
+            client = FakeWavelengthClient(),
+            files = files,
+            scope = backgroundScope,
+            network = Network.SIGNET,
+            offered = true,
+            createSeed = { id -> made += id; words },
+        )
+        holder.activate(WalletProfile(alice, null, torEnabled = false, canCreateSeed = true))
+        runCurrent()
+        assertEquals(WalletState.Unavailable(WalletUnavailability.NotConsented), holder.state.value)
+        assertEquals(emptyList(), made)
+
+        holder.consent()
+        runCurrent()
+        assertEquals(listOf(alice), made)
+        assertIs<WalletState.Open>(holder.state.value)
+    }
+
+    @Test
+    fun `an empty wallet may be forgotten, and one that holds anything or can't be read may not`() = runWallet {
+        files.recordConsent(alice)
+        val empty = holder()
+        assertTrue(empty.mayHoldMoney(alice), "a wallet that isn't open can't say it's empty")
+        empty.activate(profile())
+        runCurrent()
+        assertFalse(empty.mayHoldMoney(alice))
+        assertTrue(empty.mayHoldMoney(bob), "another profile's wallet says nothing about this one")
+        empty.stop()
+
+        val funded = holder(FakeFacadeBindings(initialConfirmedSat = 1))
+        funded.activate(profile())
+        runCurrent()
+        assertTrue(funded.mayHoldMoney(alice))
+    }
+
+    @Test
     fun `the words never reach a toString`() {
         assertFalse(profile().toString().contains("abandon"))
     }

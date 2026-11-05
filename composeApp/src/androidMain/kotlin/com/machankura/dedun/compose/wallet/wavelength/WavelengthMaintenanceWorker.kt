@@ -36,7 +36,10 @@ class WavelengthMaintenanceWorker(context: Context, params: WorkerParameters) : 
         val ctx = PlatformContext(applicationContext)
         val id = (applicationContext as DedunApplication).getGlobalPrefs().getDefaultWallet.first() as? WalletId
             ?: return Result.success()
-        val words = SeedManager.loadAndDecryptOrNull(PhoenixGlobal(ctx))?.get(id)?.words ?: return Result.success()
+        // A seed profile's words, or an nsec's own (D13).
+        val words = SeedManager.loadAndDecryptOrNull(PhoenixGlobal(ctx))?.get(id)?.words
+            ?: WavelengthProcess.seeds(ctx).words(id)
+            ?: return Result.success()
         val tor = DataStoreManager(ctx, NodeParamsManager.chain).loadUserPrefsForWallet(id).getIsTorEnabled.first()
         val ran = WavelengthProcess.holder(ctx).maintainInBackground(WalletProfile(id, words, tor), STAY_OPEN_FOR)
         logger.i { if (ran) "kept the wallet open for $id" else "left $id's wallet to the app" }

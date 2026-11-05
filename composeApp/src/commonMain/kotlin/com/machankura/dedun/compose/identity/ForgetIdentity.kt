@@ -27,6 +27,13 @@ object ForgetIdentity {
         /** A profile with a wallet attached: the seed derives its key, and this does not remove seeds. */
         data object WalletAttached : Outcome
 
+        /**
+         * An nsec with words for a wallet that holds something, or can't be read to say it doesn't.
+         * Those words are the only way back to that money (`docs/wavelength-wallet.md`, D13). Only
+         * then: an empty wallet doesn't hold a profile on the device for ever.
+         */
+        data object WalletMayHoldMoney : Outcome
+
         /** The credentials file could not be read; nothing was changed. */
         data object CannotForget : Outcome
     }
@@ -36,15 +43,22 @@ object ForgetIdentity {
         nostrRepository: NostrRepository,
         forgetNostrCredential: suspend (Identity) -> IdentityWriter.ForgetNostrCredentialResult,
         hideIdentityMetadata: suspend (Identity) -> Unit,
-    ): Outcome = when (forgetNostrCredential(identity)) {
-        is IdentityWriter.ForgetNostrCredentialResult.Forgotten -> {
-            hideIdentityMetadata(identity)
-            // The kind 0 that made it a local account, and anything queued that can now
-            // never be signed. Published events and the profile cache stay.
-            nostrRepository.forgetLocalAccount(identity.nostrPublicKey)
-            Outcome.Forgotten
+        walletMayHoldMoney: suspend (Identity) -> Boolean = { false },
+        forgetWalletWords: suspend (Identity) -> Unit = {},
+    ): Outcome {
+        // Before anything is touched: a refusal here has to leave the identity exactly as it was.
+        if (walletMayHoldMoney(identity)) return Outcome.WalletMayHoldMoney
+        return when (forgetNostrCredential(identity)) {
+            is IdentityWriter.ForgetNostrCredentialResult.Forgotten -> {
+                forgetWalletWords(identity)
+                hideIdentityMetadata(identity)
+                // The kind 0 that made it a local account, and anything queued that can now
+                // never be signed. Published events and the profile cache stay.
+                nostrRepository.forgetLocalAccount(identity.nostrPublicKey)
+                Outcome.Forgotten
+            }
+            is IdentityWriter.ForgetNostrCredentialResult.WalletAttached -> Outcome.WalletAttached
+            is IdentityWriter.ForgetNostrCredentialResult.CannotLoadKeys -> Outcome.CannotForget
         }
-        is IdentityWriter.ForgetNostrCredentialResult.WalletAttached -> Outcome.WalletAttached
-        is IdentityWriter.ForgetNostrCredentialResult.CannotLoadKeys -> Outcome.CannotForget
     }
 }
