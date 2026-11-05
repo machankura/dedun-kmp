@@ -25,9 +25,9 @@ dependencyResolutionManagement {
             }
         }
         // The wavelength daemon's gomobile bindings, built from the source the submodule pins
-        // by :composeApp:stageWavelengthBindings. wavelength-kmp's own settings declare the same
-        // repository, but its wavelength-embedded names them as `implementation`, so they reach
-        // this build's runtime classpath and have to resolve here too.
+        // by the script named below. wavelength-kmp's own settings declare the same repository,
+        // but its wavelength-embedded names them as `implementation`, so they reach this build's
+        // runtime classpath and have to resolve here too.
         exclusiveContent {
             forRepository {
                 maven(file("experimental/wavelength-kmp/bindings/maven")) { name = "wavelengthBindings" }
@@ -63,4 +63,21 @@ includeBuild("experimental/wavelength-kmp") {
         substitute(module("engineering.lightning.wavelength:wavelength-embedded")).using(project(":wavelength-embedded"))
         substitute(module("engineering.lightning.wavelength:wavelength-testing")).using(project(":wavelength-testing"))
     }
+}
+
+// The bindings have to be there before Gradle resolves anything, so no task of this build can
+// stage them: its dependency graph is worked out before any task runs. They take some minutes to
+// build and only Android needs them, so a stale or missing set is a warning rather than a build
+// step, and the desktop and jvmTest go on without them.
+val wavelengthStamp = file("experimental/wavelength-kmp/bindings/android/SOURCE")
+val wavelengthCommit = providers.exec {
+    workingDir = file("experimental/wavelength-kmp/experimental/wavelength")
+    commandLine("git", "rev-parse", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.get().trim()
+if (!wavelengthStamp.isFile || wavelengthStamp.readText().trim() != wavelengthCommit) {
+    logger.warn(
+        "The wavelength bindings are missing or not built from $wavelengthCommit. Android builds " +
+            "need them: experimental/wavelength-kmp/scripts/fetch-bindings.sh android",
+    )
 }

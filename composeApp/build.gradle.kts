@@ -27,9 +27,6 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)
         }
-        // The one thing jvmTest can't reach: the daemon's gomobile runtime, on a device.
-        @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
-        instrumentedTestVariant.sourceSetTree.set(org.jetbrains.kotlin.gradle.plugin.KotlinSourceSetTree.test)
     }
     
     // Declared only on a mac, mirroring the gate lightning-kmp-app's :library applies to its own ios
@@ -159,6 +156,7 @@ kotlin {
             // FakeWavelengthClient: the wallet's screens and lifecycle, with no daemon.
             implementation("engineering.lightning.wavelength:wavelength-testing:1.0.0")
         }
+        // The one thing jvmTest can't reach: the daemon's gomobile runtime, on a device.
         androidInstrumentedTest.dependencies {
             implementation(libs.androidx.test.runner)
             implementation(libs.androidx.testExt.junit)
@@ -358,18 +356,6 @@ val m3Audit = tasks.register("m3Audit") {
 }
 
 tasks.named("check") { dependsOn(m3Audit) }
-
-// The daemon's gomobile bindings are ignored by git and built from the source the wavelength-kmp
-// submodule pins. The script reuses a build for the commit it already staged, so this costs a git
-// status on most runs and some minutes on a fresh checkout. Android only: the desktop target has
-// no runtime and needs none of it (docs/wavelength-wallet.md, D4).
-val stageWavelengthBindings by tasks.registering(Exec::class) {
-    workingDir = rootProject.file("experimental/wavelength-kmp")
-    commandLine("bash", "scripts/fetch-bindings.sh", "android")
-    // gomobile is usually in Go's own bin, which a Gradle daemon's PATH may not have.
-    environment("PATH", System.getenv("PATH") + File.pathSeparator + System.getProperty("user.home") + "/go/bin")
-}
-tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(stageWavelengthBindings) }
 
 // The group Lightning wallet's regtest run (testing/regtest/README.md) runs only when DEDUN_REGTEST=1.
 // An environment variable is not a task input, so without this a skipped run would leave jvmTest up to
