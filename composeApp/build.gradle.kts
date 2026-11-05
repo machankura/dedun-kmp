@@ -27,6 +27,9 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)
         }
+        // The one thing jvmTest can't reach: the daemon's gomobile runtime, on a device.
+        @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+        instrumentedTestVariant.sourceSetTree.set(org.jetbrains.kotlin.gradle.plugin.KotlinSourceSetTree.test)
     }
     
     // Declared only on a mac, mirroring the gate lightning-kmp-app's :library applies to its own ios
@@ -66,6 +69,11 @@ kotlin {
             implementation(libs.androidx.activity.compose)
 //            implementation(libs.androidx.room.sqlite.wrapper)
             implementation(libs.compose.uiToolingPreview)
+
+            // The daemon itself, for Android. A separate line from core and engine below: this
+            // module has no jvm target, because upstream ships no desktop runtime, and its iOS
+            // targets need a staged xcframework (docs/wavelength-wallet.md, D4).
+            implementation("engineering.lightning.wavelength:wavelength-embedded:1.0.0")
 
             implementation(libs.sqldelight.android.driver)
         }
@@ -114,6 +122,10 @@ kotlin {
             // resolved via the lightning-kmp-app composite build (see settings.gradle.kts)
             implementation("fr.acinq.phoenix:lightning-kmp-app:1.0.0")
 
+            // resolved via the wavelength-kmp composite build; the versions are never read
+            implementation("engineering.lightning.wavelength:wavelength-core:1.0.0")
+            implementation("engineering.lightning.wavelength:wavelength-engine:1.0.0")
+
             implementation(libs.navigation.compose)
 
             implementation(libs.okio)
@@ -143,6 +155,15 @@ kotlin {
             // version as the rest of Compose Multiplatform; test-only.
             implementation(compose.desktop.uiTestJUnit4)
             implementation(libs.kotlin.testJunit)
+
+            // FakeWavelengthClient: the wallet's screens and lifecycle, with no daemon.
+            implementation("engineering.lightning.wavelength:wavelength-testing:1.0.0")
+        }
+        androidInstrumentedTest.dependencies {
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.testExt.junit)
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutinesTest)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
@@ -208,11 +229,28 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 9
         versionName = "0.1.5"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    // One APK per ABI: the daemon's libgojni.so is 83 MB on arm64-v8a once packaged and stripped,
+    // against 50 MB for the whole universal APK before it (docs/wavelength-wallet.md, D15). x86
+    // leaves: no phone that runs this app is 32-bit x86, and it was the largest of the four.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+        // Compressed in the APK and extracted on install, rather than stored and mapped in place.
+        // That costs disk on the device, and takes 58 MB off every direct download.
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
     buildTypes {
@@ -320,6 +358,18 @@ val m3Audit = tasks.register("m3Audit") {
 }
 
 tasks.named("check") { dependsOn(m3Audit) }
+
+// The daemon's gomobile bindings are ignored by git and built from the source the wavelength-kmp
+// submodule pins. The script reuses a build for the commit it already staged, so this costs a git
+// status on most runs and some minutes on a fresh checkout. Android only: the desktop target has
+// no runtime and needs none of it (docs/wavelength-wallet.md, D4).
+val stageWavelengthBindings by tasks.registering(Exec::class) {
+    workingDir = rootProject.file("experimental/wavelength-kmp")
+    commandLine("bash", "scripts/fetch-bindings.sh", "android")
+    // gomobile is usually in Go's own bin, which a Gradle daemon's PATH may not have.
+    environment("PATH", System.getenv("PATH") + File.pathSeparator + System.getProperty("user.home") + "/go/bin")
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(stageWavelengthBindings) }
 
 // The group Lightning wallet's regtest run (testing/regtest/README.md) runs only when DEDUN_REGTEST=1.
 // An environment variable is not a task input, so without this a skipped run would leave jvmTest up to
