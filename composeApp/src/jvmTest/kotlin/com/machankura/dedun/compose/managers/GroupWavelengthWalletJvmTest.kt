@@ -142,48 +142,89 @@ class GroupWavelengthWalletJvmTest {
     }
 
     @Test
-    fun `mainnet is refused in code, and the gate is shut`() = runBlocking<Unit> {
+    fun `mainnet is allowed and capped, testnets are refused, and the screen's gate is shut`() = runBlocking<Unit> {
         assertFalse(GroupWavelengthRollout.ENABLED)
-        assertFalse(GroupWavelengthRollout.allows(Chain.Mainnet))
+        assertTrue(GroupWavelengthRollout.allows(Chain.Mainnet))
         assertTrue(GroupWavelengthRollout.allows(Chain.Signet))
+        assertFalse(GroupWavelengthRollout.allows(Chain.Testnet3))
+        assertFalse(GroupWavelengthRollout.allows(Chain.Testnet4))
+        assertEquals(100_000L, GroupWavelengthRollout.capFor(Chain.Mainnet)?.sat)
+        assertNull(GroupWavelengthRollout.capFor(Chain.Signet))
         val all = fixture.group()
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
-        val refused = runCatching { GroupWavelengthWalletManager.proposeWallet(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, Chain.Mainnet, arkOperator) }
+        val refused = runCatching { GroupWavelengthWalletManager.proposeWallet(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, Chain.Testnet4, arkOperator) }
         assertTrue(refused.isFailure)
     }
 
-    @Test
-    fun `no device believes a statement for a chain the gate refuses, however well it is made, so none co-signs for it`() = runBlocking<Unit> {
-        // What a modified build would send: signed by the room, and right in every way but the chain being allowed.
-        val mainnet = GroupLightningFixture(chain = Chain.Mainnet)
+    /** A statement for [chain], signed by the room and right in every way but whether the chain is allowed: what a modified build would send. */
+    private fun statementOn(chain: Chain, check: suspend (GroupLightningFixture, List<GroupLightningFixture.Device>, String) -> Unit) = runBlocking<Unit> {
+        val on = GroupLightningFixture(chain = chain)
         try {
-            val all = mainnet.group()
-            mainnet.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
-            val ceremony = assertNotNull(GroupWavelengthWalletManager.unusedKey(all[0].db, mainnet.roomId))
+            val all = on.group()
+            on.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+            val ceremony = assertNotNull(GroupWavelengthWalletManager.unusedKey(all[0].db, on.roomId))
             val seed = ByteVector32("77".repeat(32))
-            val (identity, manifest) = GroupWavelengthWalletManager.bindingOf(PublicKey.fromHex(ceremony.groupPublicKey!!), seed, Chain.Mainnet, 0)
-            val chainName = GroupWalletStatementEvent.chainName(Chain.Mainnet)
-            all.forEach { it.db.groupWavelengthSeedDao().insertIfAbsent(GroupWavelengthSeed(mainnet.roomId, identity, chainName, 0, Hex.encode(seed.toByteArray()), all[0].publicKey)) }
+            val (identity, manifest) = GroupWavelengthWalletManager.bindingOf(PublicKey.fromHex(ceremony.groupPublicKey!!), seed, chain, 0)
+            val chainName = GroupWalletStatementEvent.chainName(chain)
+            all.forEach { it.db.groupWavelengthSeedDao().insertIfAbsent(GroupWavelengthSeed(on.roomId, identity, chainName, 0, Hex.encode(seed.toByteArray()), all[0].publicKey)) }
             val statement = GroupWavelengthWalletStatementEvent.template(
                 GroupWavelengthWalletStatementEvent.Statement(
-                    chain = Chain.Mainnet, wallet = 0, onchainAccount = 0, icebergKey = ceremony.groupPublicKey!!, ceremonyId = ceremony.id,
+                    chain = chain, wallet = 0, onchainAccount = 0, icebergKey = ceremony.groupPublicKey!!, ceremonyId = ceremony.id,
                     threshold = ceremony.threshold, participants = ceremony.participants(), identity = identity, manifestHash = manifest,
                     arkOperatorKey = arkOperator, policy = GroupWavelengthWalletStatementEvent.Policy.DEFAULT,
                 ),
             )
-            val event = mainnet.fileSignedAsRoom(all, statement.kind, statement.tags, statement.content, createdAt = 4_000_000_000)
-            all.forEach { d ->
-                val row = assertNotNull(d.db.groupSignedEventDao().getByChatRoomIdAndKind(mainnet.roomId, statement.kind).firstOrNull { it.id == event.id })
-                assertNull(GroupWavelengthWalletManager.verify(d.db, mainnet.roomId, row), "device ${d.index} doesn't believe it")
-                assertEquals(emptyList(), GroupWavelengthWalletManager.wallets(d.db, mainnet.roomId, Chain.Mainnet), "so it has no wallet to co-sign for")
-            }
+            val event = on.fileSignedAsRoom(all, statement.kind, statement.tags, statement.content, createdAt = 4_000_000_000)
+            check(on, all, event.id)
         } finally {
-            mainnet.close()
+            on.close()
         }
     }
 
-    private fun invoice(amountMsat: Long?) = Bolt11Invoice.create(
-        fixture.chain, amountMsat?.msat, randomBytes32(), PrivateKey(randomBytes32()), Either.Left("the group's lunch"), CltvExpiryDelta(144),
+    @Test
+    fun `no device believes a statement for a chain the gate refuses, however well it is made, so none co-signs for it`() = statementOn(Chain.Testnet4) { on, all, id ->
+        all.forEach { d ->
+            val row = assertNotNull(d.db.groupSignedEventDao().getByChatRoomIdAndKind(on.roomId, GroupWavelengthWalletStatementEvent.KIND).firstOrNull { it.id == id })
+            assertNull(GroupWavelengthWalletManager.verify(d.db, on.roomId, row), "device ${d.index} doesn't believe it")
+            assertEquals(emptyList(), GroupWavelengthWalletManager.wallets(d.db, on.roomId, Chain.Testnet4), "so it has no wallet to co-sign for")
+        }
+    }
+
+    @Test
+    fun `every device believes a statement for mainnet`() = statementOn(Chain.Mainnet) { on, all, id ->
+        all.forEach { d ->
+            val row = assertNotNull(d.db.groupSignedEventDao().getByChatRoomIdAndKind(on.roomId, GroupWavelengthWalletStatementEvent.KIND).firstOrNull { it.id == id })
+            assertNotNull(GroupWavelengthWalletManager.verify(d.db, on.roomId, row), "device ${d.index} believes it")
+            assertEquals(1, GroupWavelengthWalletManager.wallets(d.db, on.roomId, Chain.Mainnet).size)
+        }
+    }
+
+    @Test
+    fun `a real mainnet invoice from the swap server is read, and only on mainnet`() {
+        // From an empty throwaway group on 6 November 2026, whose keys no longer exist.
+        val invoice = "lnbc10u1p4wu0ffpp5m4mwpxhhsj3vgwgcefrg39nvl68sy0pp9p4qrtw2j8z49qwc0etsdp9vysxwun0w4czwueqve5hyum5ypex2cm9d9mx2cqzpgxqrrssrzjqgwf02g2gy0l9vgdc25wxt0z72wjlfyagxlmk54ag9hyvrdsw37smpc2x8783ehxycqqqqqqqqqqn3qp8csp5ghvhtpjr4zpd8vwhu8ghasld6dly4589ju4gm7urfnf92kpfqwcq9qyysgq4m08rhpt5j85xv2979e9nxqmzrnl3d9amhun7gs26fjsymhp7sczeggpukw33xvndffjah9s70ylncf9ggjg0h7zemka60yyzgas0gspcl5flh"
+        val payment = GroupWavelengthPaymentEvent.Payment(Chain.Mainnet, 0, invoice, 500, 1_000_000, 4_000_000_000)
+        assertEquals(ByteVector32("dd76e09af784a2c43918ca4688966cfe8f023c21286a01adca91c55281d87e57"), payment.paymentHash)
+        assertEquals(1_000L, payment.amountSat)
+        assertNull(payment.copy(chain = Chain.Regtest).paymentHash)
+    }
+
+    @Test
+    fun `a mainnet payment reads a mainnet invoice, and no other chain's`() {
+        fun payment(chain: Chain, invoice: String) = GroupWavelengthPaymentEvent.Payment(chain, 0, invoice, 500, 1_000_000, 4_000_000_000)
+        val mainnet = invoice(5_000_000, Chain.Mainnet)
+        assertTrue(mainnet.write().startsWith("lnbc50u"))
+        assertEquals(mainnet.paymentHash, payment(Chain.Mainnet, mainnet.write()).paymentHash)
+        assertEquals(5_000L, payment(Chain.Mainnet, mainnet.write()).amountSat)
+        assertNull(payment(Chain.Signet, mainnet.write()).paymentHash)
+        assertNull(payment(Chain.Regtest, mainnet.write()).paymentHash)
+        val regtest = invoice(5_000_000, Chain.Regtest).write()
+        assertTrue(regtest.startsWith("lnbcrt"))
+        assertNull(payment(Chain.Mainnet, regtest).paymentHash, "regtest's prefix starts with mainnet's")
+    }
+
+    private fun invoice(amountMsat: Long?, chain: Chain = fixture.chain) = Bolt11Invoice.create(
+        chain, amountMsat?.msat, randomBytes32(), PrivateKey(randomBytes32()), Either.Left("the group's lunch"), CltvExpiryDelta(144),
         Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory),
     )
 
