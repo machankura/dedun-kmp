@@ -14,6 +14,17 @@ This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM).
 
 ### Build and Run Android Application
 
+The Android app embeds the wallet daemon, whose bindings are built from the source the
+`experimental/wavelength-kmp` submodule pins and are not in git. Once per checkout, and again when Gradle
+warns that they are stale, with Go, `gomobile`, the Android NDK and `ANDROID_HOME` set:
+```shell
+git submodule update --init --recursive
+```
+```shell
+experimental/wavelength-kmp/scripts/fetch-bindings.sh android
+```
+The desktop app doesn't need them.
+
 To build and run the development version of the Android app, use the run configuration from the run widget
 in your IDE’s toolbar or build it directly from the terminal:
 - on macOS/Linux

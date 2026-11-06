@@ -33,7 +33,7 @@ import kotlin.time.measureTimedValue
 /**
  * The real gomobile runtime, through the app's own holder, against Lightning Labs' hosted
  * endpoints. Every wallet is a throwaway with fresh words that never holds anything. The mainnet
- * test runs only with `-Pandroid.testInstrumentationRunnerArguments.wavelengthMainnet=1`.
+ * test runs only with the instrumentation argument `wavelengthMainnet=1`.
  */
 @RunWith(AndroidJUnit4::class)
 class WalletRuntimeDeviceTest {
@@ -51,7 +51,18 @@ class WalletRuntimeDeviceTest {
         root.deleteRecursively()
     }
 
-    private fun holder(network: Network) = IdentityWavelength(Wavelength.client, files, scope, network, offered = true)
+    private fun holder(network: Network) = IdentityWavelength(
+        client = Wavelength.client,
+        files = files,
+        scope = scope,
+        network = network,
+        offered = true,
+        configFor = { net, dataDir ->
+            val config = WavelengthWalletRollout.configFor(net, dataDir)
+            // -e wavelengthEsplora <url>: to compare chain data services without a build.
+            InstrumentationRegistry.getArguments().getString("wavelengthEsplora")?.let { config.copy(walletEsploraUrl = it) } ?: config
+        },
+    )
 
     private suspend fun IdentityWavelength.opened(): WalletState.Open {
         val state = withTimeout(5.minutes) {

@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import engineering.lightning.wavelength.DescriptorWalletRequest
 import engineering.lightning.wavelength.EmbeddedWavelengthClient
 import engineering.lightning.wavelength.Network
+import engineering.lightning.wavelength.RuntimeConfig
 import engineering.lightning.wavelength.WavelengthException
 import engineering.lightning.wavelength.engine.WalletEngine
 import engineering.lightning.wavelength.model.DescriptorWalletOpenResult
@@ -100,6 +101,7 @@ class IdentityWavelength(
     private val backgroundGrace: Duration = 1.minutes,
     /** Makes and stores words for a profile with none: `WalletSeedStore.create` (D13). */
     private val createSeed: (WalletId) -> List<String> = { error("no seed store") },
+    private val configFor: (Network, String) -> RuntimeConfig = WavelengthWalletRollout::configFor,
 ) {
     private val logger = Logger.withTag("IdentityWavelength")
     private val mutex = Mutex()
@@ -271,7 +273,7 @@ class IdentityWavelength(
         val first = pinned == null
         val window = recoveryWindow ?: if (first) WavelengthWalletRollout.FIRST_OPEN_RECOVERY_WINDOW else null
         _state.value = if (window != null) WalletState.Recovering else WalletState.Opening
-        val config = WavelengthWalletRollout.configFor(network, files.dataDir(network, next.id))
+        val config = configFor(network, files.dataDir(network, next.id))
         try {
             val result = withContext(NonCancellable) {
                 client.startDescriptorWallet(

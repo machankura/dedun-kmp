@@ -49,12 +49,12 @@ class WalletSetupTest {
     }
 
     @Test
-    fun `mainnet names its hosts and takes its chain view from no staging host`() {
+    fun `mainnet names its hosts`() {
         val config = WavelengthWalletRollout.configFor(Network.MAINNET, "/data/x")
         assertTrue(config.allowMainnet)
         assertEquals("wavelength.lightning.finance:443", config.arkServerAddress)
         assertEquals("swap.wavelength.lightning.finance:443", config.swapServerAddress)
-        assertFalse(config.walletEsploraUrl!!.contains("staging"))
+        assertEquals("https://mempool.staging.lightningcluster.com/api", config.walletEsploraUrl)
         config.validate()
     }
 

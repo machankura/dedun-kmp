@@ -67,8 +67,12 @@ object WavelengthWalletRollout {
 
     /**
      * The hosts are written down rather than left to the daemon's defaults, so a daemon bump
-     * can't move them silently. The daemon's own mainnet Esplora default is a *staging* host,
-     * which is not what holds a mainnet wallet's view of the chain (D6).
+     * can't move them silently.
+     *
+     * The Esplora host is Lightning Labs', and its name says *staging*, which is uncomfortable. But
+     * on 6 November 2026 it was the only one that worked: a first open makes a burst of requests,
+     * and mempool.space and blockstream.info both rate-limited it until the open failed. Running
+     * our own is what lifts this, and is a condition of mainnet (D6, Phase 11).
      */
     fun configFor(network: Network, dataDir: String): RuntimeConfig = when (network) {
         Network.MAINNET -> RuntimeConfig(
@@ -77,7 +81,7 @@ object WavelengthWalletRollout {
             dataDir = dataDir,
             arkServerAddress = "wavelength.lightning.finance:443",
             swapServerAddress = "swap.wavelength.lightning.finance:443",
-            walletEsploraUrl = "https://mempool.space/api",
+            walletEsploraUrl = "https://mempool.staging.lightningcluster.com/api",
             debugLevel = DEBUG_LEVEL,
         )
         else -> RuntimeConfig.preset(network, dataDir).copy(debugLevel = DEBUG_LEVEL)
