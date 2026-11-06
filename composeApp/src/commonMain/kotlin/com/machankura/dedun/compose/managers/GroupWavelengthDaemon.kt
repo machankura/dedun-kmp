@@ -101,11 +101,14 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
     }
 
     companion object {
-        /** How long the daemon waits for any one signature: long enough for a quorum of phones, and well inside a round's budget. */
-        val REQUEST_TIMEOUT = 120.seconds
+        /**
+         * How long the daemon waits for any one signature. A round gives its forfeits 60 seconds from the commitment arriving, as the
+         * real signet operator's did, so this is inside that: a signer still being waited on past it holds up the daemon releasing the coin.
+         */
+        val REQUEST_TIMEOUT = 55.seconds
 
         /** Shorter, so that silence from the group reaches the daemon as a refusal rather than as a lost connection. */
-        val TRANSPORT_TIMEOUT = 100.seconds
+        val TRANSPORT_TIMEOUT = 50.seconds
 
         private const val PASSWORD_TAG = "dedun/group-wavelength/wallet-password/v1"
 

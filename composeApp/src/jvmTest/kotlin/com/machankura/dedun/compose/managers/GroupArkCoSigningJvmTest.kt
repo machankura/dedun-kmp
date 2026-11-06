@@ -262,7 +262,7 @@ class GroupArkCoSigningJvmTest {
         val batchScript = ByteVector(Script.write(listOf(OP_1, OP_PUSHDATA(outputKey))))
         val vtxoScript = ArkScripts.standardScript(owner, op, delay)
 
-        val boardingScript = ArkScripts.standardScript(boarding, op, delay)
+        val boardingScript = ArkScripts.standardScript(boarding, op, group.wallet.statement.policy.boardingDelay)
         val prevOuts = listOf(ArkOutput(50_000, Hex.encode(boardingScript.toByteArray())))
         val commitment = Transaction(3, listOf(TxIn(OutPoint(TxId(ByteVector32("b0".repeat(32))), 0), 0xffffffffL)), listOf(TxOut(Satoshi(50_000), batchScript)), 0)
         val leaf = Transaction(3, listOf(TxIn(OutPoint(commitment, 0), 0xffffffffL)), listOf(TxOut(Satoshi(50_000), vtxoScript), TxOut(Satoshi(0), ByteVector(Script.write(Script.pay2anchor)))), 0)
@@ -515,6 +515,32 @@ class GroupArkCoSigningJvmTest {
         val digest = Crypto.taggedHash(Hex.decode("abcd"), "mailbox-auth")
         assertTrue(Crypto.verifySignatureSchnorr(digest, ByteVector64(response.signature!!), PublicKey.fromHex(group.wallet.statement.identity).xOnly()))
         assertEquals(before, group.operator.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.SIGNING_REQUEST)).size)
+    }
+
+    @Test
+    fun `a proof of funds' first input is the round-join key's alone, and it signs nothing else`() = runBlocking<Unit> {
+        val group = group()
+        val seed = assertNotNull(group.operator.db.groupWavelengthSeedDao().get(fixture.roomId, group.wallet.statement.identity))
+        val key = GroupArkAuth.of(ByteVector32(seed.seed), fixture.chain).privateKey(GroupArkAuth.ROUND_JOIN_AUTH, 0)
+        val challenge = ByteVector(Script.write(Script.pay2tr(key.xOnlyPublicKey(), Crypto.TaprootTweak.KeyPathTweak)))
+        val tx = Transaction(2, listOf(TxIn(OutPoint(TxId("aa".repeat(32)), 0), 0), TxIn(OutPoint(TxId("bb".repeat(32)), 0), 0)), listOf(TxOut(Satoshi(0), ByteVector(byteArrayOf(0x6a)))), 0)
+        val prevOuts = listOf(TxOut(Satoshi(0), challenge), TxOut(Satoshi(60_000), ByteVector(Hex.decode("5120" + "cc".repeat(32)))))
+        fun ask(outs: List<TxOut> = prevOuts, method: String = ArkRequest.METHOD_BIP86, input: Int = 0) = ArkRequest(
+            kind = ArkRequest.INPUT, family = GroupArkAuth.ROUND_JOIN_AUTH.toInt(), tx = Hex.encode(Transaction.write(tx)), inputIndex = input, method = method,
+            prevOuts = outs.map { ArkOutput(it.amount.sat, Hex.encode(it.publicKeyScript.toByteArray())) },
+        )
+        val before = group.operator.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.SIGNING_REQUEST)).size
+
+        val response = group.transport.answer(ask())
+        val digest = tx.hashForSigningTaprootKeyPath(0, prevOuts, SigHash.SIGHASH_DEFAULT)
+        val output = key.publicKey().xOnly().outputKey(Crypto.TaprootTweak.KeyPathTweak).first
+        assertTrue(Crypto.verifySignatureSchnorr(digest, ByteVector64(response.signature!!), output), "under the key the challenge pays")
+        assertEquals(before, group.operator.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.SIGNING_REQUEST)).size, "and nobody is asked")
+
+        assertTrue(runCatching { group.transport.answer(ask(outs = listOf(prevOuts[1], prevOuts[0]))) }.isFailure, "a coin isn't its challenge")
+        assertTrue(runCatching { group.transport.answer(ask(outs = listOf(TxOut(Satoshi(1), challenge), prevOuts[1]))) }.isFailure, "and a challenge holds nothing")
+        assertTrue(runCatching { group.transport.answer(ask(input = 1)) }.isFailure, "the other inputs are the group's")
+        assertTrue(runCatching { group.transport.answer(ask(method = ArkRequest.METHOD_SCRIPT_PATH)) }.isFailure, "by its key path only")
     }
 
     @Test

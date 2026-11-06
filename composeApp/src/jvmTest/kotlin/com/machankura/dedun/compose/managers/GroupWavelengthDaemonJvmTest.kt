@@ -56,7 +56,7 @@ class GroupWavelengthDaemonJvmTest {
         assertIs<GroupWavelengthDaemon.Outcome.Running>(outcome, "$outcome")
 
         val sent = runtime.fake.requests.first().second
-        assertTrue(sent.contains("\"remote_signer_request_timeout_seconds\":120"), sent)
+        assertTrue(sent.contains("\"remote_signer_request_timeout_seconds\":55"), sent)
         assertFalse(sent.contains("remote_signer_rpc_host"), sent)
         assertTrue(sent.contains("\"recovery_window\":3"), sent)
         assertTrue(sent.contains("tprv"), "the authentication keys go to the daemon")

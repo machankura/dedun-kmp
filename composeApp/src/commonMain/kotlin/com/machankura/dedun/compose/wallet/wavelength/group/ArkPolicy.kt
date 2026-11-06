@@ -90,6 +90,8 @@ object ArkPolicy {
         /** What this device has lately agreed to pay in fees, by what it paid them on, and how far that may go. */
         val recentFeesSat: Map<String, Long> = emptyMap(),
         val maxRecentFeesSat: Long? = null,
+        /** How long a boarding output waits to exit, which an operator sets apart from a VTXO's. */
+        val boardingDelay: Long = exitDelay,
     )
 
     private const val TAG_INDEXER = "wavelength/indexer/v1"
@@ -218,10 +220,11 @@ object ArkPolicy {
         if (request.digest != null && bytes(request.digest, "digest") != ByteVector(message.toByteArray())) refuse("a digest that isn't this transaction's")
         val note = request.note
 
+        val delay = if (slot == GroupArkDerivation.Slot.BOARDING) context.boardingDelay else context.exitDelay
         val collab = ArkScripts.collabLeaf(own, context.operator)
-        val exit = ArkScripts.timeoutLeaf(own, context.exitDelay)
+        val exit = ArkScripts.timeoutLeaf(own, delay)
         val spentScript = prevOuts[request.inputIndex].publicKeyScript
-        val standard = ArkScripts.standardScript(own, context.operator, context.exitDelay)
+        val standard = ArkScripts.standardScript(own, context.operator, delay)
 
         return when (leaf) {
             exit -> {
@@ -397,8 +400,9 @@ object ArkPolicy {
      * in comes back, each output counted once, in new VTXOs and leaves the group has said it may pay, less a fee under the
      * statement's cap.
      *
-     * The operator still names the sweep key, because nothing this device holds says what it should be, and a sweep key can only do
-     * at the batch's expiry what the operator can do then anyway. A retried round may reuse a tree key (`ensureVTXOSigningKeys`), and
+     * The operator still names the sweep key, and its own cosigner on the tree, which is a key for this round and not the one the
+     * statement fixes. Nothing this device holds says what either should be, and neither needs to: a sweep key can only do at the batch's
+     * expiry what the operator can do then anyway, and a node can't be signed any other way without the group's own tree key on it. A retried round may reuse a tree key (`ensureVTXOSigningKeys`), and
      * is refused when it does: a member's coins wait for the next round, which is better than a key that signs twice.
      */
     private fun checkRound(context: Context, round: NotedRound, commitment: Transaction, note: ArkNote): CheckedRound {
@@ -434,7 +438,6 @@ object ArkPolicy {
 
                 val cosigners = noted.coSigners.map { key(it, "cosigner") }
                 if (cosigners.toSet().size != cosigners.size) refuse("a tree transaction naming a cosigner twice")
-                if (context.operator !in cosigners) refuse("a tree transaction the operator isn't on")
                 val (_, outputKey) = GroupArkSigner.treeCache(cosigners, sweepRoot)
                 val expected = ByteVector(Script.write(listOf(OP_1, OP_PUSHDATA(outputKey))))
                 if (prevout.publicKeyScript != expected) refuse("a tree output that isn't its cosigners' aggregate")
@@ -511,7 +514,7 @@ object ArkPolicy {
         }
         var into = forfeited
         outputsOf(round.prevOuts).forEach { prev ->
-            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.exitDelay)) into += prev.amount.sat
+            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.boardingDelay)) into += prev.amount.sat
             if (into > MAX_MONEY) refuse("a note with an impossible value")
         }
         val out = ownOut + leavesOut

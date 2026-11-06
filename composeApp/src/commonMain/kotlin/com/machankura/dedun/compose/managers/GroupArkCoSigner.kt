@@ -224,6 +224,7 @@ object GroupArkCoSigner {
             keys = keysOf(wallet),
             operator = PublicKey.fromHex(statement.arkOperatorKey),
             exitDelay = statement.policy.exitDelay,
+            boardingDelay = statement.policy.boardingDelay,
             maxRoundFeeSat = statement.policy.maxRoundFeeSat,
             maxOnchainFeeSat = statement.policy.maxOnchainFeeSat,
             isTreeKey = { it in tree },

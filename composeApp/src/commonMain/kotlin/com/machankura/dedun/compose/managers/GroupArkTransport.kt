@@ -20,6 +20,11 @@ import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.Satoshi
+import fr.acinq.bitcoin.Script
+import fr.acinq.bitcoin.SigHash
+import fr.acinq.bitcoin.Transaction
+import fr.acinq.bitcoin.TxOut
 import fr.acinq.bitcoin.crypto.iceberg.Iceberg
 import fr.acinq.bitcoin.crypto.iceberg.NonceContribution
 import fr.acinq.bitcoin.crypto.iceberg.PublicShare
@@ -79,7 +84,7 @@ class GroupArkTransport(
     suspend fun answer(request: ArkRequest): ArkResponse = when (request.kind) {
         ArkRequest.MESSAGE -> if (request.family.toLong() == GroupArkAuth.IDENTITY) identityMessage(request) else plain(request)
         ArkRequest.SHARED_KEY -> sharedKey(request)
-        ArkRequest.INPUT -> plain(request)
+        ArkRequest.INPUT -> if (request.family.toLong() == GroupArkAuth.ROUND_JOIN_AUTH) joinAuthInput(request) else plain(request)
         ArkRequest.NEXT_TREE_KEY -> nextTreeKey()
         ArkRequest.TREE_KEY -> treeKey(request.index)
         ArkRequest.MUSIG2_CREATE -> createSession(request)
@@ -100,6 +105,23 @@ class GroupArkTransport(
         }
         val signature = Crypto.signSchnorr(digest, auth.privateKey(GroupArkAuth.IDENTITY, request.index), null)
         return ArkResponse(signature = signature.toByteArray().toHex())
+    }
+
+    /**
+     * The first input of a proof of funds, which spends a challenge paying the round-join key and binds the proof to it. That key is
+     * from the shared seed and pays nothing but such challenges, so this device answers it alone. The proof's other inputs are the
+     * group's coins, and those go to the group. So only this shape is signed: a key this seed holds, and nothing it could lose.
+     */
+    private fun joinAuthInput(request: ArkRequest): ArkResponse {
+        require(request.method == ArkRequest.METHOD_BIP86 && request.inputIndex == 0) { "the round-join key signs only a proof's first input" }
+        val tx = Transaction.read(request.tx!!)
+        val prevOuts = request.prevOuts.map { TxOut(Satoshi(it.value), ByteVector(it.pkScript)) }
+        require(prevOuts.size == tx.txIn.size) { "a transaction without every prevout" }
+        val key = auth.privateKey(GroupArkAuth.ROUND_JOIN_AUTH, request.index)
+        val challenge = ByteVector(Script.write(Script.pay2tr(key.xOnlyPublicKey(), Crypto.TaprootTweak.KeyPathTweak)))
+        require(prevOuts[0] == TxOut(Satoshi(0), challenge)) { "a first input that isn't this key's challenge" }
+        val message = tx.hashForSigningTaprootKeyPath(0, prevOuts, SigHash.SIGHASH_DEFAULT)
+        return ArkResponse(signature = Crypto.signSchnorr(message, key, Crypto.TaprootTweak.KeyPathTweak).toByteArray().toHex())
     }
 
     private fun sharedKey(request: ArkRequest): ArkResponse {

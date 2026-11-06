@@ -142,8 +142,9 @@ class ArkPolicyJvmTest {
 
     /** A round this file builds whole, for the shapes the daemon wouldn't: batch, root, then a leaf paying a VTXO beside a sibling paying someone else. */
     private inner class Built(
-        rootCosigners: List<PublicKey> = listOf(operator, treeKey),
-        siblingCosigners: List<PublicKey> = listOf(operator, treeKey),
+        cosignKey: PublicKey = operator,
+        rootCosigners: List<PublicKey> = listOf(cosignKey, treeKey),
+        siblingCosigners: List<PublicKey> = listOf(cosignKey, treeKey),
         sweepDelay: Long = 1_000,
         batchValue: Long = 50_000,
         rootLockTime: Long = 0,
@@ -154,7 +155,7 @@ class ArkPolicyJvmTest {
         private val sweepRoot = ArkScripts.leafHash(ArkScripts.timeoutLeaf(sweepKey, sweepDelay))
         private val owner = keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 5)
         private val vtxoScript = ArkScripts.standardScript(owner, operator, fixtures.exitDelay)
-        private val leafCosigners = listOf(operator, treeKey)
+        private val leafCosigners = listOf(cosignKey, treeKey)
         private val boarding = ArkScripts.standardScript(keys.key(GroupArkDerivation.Slot.BOARDING, 0, 0), operator, fixtures.exitDelay)
 
         val commitment = Transaction(3, listOf(TxIn(OutPoint(TxId("b0".repeat(32)), 0), 0xffffffffL)), listOf(TxOut(Satoshi(batchValue), scriptOf(rootCosigners, sweepRoot))), 0)
@@ -302,10 +303,14 @@ class ArkPolicyJvmTest {
     }
 
     @Test
-    fun `a tree the operator isn't on is refused`() {
+    fun `the operator's cosigner on a tree is a key of that round, as the real signet operator's is, and isn't the one the statement fixes`() {
+        val built = Built(cosignKey = stranger)
+        allowed(built.signing(built.leafNode), ArkPolicy.What.TREE, session = treeKey)
+        allowed(built.signing(built.rootNode), ArkPolicy.What.TREE, session = treeKey)
+        // What it can't do is claim a node has other cosigners than its output commits to.
         refused(
             treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(coSigners = n.coSigners.filter { it != fixtures.operator }) }) }) },
-            "the operator isn't on", session = treeKey,
+            "isn't its cosigners' aggregate", session = treeKey,
         )
     }
 
@@ -575,6 +580,13 @@ class ArkPolicyJvmTest {
 
         // Nothing should stand in the way of leaving.
         allowed(fixtures.exitSweep, ArkPolicy.What.EXIT_SWEEP, context(maxRecentFeesSat = 0))
+    }
+
+    @Test
+    fun `a boarding output has its own delay, apart from a VTXO's, and only a boarding key uses it`() {
+        // The real signet operator's are 512 and 144. The fixtures use one number for both, so this asks for what they can't show.
+        refused(fixtures.boarding, "a leaf this output doesn't commit to", ArkPolicy.Context(keys, operator, fixtures.exitDelay, 2_000, 5_000, { it == treeKey }, { it == onchain }, mapOf(spent to 40_000), boardingDelay = 512))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, ArkPolicy.Context(keys, operator, fixtures.exitDelay, 2_000, 5_000, { it == treeKey }, { it == onchain }, mapOf(spent to 40_000), reservedFor = emptyMap(), boardingDelay = fixtures.exitDelay))
     }
 
     @Test

@@ -36,13 +36,14 @@ object GroupWavelengthWalletStatementEvent {
      * [exitDelay] is the operator's exit delay in blocks, which every VTXO the group accepts commits to: a longer one
      * would hold its coins up for longer on the way out, so it isn't the operator's to change alone. [minSweepDelay] is the
      * shortest life a batch of the group's VTXOs may have, in blocks: a shorter one leaves less time to renew, and no time to exit.
+     * [boardingDelay] is how long a boarding output waits to exit: an operator sets it apart from a VTXO's, and signet's are 512 and 144.
      * [maxMonthlyFeeSat] is what rounds and on-chain spends may cost between them, in thirty days and one operator's term, since a cap
      * per request says nothing about how many requests there are. An exit isn't counted: a coin only exits once, and nothing should stand
      * in the way of leaving. These defaults are guesses until a real operator's terms have been read for them.
      */
-    data class Policy(val maxRoundFeeSat: Long, val maxOnchainFeeSat: Long, val exitDelay: Long, val minSweepDelay: Long, val maxMonthlyFeeSat: Long) {
+    data class Policy(val maxRoundFeeSat: Long, val maxOnchainFeeSat: Long, val exitDelay: Long, val minSweepDelay: Long, val maxMonthlyFeeSat: Long, val boardingDelay: Long) {
         companion object {
-            val DEFAULT = Policy(maxRoundFeeSat = 2_000, maxOnchainFeeSat = 5_000, exitDelay = 144, minSweepDelay = 1_000, maxMonthlyFeeSat = 50_000)
+            val DEFAULT = Policy(maxRoundFeeSat = 2_000, maxOnchainFeeSat = 5_000, exitDelay = 144, minSweepDelay = 1_000, maxMonthlyFeeSat = 50_000, boardingDelay = 512)
         }
     }
 
@@ -83,7 +84,7 @@ object GroupWavelengthWalletStatementEvent {
                 arrayOf(IDENTITY_TAG, statement.identity),
                 arrayOf(MANIFEST_TAG, statement.manifestHash),
                 arrayOf(OPERATOR_TAG, statement.arkOperatorKey),
-                arrayOf(POLICY_TAG, statement.policy.maxRoundFeeSat.toString(), statement.policy.maxOnchainFeeSat.toString(), statement.policy.exitDelay.toString(), statement.policy.minSweepDelay.toString(), statement.policy.maxMonthlyFeeSat.toString()),
+                arrayOf(POLICY_TAG, statement.policy.maxRoundFeeSat.toString(), statement.policy.maxOnchainFeeSat.toString(), statement.policy.exitDelay.toString(), statement.policy.minSweepDelay.toString(), statement.policy.maxMonthlyFeeSat.toString(), statement.policy.boardingDelay.toString()),
             ),
             content = "",
         )
@@ -95,8 +96,8 @@ object GroupWavelengthWalletStatementEvent {
         val wallet = tag(WALLET_TAG)?.getOrNull(1)?.toLongOrNull() ?: return null
         if (tag(D_TAG)?.getOrNull(1) != identifier(chain, wallet)) return null
         val iceberg = tag(ICEBERG_TAG)?.takeIf { it.size >= 4 } ?: return null
-        val policy = tag(POLICY_TAG)?.takeIf { it.size >= 6 }?.let { p ->
-            Policy(p[1].toLongOrNull() ?: return null, p[2].toLongOrNull() ?: return null, p[3].toLongOrNull() ?: return null, p[4].toLongOrNull() ?: return null, p[5].toLongOrNull() ?: return null)
+        val policy = tag(POLICY_TAG)?.takeIf { it.size >= 7 }?.let { p ->
+            Policy(p[1].toLongOrNull() ?: return null, p[2].toLongOrNull() ?: return null, p[3].toLongOrNull() ?: return null, p[4].toLongOrNull() ?: return null, p[5].toLongOrNull() ?: return null, p[6].toLongOrNull() ?: return null)
         } ?: return null
         val participants = tag(PARTICIPANTS_TAG)?.drop(1)?.takeIf { it.isNotEmpty() } ?: return null
         if (participants != participants.sorted()) return null
