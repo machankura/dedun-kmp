@@ -281,6 +281,10 @@ object ArkPolicy {
         val digest = bytes(request.digest, "digest")
         val node = round.trees.flatMap { it.nodes }.firstOrNull { bytes(it.digest, "digest") == digest } ?: refuse("a digest of nothing in this round's trees")
         if (node.coSigners.none { key(it, "cosigner") == sessionKey }) refuse("a tree signature on a node this key isn't on")
+        // What the shares sign under is rebuilt from these, so they have to be this node's.
+        if (request.signers.isNotEmpty() && request.signers.toSet() != node.coSigners.toSet()) refuse("a session over other cosigners than this node's")
+        val tree = round.trees.first { candidate -> node in candidate.nodes }
+        if (request.scriptRoot != null && request.scriptRoot != tree.sweepRoot) refuse("a session under another sweep root than this tree's")
         return Verdict.Allow(What.TREE, ByteVector32(digest.toByteArray()))
     }
 

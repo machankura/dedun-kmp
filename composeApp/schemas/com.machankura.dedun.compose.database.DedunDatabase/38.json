@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "4908e51ed75cbe22dcfc10fd2a4bc909",
+    "identityHash": "2d8afb8df1113cc8cdb16ba9943630fc",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -2115,6 +2115,140 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "GroupArkTreeShare",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `child` INTEGER NOT NULL, `participant` TEXT NOT NULL, `share` TEXT NOT NULL, PRIMARY KEY(`wallet`, `child`, `participant`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "child",
+            "columnName": "child",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "participant",
+            "columnName": "participant",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "share",
+            "columnName": "share",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "child",
+            "participant"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkVtxo",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `outpoint` TEXT NOT NULL, `amountSat` INTEGER NOT NULL, `forfeitedIn` TEXT, `spent` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `outpoint`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outpoint",
+            "columnName": "outpoint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountSat",
+            "columnName": "amountSat",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "forfeitedIn",
+            "columnName": "forfeitedIn",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "spent",
+            "columnName": "spent",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "outpoint"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkFloor",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `floor` INTEGER, PRIMARY KEY(`wallet`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floor",
+            "columnName": "floor",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkMark",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `participant` TEXT NOT NULL, `highest` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `participant`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "participant",
+            "columnName": "participant",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "highest",
+            "columnName": "highest",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "participant"
+          ]
+        }
       },
       {
         "tableName": "GroupLightningSnapshotRow",
@@ -5677,7 +5811,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4908e51ed75cbe22dcfc10fd2a4bc909')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2d8afb8df1113cc8cdb16ba9943630fc')"
     ]
   }
 }

@@ -15,8 +15,13 @@ import com.machankura.dedun.compose.database.model.IcebergChannelLedger
 import com.machankura.dedun.compose.database.model.IcebergBudgetSpend
 import com.machankura.dedun.compose.database.dao.IcebergCoSigningDao
 import com.machankura.dedun.compose.database.dao.GroupLightningSeedDao
+import com.machankura.dedun.compose.database.dao.GroupArkDao
 import com.machankura.dedun.compose.database.dao.GroupWavelengthSeedDao
 import com.machankura.dedun.compose.database.model.GroupLightningSeed
+import com.machankura.dedun.compose.database.model.GroupArkFloor
+import com.machankura.dedun.compose.database.model.GroupArkMark
+import com.machankura.dedun.compose.database.model.GroupArkTreeShare
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.dao.IcebergKeySessionDao
 import com.machankura.dedun.compose.database.model.IcebergParticipantMessage
@@ -152,6 +157,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupLightningPaymentRow::class,
         GroupLightningSeed::class,
         GroupWavelengthSeed::class,
+        GroupArkTreeShare::class,
+        GroupArkVtxo::class,
+        GroupArkFloor::class,
+        GroupArkMark::class,
         GroupLightningSnapshotRow::class,
         GroupSignedEvent::class,
         GroupTransaction::class,
@@ -434,8 +443,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // the group has spent since still counts in its member's tally (docs/member-deposits.md, Phase 8).
         AutoMigration(from = 36, to = 37),
         // v38 adds IcebergKeySession.purpose, which wallet a key is for, "lightning" on every row before it, and
-        // GroupWavelengthSeed, the authentication seed of a group's Wavelength wallet
-        // (docs/group-wavelength-wallet.md, Phase 4).
+        // the tables of a group's Wavelength wallet: its authentication seed, its tree keys' public shares, what a
+        // co-signer knows the wallet holds, and how far the group has answered (docs/group-wavelength-wallet.md,
+        // Phases 4 and 6). None of this has been on an installed database, so it is one version.
         AutoMigration(from = 37, to = 38),
     ]
 )
@@ -491,6 +501,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun groupLightningSeedDao(): GroupLightningSeedDao
 
     abstract fun groupWavelengthSeedDao(): GroupWavelengthSeedDao
+
+    abstract fun groupArkDao(): GroupArkDao
 
     abstract fun icebergCoSigningDao(): IcebergCoSigningDao
 

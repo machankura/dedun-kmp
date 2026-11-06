@@ -15,7 +15,7 @@ import fr.acinq.secp256k1.Hex
  * Bytes rather than script elements: `txscript.ScriptBuilder` pushes a small number as `OP_n`, and these have to come
  * out exactly as it writes them.
  */
-internal object ArkScripts {
+object ArkScripts {
     /** Every Ark output's internal key, provably unspendable, so only the leaves below can move it. */
     val NUMS: XonlyPublicKey = PublicKey.fromHex("02372f225b3caee8213096de3229ee4335306b07c3c169438461b5d4749884ec65").xOnly()
 
