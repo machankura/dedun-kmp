@@ -1,10 +1,12 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.text.ProposedEvent
@@ -13,6 +15,8 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollo
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.secp256k1.Hex
 import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -136,6 +140,36 @@ class GroupWavelengthWalletJvmTest {
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
         val refused = runCatching { GroupWavelengthWalletManager.proposeWallet(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, Chain.Mainnet, arkOperator) }
         assertTrue(refused.isFailure)
+    }
+
+    @Test
+    fun `no device believes a statement for a chain the gate refuses, however well it is made, so none co-signs for it`() = runBlocking<Unit> {
+        // What a modified build would send: signed by the room, and right in every way but the chain being allowed.
+        val mainnet = GroupLightningFixture(chain = Chain.Mainnet)
+        try {
+            val all = mainnet.group()
+            mainnet.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+            val ceremony = assertNotNull(GroupWavelengthWalletManager.unusedKey(all[0].db, mainnet.roomId))
+            val seed = ByteVector32("77".repeat(32))
+            val (identity, manifest) = GroupWavelengthWalletManager.bindingOf(PublicKey.fromHex(ceremony.groupPublicKey!!), seed, Chain.Mainnet, 0)
+            val chainName = GroupWalletStatementEvent.chainName(Chain.Mainnet)
+            all.forEach { it.db.groupWavelengthSeedDao().insertIfAbsent(GroupWavelengthSeed(mainnet.roomId, identity, chainName, 0, Hex.encode(seed.toByteArray()), all[0].publicKey)) }
+            val statement = GroupWavelengthWalletStatementEvent.template(
+                GroupWavelengthWalletStatementEvent.Statement(
+                    chain = Chain.Mainnet, wallet = 0, onchainAccount = 0, icebergKey = ceremony.groupPublicKey!!, ceremonyId = ceremony.id,
+                    threshold = ceremony.threshold, participants = ceremony.participants(), identity = identity, manifestHash = manifest,
+                    arkOperatorKey = arkOperator, policy = GroupWavelengthWalletStatementEvent.Policy.DEFAULT,
+                ),
+            )
+            val event = mainnet.fileSignedAsRoom(all, statement.kind, statement.tags, statement.content, createdAt = 4_000_000_000)
+            all.forEach { d ->
+                val row = assertNotNull(d.db.groupSignedEventDao().getByChatRoomIdAndKind(mainnet.roomId, statement.kind).firstOrNull { it.id == event.id })
+                assertNull(GroupWavelengthWalletManager.verify(d.db, mainnet.roomId, row), "device ${d.index} doesn't believe it")
+                assertEquals(emptyList(), GroupWavelengthWalletManager.wallets(d.db, mainnet.roomId, Chain.Mainnet), "so it has no wallet to co-sign for")
+            }
+        } finally {
+            mainnet.close()
+        }
     }
 
     @Test

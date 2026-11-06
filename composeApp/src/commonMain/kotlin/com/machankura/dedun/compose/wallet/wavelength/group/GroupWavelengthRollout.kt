@@ -7,9 +7,10 @@ import fr.acinq.bitcoin.Satoshi
  * The gates a group's Wavelength wallet ships behind -- `docs/group-wavelength-wallet.md`, D12 and Phase 14 -- each
  * with the condition that lifts it.
  *
- * Like the other wallets' gates they decide what this device offers, never what it accepts: a device with a gate shut
- * still verifies and co-signs for a wallet another member opened, except [MAINNET_CAP], which every co-signer holds to,
- * because it is the one gate that bounds what can be lost.
+ * [ENABLED], like the other wallets' gates, decides what this device offers and not what it accepts: with it shut, a device
+ * still verifies and co-signs for a wallet another member opened. [allows] is stricter than theirs, because nobody has reviewed
+ * this: a device neither opens nor believes a wallet on a chain it refuses, so it has nothing there to co-sign for, whatever build
+ * another member runs. [MAINNET_CAP] is what every co-signer holds to once mainnet is allowed.
  */
 object GroupWavelengthRollout {
     /**

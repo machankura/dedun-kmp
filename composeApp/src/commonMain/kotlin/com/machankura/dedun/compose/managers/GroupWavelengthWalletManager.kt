@@ -65,7 +65,8 @@ object GroupWavelengthWalletManager {
     }
 
     /**
-     * Whether [signed] is a statement for [chatRoomId] this device can stand behind: the room signed it, the onchain
+     * Whether [signed] is a statement for [chatRoomId] this device can stand behind: the room signed it on a chain this
+     * build allows, for a group shape the echo rule holds in, the onchain
      * wallet it leaves to is open, its participants hold the onchain key, its Iceberg key is the one this device's ceremony
      * made for this purpose, and the authentication seed this device holds makes the identity and manifest it names. A
      * reader who is not a participant checks everything but the last two. Null otherwise, with the reason in the log.
@@ -73,6 +74,11 @@ object GroupWavelengthWalletManager {
     suspend fun verify(database: DedunDatabase, chatRoomId: String, signed: GroupSignedEvent): Wallet? {
         if (signed.kind != GroupWavelengthWalletStatementEvent.KIND || !signed.verifies()) return null
         val statement = GroupWavelengthWalletStatementEvent.read(signed.tags) ?: return null
+        // Not only what this device offers: a statement it doesn't believe is a wallet it has nothing to co-sign for.
+        if (!GroupWavelengthRollout.allows(statement.chain)) {
+            logger.w("Wavelength wallet ${signed.id} is on ${statement.chain.name}, where this build refuses one")
+            return null
+        }
         GroupWalletManager.thresholdKeyFor(database, chatRoomId) ?: return null
         // The echo rule only holds for a group of this shape: see [GroupArkCoSigner].
         if (!IcebergDkg.isDeployable(statement.participants.size, statement.threshold)) {
