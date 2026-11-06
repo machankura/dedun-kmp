@@ -43,7 +43,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * A harness for Phase 8 of `docs/group-wavelength-wallet.md`, not a test that runs by itself: four devices co-signing, for a real
@@ -136,7 +135,7 @@ class GroupWavelengthSignetJvmTest {
         val seed = assertNotNull(all[0].db.groupWavelengthSeedDao().get(fixture.roomId, statement.identity))
         val auth = GroupArkAuth.of(ByteVector32(seed.seed), Chain.Signet)
         val key = GroupArkCoSigner.walletKey(fixture.roomId, Chain.Signet, statement.wallet)
-        val transport = GroupArkTransport(all[0].db, all[0].room, all[0].publicKey, wallet, term, auth, timeout = 100.seconds)
+        val transport = GroupArkTransport(all[0].db, all[0].room, all[0].publicKey, wallet, term, auth, timeout = GroupWavelengthDaemon.TRANSPORT_TIMEOUT)
         val manifest = GroupArkManifest.of(PublicKey.fromHex(statement.icebergKey), auth, Chain.Signet, statement.wallet)
 
         // What it would take to reach the coins if this process dies: nothing here is worth more than signet's are.

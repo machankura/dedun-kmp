@@ -54,7 +54,7 @@ One commit per phase. The phases below are kept as written; this table says what
 
 | phase | state |
 |---|---|
-| 8 | **first run done on 6 November 2026, on signet, by a harness and not by phones.** See "What the first signet run found": four devices co-signed for a real daemon and the real operator, a coin went in and came out by a forfeit, and bitcoin accepted the group's signatures. Transfers, renewal, unilateral exit and Lightning haven't run, nor anything on real devices or over Marmot |
+| 8 | **two runs on 6 November 2026, on signet, by a harness and not by phones.** See "What the first signet run found" and "What the second found": four devices co-signed for a real daemon and the real operator, through boarding, a refused theft, a transfer, a recovery from nothing and a forfeit, and bitcoin accepted the group's signatures. Renewal, unilateral exit and Lightning haven't run, nor anything on real devices or over Marmot |
 | 0 | **partly run.** Spikes 2 and 3 pass, in `IcebergArkSpikeJvmTest`. Spikes 1 and 5 are half answered against real signet servers, and 6 as far as the wire format goes. Spikes 4, 7 and 8 are open: 4 and 8 need signet coins, the rest of 1 and 5 do too, and 7 needs an answer from Lightning Labs. **Spike 4's condition for going on, that the owner has seen the operator's deadlines, is not met:** the phases below are being built against the shut gate meanwhile, on local branches, and can't be finished without it. See "What Phase 0 found" |
 | 1 | **not started, and not this session's to do.** It needs signet coins sent by hand and a release of the fork, which is the owner's call. Everything below is on local branches, gated, and unproven against any money |
 | 5 | done as far as it can be without a runtime in `jvmTest`: `GroupWavelengthDaemon` opens a hosted wallet only for the elected, freshly synced device, with the manifest the group signed, and stops one that opens as anything else. Four tests, over the SDK's fake. **Not built: D13's holder and a foreground service.** The fake refuses a second daemon, as the real SDK will, so a member's personal wallet and the group's can't both open, and nothing yet decides between them. `IdentityWavelength` is being changed on another branch right now, so that waits. Nothing calls this: the gate is shut. Handover's stopped message (30382) isn't sent yet either |
@@ -154,12 +154,33 @@ Left as they are, and known:
 | commitment and tree | arrive within a second of cutoff, and are signed immediately |
 | **forfeits** | **60 seconds from the commitment, then the round fails for this wallet.** The operator went on without it each time, so a slow client failed itself and not the others, as far as one wallet can see |
 | a batch's life | 1,008 blocks, about a week. The minimum in the statement, 1,000, turns out to fit |
-| the group's own time | 160 to 430 ms a signature, **in one process with no network.** That is a floor and not a measure: nothing here says what phones on Marmot take, and a round asks for three or four |
-| fees | 255 to board, 313 to leave, against caps of 2,000 |
+| the group's own time | 160 to 700 ms a signature, **in one process with no network.** That is a floor and not a measure: nothing here says what phones on Marmot take, and a round asks for three or four |
+| fees | 221 and 255 to board, 313 and 568 to leave, against caps of 2,000 |
 
 The tree's deadline isn't measured: a refusal there waited out the transport instead. Nor is what a group takes over real relays, which is the number the spike exists for, so **this doesn't meet spike 4's condition. It only says the window is a minute.**
 
-**What the run doesn't say.** The devices were in one process, so Marmot, relays and sleeping phones weren't in it. `settled` was called by hand after checking the chain, in place of the watcher. The harness keeps its own label floor across restarts, because every device restarted at once, so the rule real devices use wasn't exercised. Nothing has run for a transfer, so the check that the operator has co-signed before a checkpoint is signed still has only fixtures behind it, and fixtures are what all seven of those were wrong about.
+**What the run doesn't say.** The devices were in one process, so Marmot, relays and sleeping phones weren't in it. `settled` was called by hand after checking the chain, in place of the watcher. The harness keeps its own label floor across restarts, because every device restarted at once, so the rule real devices use wasn't exercised. Nothing has run for a transfer in this first run: the second had one.
+
+## What the second found
+
+A fresh group, 59,032 sats, and the transfer the first run left out:
+
+| step | what happened |
+|---|---|
+| boarded | [`d7e248e8`](https://mempool.space/signet/tx/d7e248e83674651e169be1ae442ae5d6ad0108f2a192f45179889af372e80195), in a batch big enough to need two tree signatures on the path to the group's leaf. 58,811 sats. Fee 221 |
+| **a theft, refused** | a transfer of 5,000 sats to a stranger's key. All four devices refused it within 3 seconds of being asked: "a transfer to a script nobody authorised". The real checkpoint had already passed its checks by then. The coin stayed live, and nothing left |
+| **a transfer** | 20,000 sats to a key the group derives, and 38,811 in change, as Ark transaction `0851f7d6`. The Ark transaction, then the operator's co-signature, verified by each device, then the checkpoint. Completed in 3 seconds, on the first try |
+| a recovery from nothing | a new directory, as a newly elected operator would have. 73 s and 45 group signatures, for a window of 8, and both VTXOs found. It also shows what recovery costs: about 5 signatures a key |
+| left | [`f36fd018`](https://mempool.space/signet/tx/f36fd018504e3b9ff79a7ac8f2a3557c376651f32ab00d847f34ee064282ee51). Two forfeits at once in one round, of coins that came from the transfer, at about 700 ms. 58,243 sats out. Fee 568 |
+
+**The transfer's rules found nothing wrong,** unlike every other part: the checkpoint's shape, the operator's co-signature and the reservations all held on their first real request. What did go wrong:
+
+| found | where | what it was |
+|---|---|---|
+| recovery failed on a package paying the wallet twice | the daemon's own | it replays one event at a time with metadata for that event's output, and by the second event the first output is owned too, with no metadata. **It would have stopped a new operator opening this wallet** after any transfer to itself. It now hands over only the event's output |
+| the daemon can't see a coin at a key it didn't issue | how this was tested | `202/0/5` came from the group's derivation, so the daemon wrote it off as sent until a recovery scan found it, while the devices had it as the group's. The two can disagree, and which to believe is a question for Phase 9's snapshot, which should compare them. Anything real should ask the daemon for its address |
+
+**Still not run:** renewal, though a forfeit and a new VTXO have now each run apart; a unilateral exit, which takes a day of signet's blocks; Lightning; a forfeit or anything else on real phones or over Marmot. Bitcoin's interpreter has only checked the transactions that reached the chain: a transfer's stays off-chain unless someone unrolls it.
 
 ## What Phase 0 found
 
