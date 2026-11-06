@@ -32,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -173,12 +174,25 @@ class SovereignWalletViewModel(
         rememberDefault { clearDefaultWallet() }
     }
 
+    /**
+     * One reader, so the writes land in the order they were asked for. A coroutine each had
+     * no order at all: the default could end on the profile opened first, or a forgotten
+     * profile could be written back after the forget.
+     */
+    private val defaultWrites = Channel<suspend GlobalPrefs.() -> Unit>(Channel.UNLIMITED)
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            for (write in defaultWrites) {
+                runCatching { getGlobalPrefs().write() }
+                    .onFailure { log.e("could not record which profile is open", it) }
+            }
+        }
+    }
+
     /** A default that could not be written is a selector on the next boot, not a crash now. */
     private fun rememberDefault(write: suspend GlobalPrefs.() -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { getGlobalPrefs().write() }
-                .onFailure { log.e("could not record which profile is open", it) }
-        }
+        defaultWrites.trySend(write)
     }
 
     /**

@@ -215,6 +215,30 @@ class IdentitySwitchJvmTest {
         assertEquals(other, sovereign.desiredWalletId.value)
     }
 
+    /**
+     * Each write used to be a coroutine of its own, and nothing ordered them: this ended on
+     * A in about a third of its rounds, and A stayed the default for good. Reading again
+     * after B lands is what sees that. The wait can only miss a late write, never invent one.
+     */
+    @Test
+    fun `two profiles opened in a row leave the second as the default`() = runBlocking<Unit> {
+        val idA = signIn(keyA)
+        val idB = signIn(keyB)
+        val sovereign = SovereignWalletViewModel(phoenixGlobal, stopBusiness = { stopped += it })
+        withTimeout(15_000) { sovereign.availableIdentities.first { it.size == 2 } }
+        val a = activated(assertIs<StoredIdentity.NostrSecret>(sovereign.availableIdentities.value[idA]))
+        val b = activated(assertIs<StoredIdentity.NostrSecret>(sovereign.availableIdentities.value[idB]))
+        val prefs = sovereign.getGlobalPrefs()
+
+        repeat(20) { round ->
+            sovereign.setActiveIdentity(a)
+            sovereign.setActiveIdentity(b)
+            withTimeout(5_000) { prefs.getDefaultWallet.first { it == idB } }
+            delay(100)
+            assertEquals(idB, prefs.getDefaultWallet.first(), "round $round")
+        }
+    }
+
     @Test
     fun `the last profile opened is the one a cold boot resolves, until it is forgotten`() = runBlocking<Unit> {
         val idA = signIn(keyA)
