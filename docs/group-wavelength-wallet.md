@@ -48,6 +48,23 @@ Two things are owed before any of it. **No coin has moved through Wavelength in 
 personal wallet's own money paths are unproven. And **the fork has no release** (`wavelength-wallet.md`, D2). This plan
 adds to that fork and leans harder on it.
 
+### Where the build stands
+
+One commit per phase. The phases below are kept as written; this table says what happened to each.
+
+| phase | state |
+|---|---|
+| 0 | **partly run.** Spikes 2 and 3 pass, in `IcebergArkSpikeJvmTest`. Spikes 5 and 6 are answered only as far as the wire format goes. Spikes 1, 4, 7 and 8 are open: 4 and 8 need signet coins, 1 needs them for its money flows, and 7 needs an answer from Lightning Labs. See "What Phase 0 found" |
+
+## What Phase 0 found
+
+| spike | answer |
+|---|---|
+| 2. A plain signature from Iceberg | **Works, with no library change and no public cosigner.** A MuSig2 aggregation of the group's key alone, an outer BIP32 tweak, and 66 zero bytes for the cosigners' nonce, which is how MuSig2's extended encoding writes infinity. A 2-of-4 group spends a VTXO's collaborative leaf beside a stock operator's signature, and a BIP86 key path, and bitcoin's interpreter accepts both. The cache's child is the key an xpub derives, checked at each step. A wrong child and another group's shares both spend nothing. D4's public cosigner works too and stays as the fallback |
+| 3. A child key in the tree | **Works, both ways.** A hashed child (D5) gives public shares on one polynomial from every quorum at 2-of-4 and 3-of-7, and signs a tree node's key path beside a stock MuSig2 cosigner under a script-path tweak. Any quorum can sign, and a member who sat round one out can sign too, which `IcebergSigner`'s comment said was untested. The parent's shares and a sibling's do not sign for a child. **D5's fallback also signs:** with the child passed as `group_pk` and `e·a·g·gacc·τ` added afterwards, the spend is valid. So it is a real alternative that would need no daemon change, and its only remaining objection is the one in D5: it is outside the module's contract and the draft proof. D5 stands |
+| 5. A vHTLC key that isn't the identity | **Not run: needs a funded swap.** The wire is encouraging. `RequestChannelIdRequest.client_vhtlc_pubkey` is a key of its own, and `swap.proto` says it derives the channel id *"without adding a separate auth identity"*. `account_authorization` is needed only *"before consulting or reserving account credits"*, which D10 closes. Two things are now known that the plan had missed: `AcknowledgeOutSwapHtlc` carries a BIP-340 signature from that key, so **every receive's acknowledgement is one more group signature**, and `CreateInSwap` takes the key too, so an outgoing vHTLC can be keyed the same way. What the server does with a mailbox and an indexer query on a key that isn't the identity is still unknown |
+| 6. An invoice a member can check | **Not settled, and leaning towards no.** `swap.proto` says the server combines the key and the hash *"to derive a unique virtual channel ID"*, but not how, and the server's code isn't in the tree. So a member cannot recompute it today. It stays an open hole in the threat table |
+
 ---
 
 ## What was asked, and what exists
