@@ -20,7 +20,9 @@ import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.crypto.iceberg.Iceberg
 import fr.acinq.bitcoin.crypto.iceberg.NonceContribution
+import fr.acinq.bitcoin.crypto.iceberg.PublicShare
 import fr.acinq.bitcoin.crypto.iceberg.SignatureShare
 import fr.acinq.bitcoin.crypto.musig2.AggregatedNonce
 import fr.acinq.bitcoin.crypto.musig2.IndividualNonce
@@ -120,10 +122,10 @@ class GroupArkTransport(
     private suspend fun contributions(wallet: String, counter: Long): List<String>? =
         database.icebergCoSigningDao().noncesFor(wallet, counter).takeIf { it.size >= quorum }?.sortedBy { it.contribution }?.map { it.contribution }
 
-    /** The next unused counter under [wallet], kept so a restart doesn't hand a label out twice. */
-    private suspend fun allocate(wallet: String, purpose: String): Long {
+    /** The next unused counter under [wallet] from [from] on, kept so a restart doesn't hand a label out twice. */
+    private suspend fun allocate(wallet: String, purpose: String, from: Long = 0): Long {
         val dao = database.icebergCoSigningDao()
-        val counter = (dao.highestAssignment(wallet) ?: -1L) + 1
+        val counter = maxOf((dao.highestAssignment(wallet) ?: -1L) + 1, from)
         dao.insertAssignment(IcebergLabelAssignment(wallet, counter, "", purpose))
         return counter
     }
@@ -131,7 +133,7 @@ class GroupArkTransport(
     private suspend fun treeKeyAt(child: Long): PublicKey? = GroupArkCoSigner.treeKeys(database, wallet, key)[child]
 
     private suspend fun nextTreeKey(): ArkResponse = mutex.withLock {
-        val child = allocate("$key:tree", "tree")
+        val child = allocate("$key:tree", "tree", database.groupArkDao().floor(key)?.treeFloor ?: 0)
         val publicKey = treeKeyAt(child) ?: throw IllegalStateException("the group hasn't made tree key $child yet")
         ArkResponse(index = child, pubKey = publicKey.toString())
     }
@@ -193,11 +195,11 @@ class GroupArkTransport(
 
     private suspend fun plain(request: ArkRequest): ArkResponse {
         val cache = GroupArkCoSigner.cacheOf(wallet, request) ?: throw IllegalArgumentException("a request for no key the group holds")
-        val counter = mutex.withLock { allocate(key, "plain") }
+        val counter = mutex.withLock { allocate(key, "plain", database.groupArkDao().floor(key)?.floor ?: 0) }
         val contributions = contributions(key, counter) ?: throw IllegalStateException("round one isn't in for label $counter")
         val requestId = RandomInstance.bytes(16).toHex()
         val shares = ask(ArkWire.SigningItem(requestId, ArkWire.Domain(), counter, request, contributions))
-        val label = GroupArkCoSigner.label(statement.icebergKey, ArkWire.Domain(), counter)
+        val label = GroupArkCoSigner.label(statement, ArkWire.Domain(), counter)
         val message = database.groupArkDao().checked(key, label.toHex())?.message?.let { ByteVector32(it) }
             ?: throw IllegalStateException("a signature this device didn't check")
         val nonce = groupNonceOf(contributions, groupKey)
@@ -207,19 +209,49 @@ class GroupArkTransport(
         }
     }
 
-    /** Sends one signature to the room and waits for the quorum, as long as the deadline allows. A refusal looks like silence. */
+    /** Each participant's public share for [domain], to check what they send against. */
+    private suspend fun publicSharesOf(domain: ArkWire.Domain): Map<String, PublicShare> {
+        val child = domain.child ?: return database.icebergKeySessionDao().getSessionById(statement.ceremonyId)?.publicShareList().orEmpty()
+            .mapIndexedNotNull { i, share -> statement.participants.getOrNull(i)?.let { it to PublicShare(ByteVector(share)) } }.toMap()
+        return database.groupArkDao().treeShares(key).filter { it.child == child }.associate { it.participant to PublicShare(ByteVector(it.share)) }
+    }
+
+    /**
+     * Sends one signature to the room and waits for `t` good shares, as long as the deadline allows. A refusal looks like silence. Each
+     * share is checked before it counts, or one member's garbage would spoil what the others signed, with nobody to tell it was theirs.
+     */
     private suspend fun ask(item: ArkWire.SigningItem): List<SignatureShare> {
         send(ArkWire.SigningBatch(key, term, items = listOf(item)))
         val dao = database.icebergCoSigningDao()
+        val label = GroupArkCoSigner.label(statement, item.domain, item.counter).toHex()
+        val publicKey = item.domain.child?.let { treeKeyAt(it) } ?: groupKey
+        val publicShares = publicSharesOf(item.domain)
+        val contributions = item.contributions.map { NonceContribution(it) }
+        val cosigners = item.cosignerNonce?.let { AggregatedNonce(ByteVector(it)) } ?: GroupArkSigner.NO_COSIGNERS
+        val cache = GroupArkCoSigner.cacheOf(wallet, item.request) ?: throw IllegalArgumentException("a request for no key the group holds")
+        val good = HashMap<String, SignatureShare>()
+        val bad = HashSet<String>()
         val shares = withTimeoutOrNull(timeout) {
             while (true) {
-                val rows = dao.sharesFor(key, item.requestId)
-                if (rows.size >= quorum) return@withTimeoutOrNull rows
+                val message = database.groupArkDao().checked(key, label)?.message?.let { ByteVector32(it) }
+                if (message != null) {
+                    dao.sharesFor(key, item.requestId).filter { it.participant !in good && it.participant !in bad }.forEach { row ->
+                        val share = SignatureShare(row.share)
+                        val publicShare = publicShares[row.participant]
+                        if (publicShare != null && Iceberg.verifyPartialSignature(share, publicShare, contributions, n, t, publicKey, cache, message, cosigners)) {
+                            good[row.participant] = share
+                        } else {
+                            bad += row.participant
+                            logger.w("A signature share from ${row.participant.take(8)} doesn't verify")
+                        }
+                    }
+                    if (good.size >= t) return@withTimeoutOrNull good.values.toList()
+                }
                 delay(POLL)
             }
             @Suppress("UNREACHABLE_CODE") null
-        } ?: throw IllegalStateException("the group didn't answer: fewer than $quorum devices agreed to this in time").also { logger.w(it.message!!) }
-        return shares.map { SignatureShare(it.share) }
+        }
+        return shares ?: throw IllegalStateException("the group didn't answer: fewer than $t devices agreed to this in time").also { logger.w(it.message!!) }
     }
 
     private companion object {

@@ -6,6 +6,7 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Upsert
 import com.machankura.dedun.compose.database.model.GroupArkChecked
+import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkRound
@@ -35,6 +36,12 @@ interface GroupArkDao {
 
     @Query("UPDATE GroupArkVtxo SET spent = 1 WHERE wallet = :wallet AND reservedBy = :by")
     suspend fun spendReservedBy(wallet: String, by: String)
+
+    @Upsert
+    suspend fun upsertFee(row: GroupArkFee)
+
+    @Query("SELECT * FROM GroupArkFee WHERE wallet = :wallet AND term = :term AND atEpochSeconds >= :since")
+    suspend fun fees(wallet: String, term: Long, since: Long): List<GroupArkFee>
 
     @Upsert
     suspend fun upsertRound(row: GroupArkRound)

@@ -158,7 +158,7 @@ class GroupArkCoSigningJvmTest {
         fixture.signSession(group.all, group.all[1], nominated.id)
         val (request, _, _) = sweep(group, 3)
         assertTrue(answered(group, request).isFailure)
-        val label = Hex.encode(GroupArkCoSigner.label(group.wallet.statement.icebergKey, ArkWire.Domain(), 0).toByteArray())
+        val label = Hex.encode(GroupArkCoSigner.label(group.wallet.statement, ArkWire.Domain(), 0).toByteArray())
         group.all.drop(1).forEach { assertEquals(null, it.db.icebergCoSigningDao().ledgerFor(group.key, label), "device ${it.index} never considered it") }
     }
 
@@ -197,7 +197,7 @@ class GroupArkCoSigningJvmTest {
         val first = sweep(group, 4).first
         val second = sweep(group, 5).first
         val term = assertNotNull(GroupWavelengthOperatorManager.current(group.all[0].db, fixture.roomId, fixture.chain)).term
-        val label = GroupArkCoSigner.label(group.wallet.statement.icebergKey, ArkWire.Domain(), counter).let { Hex.encode(it.toByteArray()) }
+        val label = GroupArkCoSigner.label(group.wallet.statement, ArkWire.Domain(), counter).let { Hex.encode(it.toByteArray()) }
 
         sendTo(group, group.all.take(2), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("a", ArkWire.Domain(), counter, first, contributions))))
         sendTo(group, group.all.drop(2), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("b", ArkWire.Domain(), counter, second, contributions))))
@@ -228,15 +228,12 @@ class GroupArkCoSigningJvmTest {
     @Test
     fun `a device that hasn't heard how far the group has answered signs nothing, and then a restored one can't answer an old label`() = runBlocking<Unit> {
         val group = group()
-        // One signature through, so the group has answered label 0.
-        floorsKnown(group)
+        // Its first batch ever, as after a restore: no ledger, no floor, and the share kept.
         val restored = group.all[3]
-        // A restore: the ledger and the floor gone, the share kept.
-        restored.db.groupArkDao().upsertFloor(com.machankura.dedun.compose.database.model.GroupArkFloor(group.key, null))
         val noFloor = sweep(group, 2).first
         val term = assertNotNull(GroupWavelengthOperatorManager.current(group.all[0].db, fixture.roomId, fixture.chain)).term
         val contributions = group.all[0].db.icebergCoSigningDao().noncesFor(group.key, 0).sortedBy { it.contribution }.map { it.contribution }
-        val label = GroupArkCoSigner.label(group.wallet.statement.icebergKey, ArkWire.Domain(), 0).let { Hex.encode(it.toByteArray()) }
+        val label = GroupArkCoSigner.label(group.wallet.statement, ArkWire.Domain(), 0).let { Hex.encode(it.toByteArray()) }
 
         // While it doesn't know, it answers nothing at all.
         sendTo(group, listOf(restored), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("old", ArkWire.Domain(), 0, noFloor, contributions))))
@@ -250,8 +247,7 @@ class GroupArkCoSigningJvmTest {
             GroupArkCoSigner.process(restored.db, restored.room, Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, queued.content, ""), restored.publicKey)
         }
         assertEquals(1L, restored.db.groupArkDao().floor(group.key)?.floor)
-        val signed = restored.db.icebergCoSigningDao().ledgerFor(group.key, label)
-        assertTrue(signed == null || signed.messageHash != "", "nothing answered under an old label after its restore")
+        assertEquals(null, restored.db.icebergCoSigningDao().ledgerFor(group.key, label), "nothing answered under an old label after its restore")
         assertEquals(0, restored.db.icebergCoSigningDao().sharesFor(group.key, "old").size)
     }
 
@@ -339,7 +335,7 @@ class GroupArkCoSigningJvmTest {
         group.all[0].db.icebergCoSigningDao().noncesFor(group.key, counter).sortedBy { it.contribution }.map { it.contribution }
 
     private fun labelAt(group: Group, counter: Long, domain: ArkWire.Domain = ArkWire.Domain()) =
-        Hex.encode(GroupArkCoSigner.label(group.wallet.statement.icebergKey, domain, counter).toByteArray())
+        Hex.encode(GroupArkCoSigner.label(group.wallet.statement, domain, counter).toByteArray())
 
     @Test
     fun `the same message under a label with other nonces is a second challenge, and gets nothing`() = runBlocking<Unit> {
@@ -401,6 +397,102 @@ class GroupArkCoSigningJvmTest {
         assertEquals(null, restored.db.groupArkDao().checked(group.key, labelAt(group, 0, ArkWire.Domain(1))), "nor is a tree key below the floor")
         val said = fixture.lines(restored, ChatMessage.TYPE_LIGHTNING_REFUSED)
         assertTrue(said.any { it.content.contains("tree key from before") }, "and it says so")
+    }
+
+    @Test
+    fun `one member disagreeing raises the alarm and stops nothing, since n of at least 3t-2 can't have two quorums`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val liar = group.all[3]
+        val label = labelAt(group, 1)
+        val garbage = ArkWire.EchoBatch(group.key, listOf(ArkWire.EchoItem("x", label, "ee".repeat(32))))
+        val queued = GroupLightningWalletManager.queue(liar.db, liar.room, liar.publicKey, GroupWavelengthEvents.ECHO, CommonJson.encodeToString(ArkWire.EchoBatch.serializer(), garbage))
+        group.all.take(3).forEach { GroupArkCoSigner.process(it.db, it.room, Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, queued.content, ""), it.publicKey) }
+
+        val (request, funding, leaf) = sweep(group, 3)
+        val response = answered(group, request).getOrThrow()
+        val message = Transaction.read(request.tx!!).hashForSigningTaprootScriptPath(0, listOf(funding.txOut[0]), SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
+        assertTrue(Crypto.verifySignatureSchnorr(message, ByteVector64(response.signature!!), group.keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 3).xOnly()))
+        group.all.take(3).forEach { assertTrue(fixture.lines(it, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).isNotEmpty(), "device ${it.index} says so") }
+    }
+
+    @Test
+    fun `a member's bad share is left out, and the rest still make the signature`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val cheat = group.all[1]
+        val inherited = fixture.dispatch
+        fixture.dispatch = { to, event ->
+            val tampered = if (event.kind == GroupWavelengthEvents.SIGNATURE_SHARES && event.pubKey == cheat.publicKey) {
+                val batch = CommonJson.decodeFromString(ArkWire.ShareBatch.serializer(), event.content)
+                val spoiled = batch.copy(items = batch.items.map { it.copy(share = it.share.dropLast(2) + if (it.share.endsWith("00")) "01" else "00") })
+                Event(event.id, event.pubKey, event.createdAt, event.kind, event.tags, CommonJson.encodeToString(ArkWire.ShareBatch.serializer(), spoiled), event.sig)
+            } else {
+                event
+            }
+            inherited(to, tampered)
+        }
+        val (request, funding, leaf) = sweep(group, 3)
+        val response = answered(group, request).getOrThrow()
+        val message = Transaction.read(request.tx!!).hashForSigningTaprootScriptPath(0, listOf(funding.txOut[0]), SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
+        assertTrue(Crypto.verifySignatureSchnorr(message, ByteVector64(response.signature!!), group.keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 3).xOnly()))
+    }
+
+    @Test
+    fun `nonces nobody published, or too few of them, are refused`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val device = group.all[1]
+        val term = currentTerm(group)
+        val contributions = contributionsAt(group, 1)
+        val forged = contributions.drop(1) + contributions.first().reversed()
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("forged", ArkWire.Domain(), 1, sweep(group, 4).first, forged))))
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("few", ArkWire.Domain(), 2, sweep(group, 4).first, contributionsAt(group, 2).take(2)))))
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("twice", ArkWire.Domain(), 3, sweep(group, 4).first, contributionsAt(group, 3).let { it + it.first() }))))
+        assertEquals(3, fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).count { it.content.contains("hasn't seen published") })
+        (1L..3L).forEach { assertEquals(null, device.db.groupArkDao().checked(group.key, labelAt(group, it))) }
+    }
+
+    @Test
+    fun `a member lying about how far the group has got can skip it ahead a little, and not out of reach`() {
+        assertEquals(6L, GroupArkCoSigner.floorFrom(listOf(5, 1L shl 40), 2, 4_096))
+        assertEquals(6L, GroupArkCoSigner.floorFrom(listOf(5, 5, 1L shl 40), 2, 4_096))
+        assertEquals(8L, GroupArkCoSigner.floorFrom(listOf(5, 7), 2, 4_096))
+        assertEquals(4_001L, GroupArkCoSigner.floorFrom(listOf(0, 4_000), 2, 4_096))
+        assertEquals(0L, GroupArkCoSigner.floorFrom(listOf(-1, -1), 2, 4_096))
+    }
+
+    @Test
+    fun `a mark nobody asked for, or one past any real group, is thrown away`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val device = group.all[3]
+        val before = device.db.groupArkDao().floor(group.key)
+        suspend fun markFrom(from: GroupLightningFixture.Device, highest: Long, child: Long) {
+            val message = ArkWire.HighWater(group.key, asking = false, highest = highest, highestChild = child)
+            val queued = GroupLightningWalletManager.queue(from.db, from.room, from.publicKey, GroupWavelengthEvents.HIGH_WATER, CommonJson.encodeToString(ArkWire.HighWater.serializer(), message))
+            GroupArkCoSigner.process(device.db, device.room, Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, queued.content, ""), device.publicKey)
+        }
+        // This device knows how far it may answer from, so nobody has anything to tell it.
+        markFrom(group.all[0], 1L shl 30, 1L shl 30)
+        assertEquals(before, device.db.groupArkDao().floor(group.key))
+        assertFalse(device.db.groupArkDao().marks(group.key).any { it.highest == 1L shl 30 })
+
+        // Asking again, it won't take a number that would wrap the floor round to nothing.
+        device.db.groupArkDao().upsertFloor(com.machankura.dedun.compose.database.model.GroupArkFloor(group.key, null))
+        markFrom(group.all[0], Long.MAX_VALUE, 0)
+        markFrom(group.all[1], -5, 0)
+        assertFalse(device.db.groupArkDao().marks(group.key).any { it.highest == Long.MAX_VALUE || it.highest == -5L })
+    }
+
+    @Test
+    fun `labels are a wallet's own, on any key`() = runBlocking<Unit> {
+        val group = group()
+        val statement = group.wallet.statement
+        val label = GroupArkCoSigner.label(statement, ArkWire.Domain(), 0)
+        assertTrue(label != GroupArkCoSigner.label(statement.copy(wallet = 1), ArkWire.Domain(), 0))
+        assertTrue(label != GroupArkCoSigner.label(statement.copy(chain = fr.acinq.bitcoin.Chain.Testnet3), ArkWire.Domain(), 0))
+        assertTrue(label != GroupArkCoSigner.label(statement, ArkWire.Domain(0), 0))
     }
 
     @Test

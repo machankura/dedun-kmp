@@ -35,6 +35,10 @@ data class GroupArkVtxo(
     val spent: Boolean = false,
 )
 
+/** A fee this device has agreed to, on what, when and in which term, against the group's budget for them. */
+@Entity(primaryKeys = ["wallet", "tx"])
+data class GroupArkFee(val wallet: String, val tx: String, val feeSat: Long, val term: Long, val atEpochSeconds: Long)
+
 /** The one account of a round this device has signed anything under: a second is a mistake or an attack. */
 @Entity(primaryKeys = ["wallet", "commitment"])
 data class GroupArkRound(val wallet: String, val commitment: String, val noteHash: String)

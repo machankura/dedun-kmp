@@ -74,6 +74,11 @@ object GroupWavelengthWalletManager {
         if (signed.kind != GroupWavelengthWalletStatementEvent.KIND || !signed.verifies()) return null
         val statement = GroupWavelengthWalletStatementEvent.read(signed.tags) ?: return null
         GroupWalletManager.thresholdKeyFor(database, chatRoomId) ?: return null
+        // The echo rule only holds for a group of this shape: see [GroupArkCoSigner].
+        if (!IcebergDkg.isDeployable(statement.participants.size, statement.threshold)) {
+            logger.w("Wavelength wallet ${signed.id} asks for ${statement.threshold}-of-${statement.participants.size}, which isn't deployable")
+            return null
+        }
         if (GroupWalletManager.walletFor(database, chatRoomId, statement.chain, statement.onchainAccount) == null) {
             logger.w("Wavelength wallet ${signed.id} leaves to an onchain wallet this room has not opened")
             return null

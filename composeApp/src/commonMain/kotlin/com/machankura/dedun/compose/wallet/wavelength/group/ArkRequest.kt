@@ -80,7 +80,7 @@ data class ArkNote(val kind: String, val id: String, val material: JsonElement) 
 }
 
 @Serializable
-data class NotedNode(val tx: String, val digest: String, @SerialName("co_signers") val coSigners: List<String>)
+data class NotedNode(val tx: String, val digest: String, @SerialName("co_signers") val coSigners: List<String>, val signature: String? = null)
 
 @Serializable
 data class NotedTree(
@@ -123,7 +123,11 @@ data class NotedRound(
 )
 
 @Serializable
-data class NotedTx(val tx: String, @SerialName("prev_outs") val prevOuts: List<ArkOutput>)
+data class NotedTx(val tx: String, @SerialName("prev_outs") val prevOuts: List<ArkOutput>, val sigs: List<NotedSig> = emptyList())
+
+/** A signature an input of a noted transaction already carries, which is worth nothing until someone verifies whose it is. */
+@Serializable
+data class NotedSig(val input: Int, val signature: String)
 
 /** `oor.notedPackage`: a transfer's Ark transaction and the checkpoints that fund it. */
 @Serializable

@@ -8,6 +8,7 @@ import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.OP_1
 import fr.acinq.bitcoin.OP_PUSHDATA
 import fr.acinq.bitcoin.OutPoint
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Script
@@ -82,9 +83,11 @@ class ArkPolicyJvmTest {
         notedRounds: Map<String, String> = emptyMap(),
         treeKeyRounds: Map<String, String> = emptyMap(),
         minSweepDelay: Long = 0,
+        recentFeesSat: Map<String, Long> = emptyMap(),
+        maxRecentFeesSat: Long? = null,
     ) = ArkPolicy.Context(
         keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised, emptySet(),
-        capSat, unspentSat, pendingFromSat, reservedFor, notedRounds, treeKeyRounds, minSweepDelay,
+        capSat, unspentSat, pendingFromSat, reservedFor, notedRounds, treeKeyRounds, minSweepDelay, recentFeesSat, maxRecentFeesSat,
     )
 
     private fun allowed(request: ArkRequest, what: ArkPolicy.What, context: ArkPolicy.Context = context(), session: PublicKey? = null) {
@@ -143,6 +146,8 @@ class ArkPolicyJvmTest {
         siblingCosigners: List<PublicKey> = listOf(operator, treeKey),
         sweepDelay: Long = 1_000,
         batchValue: Long = 50_000,
+        rootLockTime: Long = 0,
+        rootSequence: Long = 0xffffffffL,
         vtxos: (NotedVtxo) -> List<NotedVtxo> = { listOf(it) },
     ) {
         private val sweepKey = operator
@@ -154,8 +159,8 @@ class ArkPolicyJvmTest {
 
         val commitment = Transaction(3, listOf(TxIn(OutPoint(TxId("b0".repeat(32)), 0), 0xffffffffL)), listOf(TxOut(Satoshi(batchValue), scriptOf(rootCosigners, sweepRoot))), 0)
         val root = Transaction(
-            3, listOf(TxIn(OutPoint(commitment, 0), 0xffffffffL)),
-            listOf(TxOut(Satoshi(30_000), scriptOf(leafCosigners, sweepRoot)), TxOut(Satoshi(20_000), scriptOf(siblingCosigners, sweepRoot))), 0,
+            3, listOf(TxIn(OutPoint(commitment, 0), rootSequence)),
+            listOf(TxOut(Satoshi(30_000), scriptOf(leafCosigners, sweepRoot)), TxOut(Satoshi(20_000), scriptOf(siblingCosigners, sweepRoot))), rootLockTime,
         )
         val leaf = Transaction(3, listOf(TxIn(OutPoint(root, 0), 0xffffffffL)), listOf(TxOut(Satoshi(30_000), vtxoScript), TxOut(Satoshi(0), anchor)), 0)
         val sibling = Transaction(3, listOf(TxIn(OutPoint(root, 1), 0xffffffffL)), listOf(TxOut(Satoshi(20_000), thief), TxOut(Satoshi(0), anchor)), 0)
@@ -491,6 +496,100 @@ class ArkPolicyJvmTest {
         allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(notedRounds = mapOf(commitmentId to hash)))
         refused(fixtures.forfeit, "a second account of a round", context(notedRounds = mapOf(commitmentId to "another")))
         refused(treeSign, "a second account of a round", context(notedRounds = mapOf(commitmentId to "another")), session = treeKey)
+    }
+
+    // ---- what the second reading found ----
+
+    @Test
+    fun `a value no real transaction can hold is refused, in a note or a transaction`() {
+        // A negative boarding input would bring what goes in down to what comes out, and hide a forfeit in the difference.
+        val boarding = fixtures.boarding.prevOuts.first().pkScript
+        refused(fixtures.forfeit.withRound { r -> r.copy(prevOuts = r.prevOuts.map { ArkOutput(-30_000, boarding) }) }, "impossible value")
+        refused(fixtures.forfeit.withRound { r -> r.copy(prevOuts = r.prevOuts.map { ArkOutput(2_100_000_000_000_001, boarding) }) }, "impossible value")
+        refused(
+            fixtures.oorCheckpoint.withTransfer { t ->
+                val ark = Transaction.read(t.ark.tx)
+                val out = ark.txOut[0]
+                t.copy(ark = t.ark.copy(tx = hex(ark.copy(txOut = listOf(TxOut(out.amount * 2, out.publicKeyScript), TxOut(-out.amount, out.publicKeyScript)) + ark.txOut.drop(1)))))
+            },
+            "impossible value",
+        )
+    }
+
+    private fun ArkRequest.unsignedTree() = withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { it.copy(signature = null) }) }) }
+
+    @Test
+    fun `nothing is given up for a round until its tree is shown signed`() {
+        refused(fixtures.forfeit.unsignedTree(), "nobody has shown to be signed")
+        refused(fixtures.boarding.unsignedTree(), "nobody has shown to be signed")
+        val forged = fixtures.forfeit.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { it.copy(signature = "ab".repeat(64)) }) }) }
+        refused(forged, "nobody has shown to be signed")
+        val garbage = fixtures.boarding.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { it.copy(signature = "zz") }) }) }
+        refused(garbage, "nobody has shown to be signed")
+        allowed(treeSign, ArkPolicy.What.TREE, session = treeKey)
+    }
+
+    @Test
+    fun `the signatures on a tree aren't a second account of its round`() {
+        val hash = ArkPolicy.noteHash(treeSign.note!!)
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(notedRounds = mapOf(commitmentId to hash)))
+    }
+
+    @Test
+    fun `a tree transaction that can't be published at once is refused`() {
+        val locked = Built(rootLockTime = 500_000)
+        refused(locked.signing(locked.leafNode), "can't be published straight away", session = treeKey)
+        val delayed = Built(rootSequence = 1_000)
+        refused(delayed.signing(delayed.leafNode), "can't be published straight away", session = treeKey)
+    }
+
+    @Test
+    fun `a checkpoint isn't signed until the operator has co-signed the Ark transaction`() {
+        fun signedBy(sigs: List<NotedSig>) = fixtures.oorCheckpoint.withTransfer { it.copy(ark = it.ark.copy(sigs = sigs)) }
+        refused(signedBy(emptyList()), "the operator hasn't co-signed")
+        refused(signedBy(listOf(NotedSig(0, "ab".repeat(64)))), "the operator hasn't co-signed")
+        refused(signedBy(listOf(NotedSig(0, "zz"))), "the operator hasn't co-signed")
+        val real = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.oorCheckpoint.note!!.material).ark.sigs.single()
+        refused(signedBy(listOf(real.copy(input = 1))), "the operator hasn't co-signed")
+        // The right digest, signed by anyone but the operator.
+        val transfer = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.oorCheckpoint.note!!.material)
+        val checkpoint = Transaction.read(transfer.checkpoints.single().tx)
+        val leaf = ArkScripts.collabLeaf(keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 3), operator)
+        val digest = Transaction.read(transfer.ark.tx).hashForSigningTaprootScriptPath(0, listOf(checkpoint.txOut[0]), SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
+        val someone = Crypto.signSchnorr(digest, PrivateKey(ByteVector32("66".repeat(32))), null)
+        refused(signedBy(listOf(NotedSig(0, Hex.encode(someone.toByteArray())))), "the operator hasn't co-signed")
+        // The Ark transaction comes first, and needs nothing of the kind.
+        allowed(fixtures.oorArk, ArkPolicy.What.TRANSFER)
+        allowed(fixtures.oorCheckpoint, ArkPolicy.What.TRANSFER)
+    }
+
+    @Test
+    fun `what the group spends in fees has a budget, and asking again for the same thing isn't spending again`() {
+        refused(fixtures.forfeit, "more in fees", context(maxRecentFeesSat = 999))
+        refused(fixtures.forfeit, "more in fees", context(maxRecentFeesSat = 1_000, recentFeesSat = mapOf("another round" to 1)))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(maxRecentFeesSat = 1_000, recentFeesSat = mapOf(commitmentId to 1_000)))
+        assertEquals(1_000L, assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), fixtures.forfeit)).effect!!.feeSat)
+
+        refused(onchainSpend(onchain, 9_000), "more in fees", context(maxRecentFeesSat = 999))
+        assertEquals(1_000L, assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), onchainSpend(onchain, 9_000))).effect!!.feeSat)
+
+        // Nothing should stand in the way of leaving.
+        allowed(fixtures.exitSweep, ArkPolicy.What.EXIT_SWEEP, context(maxRecentFeesSat = 0))
+    }
+
+    @Test
+    fun `an on-chain key past the window is refused`() {
+        refused(onchainSpend(onchain, 9_000).copy(index = -1), "outside the range this device checks")
+        refused(onchainSpend(onchain, 9_000).copy(branch = 2), "outside the range this device checks")
+    }
+
+    @Test
+    fun `a swap authorisation is in the swap key's name, or it isn't one`() {
+        val swapKey = keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0)
+        fun auth(key: ByteArray, tail: Int = 32 + 8 + 32) = fixtures.indexerMessage.copy(family = 202, index = 0, tag = "swap-credit-account-auth-v1", message = Hex.encode(key + ByteArray(tail)))
+        assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), auth(swapKey.value.toByteArray())))
+        refused(auth(swapKey.value.toByteArray(), 10), "doesn't parse")
+        refused(auth(stranger.value.toByteArray()), "in another key's name")
     }
 
     @Test

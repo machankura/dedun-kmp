@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "f168f27c5877919f9af6394ee576ef97",
+    "identityHash": "68f312faa442cf73855dc1b1299f8624",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -2274,6 +2274,49 @@
           "columnNames": [
             "wallet",
             "participant"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkFee",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `tx` TEXT NOT NULL, `feeSat` INTEGER NOT NULL, `term` INTEGER NOT NULL, `atEpochSeconds` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `tx`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tx",
+            "columnName": "tx",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "feeSat",
+            "columnName": "feeSat",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "term",
+            "columnName": "term",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "atEpochSeconds",
+            "columnName": "atEpochSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "tx"
           ]
         }
       },
@@ -5948,7 +5991,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f168f27c5877919f9af6394ee576ef97')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '68f312faa442cf73855dc1b1299f8624')"
     ]
   }
 }

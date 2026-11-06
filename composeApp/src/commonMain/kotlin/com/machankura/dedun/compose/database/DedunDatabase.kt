@@ -19,6 +19,7 @@ import com.machankura.dedun.compose.database.dao.GroupArkDao
 import com.machankura.dedun.compose.database.dao.GroupWavelengthSeedDao
 import com.machankura.dedun.compose.database.model.GroupLightningSeed
 import com.machankura.dedun.compose.database.model.GroupArkChecked
+import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkRound
@@ -164,6 +165,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkVtxo::class,
         GroupArkFloor::class,
         GroupArkMark::class,
+        GroupArkFee::class,
         GroupArkRound::class,
         GroupArkTreeBinding::class,
         GroupArkChecked::class,

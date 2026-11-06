@@ -48,6 +48,8 @@ object ArkPolicy {
         val reserves: List<String>,
         /** A round's note, of which there is only ever one. */
         val noteHash: String? = null,
+        /** What it costs in fees, against the group's budget for them. */
+        val feeSat: Long = 0,
     )
 
     sealed class Verdict {
@@ -85,6 +87,9 @@ object ArkPolicy {
         val treeKeyRounds: Map<String, String> = emptyMap(),
         /** The shortest life the group lets a batch of its VTXOs have, in blocks. */
         val minSweepDelay: Long = 0,
+        /** What this device has lately agreed to pay in fees, by what it paid them on, and how far that may go. */
+        val recentFeesSat: Map<String, Long> = emptyMap(),
+        val maxRecentFeesSat: Long? = null,
     )
 
     private const val TAG_INDEXER = "wavelength/indexer/v1"
@@ -93,6 +98,9 @@ object ArkPolicy {
 
     /** The daemon's `MaxReasonableDelay`: about a year, in blocks. */
     private const val MAX_REASONABLE_DELAY = 52_560L
+
+    /** Consensus's `MAX_MONEY`: nothing a real transaction holds can be more, or less than nothing. */
+    private const val MAX_MONEY = 2_100_000_000_000_000L
 
     /** The anchor every virtual transaction ends in: `OP_1 <4e73>`, for nothing. */
     private val ANCHOR = ByteVector(Script.write(Script.pay2anchor))
@@ -110,11 +118,29 @@ object ArkPolicy {
     private fun key(hex: String, what: String): PublicKey =
         runCatching { PublicKey.fromHex(hex).takeIf { it.isValid() }!! }.getOrElse { refuse("a request with no readable $what") }
 
-    private fun tx(hex: String?, what: String): Transaction =
-        runCatching { Transaction.read(hex!!) }.getOrElse { refuse("a request with no readable $what") }
+    /** A transaction, with the rule on its values that consensus has and a parser doesn't: every sum below relies on it. */
+    private fun tx(hex: String?, what: String): Transaction {
+        val tx = runCatching { Transaction.read(hex!!) }.getOrElse { refuse("a request with no readable $what") }
+        var total = 0L
+        tx.txOut.forEach {
+            if (it.amount.sat !in 0..MAX_MONEY) refuse("a $what with an impossible value")
+            total += it.amount.sat
+            if (total > MAX_MONEY) refuse("a $what with an impossible value")
+        }
+        return tx
+    }
 
     private fun outputsOf(outputs: List<ArkOutput>): List<TxOut> =
-        outputs.map { TxOut(Satoshi(it.value), bytes(it.pkScript, "prevout")) }
+        outputs.map {
+            if (it.value !in 0..MAX_MONEY) refuse("a note with an impossible value")
+            TxOut(Satoshi(it.value), bytes(it.pkScript, "prevout"))
+        }
+
+    /** That paying [fee] on [id] keeps this device inside the group's budget. A repeat of the same thing isn't a second fee. */
+    private fun checkFeeBudget(context: Context, id: String, fee: Long) {
+        val budget = context.maxRecentFeesSat ?: return
+        if (context.recentFeesSat.filterKeys { it != id }.values.sum() + fee > budget) refuse("more in fees than the group lets this wallet spend for now")
+    }
 
     private fun outpoint(tx: Transaction, index: Int): String = tx.txIn[index].outPoint.let { "${it.txid}:${it.index}" }
 
@@ -127,13 +153,18 @@ object ArkPolicy {
         }
     } catch (e: Refused) {
         Verdict.Refuse(e.reason)
+    } catch (e: Exception) {
+        // Whatever a parser throws at something the operator wrote. Nothing here suspends, so no cancellation gets caught.
+        Verdict.Refuse("a request that doesn't parse")
     }
 
     // ---- messages ----
 
     /**
      * A fund key signs a message only under a tag that can't be anything else: BIP-340 tags a digest, so none of these is
-     * ever a transaction's sighash. They authenticate, and move nothing.
+     * ever a transaction's sighash. They authenticate, and take nothing from the wallet's coins. A swap authorisation is a digest of a
+     * request this device can't see, so what it authorises is the swap server's to say, and that includes redeeming credit: the group's
+     * credit balance stays at nothing because the daemon's credit is closed (D10), not because of this.
      */
     private fun message(context: Context, request: ArkRequest): Verdict {
         if (!request.schnorr || request.compact || request.doubleHash || !request.tapTweak.isNullOrEmpty()) refuse("a fund key signs only a plain tagged Schnorr message")
@@ -142,10 +173,16 @@ object ArkPolicy {
         val message = bytes(request.message, "message")
         val tag = request.tag ?: refuse("a message with no tag")
         val digest = fr.acinq.bitcoin.Crypto.taggedHash(message.toByteArray(), tag)
-        val swapKey = slot == GroupArkDerivation.Slot.OOR_RECEIVE && request.index == 0L
+        val swapKey = slot == GroupArkDerivation.Slot.OOR_RECEIVE && request.index == 0L && request.branch == 0L
         return when {
             tag == TAG_INDEXER -> Verdict.Allow(What.PROOF, digest)
-            tag == TAG_SWAP_AUTH && swapKey -> Verdict.Allow(What.SWAP_AUTH, digest)
+            tag == TAG_SWAP_AUTH && swapKey -> {
+                // account key || request digest || expiry || nonce, as `CreditAccountAuthMessage` writes it.
+                val raw = message.toByteArray()
+                if (raw.size != 33 + 32 + 8 + 32) refuse("an authorisation that doesn't parse")
+                if (!raw.copyOfRange(0, 33).contentEquals(context.keys.key(slot, 0, 0).value.toByteArray())) refuse("an authorisation in another key's name")
+                Verdict.Allow(What.SWAP_AUTH, digest)
+            }
             tag == TAG_SWAP_ACK && swapKey -> {
                 // receiver key || payment hash || amount || vHTLC script: an acknowledgement for a payment we asked for.
                 val raw = message.toByteArray()
@@ -241,6 +278,7 @@ object ArkPolicy {
     private fun onchainSpend(context: Context, request: ArkRequest, tx: Transaction, prevOuts: List<TxOut>): Verdict {
         if (request.method != ArkRequest.METHOD_BIP86) refuse("the on-chain account spends only by its key path")
         val slot = GroupArkDerivation.Slot.ONCHAIN
+        if (request.branch !in 0..1 || request.index !in 0 until context.keys.window) refuse("a key outside the range this device checks")
         val own = context.keys.key(slot, request.branch, request.index)
         val spentScript = ByteVector(Script.write(Script.pay2tr(own.xOnly(), fr.acinq.bitcoin.Crypto.TaprootTweak.KeyPathTweak)))
         if (prevOuts[request.inputIndex].publicKeyScript != spentScript) refuse("an on-chain input this account doesn't own")
@@ -261,7 +299,9 @@ object ArkPolicy {
         }
         val fee = prevOuts.sumOf { it.amount.sat } - tx.txOut.sumOf { it.amount.sat }
         if (fee !in 0..context.maxOnchainFeeSat) refuse("an on-chain spend paying $fee sats in fees")
-        return Verdict.Allow(What.ONCHAIN, message)
+        val id = tx.txid.toString()
+        checkFeeBudget(context, id, fee)
+        return Verdict.Allow(What.ONCHAIN, message, Effect(id, emptyMap(), emptyList(), feeSat = fee))
     }
 
     // ---- a round ----
@@ -281,7 +321,12 @@ object ArkPolicy {
         if (spentScript != standard) refuse("a leaf this output doesn't commit to")
         val round = decode(NotedRound.serializer(), note.material)
         val commitment = tx(round.commitmentTx, "commitment")
-        val effect = checkRound(context, round, commitment, note).effect
+        val checked = checkRound(context, round, commitment, note)
+        val effect = checked.effect
+
+        // Giving anything up is what comes after the tree is signed, and the daemon's own ordering isn't this device's to lean on: a
+        // commitment that confirms over a tree its owner can't exit is a batch the operator sweeps at expiry.
+        if (!checked.signed) refuse("a round whose tree nobody has shown to be signed")
 
         if (tx.txid == commitment.txid) {
             if (slot != GroupArkDerivation.Slot.BOARDING) refuse("a commitment input that isn't a boarding output")
@@ -328,11 +373,21 @@ object ArkPolicy {
         return Verdict.Allow(What.TREE, ByteVector32(digest.toByteArray()), checked.effect)
     }
 
-    /** What a round comes to: the path to each VTXO by tree key, as the raw transactions on it, and what signing for it means. */
-    private class CheckedRound(val paths: Map<String, Set<String>>, val effect: Effect)
+    /**
+     * What a round comes to: the path to each VTXO by tree key, as the raw transactions on it, whether every node on those paths is
+     * shown signed, and what signing for it means.
+     */
+    private class CheckedRound(val paths: Map<String, Set<String>>, val signed: Boolean, val effect: Effect)
 
-    /** The hash of a note's body: a round has one account, so a second is either a mistake or an attack. */
-    fun noteHash(note: ArkNote): String = Hex.encode(fr.acinq.bitcoin.Crypto.sha256(note.material.toString().encodeToByteArray()))
+    /**
+     * The hash of a round's account: it has one, so a second is either a mistake or an attack. The tree's signatures are left out, since
+     * they arrive partway through a round, and add nothing to the account of it.
+     */
+    fun noteHash(note: ArkNote): String {
+        val round = decode(NotedRound.serializer(), note.material)
+        val unsigned = round.copy(trees = round.trees.map { tree -> tree.copy(nodes = tree.nodes.map { it.copy(signature = null) }) })
+        return Hex.encode(fr.acinq.bitcoin.Crypto.sha256(CommonJson.encodeToString(NotedRound.serializer(), unsigned).encodeToByteArray()))
+    }
 
     /**
      * The round, again, as if the client's own validation hadn't happened, with the rules `VerifyVTXOPath`, `Tree.Verify` and
@@ -357,7 +412,7 @@ object ArkPolicy {
         val sweepRoot = ArkScripts.leafHash(ArkScripts.timeoutLeaf(key(round.sweepKey, "sweep key"), round.sweepDelay))
 
         if (round.trees.map { it.outputIndex }.toSet().size != round.trees.size) refuse("two trees hanging from one output")
-        class Node(val noted: NotedNode, val tx: Transaction, val cosigners: List<PublicKey>, val parent: TxId?)
+        class Node(val noted: NotedNode, val tx: Transaction, val cosigners: List<PublicKey>, val parent: TxId?, val outputKey: fr.acinq.bitcoin.XonlyPublicKey, val digest: ByteVector32)
         val nodes = HashMap<TxId, Node>()
         round.trees.forEach { tree ->
             val batch = commitment.txOut.getOrNull(tree.outputIndex) ?: refuse("a tree hanging from an output the commitment doesn't have")
@@ -368,8 +423,11 @@ object ArkPolicy {
             val byId = inTree.associateBy { it.second.txid }
             val spends = HashSet<OutPoint>()
             inTree.forEach { (noted, node) ->
-                val spent = node.txIn.singleOrNull()?.outPoint ?: refuse("a tree transaction with other than one input")
+                val input = node.txIn.singleOrNull() ?: refuse("a tree transaction with other than one input")
+                val spent = input.outPoint
                 if (!spends.add(spent)) refuse("two tree transactions spending one output")
+                // Nothing may hold an exit back past the batch's sweep: `Node.ToTx` writes these, and the sighash commits to them.
+                if (node.lockTime != 0L || input.sequence != 0xffffffffL) refuse("a tree transaction that can't be published straight away")
                 val fromBatch = spent == OutPoint(commitment, tree.outputIndex.toLong())
                 val prevout = if (fromBatch) batch else byId[spent.txid]?.second?.txOut?.getOrNull(spent.index.toInt()) ?: refuse("a tree transaction that hangs from nothing")
                 if (node.txOut.sumOf { it.amount.sat } != prevout.amount.sat) refuse("a tree transaction that doesn't keep the value it spends")
@@ -383,7 +441,7 @@ object ArkPolicy {
 
                 val digest = node.hashForSigningTaprootKeyPath(0, listOf(prevout), SigHash.SIGHASH_DEFAULT)
                 if (bytes(noted.digest, "digest") != ByteVector(digest.toByteArray())) refuse("a tree digest that isn't its transaction's")
-                nodes[node.txid] = Node(noted, node, cosigners, if (fromBatch) null else spent.txid)
+                nodes[node.txid] = Node(noted, node, cosigners, if (fromBatch) null else spent.txid, outputKey, digest)
             }
         }
 
@@ -393,6 +451,7 @@ object ArkPolicy {
         val leavesUsed = HashSet<TxId>()
         val paths = HashMap<String, Set<String>>()
         val credits = HashMap<String, Long>()
+        var signed = true
         var ownOut = 0L
         round.vtxos.forEach { vtxo ->
             val owner = key(vtxo.ownerKey, "owner key")
@@ -413,6 +472,8 @@ object ArkPolicy {
             while (at != null) {
                 if (signing !in at.cosigners) refuse("a tree transaction above a VTXO that its tree key isn't on")
                 path += at.noted.tx
+                val signature = at.noted.signature?.let { runCatching { fr.acinq.bitcoin.ByteVector64(it) }.getOrNull() }
+                if (signature == null || !fr.acinq.bitcoin.Crypto.verifySignatureSchnorr(at.digest, signature, at.outputKey)) signed = false
                 at = at.parent?.let { nodes[it] ?: refuse("a tree transaction that hangs from nothing") }
             }
             paths[signing.toString()] = path
@@ -451,6 +512,7 @@ object ArkPolicy {
         var into = forfeited
         outputsOf(round.prevOuts).forEach { prev ->
             if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.exitDelay)) into += prev.amount.sat
+            if (into > MAX_MONEY) refuse("a note with an impossible value")
         }
         val out = ownOut + leavesOut
         val fee = into - out
@@ -460,7 +522,8 @@ object ArkPolicy {
         context.capSat?.let { cap ->
             if (context.unspentSat - (context.pendingFromSat[id] ?: 0) - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
         }
-        return CheckedRound(paths, Effect(id, credits, forfeitedPoints, noteHash(note)))
+        checkFeeBudget(context, id, fee)
+        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee))
     }
 
     /** That a forfeit's connector comes from this commitment: the chain of transactions that makes the forfeit conditional. */
@@ -538,9 +601,34 @@ object ArkPolicy {
             checkpoints.any { (c, _) -> c.txid == tx.txid } -> {
                 if (spentScript != standard) refuse("a leaf this output doesn't commit to")
                 if (checkpoints.first { (c, _) -> c.txid == tx.txid }.second != prevOuts) refuse("a checkpoint with prevouts other than the transfer's")
+                checkCoSigned(context, transfer, ark, checkpoints.map { it.first })
                 Verdict.Allow(What.TRANSFER, message, effect)
             }
             else -> refuse("a transaction outside the transfer that was noted")
+        }
+    }
+
+    /**
+     * That the operator has signed every input of the Ark transaction. A checkpoint hands a VTXO over to something only the operator and
+     * its owner can spend together, or the operator alone once the delay has passed. So until the owner holds the operator's half, signing
+     * one gives the coin to the operator: it can publish the checkpoint, wait, and take it. The daemon checks this itself, which is no
+     * comfort when the daemon is the thing being checked, and a device keeps this signature in its [GroupArkChecked][com.machankura.dedun.compose.database.model.GroupArkChecked]
+     * row, so that the next operator can still complete the transfer.
+     */
+    private fun checkCoSigned(context: Context, transfer: NotedTransfer, ark: Transaction, checkpoints: List<Transaction>) {
+        val spent = ark.txIn.map { input -> checkpoints.first { OutPoint(it, 0) == input.outPoint } }
+        val prevOuts = spent.map { it.txOut[0] }
+        ark.txIn.indices.forEach { i ->
+            val noted = transfer.checkpoints.first { tx(it.tx, "checkpoint").txid == spent[i].txid }
+            val owner = context.keys.vtxoOwnerOf(bytes(noted.prevOuts.single().pkScript, "prevout"), context.operator, context.exitDelay)
+                ?: refuse("a checkpoint spending a VTXO this wallet doesn't own")
+            val leaf = ArkScripts.collabLeaf(owner, context.operator)
+            val digest = ark.hashForSigningTaprootScriptPath(i, prevOuts, SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
+            val cosigned = transfer.ark.sigs.filter { it.input == i }.any { sig ->
+                val signature = runCatching { fr.acinq.bitcoin.ByteVector64(sig.signature) }.getOrNull()
+                signature != null && fr.acinq.bitcoin.Crypto.verifySignatureSchnorr(digest, signature, context.operator.xOnly())
+            }
+            if (!cosigned) refuse("a checkpoint for an Ark transaction the operator hasn't co-signed")
         }
     }
 }
