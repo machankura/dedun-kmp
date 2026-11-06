@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "68f312faa442cf73855dc1b1299f8624",
+    "identityHash": "4d59ff3489ee191f46130580966c83bb",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -2317,6 +2317,37 @@
           "columnNames": [
             "wallet",
             "tx"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkPayment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `paymentHash` TEXT NOT NULL, `tx` TEXT NOT NULL, PRIMARY KEY(`wallet`, `paymentHash`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentHash",
+            "columnName": "paymentHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tx",
+            "columnName": "tx",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "paymentHash"
           ]
         }
       },
@@ -5991,7 +6022,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '68f312faa442cf73855dc1b1299f8624')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4d59ff3489ee191f46130580966c83bb')"
     ]
   }
 }

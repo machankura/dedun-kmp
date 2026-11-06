@@ -22,6 +22,7 @@ import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
+import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
@@ -166,6 +167,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkFloor::class,
         GroupArkMark::class,
         GroupArkFee::class,
+        GroupArkPayment::class,
         GroupArkRound::class,
         GroupArkTreeBinding::class,
         GroupArkChecked::class,

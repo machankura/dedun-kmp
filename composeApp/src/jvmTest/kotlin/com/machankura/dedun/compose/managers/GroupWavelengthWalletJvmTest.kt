@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.text.ProposedEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkAuth
@@ -15,7 +16,16 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollo
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.utils.Either
+import fr.acinq.lightning.CltvExpiryDelta
+import fr.acinq.lightning.Feature
+import fr.acinq.lightning.FeatureSupport
+import fr.acinq.lightning.Features
+import fr.acinq.lightning.Lightning.randomBytes32
+import fr.acinq.lightning.payment.Bolt11Invoice
+import fr.acinq.lightning.utils.msat
 import fr.acinq.secp256k1.Hex
 import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
@@ -170,6 +180,80 @@ class GroupWavelengthWalletJvmTest {
         } finally {
             mainnet.close()
         }
+    }
+
+    private fun invoice(amountMsat: Long?) = Bolt11Invoice.create(
+        fixture.chain, amountMsat?.msat, randomBytes32(), PrivateKey(randomBytes32()), Either.Left("the group's lunch"), CltvExpiryDelta(144),
+        Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory),
+    )
+
+    @Test
+    fun `a payment exists once a quorum has signed it, for the invoice it names`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        val pay = invoice(10_000_500)
+
+        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, 4_000_000_000)
+        assertEquals(emptyMap(), GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet), "proposed is not approved")
+        fixture.signSession(all, all[1], session.id)
+
+        all.forEach { d ->
+            val approved = GroupWavelengthPayments.approved(d.db, fixture.roomId, wallet, now = 3_999_999_999).getValue(pay.paymentHash)
+            assertEquals(10_001L + 1_000, approved.maxSat, "device ${d.index} holds it to the invoice, rounded up, and the fee")
+            assertEquals(400_000L, approved.maxRefundHeight)
+            assertEquals(emptyMap(), GroupWavelengthPayments.approved(d.db, fixture.roomId, wallet, now = 4_000_000_000), "and not once it has expired")
+        }
+    }
+
+    @Test
+    fun `an invoice with no amount can't be approved, and a label can't say another hash than its invoice`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        assertTrue(runCatching { GroupWavelengthPayments.propose(all[0].db, all[0].room, all[0].publicKey, wallet, invoice(null).write(), 1_000, 400_000, 4_000_000_000) }.isFailure)
+
+        val pay = invoice(10_000_000)
+        val good = GroupWavelengthPaymentEvent.template(GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, pay.write(), 1_000, 400_000, 4_000_000_000))
+        assertNotNull(GroupWavelengthPaymentEvent.read(good.tags))
+        val lying = good.tags.map { if (it[0] == "d") arrayOf("d", "${it[1].substringBeforeLast(":")}:${"77".repeat(32)}") else it }.toTypedArray()
+        assertNull(GroupWavelengthPaymentEvent.read(lying))
+    }
+
+    @Test
+    fun `a real signet invoice from the swap server is read, which the library can't, and only on signet`() {
+        val invoice = "lntbs50u1p4wugxspp5zh0y9lsme9hcpc7u6kg3n4ys869p09x2ulguasgh9djymnspnzcqdqcwpskjepqvfujqcfqvaex7atscqzpgxqrrssrzjq0205vahju52xdkpc2hkgdtns2grzu9stmedee8usaetmldc3t540e7pwtnnqdaptqqqqqqqqqqqqeqp8crzjqd55d6radn2xsvfsgrn3sh44dafls79az5qxz56ejft704js0hz40e7pwtnnqdaptqqqqqqqqqqqqeqp8crzjqg4eu39n4qynm9gjkc04lqa894trggq7l3yhrrhaxnewapgm8tagae7pwtnnqdaptqqqqqqqqqqqqeqp8csp5l8nr0jzdmvyq78elev4tkj2jj60gu2chxgac7pmyn7uy6k6g7utq9qyysgq6ch20zssxqqxqsfk34aec856l88q7096je97ll5xxue0vupywa6puen0slqvtaph9zr5t5sqqutzkc5qegw66prum65cx6aft8l7a3qq3lzhct"
+        val payment = GroupWavelengthPaymentEvent.Payment(Chain.Signet, 0, invoice, 500, 400_000, 4_000_000_000)
+        assertEquals(ByteVector32("15de42fe1bc96f80e3dcd59119d4903e8a1794cae7d1cec1172b644dce0198b0"), payment.paymentHash)
+        assertEquals(5_000L, payment.amountSat)
+        assertEquals(5_500L, payment.maxSat)
+        assertNull(payment.copy(chain = Chain.Regtest).paymentHash, "another chain's prefix isn't this invoice")
+        assertNull(payment.copy(invoice = invoice.dropLast(1) + "q").paymentHash, "nor is one with a bad checksum")
+    }
+
+    @Test
+    fun `this reads what the library reads, on a chain it knows`() {
+        listOf(10_000_500L, 1L, 2_100_000_000_000_000L).forEach { msat ->
+            val pay = invoice(msat)
+            val read = GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, pay.write(), 0, 0, 0)
+            assertEquals(pay.paymentHash, read.paymentHash)
+            assertEquals((msat + 999) / 1000, read.amountSat)
+        }
+    }
+
+    @Test
+    fun `a payment for another wallet or chain isn't this wallet's, even signed by the room`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        listOf(GroupWavelengthPaymentEvent.Payment(fixture.chain, 7, invoice(10_000_000).write(), 1_000, 400_000, 4_000_000_000)).forEachIndexed { i, payment ->
+            val template = GroupWavelengthPaymentEvent.template(payment)
+            fixture.fileSignedAsRoom(all, template.kind, template.tags, template.content, createdAt = 4_000_000_000 + i)
+        }
+        assertEquals(emptyMap(), GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet))
     }
 
     @Test

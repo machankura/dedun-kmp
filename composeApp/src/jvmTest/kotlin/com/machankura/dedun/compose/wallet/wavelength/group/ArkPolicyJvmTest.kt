@@ -51,6 +51,11 @@ class ArkPolicyJvmTest {
         @SerialName("oor_ark") val oorArk: ArkRequest,
         @SerialName("oor_checkpoint") val oorCheckpoint: ArkRequest,
         @SerialName("indexer_message") val indexerMessage: ArkRequest,
+        @SerialName("claim_ark") val claimArk: ArkRequest,
+        @SerialName("claim_checkpoint") val claimCheckpoint: ArkRequest,
+        @SerialName("send_ark") val sendArk: ArkRequest,
+        @SerialName("send_checkpoint") val sendCheckpoint: ArkRequest,
+        @SerialName("refund_ark") val refundArk: ArkRequest,
     )
 
     private val fixtures: Fixtures = CommonJson.decodeFromString(
@@ -85,9 +90,12 @@ class ArkPolicyJvmTest {
         minSweepDelay: Long = 0,
         recentFeesSat: Map<String, Long> = emptyMap(),
         maxRecentFeesSat: Long? = null,
+        approved: Map<ByteVector32, ArkPolicy.ApprovedPayment> = emptyMap(),
+        paidIn: Map<ByteVector32, String> = emptyMap(),
     ) = ArkPolicy.Context(
-        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised, emptySet(),
+        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised,
         capSat, unspentSat, pendingFromSat, reservedFor, notedRounds, treeKeyRounds, minSweepDelay, recentFeesSat, maxRecentFeesSat,
+        approvedPayments = approved, paidIn = paidIn,
     )
 
     private fun allowed(request: ArkRequest, what: ArkPolicy.What, context: ArkPolicy.Context = context(), session: PublicKey? = null) {
@@ -701,13 +709,227 @@ class ArkPolicyJvmTest {
     }
 
     @Test
-    fun `an acknowledgement is only for a payment this group asked for`() {
+    fun `an acknowledgement is in the swap key's name, whichever payment it's for, since only a claim moves money`() {
         val hash = ByteVector32("11".repeat(32))
         val swapKey = keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0)
-        val message = Hex.encode(swapKey.value.toByteArray() + hash.toByteArray() + ByteArray(8) + ByteArray(34))
-        val ack = fixtures.indexerMessage.copy(family = 202, index = 0, tag = "out-swap-htlc-ack-v1", message = message)
-        refused(ack, "nobody here asked for")
-        val asked = ArkPolicy.Context(keys, operator, fixtures.exitDelay, 2_000, 5_000, { false }, { false }, emptyMap(), issuedInvoices = setOf(hash))
-        assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(asked, ack))
+        fun ack(key: ByteArray, tail: Int = 8 + 34) = fixtures.indexerMessage.copy(family = 202, index = 0, tag = "out-swap-htlc-ack-v1", message = Hex.encode(key + hash.toByteArray() + ByteArray(tail)))
+        assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), ack(swapKey.value.toByteArray())))
+        refused(ack(stranger.value.toByteArray()), "in another key's name")
+        refused(ack(swapKey.value.toByteArray(), 2), "doesn't parse")
+        refused(ack(swapKey.value.toByteArray()).copy(index = 1), "a tag this device doesn't sign")
+    }
+
+    // ---- a Lightning payment coming in ----
+
+    @Test
+    fun `the swap key can read its own mailbox, and that tag signs nothing else`() {
+        val swapKey = keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0)
+        fun auth(sender: ByteArray, recipient: String = "a swap's mailbox", family: Int = 202, index: Long = 0) =
+            fixtures.indexerMessage.copy(family = family, index = index, tag = "mailbox-auth", message = Hex.encode(sender + recipient.encodeToByteArray()))
+        assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), auth(swapKey.value.toByteArray())))
+        refused(auth(stranger.value.toByteArray()), "in another key's name")
+        refused(auth(swapKey.value.toByteArray(), ""), "doesn't parse")
+        refused(auth(swapKey.value.toByteArray(), index = 1), "a tag this device doesn't sign")
+        refused(auth(keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 0).value.toByteArray(), family = 44), "a tag this device doesn't sign")
+    }
+
+    @Test
+    fun `a vHTLC claim into the group's own key is allowed, in the order a real one signs, with nothing known of the invoice`() {
+        val ark = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(known = emptyMap()), fixtures.claimArk))
+        assertEquals(ArkPolicy.What.TRANSFER, ark.what)
+        assertEquals(fixtures.claimArk.digest, ark.message.toHex(), "the digest this device computed is the daemon's")
+        allowed(fixtures.claimCheckpoint, ArkPolicy.What.TRANSFER, context(known = emptyMap()))
+        assertEquals(30_000L, ark.effect!!.credits.values.single(), "and the new VTXO is pending")
+        assertEquals(emptyList(), ark.effect!!.reserves, "and no coin of the group's is given up")
+    }
+
+    /** A claim whose transfer is changed, with its digest no longer claimed. */
+    private fun ArkRequest.claimWith(change: (NotedTransfer) -> NotedTransfer) = withTransfer(change).copy(digest = null)
+
+    private fun arkPaying(script: ByteVector, value: Long = 30_000): (NotedTransfer) -> NotedTransfer = { t ->
+        val ark = Transaction.read(t.ark.tx)
+        t.copy(ark = t.ark.copy(tx = hex(ark.copy(txOut = listOf(TxOut(Satoshi(value), script)) + ark.txOut.drop(1)))))
+    }
+
+    @Test
+    fun `a claim paying anyone but the group's own keys is refused, from either transaction`() {
+        refused(fixtures.claimCheckpoint.claimWith(arkPaying(thief)), "somewhere other than the group's own keys")
+        val tx = Transaction.read(fixtures.claimArk.tx!!)
+        val stolen = tx.copy(txOut = listOf(TxOut(tx.txOut[0].amount, thief)) + tx.txOut.drop(1))
+        refused(fixtures.claimArk.copy(tx = hex(stolen), digest = null).claimWith { it.copy(ark = it.ark.copy(tx = hex(stolen))) }, "somewhere other than the group's own keys")
+        // An anchor is anyone's, so it holds nothing here either.
+        refused(fixtures.claimCheckpoint.claimWith(arkPaying(anchor)), "somewhere other than the group's own keys")
+    }
+
+    @Test
+    fun `a claim that loses or invents value is refused, and so is any with an impossible one`() {
+        val own = Transaction.read(fixtures.claimArk.tx!!).txOut[0].publicKeyScript
+        refused(fixtures.claimCheckpoint.claimWith(arkPaying(own, 29_999)), "doesn't keep what it claims")
+        refused(fixtures.claimCheckpoint.claimWith(arkPaying(own, 30_001)), "doesn't keep what it claims")
+        refused(fixtures.claimCheckpoint.claimWith(arkPaying(own, -1)), "impossible value")
+    }
+
+    @Test
+    fun `a claim leaf for anyone else, or on any key but the swap key, is refused`() {
+        val leaf = Hex.decode(fixtures.claimArk.leafScript!!)
+        val swapKeyAt = 6 + 32 + 1 + 1
+        val others = leaf.copyOf().also { stranger.xOnly().value.toByteArray().copyInto(it, swapKeyAt) }
+        refused(fixtures.claimArk.copy(leafScript = Hex.encode(others), digest = null), "doesn't recognise as this key's")
+        refused(fixtures.claimArk.copy(index = 1, digest = null), "doesn't recognise as this key's")
+        refused(fixtures.claimArk.copy(family = 44, index = 5, digest = null), "doesn't recognise as this key's")
+        val truncated = leaf.copyOf(leaf.size - 1)
+        refused(fixtures.claimArk.copy(leafScript = Hex.encode(truncated), digest = null), "doesn't recognise as this key's")
+    }
+
+    @Test
+    fun `a checkpoint for a claim isn't signed until the operator has co-signed, and pays only its own claim leaf`() {
+        refused(fixtures.claimCheckpoint.withTransfer { it.copy(ark = it.ark.copy(sigs = emptyList())) }, "the operator hasn't co-signed")
+        refused(fixtures.claimCheckpoint.withTransfer { it.copy(ark = it.ark.copy(sigs = listOf(NotedSig(0, "ab".repeat(64))))) }, "the operator hasn't co-signed")
+        val checkpoint = Transaction.read(fixtures.claimCheckpoint.tx!!)
+        val stolen = checkpoint.copy(txOut = listOf(TxOut(checkpoint.txOut[0].amount, thief)) + checkpoint.txOut.drop(1))
+        refused(
+            fixtures.claimCheckpoint.copy(tx = hex(stolen), digest = null).withTransfer { t ->
+                val ark = Transaction.read(t.ark.tx)
+                t.copy(ark = t.ark.copy(tx = hex(ark.copy(txIn = ark.txIn.map { it.copy(outPoint = OutPoint(stolen, 0)) }))), checkpoints = t.checkpoints.map { it.copy(tx = hex(stolen)) })
+            },
+            "doesn't pay its own claim leaf",
+        )
+    }
+
+    @Test
+    fun `a claim nothing explains, with two checkpoints, or spending something else, is refused`() {
+        refused(fixtures.claimArk.copy(note = null), "a claim nothing explains")
+        refused(fixtures.claimArk.withTransfer { it.copy(checkpoints = it.checkpoints + it.checkpoints) }, "other than one checkpoint")
+        refused(
+            fixtures.claimArk.withTransfer { t ->
+                val ark = Transaction.read(t.ark.tx)
+                t.copy(ark = t.ark.copy(tx = hex(ark.copy(txIn = ark.txIn + TxIn(OutPoint(TxId("dd".repeat(32)), 0), 0)))))
+            },
+            "something other than its checkpoints",
+        )
+        refused(fixtures.claimCheckpoint.copy(tx = fixtures.exitSweep.tx, prevOuts = fixtures.exitSweep.prevOuts, digest = null), "outside the claim")
+    }
+
+    @Test
+    fun `a claim over the cap is refused`() {
+        refused(fixtures.claimArk, "over its cap", context(known = emptyMap(), capSat = 39_999))
+        allowed(fixtures.claimArk, ArkPolicy.What.TRANSFER, context(known = emptyMap(), capSat = 70_000))
+    }
+
+    @Test
+    fun `every other vHTLC leaf is still refused, since a refund or a payment out wants rules of its own`() {
+        val leaf = Hex.decode(fixtures.claimArk.leafScript!!)
+        val refundShaped = leaf.copyOfRange(0, 6 + 32 + 1 - 1) + 0x87.toByte() + leaf.copyOfRange(6 + 32 + 1, leaf.size)
+        refused(fixtures.claimArk.copy(leafScript = Hex.encode(refundShaped), digest = null), "doesn't recognise as this key's")
+    }
+
+    // ---- a Lightning payment going out ----
+
+    private val notedSend: NotedTransfer = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.sendCheckpoint.note!!.material)
+    private val sendHash = ByteVector32(notedSend.vhtlcs.single().paymentHash)
+    private val sendArkId = Transaction.read(notedSend.ark.tx).txid.toString()
+
+    private fun approving(maxSat: Long = 15_000, maxRefundHeight: Long = 400_000, paidIn: Map<ByteVector32, String> = emptyMap()) =
+        context(approved = mapOf(sendHash to ArkPolicy.ApprovedPayment(maxSat, maxRefundHeight)), paidIn = paidIn)
+
+    /** The send, with its vHTLC changed and its Ark output paying exactly what the change makes, so the script always rebuilds. */
+    private fun ArkRequest.sendingInstead(change: (NotedVhtlc) -> NotedVhtlc): ArkRequest = withTransfer { t ->
+        val noted = change(t.vhtlcs.single())
+        val vhtlc = ArkScripts.Vhtlc(
+            PublicKey.fromHex(noted.sender), PublicKey.fromHex(noted.receiver), PublicKey.fromHex(noted.server), ByteVector32(noted.paymentHash),
+            noted.refundLocktime, noted.claimDelay, noted.refundDelay, noted.refundWithoutReceiverDelay,
+        )
+        val ark = Transaction.read(t.ark.tx)
+        val out = TxOut(ark.txOut[0].amount, ArkScripts.vhtlcScript(vhtlc))
+        t.copy(ark = t.ark.copy(tx = hex(ark.copy(txOut = listOf(out) + ark.txOut.drop(1)))), vhtlcs = listOf(noted))
+    }.copy(digest = null)
+
+    @Test
+    fun `this device rebuilds the daemon's vHTLC, all six leaves of it, to the byte`() {
+        val noted = notedSend.vhtlcs.single()
+        val rebuilt = ArkScripts.vhtlcScript(
+            ArkScripts.Vhtlc(
+                PublicKey.fromHex(noted.sender), PublicKey.fromHex(noted.receiver), PublicKey.fromHex(noted.server), ByteVector32(noted.paymentHash),
+                noted.refundLocktime, noted.claimDelay, noted.refundDelay, noted.refundWithoutReceiverDelay,
+            ),
+        )
+        assertEquals(Transaction.read(notedSend.ark.tx).txOut[0].publicKeyScript, rebuilt)
+    }
+
+    @Test
+    fun `a payment the group approved goes, from both transactions, in the order a real one signs`() {
+        val ark = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(approving(), fixtures.sendArk))
+        assertEquals(ArkPolicy.What.TRANSFER, ark.what)
+        assertEquals(fixtures.sendArk.digest, ark.message.toHex(), "the digest this device computed is the daemon's")
+        assertEquals(listOf(sendHash), ark.effect!!.payments, "and the payment is remembered")
+        assertEquals(listOf(25_000L), ark.effect!!.credits.values.toList(), "and only the change is the group's")
+        assertEquals(listOf(spent), ark.effect!!.reserves)
+        allowed(fixtures.sendCheckpoint, ArkPolicy.What.TRANSFER, approving())
+    }
+
+    @Test
+    fun `a payment nobody approved is refused, however well it's made`() {
+        refused(fixtures.sendArk, "the group hasn't approved")
+        refused(fixtures.sendCheckpoint, "the group hasn't approved")
+        val other = context(approved = mapOf(ByteVector32("77".repeat(32)) to ArkPolicy.ApprovedPayment(1_000_000, 400_000)))
+        refused(fixtures.sendArk, "the group hasn't approved", other)
+    }
+
+    @Test
+    fun `a payment over what the group approved is refused`() {
+        refused(fixtures.sendArk, "over the 14999", approving(maxSat = 14_999))
+        allowed(fixtures.sendArk, ArkPolicy.What.TRANSFER, approving(maxSat = 15_000))
+    }
+
+    @Test
+    fun `a payment goes once, and asking again for the same transfer isn't paying again`() {
+        refused(fixtures.sendArk, "already made in another transfer", approving(paidIn = mapOf(sendHash to "another")))
+        allowed(fixtures.sendArk, ArkPolicy.What.TRANSFER, approving(paidIn = mapOf(sendHash to sendArkId)))
+    }
+
+    @Test
+    fun `a vHTLC the group couldn't get back, or that ties its money up too long, is refused`() {
+        val someone = stranger.toString()
+        refused(fixtures.sendArk.sendingInstead { it.copy(sender = someone) }, "can't refund itself", approving())
+        refused(fixtures.sendArk.sendingInstead { it.copy(server = someone) }, "another operator", approving())
+        refused(fixtures.sendArk.sendingInstead { it.copy(refundLocktime = 400_001) }, "longer than the group approved", approving())
+        refused(fixtures.sendArk.sendingInstead { it.copy(refundDelay = 52_561) }, "an unreasonable delay", approving())
+        refused(fixtures.sendArk.sendingInstead { it.copy(claimDelay = 0) }, "an unreasonable delay", approving())
+    }
+
+    @Test
+    fun `a script the note doesn't rebuild pays nobody, which is where a hidden leaf would be`() {
+        // The note describes a good vHTLC, and the output pays something else that the note doesn't make.
+        refused(
+            fixtures.sendArk.withTransfer { t ->
+                val ark = Transaction.read(t.ark.tx)
+                t.copy(ark = t.ark.copy(tx = hex(ark.copy(txOut = listOf(TxOut(ark.txOut[0].amount, thief)) + ark.txOut.drop(1)))))
+            },
+            "a transfer to a script nobody authorised", approving(),
+        )
+        // An output it does make, under a hash nobody approved.
+        refused(fixtures.sendArk.sendingInstead { it.copy(paymentHash = "77".repeat(32)) }, "the group hasn't approved", approving())
+    }
+
+    @Test
+    fun `a checkpoint for a payment still wants the operator's co-signature`() {
+        refused(fixtures.sendCheckpoint.withTransfer { it.copy(ark = it.ark.copy(sigs = emptyList())) }, "the operator hasn't co-signed", approving())
+    }
+
+    @Test
+    fun `a failed payment's refund comes home, and goes nowhere else`() {
+        allowed(fixtures.refundArk, ArkPolicy.What.TRANSFER, context(known = emptyMap()))
+        val refund = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.refundArk.note!!.material)
+        val ark = Transaction.read(refund.ark.tx)
+        fun paying(script: ByteVector) = fixtures.refundArk.withTransfer { t ->
+            t.copy(ark = t.ark.copy(tx = hex(ark.copy(txOut = listOf(TxOut(ark.txOut[0].amount, script)) + ark.txOut.drop(1)))))
+        }.copy(digest = null)
+        refused(paying(thief), "somewhere other than the group's own keys")
+        // The same leaf with another sender is someone else's refund.
+        val leaf = Hex.decode(fixtures.refundArk.leafScript!!)
+        val someoneElses = leaf.copyOf().also { stranger.xOnly().value.toByteArray().copyInto(it, 1) }
+        refused(fixtures.refundArk.copy(leafScript = Hex.encode(someoneElses), digest = null), "doesn't recognise as this key's")
+        // And it isn't a way for any other key to sign one.
+        refused(fixtures.refundArk.copy(index = 1, digest = null), "doesn't recognise as this key's")
     }
 }

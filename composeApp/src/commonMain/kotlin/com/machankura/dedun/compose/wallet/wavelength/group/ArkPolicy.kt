@@ -50,6 +50,8 @@ object ArkPolicy {
         val noteHash: String? = null,
         /** What it costs in fees, against the group's budget for them. */
         val feeSat: Long = 0,
+        /** The Lightning payments it makes. */
+        val payments: List<ByteVector32> = emptyList(),
     )
 
     sealed class Verdict {
@@ -72,8 +74,6 @@ object ArkPolicy {
         val knownVtxos: Map<String, Long>,
         /** What the group's authorisations let leave, by script, in sats. */
         val authorisedScripts: Map<ByteVector, Long> = emptyMap(),
-        /** The payment hashes this group issued invoices for. */
-        val issuedInvoices: Set<ByteVector32> = emptySet(),
         /** The most the group's unspent coins may come to, or null for no cap, and what they come to now. */
         val capSat: Long? = null,
         val unspentSat: Long = 0,
@@ -92,11 +92,19 @@ object ArkPolicy {
         val maxRecentFeesSat: Long? = null,
         /** How long a boarding output waits to exit, which an operator sets apart from a VTXO's. */
         val boardingDelay: Long = exitDelay,
+        /** The Lightning payments a quorum of the group has approved and that haven't expired, by payment hash. */
+        val approvedPayments: Map<ByteVector32, ApprovedPayment> = emptyMap(),
+        /** The Ark transaction this device has already paid each hash in. A payment goes once. */
+        val paidIn: Map<ByteVector32, String> = emptyMap(),
     )
+
+    /** What the group approved: at most [maxSat], and no vHTLC locked for the group past [maxRefundHeight]. */
+    data class ApprovedPayment(val maxSat: Long, val maxRefundHeight: Long)
 
     private const val TAG_INDEXER = "wavelength/indexer/v1"
     private const val TAG_SWAP_AUTH = "swap-credit-account-auth-v1"
     private const val TAG_SWAP_ACK = "out-swap-htlc-ack-v1"
+    private const val TAG_MAILBOX_AUTH = "mailbox-auth"
 
     /** The daemon's `MaxReasonableDelay`: about a year, in blocks. */
     private const val MAX_REASONABLE_DELAY = 52_560L
@@ -185,12 +193,18 @@ object ArkPolicy {
                 if (!raw.copyOfRange(0, 33).contentEquals(context.keys.key(slot, 0, 0).value.toByteArray())) refuse("an authorisation in another key's name")
                 Verdict.Allow(What.SWAP_AUTH, digest)
             }
+            tag == TAG_MAILBOX_AUTH && swapKey -> {
+                // sender key || recipient: leave to read a swap's mailbox, which is the swap key's and nobody else's to give.
+                val raw = message.toByteArray()
+                if (raw.size <= 33) refuse("a mailbox authorisation that doesn't parse")
+                if (!raw.copyOfRange(0, 33).contentEquals(context.keys.key(slot, 0, 0).value.toByteArray())) refuse("a mailbox authorisation in another key's name")
+                Verdict.Allow(What.PROOF, digest)
+            }
             tag == TAG_SWAP_ACK && swapKey -> {
-                // receiver key || payment hash || amount || vHTLC script: an acknowledgement for a payment we asked for.
+                // receiver key || payment hash || amount || vHTLC script. It tells the swap server this wallet has seen a payment to it,
+                // which costs nothing: only the claim moves money, and that pays only the group. Whose payment it was is Phase 10's.
                 val raw = message.toByteArray()
                 if (raw.size < 33 + 32 + 8) refuse("an acknowledgement that doesn't parse")
-                val paymentHash = ByteVector32(raw.copyOfRange(33, 65))
-                if (paymentHash !in context.issuedInvoices) refuse("an acknowledgement for a payment nobody here asked for")
                 if (!raw.copyOfRange(0, 33).contentEquals(context.keys.key(slot, 0, 0).value.toByteArray())) refuse("an acknowledgement in another key's name")
                 Verdict.Allow(What.SWAP_ACK, digest)
             }
@@ -237,7 +251,12 @@ object ArkPolicy {
                 ArkNote.OOR -> transferInput(context, request, note, tx, prevOuts, spentScript, standard, leaf, message)
                 else -> refuse("a collaborative spend nothing explains")
             }
-            else -> refuse("a leaf this device doesn't recognise as this key's")
+            else -> {
+                val swapKey = slot == GroupArkDerivation.Slot.OOR_RECEIVE && request.index == 0L
+                val back = ArkScripts.claimHash(leaf, own) != null || ArkScripts.isRefundLeaf(leaf, own)
+                if (!swapKey || !back) refuse("a leaf this device doesn't recognise as this key's")
+                claimInput(context, request, note, tx, prevOuts, spentScript, leaf, message)
+            }
         }
     }
 
@@ -580,11 +599,18 @@ object ArkPolicy {
 
         var budget = context.authorisedScripts
         val credits = HashMap<String, Long>()
+        val payments = ArrayList<ByteVector32>()
         var out = 0L
         ark.txOut.forEachIndexed { i, output ->
             val script = output.publicKeyScript
             if (script == ANCHOR && output.amount == Satoshi(0)) return@forEachIndexed
+            val vhtlc = transfer.vhtlcs.map { vhtlcOf(it) }.firstOrNull { ArkScripts.vhtlcScript(it) == script }
             when {
+                vhtlc != null -> {
+                    checkPayment(context, vhtlc, output.amount.sat, arkId)
+                    if (vhtlc.paymentHash in payments) refuse("one Lightning payment paid twice in a transfer")
+                    payments += vhtlc.paymentHash
+                }
                 context.keys.vtxoOwnerOf(script, context.operator, context.exitDelay) != null -> credits["$arkId:$i"] = output.amount.sat
                 (budget[script] ?: -1L) >= output.amount.sat -> budget = budget + (script to budget.getValue(script) - output.amount.sat)
                 else -> refuse("a transfer to a script nobody authorised")
@@ -592,7 +618,7 @@ object ArkPolicy {
             out += output.amount.sat
         }
         if (out != into) refuse("a transfer that doesn't move exactly what it spends")
-        val effect = Effect(arkId, credits, spent.toList())
+        val effect = Effect(arkId, credits, spent.toList(), payments = payments)
 
         return when {
             tx.txid == ark.txid -> {
@@ -611,6 +637,82 @@ object ArkPolicy {
         }
     }
 
+    /** A vHTLC from what the operator noted about it, in keys this device has checked are keys. */
+    private fun vhtlcOf(noted: NotedVhtlc): ArkScripts.Vhtlc = ArkScripts.Vhtlc(
+        sender = key(noted.sender, "vHTLC key"),
+        receiver = key(noted.receiver, "vHTLC key"),
+        server = key(noted.server, "vHTLC key"),
+        paymentHash = ByteVector32(bytes(noted.paymentHash, "payment hash").toByteArray()),
+        refundLocktime = noted.refundLocktime,
+        claimDelay = noted.claimDelay,
+        refundDelay = noted.refundDelay,
+        refundWithoutReceiverDelay = noted.refundWithoutReceiverDelay,
+    )
+
+    /**
+     * That a vHTLC is a payment the group approved. The script has already been rebuilt from these, so there is no leaf anybody hasn't
+     * read. What matters then: the group can get it back, by its own swap key and this operator; only a hash a quorum approved, up to what
+     * they approved, once; and nothing that ties the money up for longer than they agreed. Who the receiver is, is the proposer's word,
+     * as with the group's Lightning wallet: an invoice names a payee, and members approved that invoice.
+     */
+    private fun checkPayment(context: Context, vhtlc: ArkScripts.Vhtlc, amountSat: Long, arkId: String) {
+        val approved = context.approvedPayments[vhtlc.paymentHash] ?: refuse("a Lightning payment the group hasn't approved")
+        if (amountSat > approved.maxSat) refuse("a Lightning payment of $amountSat sats, over the ${approved.maxSat} the group approved")
+        context.paidIn[vhtlc.paymentHash]?.let { if (it != arkId) refuse("a Lightning payment already made in another transfer") }
+        if (vhtlc.sender != context.keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0)) refuse("a vHTLC the group can't refund itself")
+        if (vhtlc.server != context.operator) refuse("a vHTLC under another operator than the group's")
+        if (vhtlc.refundLocktime !in 1..approved.maxRefundHeight) refuse("a vHTLC locked for longer than the group approved")
+        if (listOf(vhtlc.claimDelay, vhtlc.refundDelay, vhtlc.refundWithoutReceiverDelay).any { it !in 1..MAX_REASONABLE_DELAY }) refuse("a vHTLC with an unreasonable delay")
+    }
+
+    /**
+     * A vHTLC coming home: a Lightning payment in, claimed by the group's swap key, or one of its own payments that failed, refunded.
+     * Into a VTXO of the group's own is the only thing either may do, and it is safe without knowing anything else about the vHTLC,
+     * including who issued the invoice, because a signature commits to where the money goes and this is only ever a signature on a
+     * transaction paying the group. BIP-341 holds it to the leaf and the prevout, so a leaf the output doesn't commit to signs nothing
+     * that spends.
+     */
+    private fun claimInput(context: Context, request: ArkRequest, note: ArkNote?, tx: Transaction, prevOuts: List<TxOut>, spentScript: ByteVector, leaf: ByteVector, message: ByteVector32): Verdict {
+        if (note?.kind != ArkNote.OOR) refuse("a claim nothing explains")
+        val transfer = decode(NotedTransfer.serializer(), note.material)
+        val ark = tx(transfer.ark.tx, "Ark transaction")
+        val noted = transfer.checkpoints.singleOrNull() ?: refuse("a claim with other than one checkpoint")
+        val checkpoint = tx(noted.tx, "checkpoint")
+        val input = outputsOf(noted.prevOuts).singleOrNull() ?: refuse("a checkpoint with other than one input")
+        if (checkpoint.txIn.size != 1) refuse("a checkpoint with other than one input")
+        if (ark.txIn.size != 1 || ark.txIn[0].outPoint != OutPoint(checkpoint, 0)) refuse("an Ark transaction spending something other than its checkpoints")
+
+        val expected = ArkScripts.checkpointScript(context.operator, context.exitDelay, leaf)
+        if (checkpoint.txOut.size != 2 || checkpoint.txOut[1] != TxOut(Satoshi(0), ANCHOR)) refuse("a checkpoint in any shape but output then anchor")
+        if (checkpoint.txOut[0] != TxOut(input.amount, expected)) refuse("a checkpoint that doesn't pay its own claim leaf")
+
+        val arkId = ark.txid.toString()
+        val credits = HashMap<String, Long>()
+        var out = 0L
+        ark.txOut.forEachIndexed { i, output ->
+            if (output.publicKeyScript == ANCHOR && output.amount == Satoshi(0)) return@forEachIndexed
+            if (context.keys.vtxoOwnerOf(output.publicKeyScript, context.operator, context.exitDelay) == null) refuse("a claim that pays somewhere other than the group's own keys")
+            credits["$arkId:$i"] = output.amount.sat
+            out += output.amount.sat
+        }
+        if (out != input.amount.sat) refuse("a claim that doesn't keep what it claims")
+        context.capSat?.let { cap -> if (context.unspentSat - (context.pendingFromSat[arkId] ?: 0) + out > cap) refuse("a claim taking the wallet over its cap") }
+        val effect = Effect(arkId, credits, emptyList())
+
+        return when {
+            tx.txid == ark.txid -> {
+                if (request.inputIndex != 0 || spentScript != expected) refuse("an Ark input that misstates its checkpoint")
+                Verdict.Allow(What.TRANSFER, message, effect)
+            }
+            tx.txid == checkpoint.txid -> {
+                if (outputsOf(noted.prevOuts) != prevOuts || request.inputIndex != 0) refuse("a checkpoint with prevouts other than the transfer's")
+                checkLeafCoSigned(context, transfer, ark, listOf(expected to leaf))
+                Verdict.Allow(What.TRANSFER, message, effect)
+            }
+            else -> refuse("a transaction outside the claim that was noted")
+        }
+    }
+
     /**
      * That the operator has signed every input of the Ark transaction. A checkpoint hands a VTXO over to something only the operator and
      * its owner can spend together, or the operator alone once the delay has passed. So until the owner holds the operator's half, signing
@@ -620,12 +722,20 @@ object ArkPolicy {
      */
     private fun checkCoSigned(context: Context, transfer: NotedTransfer, ark: Transaction, checkpoints: List<Transaction>) {
         val spent = ark.txIn.map { input -> checkpoints.first { OutPoint(it, 0) == input.outPoint } }
-        val prevOuts = spent.map { it.txOut[0] }
-        ark.txIn.indices.forEach { i ->
-            val noted = transfer.checkpoints.first { tx(it.tx, "checkpoint").txid == spent[i].txid }
+        checkLeafCoSigned(context, transfer, ark, spent.map { checkpoint ->
+            val noted = transfer.checkpoints.first { tx(it.tx, "checkpoint").txid == checkpoint.txid }
             val owner = context.keys.vtxoOwnerOf(bytes(noted.prevOuts.single().pkScript, "prevout"), context.operator, context.exitDelay)
                 ?: refuse("a checkpoint spending a VTXO this wallet doesn't own")
-            val leaf = ArkScripts.collabLeaf(owner, context.operator)
+            checkpoint.txOut[0].publicKeyScript to ArkScripts.collabLeaf(owner, context.operator)
+        })
+    }
+
+    /** [inputs] are each Ark input's checkpoint script and the leaf that spends it. */
+    private fun checkLeafCoSigned(context: Context, transfer: NotedTransfer, ark: Transaction, inputs: List<Pair<ByteVector, ByteVector>>) {
+        val amounts = outputsOf(transfer.ark.prevOuts).map { it.amount }
+        if (amounts.size != inputs.size) refuse("an Ark transaction without every prevout")
+        val prevOuts = inputs.mapIndexed { i, (script, _) -> TxOut(amounts[i], script) }
+        inputs.forEachIndexed { i, (_, leaf) ->
             val digest = ark.hashForSigningTaprootScriptPath(i, prevOuts, SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
             val cosigned = transfer.ark.sigs.filter { it.input == i }.any { sig ->
                 val signature = runCatching { fr.acinq.bitcoin.ByteVector64(sig.signature) }.getOrNull()

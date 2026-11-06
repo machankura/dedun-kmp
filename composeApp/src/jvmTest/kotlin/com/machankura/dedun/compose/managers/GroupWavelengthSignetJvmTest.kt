@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkFloor
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.network.serialization.CommonJson
@@ -159,6 +160,11 @@ class GroupWavelengthSignetJvmTest {
         val floor = labels.takeIf { it.exists() }?.readText()?.trim()?.toLong()?.plus(LABEL_MARGIN) ?: 0L
         all.forEach { it.db.groupArkDao().upsertFloor(GroupArkFloor(key, floor, 0)) }
         say("plain labels from $floor")
+        // What the devices hold, for the same reason: real devices keep it on disk and these are in memory.
+        File(dir, "ledger.txt").takeIf { it.exists() }?.readLines()?.filter { it.isNotBlank() }?.forEach { line ->
+            val (outpoint, amount) = line.split(" ")
+            all.forEach { it.db.groupArkDao().upsertVtxo(GroupArkVtxo(key, outpoint, amount.toLong(), settled = true)) }
+        }
 
         val pump = launch(Dispatchers.Default) {
             while (isActive) {
@@ -201,6 +207,7 @@ class GroupWavelengthSignetJvmTest {
 
         // Until told to stop: keeps round one topped up, files what has been seen to settle, and says what the devices refuse or know.
         val settled = HashSet<String>()
+        val approvals = HashSet<String>()
         val refused = HashSet<String>()
         var ledger = ""
         while (!File(dir, "stop").exists()) {
@@ -211,6 +218,14 @@ class GroupWavelengthSignetJvmTest {
                 transport.provision(plainTo, 7)
                 say("provisioned to $plainTo")
             }
+            File(dir, "authorise.txt").takeIf { it.exists() }?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() && approvals.add(it) }?.forEach { line ->
+                val (invoice, maxFee, maxRefund) = line.split(" ")
+                runCatching {
+                    val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice, maxFee.toLong(), maxRefund.toLong(), Clock.System.now().epochSeconds + 3600)
+                    fixture.signSession(all, all[1], session.id)
+                    say("approved a payment: ${GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).size} approved now")
+                }.onFailure { say("couldn't approve a payment: ${it.message}") }
+            }
             File(dir, "settle.txt").takeIf { it.exists() }?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() && settled.add(it) }?.forEach { txid ->
                 all.forEach { GroupArkCoSigner.settled(it.db, key, txid) }
                 say("settled $txid")
@@ -219,6 +234,7 @@ class GroupWavelengthSignetJvmTest {
                 fixture.lines(d, ChatMessage.TYPE_LIGHTNING_REFUSED).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
                 fixture.lines(d, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
             }
+            File(dir, "ledger.txt").writeText(all[0].db.groupArkDao().vtxos(key).filter { it.settled && !it.spent }.joinToString("\n") { "${it.outpoint} ${it.amountSat}" })
             val now = all.joinToString(" | ") { d -> runBlocking { d.db.groupArkDao().vtxos(key) }.joinToString { "${it.outpoint.take(12)} ${it.amountSat} settled=${it.settled} spent=${it.spent} by=${it.reservedBy?.take(12)}" } }
             if (now != ledger) {
                 ledger = now

@@ -9,6 +9,7 @@ import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
+import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
@@ -36,6 +37,12 @@ interface GroupArkDao {
 
     @Query("UPDATE GroupArkVtxo SET spent = 1 WHERE wallet = :wallet AND reservedBy = :by")
     suspend fun spendReservedBy(wallet: String, by: String)
+
+    @Upsert
+    suspend fun upsertPayment(row: GroupArkPayment)
+
+    @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
+    suspend fun payments(wallet: String): List<GroupArkPayment>
 
     @Upsert
     suspend fun upsertFee(row: GroupArkFee)

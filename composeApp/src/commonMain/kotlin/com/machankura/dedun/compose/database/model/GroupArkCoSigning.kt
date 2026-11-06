@@ -35,6 +35,10 @@ data class GroupArkVtxo(
     val spent: Boolean = false,
 )
 
+/** The transfer this device signed a Lightning payment into. A payment goes once, whatever the daemon asks. */
+@Entity(primaryKeys = ["wallet", "paymentHash"])
+data class GroupArkPayment(val wallet: String, val paymentHash: HexKey, val tx: String)
+
 /** A fee this device has agreed to, on what, when and in which term, against the group's budget for them. */
 @Entity(primaryKeys = ["wallet", "tx"])
 data class GroupArkFee(val wallet: String, val tx: String, val feeSat: Long, val term: Long, val atEpochSeconds: Long)

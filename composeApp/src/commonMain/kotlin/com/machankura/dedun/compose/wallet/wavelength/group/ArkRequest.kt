@@ -131,7 +131,20 @@ data class NotedSig(val input: Int, val signature: String)
 
 /** `oor.notedPackage`: a transfer's Ark transaction and the checkpoints that fund it. */
 @Serializable
-data class NotedTransfer(val ark: NotedTx, val checkpoints: List<NotedTx>)
+data class NotedTransfer(val ark: NotedTx, val checkpoints: List<NotedTx>, val vhtlcs: List<NotedVhtlc> = emptyList())
+
+/** What the operator says one of a transfer's outputs is. A device rebuilds the script from these and only then believes it. */
+@Serializable
+data class NotedVhtlc(
+    val sender: String,
+    val receiver: String,
+    val server: String,
+    @SerialName("payment_hash") val paymentHash: String,
+    @SerialName("refund_locktime") val refundLocktime: Long,
+    @SerialName("claim_delay") val claimDelay: Long,
+    @SerialName("refund_delay") val refundDelay: Long,
+    @SerialName("refund_without_receiver_delay") val refundWithoutReceiverDelay: Long,
+)
 
 /** `round.notedJoin`: the to_spend transaction that makes a proof of funds unspendable. */
 @Serializable

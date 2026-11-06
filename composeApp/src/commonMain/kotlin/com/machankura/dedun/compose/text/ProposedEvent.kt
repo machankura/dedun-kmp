@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
@@ -134,6 +135,18 @@ object ProposedEvent {
                     "${2 * statement.threshold - 1} devices online every few days to keep its coins renewed"
             } ?: "A Wavelength wallet statement this device cannot read"
         )
+
+        // A payment from the Wavelength wallet: as with the Lightning wallet's, the amount and the most the fee can be come first.
+        GroupWavelengthPaymentEvent.KIND -> GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
+            val invoice = runCatching { Bolt11Invoice.read(pay.invoice).get() }.getOrNull()
+            Summary(
+                label = "Pay ${Satoshi(pay.amountSat ?: 0).grouped()} sats from the Wavelength wallet",
+                detail = buildString {
+                    append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeSat).grouped()} sats")
+                    invoice?.description?.takeIf { it.isNotBlank() }?.let { append(", for \"$it\"") }
+                },
+            )
+        } ?: Summary(label = "Pay from the Wavelength wallet", detail = "A payment this device cannot read")
 
         GroupLightningOperatorStatementEvent.KIND -> Summary(
             label = "Choose who runs the Lightning wallet",

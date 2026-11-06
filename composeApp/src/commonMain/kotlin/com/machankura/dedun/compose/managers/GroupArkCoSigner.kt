@@ -7,6 +7,7 @@ import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
+import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
@@ -236,6 +237,8 @@ object GroupArkCoSigner {
             reservedFor = vtxos.filter { it.reservedBy != null && it.term == term }.associate { it.outpoint to it.reservedBy!! },
             recentFeesSat = dao.fees(key, term, Clock.System.now().epochSeconds - FEE_WINDOW_SECONDS).associate { it.tx to it.feeSat },
             maxRecentFeesSat = statement.policy.maxMonthlyFeeSat,
+            approvedPayments = GroupWavelengthPayments.approved(database, chatRoomId, wallet),
+            paidIn = dao.payments(key).associate { ByteVector32(it.paymentHash) to it.tx },
             notedRounds = dao.rounds(key).associate { it.commitment to it.noteHash },
             treeKeyRounds = dao.treeBindings(key).associate { it.treeKey to it.commitment },
             minSweepDelay = statement.policy.minSweepDelay,
@@ -361,6 +364,7 @@ object GroupArkCoSigner {
     private suspend fun remember(database: DedunDatabase, key: String, term: Long, effect: ArkPolicy.Effect, sessionKey: PublicKey?) {
         val dao = database.groupArkDao()
         effect.noteHash?.let { dao.upsertRound(GroupArkRound(key, effect.towards, it)) }
+        effect.payments.forEach { dao.upsertPayment(GroupArkPayment(key, it.toHex(), effect.towards)) }
         if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, Clock.System.now().epochSeconds))
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }
