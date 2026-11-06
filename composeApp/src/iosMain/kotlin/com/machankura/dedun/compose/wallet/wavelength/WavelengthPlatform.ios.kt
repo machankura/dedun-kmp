@@ -8,4 +8,6 @@ actual object WavelengthPlatform {
     actual val client: EmbeddedWavelengthClient? get() = null
 
     actual fun dataRoot(context: PlatformContext): String? = null
+
+    actual fun scheduleRenewal(context: PlatformContext) = Unit
 }

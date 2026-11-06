@@ -19,6 +19,7 @@ import fr.acinq.phoenix.managers.PhoenixDatabases
 import fr.acinq.phoenix.managers.DatabaseManager
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.wallet.wavelength.WalletProfile
+import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthProcess
 import com.machankura.dedun.compose.ui.composable.WavelengthEntryScreen
 import com.machankura.dedun.compose.ui.composable.WavelengthAdvancedScreen
@@ -343,6 +344,9 @@ fun DedunNavHost(
     val identityWavelength = remember { WavelengthProcess.holder(phoenixGlobal.ctx) }
     val walletSeeds = remember { WavelengthProcess.seeds(phoenixGlobal.ctx) }
     LaunchedEffect(identityWavelength) {
+        // Here and not with the node's jobs in schedulePlatformLogic, which an nsec profile never
+        // reaches. It does nothing for a profile that hasn't turned the wallet on.
+        WavelengthPlatform.scheduleRenewal(phoenixGlobal.ctx)
         AppLifecycle.isForeground.collect { foreground ->
             if (foreground) identityWavelength.enteredForeground() else identityWavelength.enteredBackground()
         }

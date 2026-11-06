@@ -14,4 +14,7 @@ expect object WavelengthPlatform {
 
     /** Where wallets live, somewhere no backup reaches (D8). Null with no runtime. */
     fun dataRoot(context: PlatformContext): String?
+
+    /** Schedules the background renewal, where there is such a thing (D10). */
+    fun scheduleRenewal(context: PlatformContext)
 }

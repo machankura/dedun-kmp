@@ -10,4 +10,6 @@ actual object WavelengthPlatform {
     // Not Wavelength.defaultDataDir, which is filesDir and so inside allowBackup="true": a wallet
     // database restored behind the operator's back is worse than none (D8).
     actual fun dataRoot(context: PlatformContext): String? = context.applicationContext.noBackupFilesDir.absolutePath
+
+    actual fun scheduleRenewal(context: PlatformContext) = WavelengthMaintenanceWorker.schedule(context.applicationContext)
 }
