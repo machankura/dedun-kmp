@@ -19,11 +19,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.UnsignedNostrEvent
@@ -95,7 +95,7 @@ class MultipleProfilesRoundTripJvmTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
+        scope.cancelAndWait()
         db.close()
         JvmKeyStore.lock()
         storeDir.deleteRecursively()

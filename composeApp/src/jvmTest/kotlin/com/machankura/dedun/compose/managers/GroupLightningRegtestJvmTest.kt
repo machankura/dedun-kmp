@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.database.model.ChatMessage
 import co.touchlab.kermit.Severity
@@ -31,7 +32,6 @@ import fr.acinq.phoenixd.conf.LSP
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -89,7 +89,7 @@ class GroupLightningRegtestJvmTest {
 
     @AfterTest
     fun close() {
-        scope.cancel()
+        scope.cancelAndWait()
         fixture.close()
     }
 

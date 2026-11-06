@@ -4,8 +4,8 @@ import androidx.room3.Room
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.ChatRoom
@@ -38,7 +38,7 @@ class FindDirectMessageRoomJvmTest {
 
     @AfterTest
     fun closeDb() {
-        scope.cancel()
+        scope.cancelAndWait()
         db.close()
     }
 

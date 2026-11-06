@@ -18,6 +18,7 @@ import com.vitorpamplona.quartz.utils.sha256.sha256
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.MarmotKeyPackage
@@ -63,8 +64,12 @@ class ConvergenceForkJvmTest {
     private val chatRepository = DatabaseChatRepository(db, scope)
     private val nostrRepository = DatabaseNostrRepository(db, scope)
 
+    /** A fork arms `settleLater`, which keeps ticking on the engine's own scope after the test is done. */
     @AfterTest
-    fun closeDb() = db.close()
+    fun closeDb() {
+        db.marmotEngine.scope.cancelAndWait()
+        db.close()
+    }
 
     private val user = KeyPair()
     private val userHex = user.pubKey.toHexKey()

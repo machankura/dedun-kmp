@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.MarmotGroupEvent
 import com.machankura.dedun.compose.database.model.NostrEvent
@@ -49,7 +50,7 @@ class GroupLightningNodeJvmTest {
 
     @AfterTest
     fun close() {
-        scope.cancel()
+        scope.cancelAndWait()
         fixture.close()
     }
 

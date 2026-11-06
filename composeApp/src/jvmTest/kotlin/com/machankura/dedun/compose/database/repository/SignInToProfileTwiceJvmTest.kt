@@ -3,8 +3,8 @@ package com.machankura.dedun.compose.database.repository
 import androidx.room3.Room
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.GENESIS_AT
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -35,7 +35,7 @@ class SignInToProfileTwiceJvmTest {
 
     @AfterTest
     fun closeDb() {
-        scope.cancel()
+        scope.cancelAndWait()
         db.close()
     }
 

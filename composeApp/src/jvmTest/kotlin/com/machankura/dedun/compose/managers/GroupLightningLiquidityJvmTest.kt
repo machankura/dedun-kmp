@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.model.MarmotGroupEvent
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.network.serialization.CommonJson
@@ -16,7 +17,6 @@ import fr.acinq.lightning.Lightning.randomBytes32
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,7 +47,7 @@ abstract class GroupLightningLiquidityCases(chain: Chain) {
 
     @AfterTest
     fun close() {
-        scope.cancel()
+        scope.cancelAndWait()
         fixture.close()
     }
 

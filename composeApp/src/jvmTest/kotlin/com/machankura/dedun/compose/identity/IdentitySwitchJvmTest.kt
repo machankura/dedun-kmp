@@ -13,11 +13,11 @@ import fr.acinq.phoenix.managers.NodeParamsManager
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
 import fr.acinq.phoenix.security.JvmKeyStore
 import fr.acinq.phoenix.utils.PlatformContext
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.extensions.getGlobalPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -97,7 +97,7 @@ class IdentitySwitchJvmTest {
 
     @AfterTest
     fun tearDown() {
-        scope.cancel()
+        scope.cancelAndWait()
         db.close()
         JvmKeyStore.lock()
         storeDir.deleteRecursively()

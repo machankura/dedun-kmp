@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.model.MarmotGroupEvent
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
@@ -12,7 +13,6 @@ import fr.acinq.lightning.Lightning.randomBytes32
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -36,7 +36,7 @@ class GroupLightningRekeyJvmTest {
 
     @AfterTest
     fun close() {
-        scope.cancel()
+        scope.cancelAndWait()
         fixture.close()
     }
 

@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.managers
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 import kotlin.time.Instant
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.IcebergChannelLedger
 import com.machankura.dedun.compose.database.model.MarmotGroupEvent
@@ -37,7 +38,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -59,7 +59,7 @@ class GroupLightningReportsJvmTest {
 
     @AfterTest
     fun close() {
-        scope.cancel()
+        scope.cancelAndWait()
         fixture.close()
     }
 

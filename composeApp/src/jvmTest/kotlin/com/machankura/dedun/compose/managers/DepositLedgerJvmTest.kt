@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
@@ -27,7 +28,6 @@ import fr.acinq.secp256k1.Hex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,8 +47,8 @@ class DepositLedgerJvmTest {
 
     @AfterTest
     fun tearDown() {
+        scope.cancelAndWait()
         db.close()
-        scope.cancel()
     }
 
     private val chain = Chain.Regtest

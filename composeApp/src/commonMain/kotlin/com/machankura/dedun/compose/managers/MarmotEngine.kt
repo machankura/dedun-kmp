@@ -60,7 +60,8 @@ import com.machankura.dedun.compose.exceptions.MarmotConvergencePendingException
  */
 class MarmotEngine(
     private val database: DedunDatabase,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /** Lives as long as the database, which the app never closes; a test that does stops this first. */
+    internal val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     private val logger = Logger.withTag("MarmotEngine")
 

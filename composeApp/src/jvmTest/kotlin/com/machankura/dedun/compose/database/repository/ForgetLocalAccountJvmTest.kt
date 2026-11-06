@@ -4,9 +4,9 @@ import androidx.room3.Room
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.RelayUrlNormalizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.nostr.SignInSync
@@ -32,7 +32,7 @@ class ForgetLocalAccountJvmTest {
 
     @AfterTest
     fun closeDb() {
-        scope.cancel()
+        scope.cancelAndWait()
         db.close()
     }
 
