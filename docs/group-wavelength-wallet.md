@@ -55,6 +55,14 @@ One commit per phase. The phases below are kept as written; this table says what
 | phase | state |
 |---|---|
 | 0 | **partly run.** Spikes 2 and 3 pass, in `IcebergArkSpikeJvmTest`. Spikes 5 and 6 are answered only as far as the wire format goes. Spikes 1, 4, 7 and 8 are open: 4 and 8 need signet coins, 1 needs them for its money flows, and 7 needs an answer from Lightning Labs. See "What Phase 0 found" |
+| 1 | **not started, and not this session's to do.** It needs signet coins sent by hand and a release of the fork, which is the owner's call. Everything below is on local branches, gated, and unproven against any money |
+| 2 | done: `GroupArkDerivation`, `GroupArkAuth`, `GroupArkManifest`, `IcebergChildKeys`, `GroupArkSigner`, 12 tests in `GroupArkKeysTest`. Four tests in the fork (`walletdesc/group_manifest_test.go`) pin the same bytes against the daemon's own parser: the manifest is already canonical and hashes the same, the auth keys join it, an owner child matches, and lnd's MuSig2 aggregates a tree key to the same output key |
+
+| what the plan said | what it turned out to be |
+|---|---|
+| D4: `tr, 42, 44, 202, vHTLC` slots | `tr, 42, 44, 45, 202`, because a manifest must fill every fund family in `keyfamily.Registry`, and adding one to the registry would break every existing manifest and minimal bundle. So no family 203, and the vHTLC key has to come from one the group already holds (Phase 3) |
+| D6: identity moves to the `Auth` class | the registry doesn't change. Identity stays a fund slot in the manifest, filled from the authentication seed's root at its own path, so it isn't an override and needs no `allowOverride`. The callback signer answers for family 6 on the operator's device at once. The daemon can't tell |
+| Phase 2: a Go test writes the fixture and a Kotlin test reads it | both pin the same literals. Kotlin computes them from a group key, and Go has to accept them and hash them the same |
 
 ## What Phase 0 found
 
