@@ -33,10 +33,12 @@ object GroupWavelengthWalletStatementEvent {
     /**
      * What bounds the group's automatic signatures, in sats. [maxRoundFeeSat] is the most a round may take from
      * what the group puts in without an authorisation; [maxOnchainFeeSat] the most an onchain spend may pay in fees.
+     * [exitDelay] is the operator's exit delay in blocks, which every VTXO the group accepts commits to: a longer one
+     * would hold its coins up for longer on the way out, so it isn't the operator's to change alone.
      */
-    data class Policy(val maxRoundFeeSat: Long, val maxOnchainFeeSat: Long) {
+    data class Policy(val maxRoundFeeSat: Long, val maxOnchainFeeSat: Long, val exitDelay: Long) {
         companion object {
-            val DEFAULT = Policy(maxRoundFeeSat = 2_000, maxOnchainFeeSat = 5_000)
+            val DEFAULT = Policy(maxRoundFeeSat = 2_000, maxOnchainFeeSat = 5_000, exitDelay = 144)
         }
     }
 
@@ -77,7 +79,7 @@ object GroupWavelengthWalletStatementEvent {
                 arrayOf(IDENTITY_TAG, statement.identity),
                 arrayOf(MANIFEST_TAG, statement.manifestHash),
                 arrayOf(OPERATOR_TAG, statement.arkOperatorKey),
-                arrayOf(POLICY_TAG, statement.policy.maxRoundFeeSat.toString(), statement.policy.maxOnchainFeeSat.toString()),
+                arrayOf(POLICY_TAG, statement.policy.maxRoundFeeSat.toString(), statement.policy.maxOnchainFeeSat.toString(), statement.policy.exitDelay.toString()),
             ),
             content = "",
         )
@@ -89,8 +91,8 @@ object GroupWavelengthWalletStatementEvent {
         val wallet = tag(WALLET_TAG)?.getOrNull(1)?.toLongOrNull() ?: return null
         if (tag(D_TAG)?.getOrNull(1) != identifier(chain, wallet)) return null
         val iceberg = tag(ICEBERG_TAG)?.takeIf { it.size >= 4 } ?: return null
-        val policy = tag(POLICY_TAG)?.takeIf { it.size >= 3 }?.let { p ->
-            Policy(p[1].toLongOrNull() ?: return null, p[2].toLongOrNull() ?: return null)
+        val policy = tag(POLICY_TAG)?.takeIf { it.size >= 4 }?.let { p ->
+            Policy(p[1].toLongOrNull() ?: return null, p[2].toLongOrNull() ?: return null, p[3].toLongOrNull() ?: return null)
         } ?: return null
         val participants = tag(PARTICIPANTS_TAG)?.drop(1)?.takeIf { it.isNotEmpty() } ?: return null
         if (participants != participants.sorted()) return null
