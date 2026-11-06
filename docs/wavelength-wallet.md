@@ -5,17 +5,32 @@ history and a way out, on the profile tab above the member wallets. It is an Ark
 app's process by Lightning Labs' `waved` daemon, through the `wavelength-kmp` submodule at
 `experimental/wavelength-kmp`.
 
-**Planned, nothing built.** Written on 6 November 2026 against `22935627` (`dedun`), with `wavelength-kmp`
-at `cb9474b0` (`descriptors`) and `lightning-kmp-app` at `949bfcb9`. Files and lines named below are as
-they stood at those commits. What this rests on:
-- **Read:** the SDK at that commit; `lightninglabs/wavelength` at `v0.2.1` and `main`; our fork
-  `machankura/wavelength` at `63d545fb` (`descriptors`); the Bark wallet at `56031156`.
-- **Probed, read-only, on 6 November:** `wavelength.lightning.finance:443` and
-  `swap.wavelength.lightning.finance:443` resolve and complete a TLS handshake offering HTTP/2, with
-  certificates for `lumosd.prod` and `swapd.prod.lightningcluster.com`. The daemon's mainnet Esplora default
-  answered with a tip height. No wallet was opened and no RPC was made.
-- **Not known:** whether the operator accepts a new wallet on mainnet, on what terms, and what its limits
-  are. See *Is mainnet open?* below. Phase 0 answers this with an empty wallet before anything else is built.
+**Built on `claude/wavelength-wallet`, phases 2 to 9 and 13, on signet and not released. Mainnet is one line
+away and has not been switched on.** Written on 6 November 2026 against `22935627` (`dedun`), with `wavelength-kmp`
+at `cb9474b0` (`descriptors`) and `lightning-kmp-app` at `949bfcb9`. Files and lines named below are as they stood at
+those commits. The phases are kept as written; the table below says where the build chose differently.
+
+What is checked:
+- Android and Linux desktop compile, the JVM suite passes (2,004 tests, 6 skipped, up from 1,930 and 6), and the
+  audit's budgets and floors are met. `ChatPaneSelectionJvmTest` failed once in a full run while the machine was out of
+  memory, and passes alone. It is the flake [bark-wallet-removal.md](./bark-wallet-removal.md) describes.
+- The real runtime, through the app's own holder, on an API 37 emulator with 16 KB pages and an API 36 one with 4 KB:
+  an empty throwaway wallet opens, reports its identity, makes an invoice and a deposit address, stops and reopens
+  against its pin. **On signet and on mainnet.** See `WalletRuntimeDeviceTest`. The background worker, on the same runtime,
+  in `WavelengthMaintenanceWorkerDeviceTest`.
+- The app itself, by hand on an emulator, on signet: a new profile, the row, the sheet, the first open, the wallet
+  screen, a real invoice with its QR code, an onchain address, the advanced screen, the daemon stopping a minute after
+  the app is left, and reopening in 6 seconds on return.
+- `tr` only: the daemon reports no `wpkh` account, so it holds nothing at `m/84'`. No private key in logcat through any
+  of this, by searching for `xprv` and `tprv`.
+
+**Not checked, and this is the part that matters:**
+- **No wallet has held anything.** Every flow with money is tested only over `FakeWavelengthClient`: a payment
+  received, a send, a board, a renewal, a cooperative exit, an emergency exit, a restore that finds coins. There is no
+  signet faucet API, and funding one by hand is the next step. Phase 11 cannot start without it.
+- A real phone: emulators only. Memory is a question: the app's PSS with a wallet open was 550 MB on one.
+- iOS (Phase 12): the SDK's iOS code has never been compiled, and neither has this wallet's `iosMain` actual.
+- The nested daemon is built on this host, from a fork with no release.
 
 Read [bark-wallet.md](./bark-wallet.md) first, for its reasoning about a profile's wallet, and
 [bark-wallet-removal.md](./bark-wallet-removal.md), for why a rollout flag can strand money. Then read
@@ -34,6 +49,46 @@ them. The work is in four things Bark did not have.**
 3. **There is no desktop runtime.** `wavelength-embedded` has Android and iOS targets only. A desktop build
    says *Not available on this device* until upstream ships a C ABI (D4).
 4. **The size.** `Wavewalletdk.aar` is 191 MB compressed, against a 50 MB debug APK today (D15).
+
+## Where the build chose differently
+
+| phase | what the plan said | what it turned out to be |
+|---|---|---|
+| 0 | run before anything else | run alongside Phases 2 to 4, because proving account keys through the app's own holder needs that holder to exist. Results below |
+| 1 | a tagged release of the fork, rebased on an upstream tag | **not done: publishing is the owner's call.** The fork is a submodule of the SDK instead, at `experimental/wavelength`, and its gitlink pins the commit (`docs/adr/0006-daemon-source.md` in the SDK). `fetch-bindings.sh` builds from it. `wavelength.version` is `v0.2.1-machankura.1`. The rebase hasn't happened: the fork is still 109 ahead and 50 behind |
+| 1 | a mainnet preset in `NetworkPresets` | in `WavelengthWalletRollout.configFor`, so the SDK stays free of a host choice this app is still making |
+| 2 | a Gradle task stages the bindings before a build | can't work: Gradle resolves the graph before any task runs, and staging alongside a build raced with its reading the file. Settings warns with the command, and the README has the step. `ANDROID_HOME` is needed for the same reason as `lightning-kmp-app` |
+| 2 | the SDK's AGP 9.1 might sit beside the app's 9.4 | a composite build refuses two versions. The SDK moved to 9.4.0 |
+| 2 | `androidInstrumentedTest` shares nothing | it would have taken `commonTest` with it, whose test names have spaces D8 refuses before DEX 040. Left on its own source tree |
+| 2 | maybe drop ABIs | x86 dropped. arm64-v8a, armeabi-v7a and x86_64 remain, each 67-70 MB (D15) |
+| 3 | descriptors with BIP380 checksums | none: they are optional, and it was code for nothing |
+| 4 | `BackgroundRestartPolicy.reopening` | the holder does it, with a grace period. The policy drives the client directly, which leaves the engine stale |
+| 4 | an `IdentityPubKey` derived and compared in Kotlin | not needed: the daemon checks it, and the pin comes from its answer. The attempt found that identity is family 6, `KeyFamilyNodeKey`, and not 0 |
+| 4 | recover with the daemon's window (D12) | a window of 10 on a first open, and *Look for more coins* for 100. See below |
+| 7 | `maxCreditSat` zero by default | left to the daemon: zero would strand credit, which nothing else can spend |
+| 7 | `PreimageStore`, a Room table | a file: it is only ever appended to and read whole |
+| 8 | a *Renew now*, if Phase 0 put a verb in the SDK | no verb, so an urgent deadline says to open the app and leave it open |
+| 8 | scheduled from `schedulePlatformLogic` | from the nav host: an nsec profile has no node, so it never reaches that |
+| 9 | a progress view for exits that drives them | `exitSummary` and the daemon's own job: it carries on across restarts by itself |
+| 13 | forget refused until the words are confirmed saved | refused while the wallet may hold money. An empty wallet's words hold nothing, so there is nothing to confirm, and they are removed with the key |
+| 13 | after the mainnet release | built now, on request. It runs on signet like the rest |
+
+## What Phase 0 found
+
+Run on 6 November 2026, with the daemon at `63d545fb`, as a process on this host (`waved`, `wavecli`) and in the app on
+emulators.
+
+| spike | answer |
+|---|---|
+| 1. Mainnet access | **Open, with no gate we met.** A throwaway wallet with no registration opened, connected, and was given a real `lnbc` invoice and a `bc1p` address. Terms it was given: **50,000 sat most per VTXO, 300,000 sat most per wallet,** 1,000 sat floor, 6 confirmations to board, boarding exit delay 512 blocks, VTXO exit delay 144, free refresh window 648 blocks (about 4.5 days), minimum operator fee 1,000 sat. Signet differs: 200,000 per VTXO, 1 BTC per wallet, 1 confirmation, a window of 504. A receive above the VTXO limit is refused in words. Only `freeRefreshWindowBlocks` of these reaches the SDK's `ServerInfo`, since the generated model is the facade's |
+| 2. Account keys on `lwwallet` | Work. `tr` plus the coin-level key opens on both networks with no `wpkh`, and the public export has only `tr`. Vectors from the daemon's own derivation match bitcoin-kmp's byte for byte, and are `WalletKeysTest`. **Recovery with a window of 100 did not finish in 400 s on an empty wallet; 10 took 75 s on this host and 2m04s or 78 s on an emulator.** So D12 changed. A funded recovery is untested |
+| 3. The engine after an atomic start | Works: `engine.start()` against the running daemon goes straight to `READY`. No SDK change |
+| 4. Size, memory, start | APK per ABI 67-70 MB, up from 50 MB for all four together. `libgojni.so` on arm64-v8a is 83 MB stripped, 25 MB compressed. Daemon RSS 84 MB as a process on this host. The app's PSS on an emulator with the wallet open, 550 MB. It loads and runs on 16 KB pages |
+| 5. Keeping coins alive | Partly: needs money for a real renewal. The window is long enough for a daily worker on the terms above. `WavelengthMaintenanceWorkerDeviceTest` ran the real worker: it read the default profile, decrypted the words with no screen, opened the wallet against its pin, stopped the daemon, and gave way to the app at once. WorkManager won't run a periodic job ahead of its schedule even when JobScheduler is told to, hence the test builder. How long a real renewal needs the daemon up is **not known without a coin** |
+| 6. Lightning with the app closed | **Not run: needs money** |
+| 7. Foreground return | A reopen is 5-7 s, so a grace period of a minute covers most returns. With the app in the background the daemon logged `name resolver error`s until it stopped, which is what upstream warned of |
+| 8. The composite build | Works once AGP matches, and the desktop classpath has no native code |
+| 9. Esplora | **Both public hosts fail a first open.** `mempool.space` answered 429 on a host run and timed out on the device. `blockstream.info` answered 429. Lightning Labs' own `mempool.staging.lightningcluster.com` worked. So D6 changed |
 
 ---
 
@@ -126,7 +181,8 @@ seed wallet of those words to agree with. It derives with bitcoin-kmp, always th
 catches any drift. What this does give up is that typing the same words into a stock Wavelength wallet is not
 promised to find the same wallet. Words restore in Dedun, and the keys can be exported as descriptors.
 
-**D2. Which daemon: a tagged release of our fork.** The descriptor verbs exist only in `machankura/wavelength`.
+**D2. Which daemon: a tagged release of our fork.** *Built so far: the fork nested and pinned, with no release yet (see the
+table above).* The descriptor verbs exist only in `machankura/wavelength`.
 Money should not run on a locally built branch, so Phase 1 cuts a release: rebased on a released upstream tag,
 with assets on the fork's releases and digests in `bindings.digests`. `fetch-bindings.sh` already takes
 `WAVELENGTH_REPO`. If upstream merges the work first, the pin moves there and the fork goes.
@@ -167,11 +223,12 @@ profile always opens.** There is no `ENABLED` that strands money, so a wind-down
 than a rewrite. The cap bounds a send, and an invoice that would take the balance over it. It can't bound an onchain
 deposit, so the wallet screen states it.
 
-**D6. Endpoints are written down, and the chain view is not a staging host.** The rollout names the Ark and swap hosts
-rather than leaving them to the daemon's defaults, so a pin bump can't move them silently. Esplora is set explicitly,
-to one Phase 0 chooses. The recommendation is `https://mempool.space/api` unless `lwwallet`'s polling trips its limits,
-then a Machankura-run instance. Lightning Labs sees the wallet's VTXOs, Lightning payments and the device's IP, and the
-Esplora host sees its onchain addresses. The sheet says so.
+**D6. Endpoints are written down, and our own Esplora is a condition of mainnet.** The rollout names the Ark and swap
+hosts rather than leaving them to the daemon's defaults, so a pin bump can't move them silently. The plan was to avoid the
+daemon's Esplora default because its name says *staging*. Spike 9 reversed that: it is the only host that let a first open
+finish, and two public ones rate-limited it until the open failed. It stays named in `configFor` until a Machankura-run
+instance replaces it, which Phase 11 now requires. Lightning Labs sees the wallet's VTXOs, Lightning payments and the
+device's IP, and the Esplora host sees its onchain addresses. The sheet says so.
 
 **D7. Tor on means no wallet.** There is no proxy to give the daemon, and a profile with Tor on would connect over
 clearnet against the user's choice. This is the same call as `bark-wallet.md` D6 and `standalone-electrum.md` D4.
@@ -206,10 +263,12 @@ and this decision is amended.
 recovery-phrase screen, tell a person to turn the wallet off on one device first. Restoring on a new device means the old
 one is gone or its app is closed.
 
-**D12. Every first open of a directory recovers.** `recoverState = true` when the directory is new, because a restore and a
-new wallet look the same from here. The birthday is a constant, the release that first holds money, since no key can have
-received anything earlier. It bounds the rescan and is frozen. Recovery's result is shown, and a partial one is safe to
-retry, so here, unlike Bark, the retry is real.
+**D12. A first open looks a little way, and more is asked for.** `recoverState = true` when no open has succeeded yet,
+because a restore and a new wallet look the same from here, with a window of 10 so that it is something a person will wait
+for. *Look for more coins* in Advanced reopens with 100. So a restored wallet that used more than 10 keys **shows too little
+until that is pressed,** and the button's sentence says why it is there. A window of 100 on a first open is not an option
+while it takes more than six minutes on an empty wallet. The birthday is a constant, before any key here can have received
+anything. Recovery's result is shown, and a partial one is safe to retry, so here, unlike Bark, the retry is real.
 
 **D13. nsec profiles get words of their own, later. npub profiles never.** Deriving from the nsec would be simpler, with no
 new file. But an nsec gets pasted into other nostr clients, and leaking one shouldn't empty a wallet. So Phase 13 brings back
@@ -220,10 +279,10 @@ the npub plan.
 **D14. The Phoenix node is left alone,** and it keeps starting. Whether a profile with a visible wallet needs an invisible node
 is `bark-wallet.md`'s open question, and it stays open.
 
-**D15. ABI splits ship with the runtime.** The AAR is 191 MB compressed across four ABIs, so about 48 MB per ABI compressed, and
-libraries are stored uncompressed in an APK at this `minSdk`. Bark's estimate of 8 MB turned out to be 14 MB for the same reason.
-Phase 0 measures this. Phase 2 adds `splits.abi` for direct APKs and an AAB for Play. x86 and armeabi-v7a are dropped from release
-if the numbers argue for it. Upstream's U3 (slim AARs) would help the build, not the app.
+**D15. ABI splits ship with the runtime.** The AAR is 191 MB compressed, and `splits.abi` gives one APK each for arm64-v8a,
+armeabi-v7a and x86_64, at 67-70 MB. x86 is dropped. Native libraries are compressed in the APK (`useLegacyPackaging`),
+which takes 58 MB off a download and costs that much disk on the device when they are extracted. An AAB for Play gets the
+same split without the setting.
 
 **D16. One commit per phase, each one compiling and passing.** Messages end `(Wavelength wallet, Phase N)`. Strings go through
 `strings.xml` in sentence case, with *onchain*, not *on-chain*; *Ark* is a proper noun; *VTXO* appears only on the advanced screen;
@@ -443,7 +502,9 @@ Bark flipped its network by decision, ahead of its own condition. This plan's co
 | Cooperative exit of part, then an emergency exit of the rest | the coins arrive, and the wallet reads zero |
 | Credit: receive below the floor | shown as credit, and spendable or explained |
 
-Then `WavelengthWalletRollout.NETWORK = Mainnet`, one commit, with the operator's terms from Phase 0 re-read, and `versionCode` bumped. A signet build type stays available for testing.
+**Also a condition, from spike 9: an Esplora we run, in place of the host named `staging` (D6).**
+
+Then `WavelengthWalletRollout.NETWORK = Network.MAINNET`, one commit, with the operator's terms from Phase 0 re-read, and `versionCode` bumped. A signet build type stays available for testing.
 
 **Done when** the table is done and written here with dates, amounts and txids. Lifting the cap is its own later decision, with the same shape of condition `GroupWalletRollout` uses.
 
@@ -503,8 +564,9 @@ coin lifetime. D5 is what makes that a flag and not a rewrite.
 
 ## Open questions
 
-1. **The daemon (D2).** Our fork as a release, or external seed on upstream `v0.2.1`? Recommended: the fork. It must be settled by the end of Phase 0, because it fixes where the coins' keys are.
-2. **Distribution (D15).** Play, direct APKs or both? It decides how much the size matters, and which ABIs ship.
-3. **Is desktop acceptable as unavailable (D4)?** If not, a remote-daemon or C ABI plan goes ahead of this one's iOS.
-4. **Who runs Esplora long term (D6)?** A third party's public instance is fine for a capped wallet. Lifting the cap is a reason to run one.
-5. **The SDK's licence.** Its README says the Apache licence "came with the project template and is still under review"; upstream is MIT. Fix before shipping it in the app.
+1. **The daemon (D2).** Our fork as a release, or external seed on upstream `v0.2.1`? Recommended: the fork. It must be settled before real money, because it fixes where the coins' keys are. This branch assumes the fork.
+2. **Signet funding.** Every money path is unproven until a wallet holds signet coins. There is no faucet API, so this needs somebody to send some to an address.
+3. **Who runs Esplora (D6)?** It is now a condition of mainnet.
+4. **Distribution (D15).** Play, direct APKs or both?
+5. **Is desktop acceptable as unavailable (D4)?** If not, a remote-daemon or C ABI plan goes ahead of iOS.
+6. **The SDK's licence.** Its README says the Apache licence "came with the project template and is still under review"; upstream is MIT. Fix before shipping it in the app.

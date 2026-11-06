@@ -162,6 +162,7 @@ kotlin {
         // The one thing jvmTest can't reach: the daemon's gomobile runtime, on a device.
         androidInstrumentedTest.dependencies {
             implementation(libs.androidx.test.runner)
+            implementation("androidx.work:work-testing:2.11.1")
             implementation(libs.androidx.testExt.junit)
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutinesTest)
