@@ -1194,4 +1194,5 @@
     <string name="wavelength_recovery_phrase_show">Show the words</string>
     <string name="wavelength_recovery_phrase_none">This profile's wallet has no words yet. They are made when you turn the wallet on.</string>
     <string name="could_not_forget_the_key_wallet_may_hold_money">The key was not forgotten: this profile's wallet may still hold money. Open the wallet and move everything out first.</string>
+    <string name="wavelength_entry_waiting_for_payment">Waiting for payment</string>
 </resources>

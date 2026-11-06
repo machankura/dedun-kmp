@@ -96,6 +96,7 @@ import dedun.composeapp.generated.resources.wavelength_entry_started
 import dedun.composeapp.generated.resources.wavelength_entry_status
 import dedun.composeapp.generated.resources.wavelength_entry_succeeded
 import dedun.composeapp.generated.resources.wavelength_entry_to
+import dedun.composeapp.generated.resources.wavelength_entry_waiting_for_payment
 import dedun.composeapp.generated.resources.wavelength_mainnet_cap_s_sats
 import dedun.composeapp.generated.resources.wavelength_no_payments_yet
 import dedun.composeapp.generated.resources.wavelength_opening
@@ -110,6 +111,7 @@ import dedun.composeapp.generated.resources.wavelength_wrong_identity
 import engineering.lightning.wavelength.Network
 import engineering.lightning.wavelength.model.Entry
 import engineering.lightning.wavelength.model.EntryKind
+import engineering.lightning.wavelength.model.EntryPhase
 import engineering.lightning.wavelength.model.EntryStatus
 import fr.acinq.bitcoin.Satoshi
 import org.jetbrains.compose.resources.stringResource
@@ -335,18 +337,24 @@ internal fun entryTitle(entry: Entry): String = stringResource(
 )
 
 @Composable
-private fun entryStatusText(status: EntryStatus?): String = stringResource(
-    when (status) {
-        EntryStatus.COMPLETE -> Res.string.wavelength_entry_succeeded
-        EntryStatus.FAILED -> Res.string.wavelength_entry_failed
+private fun entryStatusText(entry: Entry): String = stringResource(
+    when {
+        entry.status == EntryStatus.COMPLETE -> Res.string.wavelength_entry_succeeded
+        entry.status == EntryStatus.FAILED -> Res.string.wavelength_entry_failed
+        entry.isUnpaidRequest -> Res.string.wavelength_entry_waiting_for_payment
         else -> Res.string.wavelength_entry_pending
     }
 )
 
+/** An invoice or address nobody has paid yet, which is no money on its way. */
+private val Entry.isUnpaidRequest: Boolean
+    get() = status == EntryStatus.PENDING && (kind == EntryKind.RECEIVE || kind == EntryKind.DEPOSIT) &&
+        (progress?.phase == null || progress?.phase == EntryPhase.REQUEST_CREATED || progress?.phase == EntryPhase.WAITING_FOR_PAYMENT)
+
 /** The status, then when -- *Pending · 14:02 2 Nov 2026*. */
 @Composable
 private fun entrySubtitle(entry: Entry): String {
-    val status = entryStatusText(entry.status)
+    val status = entryStatusText(entry)
     val time = (entry.updatedAt ?: entry.createdAt)?.toFormattedTimeAndDateString() ?: return status
     return stringResource(Res.string.wavelength_entry_s_dot_s, status, time)
 }
@@ -354,8 +362,11 @@ private fun entrySubtitle(entry: Entry): String {
 @Composable
 private fun signedAmount(entry: Entry): String {
     val amount = Satoshi(entry.amountSat).grouped()
-    return when (entry.kind) {
-        EntryKind.SEND, EntryKind.EXIT -> stringResource(Res.string.wavelength_entry_minus_s_sats, amount)
+    return when {
+        // An address has no amount until it is paid.
+        entry.amountSat == 0L -> ""
+        entry.isUnpaidRequest -> stringResource(Res.string.s_sats, amount)
+        entry.kind == EntryKind.SEND || entry.kind == EntryKind.EXIT -> stringResource(Res.string.wavelength_entry_minus_s_sats, amount)
         else -> stringResource(Res.string.wavelength_entry_plus_s_sats, amount)
     }
 }
@@ -376,7 +387,7 @@ fun WavelengthEntryDetail(entry: Entry?, modifier: Modifier = Modifier, preimage
     ) {
         Text(entryTitle(entry), style = MaterialTheme.typography.headlineSmall)
         Text(signedAmount(entry), style = MaterialTheme.typography.displaySmall)
-        DetailLine(stringResource(Res.string.wavelength_entry_status), entry.progress?.phaseLabel?.ifEmpty { null } ?: entryStatusText(entry.status))
+        DetailLine(stringResource(Res.string.wavelength_entry_status), entryStatusText(entry))
         DetailLine(stringResource(Res.string.wavelength_amount), stringResource(Res.string.s_sats, Satoshi(entry.amountSat).grouped()))
         if (entry.feeSat > 0) DetailLine(stringResource(Res.string.wavelength_entry_fee), stringResource(Res.string.s_sats, Satoshi(entry.feeSat).grouped()))
         entry.createdAt?.let { DetailLine(stringResource(Res.string.wavelength_entry_started), it.toFormattedTimeAndDateString()) }

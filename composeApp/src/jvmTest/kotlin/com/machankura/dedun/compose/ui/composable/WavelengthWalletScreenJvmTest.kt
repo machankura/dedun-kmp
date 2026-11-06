@@ -94,6 +94,15 @@ class WavelengthWalletScreenJvmTest {
     }
 
     @Test
+    fun `an invoice nobody has paid is not shown as money on its way`() = runDesktopComposeUiTest(400, 800) {
+        val unpaid = Entry(id = "c", kind = EntryKind.RECEIVE, status = EntryStatus.PENDING, amountSat = 12_000)
+        setContent { Content(loaded.copy(entries = listOf(unpaid))) }
+        onNodeWithText("12,000 sats").assertIsDisplayed()
+        onNodeWithText("+12,000 sats").assertDoesNotExist()
+        onNodeWithText("Waiting for payment").assertIsDisplayed()
+    }
+
+    @Test
     fun `credit is shown apart and is not in the balance`() = runDesktopComposeUiTest(400, 800) {
         setContent { Content(loaded.copy(balance = Balance(confirmedSat = 21_000, creditAvailableSat = 700))) }
         onNodeWithText("21,000 sats").assertIsDisplayed()
