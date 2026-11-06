@@ -198,7 +198,7 @@ class GroupArkTransport(
         val requestId = RandomInstance.bytes(16).toHex()
         val shares = ask(ArkWire.SigningItem(requestId, ArkWire.Domain(), counter, request, contributions))
         val label = GroupArkCoSigner.label(statement.icebergKey, ArkWire.Domain(), counter)
-        val message = database.icebergCoSigningDao().ledgerFor(key, label.toHex())?.messageHash?.let { ByteVector32(it) }
+        val message = database.groupArkDao().checked(key, label.toHex())?.message?.let { ByteVector32(it) }
             ?: throw IllegalStateException("a signature this device didn't check")
         val nonce = groupNonceOf(contributions, groupKey)
         return when (val signature = GroupArkSigner.plainSignature(shares, n, t, nonce, cache, message)) {

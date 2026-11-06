@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "2d8afb8df1113cc8cdb16ba9943630fc",
+    "identityHash": "f168f27c5877919f9af6394ee576ef97",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -2156,7 +2156,7 @@
       },
       {
         "tableName": "GroupArkVtxo",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `outpoint` TEXT NOT NULL, `amountSat` INTEGER NOT NULL, `forfeitedIn` TEXT, `spent` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `outpoint`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `outpoint` TEXT NOT NULL, `amountSat` INTEGER NOT NULL, `origin` TEXT, `settled` INTEGER NOT NULL, `reservedBy` TEXT, `term` INTEGER, `spent` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `outpoint`))",
         "fields": [
           {
             "fieldPath": "wallet",
@@ -2177,9 +2177,25 @@
             "notNull": true
           },
           {
-            "fieldPath": "forfeitedIn",
-            "columnName": "forfeitedIn",
+            "fieldPath": "origin",
+            "columnName": "origin",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "settled",
+            "columnName": "settled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reservedBy",
+            "columnName": "reservedBy",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "term",
+            "columnName": "term",
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "spent",
@@ -2198,7 +2214,7 @@
       },
       {
         "tableName": "GroupArkFloor",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `floor` INTEGER, PRIMARY KEY(`wallet`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `floor` INTEGER, `treeFloor` INTEGER, PRIMARY KEY(`wallet`))",
         "fields": [
           {
             "fieldPath": "wallet",
@@ -2209,6 +2225,11 @@
           {
             "fieldPath": "floor",
             "columnName": "floor",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "treeFloor",
+            "columnName": "treeFloor",
             "affinity": "INTEGER"
           }
         ],
@@ -2221,7 +2242,7 @@
       },
       {
         "tableName": "GroupArkMark",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `participant` TEXT NOT NULL, `highest` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `participant`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `participant` TEXT NOT NULL, `highest` INTEGER NOT NULL, `highestChild` INTEGER NOT NULL, PRIMARY KEY(`wallet`, `participant`))",
         "fields": [
           {
             "fieldPath": "wallet",
@@ -2240,6 +2261,12 @@
             "columnName": "highest",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "highestChild",
+            "columnName": "highestChild",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -2247,6 +2274,116 @@
           "columnNames": [
             "wallet",
             "participant"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkRound",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `commitment` TEXT NOT NULL, `noteHash` TEXT NOT NULL, PRIMARY KEY(`wallet`, `commitment`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commitment",
+            "columnName": "commitment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "noteHash",
+            "columnName": "noteHash",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "commitment"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkTreeBinding",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `treeKey` TEXT NOT NULL, `commitment` TEXT NOT NULL, PRIMARY KEY(`wallet`, `treeKey`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeKey",
+            "columnName": "treeKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commitment",
+            "columnName": "commitment",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "treeKey"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkChecked",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `label` TEXT NOT NULL, `child` INTEGER, `counter` INTEGER NOT NULL, `item` TEXT NOT NULL, `message` TEXT NOT NULL, PRIMARY KEY(`wallet`, `label`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "child",
+            "columnName": "child",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "counter",
+            "columnName": "counter",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "item",
+            "columnName": "item",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "message",
+            "columnName": "message",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet",
+            "label"
           ]
         }
       },
@@ -5811,7 +5948,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2d8afb8df1113cc8cdb16ba9943630fc')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f168f27c5877919f9af6394ee576ef97')"
     ]
   }
 }

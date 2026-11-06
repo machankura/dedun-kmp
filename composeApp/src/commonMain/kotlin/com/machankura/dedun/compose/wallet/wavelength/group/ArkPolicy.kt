@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.network.serialization.CommonJson
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.OP_0
+import fr.acinq.bitcoin.OP_1
 import fr.acinq.bitcoin.OP_PUSHDATA
 import fr.acinq.bitcoin.OP_RETURN
 import fr.acinq.bitcoin.OutPoint
@@ -34,9 +35,24 @@ object ArkPolicy {
     /** What an allowed request is, and so how the co-signer files it. */
     enum class What { PROOF, SWAP_AUTH, SWAP_ACK, TREE, FORFEIT, BOARDING, JOIN_PROOF, EXIT_SWEEP, ONCHAIN, TRANSFER }
 
+    /**
+     * What a signature means for this device's own record, which only the policy has worked out. It reserves and it pends, and never
+     * says a thing has happened, since a request can be allowed and never submitted.
+     */
+    data class Effect(
+        /** The commitment or Ark transaction this signature goes towards. */
+        val towards: String,
+        /** Its outputs that are this wallet's VTXOs, by `txid:vout`. */
+        val credits: Map<String, Long>,
+        /** The VTXOs it gives up, by `txid:vout`. */
+        val reserves: List<String>,
+        /** A round's note, of which there is only ever one. */
+        val noteHash: String? = null,
+    )
+
     sealed class Verdict {
         /** Sign [message], which this device computed. Never the digest the request carried. */
-        data class Allow(val what: What, val message: ByteVector32) : Verdict()
+        data class Allow(val what: What, val message: ByteVector32, val effect: Effect? = null) : Verdict()
         data class Refuse(val reason: String) : Verdict()
     }
 
@@ -59,13 +75,24 @@ object ArkPolicy {
         /** The most the group's unspent coins may come to, or null for no cap, and what they come to now. */
         val capSat: Long? = null,
         val unspentSat: Long = 0,
-        /** The round each VTXO was last forfeited into, by `txid:vout`, until that round is known to have failed. */
-        val forfeitedIn: Map<String, String> = emptyMap(),
+        /** How much of [unspentSat] is only pending, by what it comes from, so a round isn't counted against itself. */
+        val pendingFromSat: Map<String, Long> = emptyMap(),
+        /** What this device has already given each VTXO to, by `txid:vout`: a commitment's txid, or an Ark transaction's. */
+        val reservedFor: Map<String, String> = emptyMap(),
+        /** The one account of each round this device has signed anything under, by commitment txid: its note's hash. */
+        val notedRounds: Map<String, String> = emptyMap(),
+        /** The one commitment each tree key has signed for, by compressed key. */
+        val treeKeyRounds: Map<String, String> = emptyMap(),
+        /** The shortest life the group lets a batch of its VTXOs have, in blocks. */
+        val minSweepDelay: Long = 0,
     )
 
     private const val TAG_INDEXER = "wavelength/indexer/v1"
     private const val TAG_SWAP_AUTH = "swap-credit-account-auth-v1"
     private const val TAG_SWAP_ACK = "out-swap-htlc-ack-v1"
+
+    /** The daemon's `MaxReasonableDelay`: about a year, in blocks. */
+    private const val MAX_REASONABLE_DELAY = 52_560L
 
     /** The anchor every virtual transaction ends in: `OP_1 <4e73>`, for nothing. */
     private val ANCHOR = ByteVector(Script.write(Script.pay2anchor))
@@ -146,6 +173,8 @@ object ArkPolicy {
         if (request.method != ArkRequest.METHOD_SCRIPT_PATH) refuse("a fund key spends only by a leaf")
         if (request.leafVersion != Script.TAPROOT_LEAF_TAPSCRIPT) refuse("a leaf of another version")
         val slot = context.keys.slotOf(request.family) ?: refuse("an input under a family the group holds no key in")
+        // Only keys every check below would count: a boarding output past the window would go in as nothing.
+        if (request.branch != 0L || request.index !in 0 until context.keys.window) refuse("a key outside the range this device checks")
         val own = context.keys.key(slot, request.branch, request.index)
         val leaf = bytes(request.leafScript, "leaf")
         val message = tx.hashForSigningTaprootScriptPath(request.inputIndex, prevOuts, SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
@@ -165,7 +194,7 @@ object ArkPolicy {
             }
             collab -> when (note?.kind) {
                 ArkNote.ROUND -> roundInput(context, request, note, tx, prevOuts, spentScript, standard, slot, message)
-                ArkNote.OOR -> transferInput(context, request, note, tx, spentScript, standard, leaf, message)
+                ArkNote.OOR -> transferInput(context, request, note, tx, prevOuts, spentScript, standard, leaf, message)
                 else -> refuse("a collaborative spend nothing explains")
             }
             else -> refuse("a leaf this device doesn't recognise as this key's")
@@ -198,7 +227,11 @@ object ArkPolicy {
 
     /** A VTXO's exit leaf, alone: every output pays the group's onchain wallet, for a fee under the statement's cap. */
     private fun exitSweep(context: Context, tx: Transaction, prevOuts: List<TxOut>, message: ByteVector32): Verdict {
-        tx.txOut.forEach { if (!context.isOnchainWallet(it.publicKeyScript) && it.publicKeyScript != ANCHOR) refuse("an exit that pays somewhere other than the group's onchain wallet") }
+        // An anchor is anyone's to spend, so it is allowed for nothing, and only for nothing.
+        tx.txOut.forEach {
+            val anchor = it.publicKeyScript == ANCHOR && it.amount == Satoshi(0)
+            if (!context.isOnchainWallet(it.publicKeyScript) && !anchor) refuse("an exit that pays somewhere other than the group's onchain wallet")
+        }
         val fee = prevOuts.sumOf { it.amount.sat } - tx.txOut.sumOf { it.amount.sat }
         if (fee !in 0..context.maxOnchainFeeSat) refuse("an exit paying $fee sats in fees")
         return Verdict.Allow(What.EXIT_SWEEP, message)
@@ -248,18 +281,17 @@ object ArkPolicy {
         if (spentScript != standard) refuse("a leaf this output doesn't commit to")
         val round = decode(NotedRound.serializer(), note.material)
         val commitment = tx(round.commitmentTx, "commitment")
-        checkRound(context, round, commitment)
+        val effect = checkRound(context, round, commitment, note).effect
 
         if (tx.txid == commitment.txid) {
             if (slot != GroupArkDerivation.Slot.BOARDING) refuse("a commitment input that isn't a boarding output")
             if (prevOuts != outputsOf(round.prevOuts)) refuse("a commitment with prevouts other than the round's")
-            return Verdict.Allow(What.BOARDING, message)
+            return Verdict.Allow(What.BOARDING, message, effect)
         }
 
         if (slot == GroupArkDerivation.Slot.BOARDING) refuse("a boarding key signing something other than its commitment")
         if (request.inputIndex != 0 || tx.txIn.size != 2) refuse("a forfeit in any shape but VTXO then connector")
         val forfeit = round.forfeits.firstOrNull { it.vtxoOutpoint == outpoint(tx, 0) } ?: refuse("a forfeit of a VTXO the round isn't replacing")
-        context.forfeitedIn[forfeit.vtxoOutpoint]?.let { if (it != note.id) refuse("a VTXO already forfeited into another round") }
         if (outpoint(tx, 1) != forfeit.connectorOutpoint) refuse("a forfeit over a connector other than the one assigned")
         if (prevOuts[0].amount.sat != forfeit.vtxoAmount) refuse("a forfeit that misstates its VTXO")
         if (prevOuts[1].amount.sat != forfeit.connectorAmount || prevOuts[1].publicKeyScript != bytes(forfeit.connectorPkScript, "connector")) refuse("a forfeit that misstates its connector")
@@ -268,65 +300,99 @@ object ArkPolicy {
         val outputs = tx.txOut
         if (outputs.size != 2 || outputs[1].publicKeyScript != ANCHOR || outputs[1].amount != Satoshi(0)) refuse("a forfeit in any shape but penalty then anchor")
         if (outputs[0].amount.sat != forfeit.vtxoAmount + forfeit.connectorAmount) refuse("a forfeit that pays other than everything it spends")
-        return Verdict.Allow(What.FORFEIT, message)
+        return Verdict.Allow(What.FORFEIT, message, effect)
     }
 
-    /** A tree node's digest, from a session this device holds with a key the group made. */
+    /**
+     * A tree node's digest, from a session this device holds with a key the group made. A tree key signs only the path to its
+     * own VTXO, in one round, ever: with the operator's help it could otherwise sign that VTXO away after the round is over.
+     */
     private fun treeSignature(context: Context, request: ArkRequest, sessionKey: PublicKey): Verdict {
         val note = request.note?.takeIf { it.kind == ArkNote.ROUND } ?: refuse("a tree signature nothing explains")
         val round = decode(NotedRound.serializer(), note.material)
         val commitment = tx(round.commitmentTx, "commitment")
-        checkRound(context, round, commitment)
+        val checked = checkRound(context, round, commitment, note)
         if (!context.isTreeKey(sessionKey)) refuse("a tree signature under a key the group didn't make")
+        context.treeKeyRounds[sessionKey.toString()]?.let { if (it != commitment.txid.toString()) refuse("a tree key that has signed for another round") }
+
         val digest = bytes(request.digest, "digest")
         val node = round.trees.flatMap { it.nodes }.firstOrNull { bytes(it.digest, "digest") == digest } ?: refuse("a digest of nothing in this round's trees")
         if (node.coSigners.none { key(it, "cosigner") == sessionKey }) refuse("a tree signature on a node this key isn't on")
-        // What the shares sign under is rebuilt from these, so they have to be this node's.
-        if (request.signers.isNotEmpty() && request.signers.toSet() != node.coSigners.toSet()) refuse("a session over other cosigners than this node's")
+        val path = checked.paths[sessionKey.toString()] ?: refuse("a tree signature under a key no VTXO of this round uses")
+        if (node.tx !in path) refuse("a tree signature off the path to this key's VTXO")
+
+        // What the shares sign under is rebuilt from these, so they have to be exactly this node's.
+        if (request.signers.sorted() != node.coSigners.sorted()) refuse("a session over other cosigners than this node's")
         val tree = round.trees.first { candidate -> node in candidate.nodes }
-        if (request.scriptRoot != null && request.scriptRoot != tree.sweepRoot) refuse("a session under another sweep root than this tree's")
-        return Verdict.Allow(What.TREE, ByteVector32(digest.toByteArray()))
+        if (request.scriptRoot != tree.sweepRoot) refuse("a session under another sweep root than this tree's")
+        return Verdict.Allow(What.TREE, ByteVector32(digest.toByteArray()), checked.effect)
     }
 
+    /** What a round comes to: the path to each VTXO by tree key, as the raw transactions on it, and what signing for it means. */
+    private class CheckedRound(val paths: Map<String, Set<String>>, val effect: Effect)
+
+    /** The hash of a note's body: a round has one account, so a second is either a mistake or an attack. */
+    fun noteHash(note: ArkNote): String = Hex.encode(fr.acinq.bitcoin.Crypto.sha256(note.material.toString().encodeToByteArray()))
+
     /**
-     * The round, again, as if the client's own validation hadn't happened. Each noted tree hangs from the commitment, each
-     * node's prevout is its cosigners' aggregate under the sweep root, and each digest is its node's. Each VTXO this wallet
-     * asked for is a leaf paying a key this device derived, with a tree key the group made. What goes in comes back, in new
-     * VTXOs and leaves the group has said it may pay, less a fee under the statement's cap.
+     * The round, again, as if the client's own validation hadn't happened, with the rules `VerifyVTXOPath`, `Tree.Verify` and
+     * `ValidateDelayParameters` have: each noted tree hangs from the commitment, each node keeps the value of the output it
+     * spends and is its cosigners' aggregate under the sweep root, and each digest is its node's. Each VTXO this wallet asked for
+     * is its own leaf, paying a key this device derived, with a tree key the group made that is on every node above it. What goes
+     * in comes back, each output counted once, in new VTXOs and leaves the group has said it may pay, less a fee under the
+     * statement's cap.
+     *
+     * The operator still names the sweep key, because nothing this device holds says what it should be, and a sweep key can only do
+     * at the batch's expiry what the operator can do then anyway. A retried round may reuse a tree key (`ensureVTXOSigningKeys`), and
+     * is refused when it does: a member's coins wait for the next round, which is better than a key that signs twice.
      */
-    private fun checkRound(context: Context, round: NotedRound, commitment: Transaction) {
+    private fun checkRound(context: Context, round: NotedRound, commitment: Transaction, note: ArkNote): CheckedRound {
+        val id = commitment.txid.toString()
+        context.notedRounds[id]?.let { if (it != noteHash(note)) refuse("a second account of a round this device already signed under") }
         if (outputsOf(round.prevOuts).size != commitment.txIn.size) refuse("a commitment without every prevout")
+
+        if (context.exitDelay !in 1..MAX_REASONABLE_DELAY || round.sweepDelay > MAX_REASONABLE_DELAY) refuse("a delay longer than the daemon itself accepts")
+        if (round.sweepDelay <= context.exitDelay) refuse("a sweep delay that lets the batch go before a VTXO can exit")
+        if (round.sweepDelay < context.minSweepDelay) refuse("a batch with a shorter life than the group agreed")
         val sweepRoot = ArkScripts.leafHash(ArkScripts.timeoutLeaf(key(round.sweepKey, "sweep key"), round.sweepDelay))
 
-        val leafOutputs = HashMap<ByteVector, MutableList<Pair<Long, List<PublicKey>>>>()
+        if (round.trees.map { it.outputIndex }.toSet().size != round.trees.size) refuse("two trees hanging from one output")
+        class Node(val noted: NotedNode, val tx: Transaction, val cosigners: List<PublicKey>, val parent: TxId?)
+        val nodes = HashMap<TxId, Node>()
         round.trees.forEach { tree ->
             val batch = commitment.txOut.getOrNull(tree.outputIndex) ?: refuse("a tree hanging from an output the commitment doesn't have")
             if (batch != TxOut(Satoshi(tree.batchOutput.value), bytes(tree.batchOutput.pkScript, "batch output"))) refuse("a tree that misstates its batch output")
             if (bytes(tree.sweepRoot, "sweep root") != ByteVector(sweepRoot.toByteArray())) refuse("a tree whose sweep root isn't the round's")
 
-            val nodes = tree.nodes.map { it to tx(it.tx, "tree transaction") }
-            val byId = nodes.associateBy { it.second.txid }
-            nodes.forEach { (noted, node) ->
+            val inTree = tree.nodes.map { it to tx(it.tx, "tree transaction") }
+            val byId = inTree.associateBy { it.second.txid }
+            val spends = HashSet<OutPoint>()
+            inTree.forEach { (noted, node) ->
                 val spent = node.txIn.singleOrNull()?.outPoint ?: refuse("a tree transaction with other than one input")
-                val prevout = if (spent == OutPoint(commitment, tree.outputIndex.toLong())) batch
-                else byId[spent.txid]?.second?.txOut?.getOrNull(spent.index.toInt()) ?: refuse("a tree transaction that hangs from nothing")
+                if (!spends.add(spent)) refuse("two tree transactions spending one output")
+                val fromBatch = spent == OutPoint(commitment, tree.outputIndex.toLong())
+                val prevout = if (fromBatch) batch else byId[spent.txid]?.second?.txOut?.getOrNull(spent.index.toInt()) ?: refuse("a tree transaction that hangs from nothing")
+                if (node.txOut.sumOf { it.amount.sat } != prevout.amount.sat) refuse("a tree transaction that doesn't keep the value it spends")
 
                 val cosigners = noted.coSigners.map { key(it, "cosigner") }
+                if (cosigners.toSet().size != cosigners.size) refuse("a tree transaction naming a cosigner twice")
                 if (context.operator !in cosigners) refuse("a tree transaction the operator isn't on")
                 val (_, outputKey) = GroupArkSigner.treeCache(cosigners, sweepRoot)
-                val expected = ByteVector(Script.write(listOf(fr.acinq.bitcoin.OP_1, OP_PUSHDATA(outputKey))))
+                val expected = ByteVector(Script.write(listOf(OP_1, OP_PUSHDATA(outputKey))))
                 if (prevout.publicKeyScript != expected) refuse("a tree output that isn't its cosigners' aggregate")
 
                 val digest = node.hashForSigningTaprootKeyPath(0, listOf(prevout), SigHash.SIGHASH_DEFAULT)
                 if (bytes(noted.digest, "digest") != ByteVector(digest.toByteArray())) refuse("a tree digest that isn't its transaction's")
-
-                node.txOut.forEach { out -> leafOutputs.getOrPut(out.publicKeyScript) { mutableListOf() }.add(out.amount.sat to cosigners) }
+                nodes[node.txid] = Node(noted, node, cosigners, if (fromBatch) null else spent.txid)
             }
         }
 
-        // A signing key maps to exactly one VTXO, as `VerifyVTXOPath` has it, and the leaf has to be the one it asked for.
+        // A signing key maps to exactly one VTXO, as `VerifyVTXOPath` has it, and each leaf pays only one of them.
         val signingKeys = round.vtxos.map { it.signingKey }
         if (signingKeys.size != signingKeys.toSet().size) refuse("two VTXOs under one tree key")
+        val leavesUsed = HashSet<TxId>()
+        val paths = HashMap<String, Set<String>>()
+        val credits = HashMap<String, Long>()
         var ownOut = 0L
         round.vtxos.forEach { vtxo ->
             val owner = key(vtxo.ownerKey, "owner key")
@@ -335,17 +401,35 @@ object ArkPolicy {
             if (!context.isTreeKey(signing)) refuse("a VTXO under a tree key the group didn't make")
             val script = ArkScripts.standardScript(owner, context.operator, context.exitDelay)
             if (bytes(vtxo.pkScript, "VTXO script") != script) refuse("a VTXO that doesn't pay its owner, the operator and the agreed delay")
-            val leaf = leafOutputs[script]?.firstOrNull { (amount, cosigners) -> amount == vtxo.amount && signing in cosigners }
-            if (leaf == null) refuse("a VTXO the tree doesn't pay")
+            val leaf = nodes.values.firstOrNull { node ->
+                node.tx.txid !in leavesUsed && signing in node.cosigners && node.tx.txOut.size == 2 &&
+                    node.tx.txOut[0] == TxOut(Satoshi(vtxo.amount), script) &&
+                    node.tx.txOut[1] == TxOut(Satoshi(0), ANCHOR)
+            } ?: refuse("a VTXO the tree doesn't pay")
+            leavesUsed += leaf.tx.txid
+
+            val path = HashSet<String>()
+            var at: Node? = leaf
+            while (at != null) {
+                if (signing !in at.cosigners) refuse("a tree transaction above a VTXO that its tree key isn't on")
+                path += at.noted.tx
+                at = at.parent?.let { nodes[it] ?: refuse("a tree transaction that hangs from nothing") }
+            }
+            paths[signing.toString()] = path
+            credits["${leaf.tx.txid}:0"] = vtxo.amount
             ownOut += vtxo.amount
         }
 
-        // Leaves: real outputs of the commitment, to the group's own wallet, or within what the group authorised.
+        // Leaves: real outputs of the commitment, each counted once, to the group's own wallet or within what it authorised.
         var budget = context.authorisedScripts
+        val leavesPaid = HashSet<Int>()
         var leavesOut = 0L
         round.leaves.forEach { leave ->
             val script = bytes(leave.pkScript, "leave")
-            if (commitment.txOut.none { it.publicKeyScript == script && it.amount.sat == leave.value }) refuse("a leave the commitment doesn't pay")
+            val at = commitment.txOut.indices.firstOrNull { i ->
+                i !in leavesPaid && commitment.txOut[i].publicKeyScript == script && commitment.txOut[i].amount.sat == leave.value
+            } ?: refuse("a leave the commitment doesn't pay")
+            leavesPaid += at
             when {
                 context.isOnchainWallet(script) -> Unit
                 (budget[script] ?: -1L) >= leave.value -> budget = budget + (script to budget.getValue(script) - leave.value)
@@ -355,17 +439,18 @@ object ArkPolicy {
         }
 
         // Value: the group's own record of what it forfeits, never the note's, and the boarding inputs it can prove.
+        val forfeitedPoints = round.forfeits.map { it.vtxoOutpoint }
+        if (forfeitedPoints.size != forfeitedPoints.toSet().size) refuse("one VTXO forfeited twice")
         var forfeited = 0L
         round.forfeits.forEach { forfeit ->
             val known = context.knownVtxos[forfeit.vtxoOutpoint] ?: refuse("a forfeit of a VTXO this device doesn't know of")
             if (known != forfeit.vtxoAmount) refuse("a forfeit for an amount other than the VTXO's")
+            context.reservedFor[forfeit.vtxoOutpoint]?.let { if (it != id) refuse("a VTXO already given to another round or transfer") }
             forfeited += known
         }
         var into = forfeited
-        val boardingSlot = GroupArkDerivation.Slot.BOARDING
         outputsOf(round.prevOuts).forEach { prev ->
-            val boarding = (0L until 64L).any { i -> prev.publicKeyScript == ArkScripts.standardScript(context.keys.key(boardingSlot, 0, i), context.operator, context.exitDelay) }
-            if (boarding) into += prev.amount.sat
+            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.exitDelay)) into += prev.amount.sat
         }
         val out = ownOut + leavesOut
         val fee = into - out
@@ -373,8 +458,9 @@ object ArkPolicy {
         if (fee > context.maxRoundFeeSat) refuse("a round taking $fee sats, more than the group agreed to")
 
         context.capSat?.let { cap ->
-            if (context.unspentSat - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
+            if (context.unspentSat - (context.pendingFromSat[id] ?: 0) - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
         }
+        return CheckedRound(paths, Effect(id, credits, forfeitedPoints, noteHash(note)))
     }
 
     /** That a forfeit's connector comes from this commitment: the chain of transactions that makes the forfeit conditional. */
@@ -397,52 +483,62 @@ object ArkPolicy {
     // ---- a transfer ----
 
     /** A checkpoint or an Ark transaction: both are checked as the one package they only mean something as. */
-    private fun transferInput(context: Context, request: ArkRequest, note: ArkNote, tx: Transaction, spentScript: ByteVector, standard: ByteVector, leaf: ByteVector, message: ByteVector32): Verdict {
+    private fun transferInput(context: Context, request: ArkRequest, note: ArkNote, tx: Transaction, prevOuts: List<TxOut>, spentScript: ByteVector, standard: ByteVector, leaf: ByteVector, message: ByteVector32): Verdict {
         val transfer = decode(NotedTransfer.serializer(), note.material)
         val ark = tx(transfer.ark.tx, "Ark transaction")
+        val arkId = ark.txid.toString()
         val checkpoints = transfer.checkpoints.map { tx(it.tx, "checkpoint") to outputsOf(it.prevOuts) }
         if (checkpoints.isEmpty()) refuse("a transfer with no checkpoints")
+        if (checkpoints.map { it.first.txid }.toSet().size != checkpoints.size) refuse("a transfer naming one checkpoint twice")
 
         var into = 0L
+        val spent = HashSet<String>()
         checkpoints.forEach { (checkpoint, prev) ->
             val input = prev.singleOrNull() ?: refuse("a checkpoint with other than one input")
+            if (checkpoint.txIn.size != 1) refuse("a checkpoint with other than one input")
             val outpointKey = outpoint(checkpoint, 0)
+            if (!spent.add(outpointKey)) refuse("a transfer spending one VTXO twice")
             val known = context.knownVtxos[outpointKey] ?: refuse("a checkpoint spending a VTXO this device doesn't know of")
             if (known != input.amount.sat) refuse("a checkpoint that misstates its VTXO")
-            if (checkpoint.txOut.size != 2 || checkpoint.txOut[1].publicKeyScript != ANCHOR) refuse("a checkpoint in any shape but output then anchor")
-            if (checkpoint.txOut[0].amount != input.amount) refuse("a checkpoint that doesn't carry its VTXO's whole value")
+            context.reservedFor[outpointKey]?.let { if (it != arkId) refuse("a VTXO already given to another round or transfer") }
+
+            // The checkpoint's output is what a signature over it actually hands on, so it is the shape that matters most.
+            val owner = context.keys.vtxoOwnerOf(input.publicKeyScript, context.operator, context.exitDelay) ?: refuse("a checkpoint spending a VTXO this wallet doesn't own")
+            val expected = ArkScripts.checkpointScript(context.operator, context.exitDelay, ArkScripts.collabLeaf(owner, context.operator))
+            if (checkpoint.txOut.size != 2 || checkpoint.txOut[1] != TxOut(Satoshi(0), ANCHOR)) refuse("a checkpoint in any shape but output then anchor")
+            if (checkpoint.txOut[0] != TxOut(input.amount, expected)) refuse("a checkpoint that doesn't pay its own collaborative leaf")
             if (ark.txIn.none { it.outPoint == OutPoint(checkpoint, 0) }) refuse("a checkpoint the Ark transaction doesn't spend")
             into += known
         }
         if (ark.txIn.size != checkpoints.size) refuse("an Ark transaction spending something other than its checkpoints")
 
         var budget = context.authorisedScripts
+        val credits = HashMap<String, Long>()
         var out = 0L
-        ark.txOut.forEach { output ->
+        ark.txOut.forEachIndexed { i, output ->
             val script = output.publicKeyScript
-            if (script == ANCHOR && output.amount == Satoshi(0)) return@forEach
-            val ownScript = (0L until 512L).any { i ->
-                script == ArkScripts.standardScript(context.keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, i), context.operator, context.exitDelay)
-            }
+            if (script == ANCHOR && output.amount == Satoshi(0)) return@forEachIndexed
             when {
-                ownScript -> Unit
+                context.keys.vtxoOwnerOf(script, context.operator, context.exitDelay) != null -> credits["$arkId:$i"] = output.amount.sat
                 (budget[script] ?: -1L) >= output.amount.sat -> budget = budget + (script to budget.getValue(script) - output.amount.sat)
                 else -> refuse("a transfer to a script nobody authorised")
             }
             out += output.amount.sat
         }
         if (out != into) refuse("a transfer that doesn't move exactly what it spends")
+        val effect = Effect(arkId, credits, spent.toList())
 
         return when {
             tx.txid == ark.txid -> {
                 val checkpoint = checkpoints.firstOrNull { (c, _) -> tx.txIn[request.inputIndex].outPoint == OutPoint(c, 0) }?.first ?: refuse("an Ark input that isn't a checkpoint")
                 if (spentScript != checkpoint.txOut[0].publicKeyScript) refuse("an Ark input that misstates its checkpoint")
                 if (spentScript != ArkScripts.checkpointScript(context.operator, context.exitDelay, leaf)) refuse("a checkpoint that doesn't commit to this leaf")
-                Verdict.Allow(What.TRANSFER, message)
+                Verdict.Allow(What.TRANSFER, message, effect)
             }
             checkpoints.any { (c, _) -> c.txid == tx.txid } -> {
                 if (spentScript != standard) refuse("a leaf this output doesn't commit to")
-                Verdict.Allow(What.TRANSFER, message)
+                if (checkpoints.first { (c, _) -> c.txid == tx.txid }.second != prevOuts) refuse("a checkpoint with prevouts other than the transfer's")
+                Verdict.Allow(What.TRANSFER, message, effect)
             }
             else -> refuse("a transaction outside the transfer that was noted")
         }

@@ -52,7 +52,7 @@ object ArkWire {
     @Serializable
     data class ShareBatch(val wallet: String, val items: List<ShareItem>)
 
-    /** How far this device has answered, or a question to the others about how far they have. */
+    /** How far this device has answered, in labels and in tree keys, or a question to the others about how far they have. */
     @Serializable
-    data class HighWater(val wallet: String, val asking: Boolean, val highest: Long)
+    data class HighWater(val wallet: String, val asking: Boolean, val highest: Long, val highestChild: Long = -1)
 }

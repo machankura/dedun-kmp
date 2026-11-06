@@ -174,6 +174,14 @@ class GroupArkCoSigningJvmTest {
         }
     }
 
+    /** A batch that reached [target] while it was restoring, so it is in the room and hasn't been looked at. */
+    private suspend fun fileOnly(group: Group, target: GroupLightningFixture.Device, batch: ArkWire.SigningBatch) {
+        val content = CommonJson.encodeToString(ArkWire.SigningBatch.serializer(), batch)
+        val queued = GroupLightningWalletManager.queue(group.operator.db, group.operator.room, group.operator.publicKey, GroupWavelengthEvents.SIGNING_REQUEST, content)
+        target.received.add(queued.id)
+        target.db.marmotInnerEventDao().upsert(queued.copy(chatRoomId = fixture.roomId))
+    }
+
     private suspend fun floorsKnown(group: Group) {
         // Everybody learns how far the group has answered before the hostile part.
         val (request, _, _) = sweep(group, 1)
@@ -311,10 +319,100 @@ class GroupArkCoSigningJvmTest {
         val signature = session.aggregateSigs(listOf(ByteVector32(response.signature!!), session.sign(operatorSecret, arkOperator).right!!)).right!!
         assertTrue(Crypto.verifySignatureSchnorr(digest, signature, outputKey), "the tree node's key path is spent")
 
+        val commitment = Transaction.read(noted.commitmentTx).txid.toString()
         group.all.forEach { d ->
             val known = d.db.groupArkDao().vtxos(group.key)
             assertEquals(listOf(50_000L), known.map { it.amountSat }, "device ${d.index} remembers the VTXO it signed for")
+            assertEquals(emptyMap<String, Long>(), contextOn(d, group).knownVtxos, "device ${d.index} won't spend it until it has seen it settle")
+            assertEquals(mapOf(commitment to 50_000L), contextOn(d, group).pendingFromSat)
+            GroupArkCoSigner.settled(d.db, group.key, commitment)
+            assertEquals(listOf(50_000L), contextOn(d, group).knownVtxos.values.toList(), "device ${d.index} spends it once it has")
+            assertEquals(50_000L, contextOn(d, group).unspentSat)
         }
+    }
+
+    private suspend fun contextOn(d: GroupLightningFixture.Device, group: Group) = GroupArkCoSigner.contextOf(d.db, fixture.roomId, group.wallet, group.key, currentTerm(group))
+
+    private suspend fun currentTerm(group: Group) = assertNotNull(GroupWavelengthOperatorManager.current(group.all[0].db, fixture.roomId, fixture.chain)).term
+
+    private suspend fun contributionsAt(group: Group, counter: Long) =
+        group.all[0].db.icebergCoSigningDao().noncesFor(group.key, counter).sortedBy { it.contribution }.map { it.contribution }
+
+    private fun labelAt(group: Group, counter: Long, domain: ArkWire.Domain = ArkWire.Domain()) =
+        Hex.encode(GroupArkCoSigner.label(group.wallet.statement.icebergKey, domain, counter).toByteArray())
+
+    @Test
+    fun `the same message under a label with other nonces is a second challenge, and gets nothing`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val counter = 1L
+        val request = sweep(group, 4).first
+        val contributions = contributionsAt(group, counter)
+        val term = currentTerm(group)
+        val device = group.all[1]
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("a", ArkWire.Domain(), counter, request, contributions))))
+        val checked = assertNotNull(device.db.groupArkDao().checked(group.key, labelAt(group, counter)))
+        val refusedBefore = fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size
+
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("b", ArkWire.Domain(), counter, request, contributions.reversed()))))
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("c", ArkWire.Domain(), counter, request, contributions, cosignerNonce = "ab".repeat(66)))))
+
+        assertEquals(refusedBefore + 2, fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size, "the device refuses each")
+        assertTrue(fixture.lines(device, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).isNotEmpty(), "and raises the alarm")
+        assertEquals(checked.item, device.db.groupArkDao().checked(group.key, labelAt(group, counter))?.item, "what it would sign is still what it checked first")
+    }
+
+    @Test
+    fun `a device counts how far it has checked, in labels and in tree keys apart`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val dao = group.all[1].db.groupArkDao()
+        assertEquals(0L, dao.highestPlainChecked(group.key))
+        assertEquals(null, dao.highestChildChecked(group.key))
+    }
+
+    @Test
+    fun `a restored device answers no tree key below what the group has reached, and no old term's request once it knows`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val restored = group.all[3]
+        restored.db.groupArkDao().upsertFloor(com.machankura.dedun.compose.database.model.GroupArkFloor(group.key, null))
+        val term = currentTerm(group)
+
+        // From the old term, at a label above any floor: filed in the room, and nothing it should ever answer.
+        val old = sweep(group, 6).first
+        val stale = ArkWire.SigningBatch(group.key, term - 1, listOf(ArkWire.SigningItem("stale", ArkWire.Domain(), 9, old, contributionsAt(group, 9))))
+        fileOnly(group, restored, stale)
+        // And for a tree key it won't be asked about again, this term.
+        val treeItem = ArkWire.SigningItem("old tree", ArkWire.Domain(1), 0, sweep(group, 7).first, emptyList())
+        fileOnly(group, restored, ArkWire.SigningBatch(group.key, term, listOf(treeItem)))
+
+        repeat(2) { i ->
+            val other = group.all[i]
+            val message = ArkWire.HighWater(group.key, asking = false, highest = 0, highestChild = 1)
+            val queued = GroupLightningWalletManager.queue(other.db, other.room, other.publicKey, GroupWavelengthEvents.HIGH_WATER, CommonJson.encodeToString(ArkWire.HighWater.serializer(), message))
+            GroupArkCoSigner.process(restored.db, restored.room, Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, queued.content, ""), restored.publicKey)
+        }
+
+        val floor = assertNotNull(restored.db.groupArkDao().floor(group.key))
+        assertEquals(1L, floor.floor)
+        assertEquals(2L, floor.treeFloor)
+        assertEquals(null, restored.db.groupArkDao().checked(group.key, labelAt(group, 9)), "an old term's request is nothing now")
+        assertEquals(null, restored.db.groupArkDao().checked(group.key, labelAt(group, 0, ArkWire.Domain(1))), "nor is a tree key below the floor")
+        val said = fixture.lines(restored, ChatMessage.TYPE_LIGHTNING_REFUSED)
+        assertTrue(said.any { it.content.contains("tree key from before") }, "and it says so")
+    }
+
+    @Test
+    fun `a tree key's label can't sign a plain request, nor a plain label a tree one`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val device = group.all[1]
+        val domain = ArkWire.Domain(0)
+        val item = ArkWire.SigningItem("crossed", domain, 0, sweep(group, 4).first, emptyList())
+        sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, currentTerm(group), listOf(item)))
+        assertEquals(null, device.db.groupArkDao().checked(group.key, labelAt(group, 0, domain)))
+        assertTrue(fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).any { it.content.contains("another kind of signature") })
     }
 
     @Test

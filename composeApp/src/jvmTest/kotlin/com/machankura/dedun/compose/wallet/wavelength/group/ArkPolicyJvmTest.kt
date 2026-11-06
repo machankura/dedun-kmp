@@ -5,10 +5,13 @@ import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Crypto
+import fr.acinq.bitcoin.OP_1
+import fr.acinq.bitcoin.OP_PUSHDATA
 import fr.acinq.bitcoin.OutPoint
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Script
+import fr.acinq.bitcoin.SigHash
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.TxIn
@@ -20,6 +23,7 @@ import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -73,8 +77,15 @@ class ArkPolicyJvmTest {
         operatorKey: PublicKey = operator,
         exitDelay: Long = fixtures.exitDelay,
         unspentSat: Long = 40_000,
-        forfeitedIn: Map<String, String> = emptyMap(),
-    ) = ArkPolicy.Context(keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised, emptySet(), capSat, unspentSat, forfeitedIn)
+        pendingFromSat: Map<String, Long> = emptyMap(),
+        reservedFor: Map<String, String> = emptyMap(),
+        notedRounds: Map<String, String> = emptyMap(),
+        treeKeyRounds: Map<String, String> = emptyMap(),
+        minSweepDelay: Long = 0,
+    ) = ArkPolicy.Context(
+        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised, emptySet(),
+        capSat, unspentSat, pendingFromSat, reservedFor, notedRounds, treeKeyRounds, minSweepDelay,
+    )
 
     private fun allowed(request: ArkRequest, what: ArkPolicy.What, context: ArkPolicy.Context = context(), session: PublicKey? = null) {
         val verdict = ArkPolicy.check(context, request, session)
@@ -109,6 +120,67 @@ class ArkPolicyJvmTest {
     }
 
     private val thief = ByteVector(Hex.decode("5120" + "ee".repeat(32)))
+    private val anchor = ByteVector(Script.write(Script.pay2anchor))
+    private val stranger = PublicKey.fromHex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+
+    /** The tree signature as members see it: the transport fills in the session's cosigners and sweep root, which the daemon only names once. */
+    private val treeSign: ArkRequest = fixtures.treeSign.let { request ->
+        val round = CommonJson.decodeFromJsonElement(NotedRound.serializer(), request.note!!.material)
+        val tree = round.trees.first { t -> t.nodes.any { it.digest == request.digest } }
+        request.copy(signers = tree.nodes.first { it.digest == request.digest }.coSigners, scriptRoot = tree.sweepRoot)
+    }
+
+    private val commitmentId: String = Transaction.read(CommonJson.decodeFromJsonElement(NotedRound.serializer(), fixtures.forfeit.note!!.material).commitmentTx).txid.toString()
+
+    private fun hex(tx: Transaction) = Hex.encode(Transaction.write(tx))
+
+    private fun scriptOf(cosigners: List<PublicKey>, sweepRoot: ByteVector32) =
+        ByteVector(Script.write(listOf(OP_1, OP_PUSHDATA(GroupArkSigner.treeCache(cosigners, sweepRoot).second))))
+
+    /** A round this file builds whole, for the shapes the daemon wouldn't: batch, root, then a leaf paying a VTXO beside a sibling paying someone else. */
+    private inner class Built(
+        rootCosigners: List<PublicKey> = listOf(operator, treeKey),
+        siblingCosigners: List<PublicKey> = listOf(operator, treeKey),
+        sweepDelay: Long = 1_000,
+        batchValue: Long = 50_000,
+        vtxos: (NotedVtxo) -> List<NotedVtxo> = { listOf(it) },
+    ) {
+        private val sweepKey = operator
+        private val sweepRoot = ArkScripts.leafHash(ArkScripts.timeoutLeaf(sweepKey, sweepDelay))
+        private val owner = keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 5)
+        private val vtxoScript = ArkScripts.standardScript(owner, operator, fixtures.exitDelay)
+        private val leafCosigners = listOf(operator, treeKey)
+        private val boarding = ArkScripts.standardScript(keys.key(GroupArkDerivation.Slot.BOARDING, 0, 0), operator, fixtures.exitDelay)
+
+        val commitment = Transaction(3, listOf(TxIn(OutPoint(TxId("b0".repeat(32)), 0), 0xffffffffL)), listOf(TxOut(Satoshi(batchValue), scriptOf(rootCosigners, sweepRoot))), 0)
+        val root = Transaction(
+            3, listOf(TxIn(OutPoint(commitment, 0), 0xffffffffL)),
+            listOf(TxOut(Satoshi(30_000), scriptOf(leafCosigners, sweepRoot)), TxOut(Satoshi(20_000), scriptOf(siblingCosigners, sweepRoot))), 0,
+        )
+        val leaf = Transaction(3, listOf(TxIn(OutPoint(root, 0), 0xffffffffL)), listOf(TxOut(Satoshi(30_000), vtxoScript), TxOut(Satoshi(0), anchor)), 0)
+        val sibling = Transaction(3, listOf(TxIn(OutPoint(root, 1), 0xffffffffL)), listOf(TxOut(Satoshi(20_000), thief), TxOut(Satoshi(0), anchor)), 0)
+
+        private fun noted(tx: Transaction, spent: TxOut, cosigners: List<PublicKey>) =
+            NotedNode(hex(tx), Hex.encode(tx.hashForSigningTaprootKeyPath(0, listOf(spent), SigHash.SIGHASH_DEFAULT).toByteArray()), cosigners.map { it.toString() })
+
+        val rootNode = noted(root, commitment.txOut[0], rootCosigners)
+        val leafNode = noted(leaf, root.txOut[0], leafCosigners)
+        val siblingNode = noted(sibling, root.txOut[1], siblingCosigners)
+
+        val round = NotedRound(
+            commitmentTx = hex(commitment),
+            prevOuts = listOf(ArkOutput(30_000, Hex.encode(boarding.toByteArray()))),
+            sweepKey = sweepKey.toString(),
+            sweepDelay = sweepDelay,
+            trees = listOf(NotedTree(0, ArkOutput(batchValue, Hex.encode(commitment.txOut[0].publicKeyScript.toByteArray())), Hex.encode(sweepRoot.toByteArray()), listOf(rootNode, leafNode, siblingNode))),
+            vtxos = vtxos(NotedVtxo(treeKey.toString(), owner.toString(), 30_000, Hex.encode(vtxoScript.toByteArray()))),
+        )
+
+        fun signing(node: NotedNode, changed: (NotedRound) -> NotedRound = { it }) = ArkRequest(
+            kind = ArkRequest.MUSIG2_SIGN, digest = node.digest, signers = node.coSigners, scriptRoot = round.trees[0].sweepRoot,
+            note = ArkNote(ArkNote.ROUND, "built", CommonJson.encodeToJsonElement(NotedRound.serializer(), changed(round))),
+        )
+    }
 
     // ---- the real shapes pass ----
 
@@ -120,7 +192,7 @@ class ArkPolicyJvmTest {
 
     @Test
     fun `every shape the daemon builds is allowed, and the digest computed here is the daemon's`() {
-        allowed(fixtures.treeSign, ArkPolicy.What.TREE, session = treeKey)
+        allowed(treeSign, ArkPolicy.What.TREE, session = treeKey)
         allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT)
         allowed(fixtures.boarding, ArkPolicy.What.BOARDING)
         allowed(fixtures.joinProof, ArkPolicy.What.JOIN_PROOF)
@@ -200,13 +272,13 @@ class ArkPolicyJvmTest {
     @Test
     fun `a round whose tree doesn't pay the VTXO it promised is refused`() {
         refused(fixtures.forfeit.withRound { r -> r.copy(vtxos = r.vtxos.map { it.copy(amount = it.amount + 1) }) }, "the tree doesn't pay")
-        refused(fixtures.treeSign.withRound { r -> r.copy(vtxos = r.vtxos.map { it.copy(amount = it.amount + 1) }) }, "the tree doesn't pay", session = treeKey)
+        refused(treeSign.withRound { r -> r.copy(vtxos = r.vtxos.map { it.copy(amount = it.amount + 1) }) }, "the tree doesn't pay", session = treeKey)
     }
 
     @Test
     fun `a tree key the group didn't make is refused`() {
         refused(fixtures.forfeit, "a tree key the group didn't make", context(isTreeKey = { false }))
-        refused(fixtures.treeSign, "a tree key the group didn't make", context(isTreeKey = { false }), session = treeKey)
+        refused(treeSign, "a tree key the group didn't make", context(isTreeKey = { false }), session = treeKey)
     }
 
     @Test
@@ -219,7 +291,7 @@ class ArkPolicyJvmTest {
     @Test
     fun `a tree whose node isn't its cosigners' aggregate is refused`() {
         refused(
-            fixtures.treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(coSigners = n.coSigners.reversed() + "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798") }) }) },
+            treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(coSigners = n.coSigners.reversed() + "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798") }) }) },
             "isn't its cosigners' aggregate", session = treeKey,
         )
     }
@@ -227,7 +299,7 @@ class ArkPolicyJvmTest {
     @Test
     fun `a tree the operator isn't on is refused`() {
         refused(
-            fixtures.treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(coSigners = n.coSigners.filter { it != fixtures.operator }) }) }) },
+            treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(coSigners = n.coSigners.filter { it != fixtures.operator }) }) }) },
             "the operator isn't on", session = treeKey,
         )
     }
@@ -235,17 +307,17 @@ class ArkPolicyJvmTest {
     @Test
     fun `a tree digest that isn't its transaction's is refused`() {
         refused(
-            fixtures.treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(digest = "cd".repeat(32)) }) }) },
+            treeSign.withRound { r -> r.copy(trees = r.trees.map { t -> t.copy(nodes = t.nodes.map { n -> n.copy(digest = "cd".repeat(32)) }) }) },
             "isn't its transaction's", session = treeKey,
         )
     }
 
     @Test
     fun `a tree signature on a digest outside the round, or a session it isn't on, is refused`() {
-        refused(fixtures.treeSign.copy(digest = "cd".repeat(32)), "a digest of nothing in this round's trees", session = treeKey)
+        refused(treeSign.copy(digest = "cd".repeat(32)), "a digest of nothing in this round's trees", session = treeKey)
         val otherTree: (PublicKey) -> Boolean = { true }
-        refused(fixtures.treeSign, "a node this key isn't on", context(isTreeKey = otherTree), session = keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 5))
-        refused(fixtures.treeSign, "a session this device didn't start")
+        refused(treeSign, "a node this key isn't on", context(isTreeKey = otherTree), session = keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 5))
+        refused(treeSign, "a session this device didn't start")
     }
 
     @Test
@@ -290,9 +362,157 @@ class ArkPolicyJvmTest {
     }
 
     @Test
-    fun `a VTXO already forfeited into another round is refused`() {
-        refused(fixtures.forfeit, "already forfeited into another round", context(forfeitedIn = mapOf(spent to "another round")))
-        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(forfeitedIn = mapOf(spent to fixtures.forfeit.note!!.id)))
+    fun `a VTXO already given to another round or transfer is refused, and to the same commitment under any note id it isn't`() {
+        refused(fixtures.forfeit, "already given to another round or transfer", context(reservedFor = mapOf(spent to "another round")))
+        refused(fixtures.oorCheckpoint, "already given to another round or transfer", context(reservedFor = mapOf(spent to commitmentId)))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(reservedFor = mapOf(spent to commitmentId)))
+        allowed(fixtures.forfeit.copy(note = fixtures.forfeit.note!!.copy(id = "a retry")), ArkPolicy.What.FORFEIT, context(reservedFor = mapOf(spent to commitmentId)))
+    }
+
+    // ---- what the independent review found ----
+
+    @Test
+    fun `an exit can't pay its value to an anchor, which anyone can spend`() {
+        refused(fixtures.exitSweep.payingInstead(anchor), "somewhere other than the group's onchain wallet")
+        val tx = Transaction.read(fixtures.exitSweep.tx!!)
+        val half = tx.txOut[0].amount.sat / 2
+        val split = tx.copy(txOut = listOf(TxOut(Satoshi(half), tx.txOut[0].publicKeyScript), TxOut(Satoshi(half), anchor)))
+        refused(fixtures.exitSweep.copy(tx = hex(split), digest = null), "somewhere other than the group's onchain wallet")
+    }
+
+    /** The checkpoint a thief would like signed, with an Ark transaction beside it that looks like the real one. */
+    private fun decoyCheckpoint(change: (Transaction) -> Transaction): ArkRequest {
+        val stolen = change(Transaction.read(fixtures.oorCheckpoint.tx!!))
+        return fixtures.oorCheckpoint.copy(tx = hex(stolen), digest = null).withTransfer { t ->
+            val ark = Transaction.read(t.ark.tx)
+            t.copy(
+                ark = t.ark.copy(tx = hex(ark.copy(txIn = ark.txIn.map { it.copy(outPoint = OutPoint(stolen, 0)) }))),
+                checkpoints = t.checkpoints.map { it.copy(tx = hex(stolen)) },
+            )
+        }
+    }
+
+    @Test
+    fun `a checkpoint paying a thief is refused, however good its Ark transaction looks`() {
+        refused(decoyCheckpoint { it.copy(txOut = listOf(TxOut(it.txOut[0].amount, thief)) + it.txOut.drop(1)) }, "doesn't pay its own collaborative leaf")
+        refused(decoyCheckpoint { it.copy(txOut = listOf(it.txOut[0], TxOut(Satoshi(1), anchor))) }, "output then anchor")
+        refused(decoyCheckpoint { it.copy(txOut = it.txOut + TxOut(Satoshi(1), thief)) }, "output then anchor")
+        val twoInputs = decoyCheckpoint { it.copy(txIn = it.txIn + TxIn(OutPoint(TxId("dd".repeat(32)), 0), 0)) }
+        refused(twoInputs.copy(prevOuts = twoInputs.prevOuts + twoInputs.prevOuts), "other than one input")
+    }
+
+    @Test
+    fun `a transfer naming a checkpoint twice, or an Ark transaction with an input of its own, is refused`() {
+        refused(fixtures.oorCheckpoint.withTransfer { it.copy(checkpoints = it.checkpoints + it.checkpoints) }, "one checkpoint twice")
+        refused(
+            fixtures.oorCheckpoint.withTransfer { t ->
+                val ark = Transaction.read(t.ark.tx)
+                t.copy(ark = t.ark.copy(tx = hex(ark.copy(txIn = ark.txIn + TxIn(OutPoint(TxId("dd".repeat(32)), 0), 0)))))
+            },
+            "something other than its checkpoints",
+        )
+    }
+
+    @Test
+    fun `a checkpoint's prevouts have to be the transfer's`() {
+        val misstated = fixtures.oorCheckpoint.prevOuts.map { it.copy(value = it.value - 1) }
+        refused(fixtures.oorCheckpoint.copy(prevOuts = misstated, digest = null), "prevouts other than the transfer's")
+    }
+
+    @Test
+    fun `a transfer signs in the order a real one does, the Ark transaction first`() {
+        val first = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), fixtures.oorArk))
+        val effect = assertNotNull(first.effect)
+        assertEquals(listOf(spent), effect.reserves)
+        allowed(fixtures.oorCheckpoint, ArkPolicy.What.TRANSFER, context(reservedFor = effect.reserves.associateWith { effect.towards }))
+    }
+
+    @Test
+    fun `a tree key signs its own VTXO's path, and nothing else`() {
+        val built = Built()
+        allowed(built.signing(built.leafNode), ArkPolicy.What.TREE, session = treeKey)
+        allowed(built.signing(built.rootNode), ArkPolicy.What.TREE, session = treeKey)
+        refused(built.signing(built.siblingNode), "off the path to this key's VTXO", session = treeKey)
+    }
+
+    @Test
+    fun `a tree key replayed with an empty note, or one that has signed for another round, is refused`() {
+        val empty = treeSign.withRound { r -> r.copy(vtxos = emptyList(), leaves = emptyList(), forfeits = emptyList(), prevOuts = r.prevOuts.map { it.copy(pkScript = "51") }) }
+        refused(empty, "a key no VTXO of this round uses", session = treeKey)
+        refused(treeSign, "has signed for another round", context(treeKeyRounds = mapOf(treeKey.toString() to "another")), session = treeKey)
+        allowed(treeSign, ArkPolicy.What.TREE, context(treeKeyRounds = mapOf(treeKey.toString() to commitmentId)), session = treeKey)
+    }
+
+    @Test
+    fun `a session over other cosigners or another sweep root than its node's is refused`() {
+        refused(treeSign.copy(signers = treeSign.signers + treeSign.signers.first()), "other cosigners", session = treeKey)
+        refused(treeSign.copy(signers = treeSign.signers.drop(1)), "other cosigners", session = treeKey)
+        refused(treeSign.copy(signers = emptyList()), "other cosigners", session = treeKey)
+        refused(treeSign.copy(scriptRoot = "ab".repeat(32)), "another sweep root", session = treeKey)
+        refused(treeSign.copy(scriptRoot = null), "another sweep root", session = treeKey)
+    }
+
+    @Test
+    fun `a node above a VTXO that its tree key isn't on is refused, as the daemon does`() {
+        val built = Built(rootCosigners = listOf(operator, stranger))
+        refused(built.signing(built.leafNode), "that its tree key isn't on", session = treeKey)
+    }
+
+    @Test
+    fun `a tree that doesn't keep its value is refused, as the daemon does`() {
+        val built = Built(batchValue = 50_001)
+        refused(built.signing(built.leafNode), "doesn't keep the value it spends", session = treeKey)
+    }
+
+    @Test
+    fun `a batch that can be swept before a VTXO can exit, or sooner than the group agreed, is refused`() {
+        val built = Built(sweepDelay = fixtures.exitDelay)
+        refused(built.signing(built.leafNode), "before a VTXO can exit", session = treeKey)
+        val tiny = Built(sweepDelay = 1_000)
+        refused(tiny.signing(tiny.leafNode), "a shorter life", context(minSweepDelay = 1_001), session = treeKey)
+        val forever = Built(sweepDelay = 52_561)
+        refused(forever.signing(forever.leafNode), "longer than the daemon itself accepts", session = treeKey)
+    }
+
+    @Test
+    fun `one output is counted once, however many times a note names it`() {
+        val built = Built()
+        refused(built.signing(built.leafNode) { r -> r.copy(vtxos = r.vtxos + r.vtxos) }, "two VTXOs under one tree key", session = treeKey)
+        val otherKey = keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 6)
+        val twice = Built(vtxos = { listOf(it, it.copy(signingKey = otherKey.toString())) })
+        refused(twice.signing(twice.leafNode), "the tree doesn't pay", context(isTreeKey = { true }), session = treeKey)
+        refused(fixtures.forfeit.withRound { r -> r.copy(leaves = r.leaves + r.leaves) }, "a leave the commitment doesn't pay")
+        refused(fixtures.forfeit.withRound { r -> r.copy(forfeits = r.forfeits + r.forfeits) }, "forfeited twice")
+    }
+
+    @Test
+    fun `a round has one account, whichever request first gave it`() {
+        val hash = ArkPolicy.noteHash(fixtures.forfeit.note!!)
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(notedRounds = mapOf(commitmentId to hash)))
+        refused(fixtures.forfeit, "a second account of a round", context(notedRounds = mapOf(commitmentId to "another")))
+        refused(treeSign, "a second account of a round", context(notedRounds = mapOf(commitmentId to "another")), session = treeKey)
+    }
+
+    @Test
+    fun `a key past the window every check looks through is refused, rather than counted as nothing`() {
+        refused(fixtures.boarding.copy(index = keys.window), "outside the range this device checks")
+        refused(fixtures.boarding.copy(branch = 1), "outside the range this device checks")
+        refused(fixtures.forfeit.copy(index = -1), "outside the range this device checks")
+    }
+
+    @Test
+    fun `what a round means for the ledger comes from what the tree really pays`() {
+        val verdict = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), Built().let { it.signing(it.leafNode) }, treeKey))
+        val built = Built()
+        assertEquals(mapOf("${built.leaf.txid}:0" to 30_000L), verdict.effect!!.credits)
+        assertEquals(built.commitment.txid.toString(), verdict.effect!!.towards)
+        assertEquals(listOf(spent), assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), fixtures.forfeit)).effect!!.reserves)
+    }
+
+    @Test
+    fun `the cap counts the coins a round replaces once, and not its own pending ones again`() {
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(capSat = 50_000, unspentSat = 90_000, pendingFromSat = mapOf(commitmentId to 50_000)))
+        refused(fixtures.forfeit, "over its cap", context(capSat = 50_000, unspentSat = 90_000))
     }
 
     @Test
