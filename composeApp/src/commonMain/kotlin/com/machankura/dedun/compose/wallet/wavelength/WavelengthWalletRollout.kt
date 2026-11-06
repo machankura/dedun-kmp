@@ -22,10 +22,11 @@ object WavelengthWalletRollout {
     const val OFFERED: Boolean = true
 
     /**
-     * The network every profile's wallet opens on. Signet until the hand-run table in Phase 11
-     * has been done on a real device, with real money, and written down.
+     * The network every profile's wallet opens on. Mainnet by decision on 6 November 2026, ahead
+     * of Phase 11's condition: its hand-run table has not been done, so no coin has yet moved
+     * through this wallet on any network. Debug builds open on it too.
      */
-    val NETWORK: Network = Network.SIGNET
+    val NETWORK: Network = Network.MAINNET
 
     /**
      * The most one send may move, and the balance an invoice may take the wallet to, on
@@ -72,7 +73,7 @@ object WavelengthWalletRollout {
      * The Esplora host is Lightning Labs', and its name says *staging*, which is uncomfortable. But
      * on 6 November 2026 it was the only one that worked: a first open makes a burst of requests,
      * and mempool.space and blockstream.info both rate-limited it until the open failed. Running
-     * our own is what lifts this, and is a condition of mainnet (D6, Phase 11).
+     * our own is what lifts this, and is still owed (D6, Phase 11).
      */
     fun configFor(network: Network, dataDir: String): RuntimeConfig = when (network) {
         Network.MAINNET -> RuntimeConfig(

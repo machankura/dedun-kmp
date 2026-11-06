@@ -5,8 +5,9 @@ history and a way out, on the profile tab above the member wallets. It is an Ark
 app's process by Lightning Labs' `waved` daemon, through the `wavelength-kmp` submodule at
 `experimental/wavelength-kmp`.
 
-**Built on `claude/wavelength-wallet`, phases 2 to 9 and 13, on signet and not released. Mainnet is one line
-away and has not been switched on.** Written on 6 November 2026 against `22935627` (`dedun`), with `wavelength-kmp`
+**Built on `claude/wavelength-wallet`, phases 2 to 9 and 13, and not released. `NETWORK` was set to mainnet by decision
+on 6 November 2026, ahead of Phase 11's condition: its table has not been done, and no coin has moved through this wallet
+on any network.** Written on 6 November 2026 against `22935627` (`dedun`), with `wavelength-kmp`
 at `cb9474b0` (`descriptors`) and `lightning-kmp-app` at `949bfcb9`. Files and lines named below are as they stood at
 those commits. The phases are kept as written; the table below says where the build chose differently.
 
@@ -21,13 +22,16 @@ What is checked:
 - The app itself, by hand on an emulator, on signet: a new profile, the row, the sheet, the first open, the wallet
   screen, a real invoice with its QR code, an onchain address, the advanced screen, the daemon stopping a minute after
   the app is left, and reopening in 6 seconds on return.
+- The app with `NETWORK` on mainnet, by hand on an emulator, with an empty throwaway profile: the sheet with no test line,
+  the first open in under 100 seconds, the wallet screen stating the cap, a 12,000 sat `lnbc` invoice, a `bc1p` address,
+  and a 200,000 sat invoice refused for going past the cap.
 - `tr` only: the daemon reports no `wpkh` account, so it holds nothing at `m/84'`. No private key in logcat through any
   of this, by searching for `xprv` and `tprv`.
 
 **Not checked, and this is the part that matters:**
 - **No wallet has held anything.** Every flow with money is tested only over `FakeWavelengthClient`: a payment
   received, a send, a board, a renewal, a cooperative exit, an emergency exit, a restore that finds coins. There is no
-  signet faucet API, and funding one by hand is the next step. Phase 11 cannot start without it.
+  signet faucet API, so a signet run takes coins sent by hand, and mainnet's table takes a small amount of real money.
 - A real phone: emulators only. Memory is a question: the app's PSS with a wallet open was 550 MB on one.
 - iOS (Phase 12): the SDK's iOS code has never been compiled, and neither has this wallet's `iosMain` actual.
 - The nested daemon is built on this host, from a fork with no release.
@@ -71,7 +75,9 @@ them. The work is in four things Bark did not have.**
 | 8 | scheduled from `schedulePlatformLogic` | from the nav host: an nsec profile has no node, so it never reaches that |
 | 9 | a progress view for exits that drives them | `exitSummary` and the daemon's own job: it carries on across restarts by itself |
 | 13 | forget refused until the words are confirmed saved | refused while the wallet may hold money. An empty wallet's words hold nothing, so there is nothing to confirm, and they are removed with the key |
-| 13 | after the mainnet release | built now, on request. It runs on signet like the rest |
+| 11 | mainnet after the table and our own Esplora | set first, by decision. Both are still owed, so `NETWORK`'s comment says so |
+| 11 | `versionCode` bumped, a signet build type kept | neither yet. The bump belongs to a release, and debug builds open on mainnet too, so signet by hand means changing `NETWORK` |
+| 13 | after the mainnet release | built ahead of it, on request |
 
 ## What Phase 0 found
 
@@ -215,8 +221,8 @@ expect object WavelengthPlatform {
 The row says so in words. It does not hide.
 
 **D5. Its own gate, and the gate never locks anyone out.** `WavelengthWalletRollout` holds `OFFERED`, `NETWORK`,
-per-network endpoints and `MAINNET_CAP = Satoshi(100_000)`. `NETWORK` is signet until Phase 11's condition is met,
-and `allowMainnet` is set only from this object.
+per-network endpoints and `MAINNET_CAP = Satoshi(100_000)`. `NETWORK` was to stay signet until Phase 11's condition was met,
+and was set to mainnet ahead of it. `allowMainnet` is set only from this object.
 
 The Bark removal's first finding becomes a rule here: **turning the gate off stops new consent, and a consented
 profile always opens.** There is no `ENABLED` that strands money, so a wind-down is the flag and a release rather
@@ -227,7 +233,7 @@ deposit, so the wallet screen states it.
 hosts rather than leaving them to the daemon's defaults, so a pin bump can't move them silently. The plan was to avoid the
 daemon's Esplora default because its name says *staging*. Spike 9 reversed that: it is the only host that let a first open
 finish, and two public ones rate-limited it until the open failed. It stays named in `configFor` until a Machankura-run
-instance replaces it, which Phase 11 now requires. Lightning Labs sees the wallet's VTXOs, Lightning payments and the
+instance replaces it, which Phase 11 requires and is still owed. Lightning Labs sees the wallet's VTXOs, Lightning payments and the
 device's IP, and the Esplora host sees its onchain addresses. The sheet says so.
 
 **D7. Tor on means no wallet.** There is no proxy to give the daemon, and a profile with Tor on would connect over
@@ -490,6 +496,8 @@ Tests: over the fake for each step and stop. Against signet with the operator bl
 
 ### Phase 11: mainnet
 
+**`NETWORK` was set to mainnet on 6 November 2026, ahead of this condition. The table below and the Esplora are still owed, and no release should carry the wallet until they are done.**
+
 Bark flipped its network by decision, ahead of its own condition. This plan's condition, by hand, on a real Android device with an amount someone can afford to lose, under the cap:
 
 | step | what to see |
@@ -564,9 +572,9 @@ coin lifetime. D5 is what makes that a flag and not a rewrite.
 
 ## Open questions
 
-1. **The daemon (D2).** Our fork as a release, or external seed on upstream `v0.2.1`? Recommended: the fork. It must be settled before real money, because it fixes where the coins' keys are. This branch assumes the fork.
+1. **The daemon (D2).** Our fork as a release, or external seed on upstream `v0.2.1`? Recommended: the fork. It must be settled before anyone holds real money, because it fixes where the coins' keys are. `NETWORK` is now mainnet, so this is the first thing to settle. This branch assumes the fork.
 2. **Signet funding.** Every money path is unproven until a wallet holds signet coins. There is no faucet API, so this needs somebody to send some to an address.
-3. **Who runs Esplora (D6)?** It is now a condition of mainnet.
+3. **Who runs Esplora (D6)?** It is a condition of Phase 11, and mainnet is using the `staging` host until it is answered.
 4. **Distribution (D15).** Play, direct APKs or both?
 5. **Is desktop acceptable as unavailable (D4)?** If not, a remote-daemon or C ABI plan goes ahead of iOS.
 6. **The SDK's licence.** Its README says the Apache licence "came with the project template and is still under review"; upstream is MIT. Fix before shipping it in the app.
