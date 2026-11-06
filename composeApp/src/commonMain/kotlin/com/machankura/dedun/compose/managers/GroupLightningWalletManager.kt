@@ -90,7 +90,7 @@ object GroupLightningWalletManager {
         val used = database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupLightningWalletStatementEvent.KIND)
             .mapNotNull { GroupLightningWalletStatementEvent.read(it.tags)?.ceremonyId }.toSet()
         return database.icebergKeySessionDao().getSessionsForChatRoom(chatRoomId)
-            .firstOrNull { it.stage == IcebergRitualStage.COMPLETE && it.share != null && it.id !in used }
+            .firstOrNull { it.purpose == IcebergKeySession.PURPOSE_LIGHTNING && it.stage == IcebergRitualStage.COMPLETE && it.share != null && it.id !in used }
     }
 
     /** The newest statement for [chain] and [wallet] in [chatRoomId] that this device believes, or null. */

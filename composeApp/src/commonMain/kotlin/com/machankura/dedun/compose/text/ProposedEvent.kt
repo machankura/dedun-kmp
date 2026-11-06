@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import fr.acinq.bitcoin.Satoshi
@@ -123,6 +124,15 @@ object ProposedEvent {
                 "On ${GroupWalletStatementEvent.chainName(statement.chain)}, ${statement.threshold} of ${statement.participants.size} to sign, " +
                     "at most ${statement.policy.inFlightCapSat} sats in flight"
             } ?: "A Lightning wallet statement this device cannot read"
+        )
+
+        // The group keeping a Wavelength wallet: a key, an operator and an expiry clock.
+        GroupWavelengthWalletStatementEvent.KIND -> Summary(
+            label = "Open a Wavelength wallet",
+            detail = GroupWavelengthWalletStatementEvent.read(event.tags)?.let { statement ->
+                "On ${GroupWalletStatementEvent.chainName(statement.chain)}, ${statement.threshold} of ${statement.participants.size} to sign, " +
+                    "${2 * statement.threshold - 1} devices online every few days to keep its coins renewed"
+            } ?: "A Wavelength wallet statement this device cannot read"
         )
 
         GroupLightningOperatorStatementEvent.KIND -> Summary(

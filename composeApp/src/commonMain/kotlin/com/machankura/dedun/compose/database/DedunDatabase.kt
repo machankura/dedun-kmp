@@ -15,7 +15,9 @@ import com.machankura.dedun.compose.database.model.IcebergChannelLedger
 import com.machankura.dedun.compose.database.model.IcebergBudgetSpend
 import com.machankura.dedun.compose.database.dao.IcebergCoSigningDao
 import com.machankura.dedun.compose.database.dao.GroupLightningSeedDao
+import com.machankura.dedun.compose.database.dao.GroupWavelengthSeedDao
 import com.machankura.dedun.compose.database.model.GroupLightningSeed
+import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.dao.IcebergKeySessionDao
 import com.machankura.dedun.compose.database.model.IcebergParticipantMessage
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -149,6 +151,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         DepositRow::class,
         GroupLightningPaymentRow::class,
         GroupLightningSeed::class,
+        GroupWavelengthSeed::class,
         GroupLightningSnapshotRow::class,
         GroupSignedEvent::class,
         GroupTransaction::class,
@@ -191,7 +194,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 37,
+    version = 38,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -430,6 +433,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // v37 adds DepositRow: every deposit into a group as this device learned it, kept so a deposit
         // the group has spent since still counts in its member's tally (docs/member-deposits.md, Phase 8).
         AutoMigration(from = 36, to = 37),
+        // v38 adds IcebergKeySession.purpose, which wallet a key is for, "lightning" on every row before it, and
+        // GroupWavelengthSeed, the authentication seed of a group's Wavelength wallet
+        // (docs/group-wavelength-wallet.md, Phase 4).
+        AutoMigration(from = 37, to = 38),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -482,6 +489,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun icebergKeySessionDao(): IcebergKeySessionDao
 
     abstract fun groupLightningSeedDao(): GroupLightningSeedDao
+
+    abstract fun groupWavelengthSeedDao(): GroupWavelengthSeedDao
 
     abstract fun icebergCoSigningDao(): IcebergCoSigningDao
 

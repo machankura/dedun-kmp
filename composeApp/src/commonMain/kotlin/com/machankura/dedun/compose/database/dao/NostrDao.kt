@@ -4,7 +4,9 @@ import com.machankura.dedun.compose.managers.GroupLightningOperatorManager
 import com.machankura.dedun.compose.managers.GroupLightningCoSigner
 import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.managers.IcebergRitualManager
 import androidx.room3.Dao
 import androidx.room3.Transaction
@@ -1618,6 +1620,17 @@ abstract class NostrDao(
                         // encrypted to each participant inside the room.
                         innerEvent.kind == GroupLightningEvents.NODE_SEED ->
                             GroupLightningWalletManager.receiveSeed(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // A member handing out the Wavelength wallet's authentication seed,
+                        // encrypted to each participant inside the room.
+                        innerEvent.kind == GroupWavelengthEvents.AUTH_SEED ->
+                            GroupWavelengthWalletManager.receiveSeed(
                                 database = database,
                                 localChatRoom = localChatRoom,
                                 innerEvent = innerEvent,

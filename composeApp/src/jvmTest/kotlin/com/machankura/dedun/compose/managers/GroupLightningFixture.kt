@@ -30,6 +30,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -124,6 +125,7 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
             GroupLightningEvents.NODE_SEED -> GroupLightningWalletManager.receiveSeed(to.db, to.room, event, to.publicKey, to.privateKey)
             GroupLightningEvents.SNAPSHOT, GroupLightningEvents.INVOICE, GroupLightningEvents.INVOICE_REQUEST -> GroupLightningReports.process(to.db, to.room, event)
             GroupLightningEvents.STOPPED -> GroupLightningOperatorManager.receiveStopped(to.db, to.room, event)
+            GroupWavelengthEvents.AUTH_SEED -> GroupWavelengthWalletManager.receiveSeed(to.db, to.room, event, to.publicKey, to.privateKey)
         }
     }
 
@@ -155,9 +157,9 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
     }
 
     suspend fun signSession(all: List<Device>, proposer: Device, sessionId: String) {
-        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC)
+        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC + GroupWavelengthEvents.WALLET_TRAFFIC)
         all.filter { it !== proposer }.forEach { FrostSigningManager.approve(it.db, it.room, sessionId) }
-        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC)
+        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC + GroupWavelengthEvents.WALLET_TRAFFIC)
     }
 
     suspend fun openOnchainWallet(all: List<Device>) {
@@ -228,8 +230,8 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
     suspend fun group(): List<Device> = (0 until n).map { device(it) }.also { openOnchainWallet(it) }
 
     /** Runs a Lightning wallet key ceremony from [proposer], every other device approving every step. */
-    suspend fun runCeremony(all: List<Device>, proposer: Device = all[0], threshold: Int = 2): IcebergKeySession {
-        val proposed = IcebergRitualManager.proposeCeremony(proposer.db, proposer.room, proposer.publicKey, proposer.privateKey, threshold, chain)
+    suspend fun runCeremony(all: List<Device>, proposer: Device = all[0], threshold: Int = 2, purpose: String = IcebergKeySession.PURPOSE_LIGHTNING): IcebergKeySession {
+        val proposed = IcebergRitualManager.proposeCeremony(proposer.db, proposer.room, proposer.publicKey, proposer.privateKey, threshold, chain, purpose)
         repeat(6) {
             pump(all, GroupLightningEvents.CEREMONY)
             all.forEach { d ->

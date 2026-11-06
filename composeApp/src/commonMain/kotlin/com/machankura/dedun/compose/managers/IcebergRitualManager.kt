@@ -84,6 +84,7 @@ object IcebergRitualManager {
     private const val SESSION_TAG = "iceberg_session"
     private const val THRESHOLD_TAG = "threshold"
     private const val ONCHAIN_TAG = "onchain_dkg"
+    private const val PURPOSE_TAG = "purpose"
 
     /**
      * How long a ceremony has, from its proposal, before any participant's device abandons it. Long
@@ -154,6 +155,7 @@ object IcebergRitualManager {
         nostrPrivateKey: ByteArray,
         threshold: Int,
         chain: Chain,
+        purpose: String = IcebergKeySession.PURPOSE_LIGHTNING,
     ): IcebergKeySession {
         val roomId = localChatRoom.chatRoom.id
         require(localChatRoom.chatRoom.mlsGroupState != null) { "An Iceberg ceremony runs in a Marmot room" }
@@ -180,6 +182,7 @@ object IcebergRitualManager {
             participantCount = members.size,
             participantPublicKeys = IcebergKeySession.formatParticipants(members),
             onchainDkgSessionId = onchainKey.id,
+            purpose = purpose,
             root = RandomInstance.bytes(32).toHex(),
             // Opening a ceremony is agreeing to be in it, as with ChillDKG's host key.
             joinApprovedAt = Clock.System.now(),
@@ -187,7 +190,7 @@ object IcebergRitualManager {
         database.icebergKeySessionDao().upsert(session)
         announce(
             database, session, ChatMessage.TYPE_ICEBERG_STARTED,
-            "started a key ceremony for a Lightning wallet. It will take ${session.threshold} of ${session.participantCount} " +
+            "started a key ceremony for a ${session.walletName}. It will take ${session.threshold} of ${session.participantCount} " +
                 "of the people who hold the onchain wallet's key to sign for it, and ${2 * session.threshold - 1} of their devices " +
                 "to be online for every payment.",
             session.coordinatorPublicKey,
@@ -268,6 +271,9 @@ object IcebergRitualManager {
             participantCount = members.size,
             participantPublicKeys = IcebergKeySession.formatParticipants(members),
             onchainDkgSessionId = onchainKey.id,
+            // A proposal from before there was a second wallet says nothing, and was for the first.
+            purpose = innerEvent.tags.firstOrNull { it.size >= 2 && it[0] == PURPOSE_TAG }?.get(1)
+                ?.takeIf { it == IcebergKeySession.PURPOSE_WAVELENGTH } ?: IcebergKeySession.PURPOSE_LIGHTNING,
             root = RandomInstance.bytes(32).toHex(),
             // When it was proposed, not when this device heard of it: the deadline runs from here,
             // and every device has to agree on it.
@@ -276,7 +282,7 @@ object IcebergRitualManager {
         database.icebergKeySessionDao().upsert(session)
         announce(
             database, session, ChatMessage.TYPE_ICEBERG_STARTED,
-            "started a key ceremony for a Lightning wallet. It will take ${session.threshold} of ${session.participantCount} " +
+            "started a key ceremony for a ${session.walletName}. It will take ${session.threshold} of ${session.participantCount} " +
                 "of the people who hold the onchain wallet's key to sign for it, and ${2 * session.threshold - 1} of their devices " +
                 "to be online for every payment.",
             session.coordinatorPublicKey,
@@ -386,7 +392,7 @@ object IcebergRitualManager {
             }
             announce(
                 database, session, ChatMessage.TYPE_ICEBERG_COMPLETE,
-                "The group has a key for a Lightning wallet. It takes ${session.threshold} of ${session.participantCount} to sign for it.",
+                "The group has a key for a ${session.walletName}. It takes ${session.threshold} of ${session.participantCount} to sign for it.",
                 session.coordinatorPublicKey,
             )
             logger.i("Iceberg ceremony ${session.id} complete")
@@ -574,7 +580,7 @@ object IcebergRitualManager {
         val current = database.icebergKeySessionDao().getSessionById(session.id) ?: session
         if (current.stage == IcebergRitualStage.FAILED) return
         update(database, current) { it.copy(stage = IcebergRitualStage.FAILED, failureReason = reason, root = null) }
-        announce(database, current, ChatMessage.TYPE_ICEBERG_FAILED, "abandoned the Lightning wallet's key ceremony. No key was created, and it is safe to run it again.", culprit)
+        announce(database, current, ChatMessage.TYPE_ICEBERG_FAILED, "abandoned the ${current.walletName}'s key ceremony. No key was created, and it is safe to run it again.", culprit)
     }
 
     private suspend fun announceApprovalNeeded(database: DedunDatabase, session: IcebergKeySession, step: IcebergApprovalStep) {
@@ -583,11 +589,11 @@ object IcebergRitualManager {
         update(database, session) { it.copy(approvalRequestedThrough = step) }
         val (type, content) = when (step) {
             IcebergApprovalStep.JOIN -> ChatMessage.TYPE_ICEBERG_APPROVAL_NEEDED_JOIN to
-                "Your approval is needed to join the Lightning wallet's key ceremony. Nothing has been published from this device yet."
+                "Your approval is needed to join the ${session.walletName}'s key ceremony. Nothing has been published from this device yet."
             IcebergApprovalStep.REVEAL -> ChatMessage.TYPE_ICEBERG_APPROVAL_NEEDED_REVEAL to
-                "Everyone has joined the Lightning wallet's key ceremony. Your approval is needed to send your contributions to the key."
+                "Everyone has joined the ${session.walletName}'s key ceremony. Your approval is needed to send your contributions to the key."
             IcebergApprovalStep.CONFIRM -> ChatMessage.TYPE_ICEBERG_APPROVAL_NEEDED_CONFIRM to
-                "Your share of the Lightning wallet's key is assembled. Your approval is needed to publish what you saw, so the group can check it agrees."
+                "Your share of the ${session.walletName}'s key is assembled. Your approval is needed to publish what you saw, so the group can check it agrees."
         }
         announce(database, session, type, content, session.userPublicKey)
     }
@@ -595,7 +601,7 @@ object IcebergRitualManager {
     private suspend fun announceStep(database: DedunDatabase, session: IcebergKeySession, kind: Kind, actor: HexKey) {
         val (type, content) = when (kind) {
             GroupLightningEvents.DKG_ROUND_1 -> ChatMessage.TYPE_ICEBERG_COMMITTED to
-                "joined the Lightning wallet's key ceremony, committing to their contributions before anyone reveals one."
+                "joined the ${session.walletName}'s key ceremony, committing to their contributions before anyone reveals one."
             GroupLightningEvents.DKG_ROUND_2 -> ChatMessage.TYPE_ICEBERG_REVEALED to
                 "sent their contributions to the key, each one only to the members who will hold it."
             GroupLightningEvents.DKG_ROUND_3 -> ChatMessage.TYPE_ICEBERG_CONFIRMED to
@@ -649,6 +655,7 @@ object IcebergRitualManager {
             if (includeProposalTags) {
                 add(arrayOf(THRESHOLD_TAG, session.threshold.toString()))
                 add(arrayOf(ONCHAIN_TAG, session.onchainDkgSessionId))
+                add(arrayOf(PURPOSE_TAG, session.purpose))
             }
         }
         val tags = pTags.toTypedArray() + ownTags.toTypedArray()

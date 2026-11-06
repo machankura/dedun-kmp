@@ -7,6 +7,7 @@ import fr.acinq.bitcoin.Satoshi
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
@@ -1084,7 +1085,8 @@ data class ChatMessage(
                     val isProtocolMessage = !isDirectMessageEnvelope && (
                         event.kind in DkgRitualEvents.ALL ||
                             event.kind in FrostSigningEvents.ALL ||
-                            event.kind in GroupLightningEvents.PROTOCOL
+                            event.kind in GroupLightningEvents.PROTOCOL ||
+                            event.kind in GroupWavelengthEvents.PROTOCOL
                     )
 
                     database.marmotInnerEventDao().upsert(
@@ -1405,6 +1407,10 @@ data class ChatMessage(
                 // worth a line. Not the three the group signs, which have arms
                 // of their own below.
                 in GroupLightningEvents.PROTOCOL -> null
+
+                // The Wavelength wallet's, and for now the three its group signs too, which get
+                // their lines with its screens (docs/group-wavelength-wallet.md, Phase 9).
+                in GroupWavelengthEvents.ALL -> null
 
                 ChatEvent.KIND -> {
                     ChatMessage(
