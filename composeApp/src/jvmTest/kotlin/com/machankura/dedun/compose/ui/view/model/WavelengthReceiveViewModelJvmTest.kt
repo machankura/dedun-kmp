@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
 import com.machankura.dedun.compose.wallet.wavelength.WalletState
 import engineering.lightning.wavelength.DescriptorWalletRequest
 import engineering.lightning.wavelength.Network
@@ -35,8 +37,22 @@ class WavelengthReceiveViewModelJvmTest {
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
+    /**
+     * Clearing the store cancels every `viewModelScope`, so no collector outlives the test:
+     * the screen follows `engine.snapshot`, a StateFlow that never completes, and a collector
+     * still live when the next test class calls `Dispatchers.setMain` fails *that* class with
+     * "Main is used concurrently with setting it".
+     */
     @AfterTest
-    fun tearDown() = Dispatchers.resetMain()
+    fun tearDown() {
+        store.clear()
+        Dispatchers.resetMain()
+    }
+
+    private val store = ViewModelStore()
+    private var kept = 0
+
+    private fun <T : ViewModel> keep(viewModel: T): T = viewModel.also { store.put("vm-${kept++}", it) }
 
     private suspend fun open(scope: CoroutineScope, bindings: FakeFacadeBindings, network: Network = Network.SIGNET): WalletState.Open {
         val client = FakeWavelengthClient(bindings)
@@ -48,7 +64,7 @@ class WavelengthReceiveViewModelJvmTest {
     }
 
     private suspend fun TestScope.model(bindings: FakeFacadeBindings = FakeFacadeBindings(), network: Network = Network.SIGNET) =
-        WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open(backgroundScope, bindings, network)))
+        keep(WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open(backgroundScope, bindings, network))))
 
     private fun run(block: suspend TestScope.() -> Unit) = runTest(UnconfinedTestDispatcher(), testBody = block)
 
@@ -127,7 +143,7 @@ class WavelengthReceiveViewModelJvmTest {
 
     @Test
     fun `with no wallet open there is nothing to ask`() {
-        val model = WavelengthReceiveViewModel(MutableStateFlow(WalletState.Opening))
+        val model = keep(WavelengthReceiveViewModel(MutableStateFlow(WalletState.Opening)))
         assertFalse(model.uiState.hasWallet)
         model.makeAddress()
         assertNull(model.uiState.address)
@@ -141,7 +157,7 @@ class WavelengthReceiveViewModelJvmTest {
     fun `a paid invoice is marked paid, with what arrived`() = run {
         val bindings = FakeFacadeBindings()
         val open = open(backgroundScope, bindings)
-        val model = WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open))
+        val model = keep(WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open)))
         model.onAmountChange("5000")
         model.makeInvoice()
         assertNotNull(model.uiState.invoice)
@@ -156,7 +172,7 @@ class WavelengthReceiveViewModelJvmTest {
     fun `a failed receive is not a payment, and a new amount clears the last one`() = run {
         val bindings = FakeFacadeBindings()
         val open = open(backgroundScope, bindings)
-        val model = WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open))
+        val model = keep(WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open)))
         model.onAmountChange("5000")
         model.makeInvoice()
         bindings.fail(entry(open, EntryKind.RECEIVE))
@@ -176,7 +192,7 @@ class WavelengthReceiveViewModelJvmTest {
     fun `a paid boarding address is marked paid, and another can be asked for`() = run {
         val bindings = FakeFacadeBindings()
         val open = open(backgroundScope, bindings)
-        val model = WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open))
+        val model = keep(WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open)))
         model.makeAddress()
         val first = model.uiState.address
         assertNotNull(first)
@@ -196,7 +212,7 @@ class WavelengthReceiveViewModelJvmTest {
     fun `a paid invoice says nothing about the address`() = run {
         val bindings = FakeFacadeBindings()
         val open = open(backgroundScope, bindings)
-        val model = WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open))
+        val model = keep(WavelengthReceiveViewModel(MutableStateFlow<WalletState>(open)))
         model.makeAddress()
         model.onAmountChange("5000")
         model.makeInvoice()

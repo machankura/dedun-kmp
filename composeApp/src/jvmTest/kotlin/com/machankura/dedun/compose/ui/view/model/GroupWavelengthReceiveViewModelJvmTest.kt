@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -44,8 +46,22 @@ class GroupWavelengthReceiveViewModelJvmTest {
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
+    /**
+     * Clearing the store cancels every `viewModelScope`, so no collector outlives the test.
+     * `initiate()` combines six never-ending flows, and a collector still live when the next
+     * test class calls `Dispatchers.setMain` fails *that* class with "Main is used concurrently
+     * with setting it".
+     */
     @AfterTest
-    fun tearDown() = Dispatchers.resetMain()
+    fun tearDown() {
+        store.clear()
+        Dispatchers.resetMain()
+    }
+
+    private val store = ViewModelStore()
+    private var kept = 0
+
+    private fun <T : ViewModel> keep(viewModel: T): T = viewModel.also { store.put("vm-${kept++}", it) }
 
     private val me = GroupWavelengthUiFixtures.ME
     private val operatorKey: HexKey = "b".repeat(64)
@@ -80,7 +96,7 @@ class GroupWavelengthReceiveViewModelJvmTest {
     }
 
     private fun receiving(repository: Wavelength): GroupWavelengthReceiveViewModel {
-        val viewModel = GroupWavelengthReceiveViewModel(me, GroupWavelengthUiFixtures.chatRoomId, Chain.Signet, chat, repository)
+        val viewModel = keep(GroupWavelengthReceiveViewModel(me, GroupWavelengthUiFixtures.chatRoomId, Chain.Signet, chat, repository))
         viewModel.initiate()
         runBlocking { withTimeout(5_000) { while (viewModel.uiState !is GroupWavelengthReceiveUIState.Loaded) delay(10) } }
         return viewModel

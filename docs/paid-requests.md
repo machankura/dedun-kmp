@@ -36,10 +36,12 @@ written, and the table below says where the build chose differently.
 | the cap is recomputed on every emission | the limits are; the `AtTheCap` gate is left one-shot, so a member whose deposit filled the cap sees the payment rather than the cap |
 | each of the three rotating view models grows a `justPaid` | one `PaidAddressWatch`, because all three turned out to have the same shape -- a current address and a list with a `USED` status -- with `GroupWalletState` serving two of them |
 | `DepositCard` takes the just-paid address | it takes the amount. `GroupWalletDerivation.Derived` needs real keys and a tweak cache, which is an expensive fixture for a card that only prints a figure |
+| the per-phase tests are enough to say a phase is done | they are not. Every phase passed its own tests and the full suite still broke, two classes away: these screens now collect flows that never end -- the operator's payments, the engine's snapshot, six combined device-local flows -- and a `viewModelScope` cannot be cancelled from outside, so each test leaked a coroutine onto the test dispatcher and the next class to call `Dispatchers.setMain` failed with *Main is used concurrently with setting it*. A `ViewModelStore` per test class, cleared before `resetMain`, is the fix. Run the whole suite before believing a phase |
 | Phase 5 is a source scan over `QRCodeView` call sites | a Compose UI test. `runDesktopComposeUiTest` is already in this tree, which the plan missed, and `QRCodeView` gives its image the request as a content description -- so *is this scannable?* is a question the semantics tree answers. A new rail that forgets the rule fails on what it draws rather than passing a scan of its imports |
 
-Nothing here has been seen on a phone, or against a real payment: every phase was
-checked with `:composeApp:jvmTest`, `:composeApp:compileKotlinJvm` and
+Nothing here has been seen on a phone, or against a real payment. The full
+`:composeApp:jvmTest` suite is green -- 2,318 tests, 7 skipped, which are the
+regtest ones -- along with `:composeApp:compileKotlinJvm` and
 `m3-audit.sh --check`. The regtest run named under Phase 1 has not been done.
 
 The headline: **a payment request has three states and only the first of them is

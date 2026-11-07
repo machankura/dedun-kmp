@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -67,8 +69,22 @@ class GroupLightningWalletViewModelJvmTest {
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
+    /**
+     * Clearing the store cancels every `viewModelScope`, so no collector outlives the test --
+     * the receive screen watches the operator's payments for a match that may never come, and a
+     * collector still live when the next test class calls `Dispatchers.setMain` fails *that*
+     * class with "Main is used concurrently with setting it".
+     */
     @AfterTest
-    fun tearDown() = Dispatchers.resetMain()
+    fun tearDown() {
+        store.clear()
+        Dispatchers.resetMain()
+    }
+
+    private val store = ViewModelStore()
+    private var kept = 0
+
+    private fun <T : ViewModel> keep(viewModel: T): T = viewModel.also { store.put("vm-${kept++}", it) }
 
     private val chatRoomId = "d4c3b2a1".repeat(8)
     private val me = "a".repeat(64)
@@ -342,7 +358,7 @@ class GroupLightningWalletViewModelJvmTest {
         val deposits = object : DepositRepository by DepositRepository.NO_OP {
             override suspend fun standing(chatRoomId: String, chain: Chain, canPropose: Boolean) = standing
         }
-        val viewModel = GroupLightningReceiveViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningReceiveUIState.Loading, chat, lightning, deposits)
+        val viewModel = keep(GroupLightningReceiveViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningReceiveUIState.Loading, chat, lightning, deposits))
         viewModel.initiate()
         runBlocking { withTimeout(5_000) { while (viewModel.uiState == GroupLightningReceiveUIState.Loading) delay(10) } }
         return viewModel
