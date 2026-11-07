@@ -412,15 +412,23 @@ screen.
 ### Phase 5: the technical sheet
 
 - `GroupWavelengthEntryTechnicalSheet(entry, onDismiss)`, on the shared `ModalBottomSheet`
-  (`BottomSheetDialog.kt:45`), sections as the sketch above, long values in a `SelectionContainer` with
-  a copy button that notifies through `rememberNotifier` — the copied string read above the handler, as
-  CLAUDE.md requires.
-- A `TextButton` on the detail opens it; it is the only button on the screen (T9).
+  (`BottomSheetDialog.kt:45`), sections as the sketch above, long values copyable through the shared
+  `DetailLine`, which puts them in a `SelectionContainer` and reads the copied string above the handler,
+  as CLAUDE.md requires.
+- A `TextButton` on the detail opens it; it is the only control on the screen (T9).
+- A heading appears only when this device holds something under it, so *What your device signed* is
+  absent on an approval nothing has acted on yet — rather than a heading over nothing.
 - The *Still untested* block per kind, from the existing strings.
-- **Tests:** the sheet opens and dismisses; per kind, every field this device holds is displayed and a
-  field it doesn't hold is absent rather than empty; an operator-only entry's sheet has the operator's
-  section and says the device has no record; the sheet scrolls at phone height with the longest kind in
-  it, which is the Lightning payout.
+- **Q4 answered here by default, not by the owner:** the sheet says, in words, that the group's wallet
+  holds no proof of payment and that if one exists it is in the operator's daemon. The alternative — a
+  *Proof of payment* row left out in silence — reads as a wallet that lost one, since the profile wallet
+  shows the row.
+- **The Lightning-claim deadline gap is said on the deposit's sheet,** where a member reading the full
+  detail of a claimed coin is exactly who should be told that its deadline is the operator's word.
+- **Tests:** the two headings and their fields; a field this device doesn't hold is absent rather than
+  empty, asserted by the whole *What your device signed* heading being gone; the no-proof line; the
+  no-deadline line; an operator-only entry's sheet being their word throughout and saying so; and the
+  detail's one button opening the sheet.
 
 **Done when** nothing in the sheet is a `.dp` literal, a hardcoded colour or a title-cased string, and
 `m3Audit` still reports every budget met.

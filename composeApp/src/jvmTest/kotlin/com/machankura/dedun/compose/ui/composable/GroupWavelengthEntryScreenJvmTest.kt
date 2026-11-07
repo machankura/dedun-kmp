@@ -4,9 +4,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
@@ -129,6 +132,77 @@ class GroupWavelengthEntryScreenJvmTest {
         onNodeWithText("Fee").assertIsDisplayed()
         // No Amount line: a round has a cost and no amount, so one would say nothing twice.
         onNodeWithText("Amount").assertDoesNotExist()
+    }
+
+    // ---- the technical sheet ----
+
+    @Test
+    fun `the sheet puts what this device signed and what the group approved under their own headings`() =
+        runDesktopComposeUiTest(phone, 2400) {
+            val approval = onchainPayout()
+            val rows = GroupWavelengthHistory.Rows(
+                leaves = listOf(GroupArkLeave("w", approval.id, "the-round", "0014bb", 8_000, 400, confirmed = true, atEpochSeconds = now - 50, confirmedAtEpochSeconds = now - 10)),
+                onchainPayouts = listOf(approval),
+            )
+            val entry = assertNotNull(of(rows).singleOrNull())
+            setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryTechnicalSheet(entry) {} } } }
+            onNodeWithText("What your device signed").assertIsDisplayed()
+            onNodeWithText("What the group approved").assertIsDisplayed()
+            onNodeWithText("the-round").assertIsDisplayed()
+            onNodeWithText(approval.id).assertIsDisplayed()
+            onNodeWithText("Your device saw the round confirm").assertIsDisplayed()
+        }
+
+    @Test
+    fun `a field this device doesn't hold is left out, not shown empty`() = runDesktopComposeUiTest(phone, 2400) {
+        // No leave: nothing was signed yet, so there is no "What your device signed" at all.
+        val entry = assertNotNull(of(GroupWavelengthHistory.Rows(onchainPayouts = listOf(onchainPayout()))).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryTechnicalSheet(entry) {} } } }
+        onNodeWithText("What the group approved").assertIsDisplayed()
+        onNodeWithText("What your device signed").assertDoesNotExist()
+        onNodeWithText("Your device saw the round confirm").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a Lightning payout's sheet says the group holds no proof of payment`() = runDesktopComposeUiTest(phone, 2400) {
+        val entry = assertNotNull(of(GroupWavelengthHistory.Rows(payouts = listOf(lightningPayout()))).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryTechnicalSheet(entry) {} } } }
+        onNodeWithText("The group's wallet holds no proof of payment", substring = true).assertIsDisplayed()
+        onNodeWithText("Still untested").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a Lightning deposit's sheet says its deadline is the operator's word`() = runDesktopComposeUiTest(phone, 2400) {
+        val hash = "c".repeat(64)
+        val rows = GroupWavelengthHistory.Rows(
+            addresses = listOf(GroupArkDepositAddress("w", "r1", OTHER, Instant.fromEpochSeconds(now - 900), invoiceAmountSat = 9_000, invoice = "lnbcrt90u1x", paymentHash = hash)),
+            claims = listOf(GroupArkClaim("w", "ark", hash, 8_900, atEpochSeconds = now - 100)),
+        )
+        val entry = assertNotNull(of(rows).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryTechnicalSheet(entry) {} } } }
+        onNodeWithText("has no deadline your device can work out", substring = true).assertIsDisplayed()
+        onNodeWithText("lnbcrt90u1x").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an operator-only line's sheet is their word throughout, and says so`() = runDesktopComposeUiTest(phone, 2400) {
+        val said = GroupWavelengthSnapshot(
+            "w", 3, now, 912_000, 0,
+            activity = listOf(GroupWavelengthSnapshot.Line("l1", "receive", GroupWavelengthHistory.LINE_COMPLETE, 8_000, 12, now - 50, failure = "")),
+        )
+        val entry = assertNotNull(of(GroupWavelengthHistory.Rows(), said).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryTechnicalSheet(entry) {} } } }
+        onNodeWithText("What whoever runs the wallet says").assertIsDisplayed()
+        onNodeWithText("Your device has no record of this at all. Everything above is their word.").assertIsDisplayed()
+        onNodeWithText("What your device signed").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the detail opens the sheet, and it is the only control on the screen`() = runDesktopComposeUiTest(phone, 1600) {
+        val entry = assertNotNull(of(GroupWavelengthHistory.Rows(deposits = listOf(deposit()))).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+        onNodeWithText("Technical details").performClick()
+        onNodeWithText("What your device signed").assertIsDisplayed()
     }
 
     @Test

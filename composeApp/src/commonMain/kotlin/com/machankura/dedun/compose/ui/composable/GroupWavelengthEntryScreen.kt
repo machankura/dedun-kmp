@@ -14,9 +14,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -62,6 +67,7 @@ import dedun.composeapp.generated.resources.group_wavelength_entry_when
 import dedun.composeapp.generated.resources.group_wavelength_entry_whose
 import dedun.composeapp.generated.resources.group_wavelength_history_when_unknown
 import dedun.composeapp.generated.resources.group_wavelength_invoice_warning
+import dedun.composeapp.generated.resources.group_wavelength_tech_open
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.wavelength_amount
 import dedun.composeapp.generated.resources.wavelength_entry_fee
@@ -185,6 +191,14 @@ internal fun GroupWavelengthEntryDetail(
 
         Text(sourceLine(entry.source), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         warning(entry)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+
+        // The one control on the screen (T9). Everything technical is behind it rather than on the
+        // summary, because the summary is for the question "what was this" and the sheet for "prove it".
+        var showingTechnical by remember { mutableStateOf(false) }
+        TextButton(onClick = { showingTechnical = true }) { Text(stringResource(Res.string.group_wavelength_tech_open)) }
+        if (showingTechnical) {
+            GroupWavelengthEntryTechnicalSheet(entry, onDismiss = { showingTechnical = false })
+        }
     }
 }
 
