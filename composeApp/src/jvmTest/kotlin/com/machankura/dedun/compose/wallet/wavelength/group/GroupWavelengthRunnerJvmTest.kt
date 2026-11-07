@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.managers.GroupLightningFixture
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
+import com.machankura.dedun.compose.managers.GroupWavelengthPayments
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.database.model.IcebergLabelAssignment
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
@@ -15,6 +16,16 @@ import engineering.lightning.wavelength.FacadeBindings
 import engineering.lightning.wavelength.FacadeWavelengthClient
 import engineering.lightning.wavelength.SignerHost
 import engineering.lightning.wavelength.testing.FakeFacadeBindings
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.PrivateKey
+import fr.acinq.bitcoin.utils.Either
+import fr.acinq.lightning.CltvExpiryDelta
+import fr.acinq.lightning.Feature
+import fr.acinq.lightning.FeatureSupport
+import fr.acinq.lightning.Features
+import fr.acinq.lightning.Lightning.randomBytes32
+import fr.acinq.lightning.payment.Bolt11Invoice
+import fr.acinq.lightning.utils.msat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
@@ -257,5 +268,32 @@ class GroupWavelengthRunnerJvmTest {
         setup.pumped { setup.runner.refresh() }
         val sent = setup.runtime.fake.requests.first().second
         assertTrue(sent.contains("\"recovery_window\":${12 + GroupWavelengthRunner.RECOVERY_WINDOW}"), sent)
+    }
+
+    private fun invoiceFor(sat: Long): String = Bolt11Invoice.create(
+        fixture.chain, (sat * 1000).msat, randomBytes32(), PrivateKey(ByteVector32("11".repeat(32))), Either.Left("pay"), CltvExpiryDelta(18),
+        Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory), randomBytes32(),
+    ).write()
+
+    @Test
+    fun `it pays what a quorum approved, once, and nothing else`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.pumped { setup.runner.refresh() }
+        val invoice = invoiceFor(1_000)
+        val payout = fixture.payable(setup.all, setup.all[1], setup.wallet, 100_000)
+
+        // Nothing approved yet, so nothing is tried: an unapproved attempt holds the coin while every device refuses it.
+        setup.runner.refresh()
+        assertFalse(setup.runtime.fake.requests.any { invoice in it.second })
+
+        val session = GroupWavelengthPayments.propose(setup.all[1].db, setup.all[1].room, setup.all[1].publicKey, setup.wallet, invoice, 50, 500, Clock.System.now().epochSeconds + 3600, payout)
+        fixture.signSession(setup.all, setup.all[1], session.id)
+        setup.runner.refresh()
+        setup.runner.refresh()
+        withTimeoutOrNull(5.seconds) { while (setup.runtime.fake.requests.none { invoice in it.second }) delay(20) }
+        assertEquals(1, setup.runtime.fake.requests.count { invoice in it.second }, "once")
+        val sent = setup.runtime.fake.requests.first { invoice in it.second }.second
+        assertFalse(sent.contains("MaxCredit"), "credit stays closed, which on the wire is saying nothing of it: $sent")
     }
 }

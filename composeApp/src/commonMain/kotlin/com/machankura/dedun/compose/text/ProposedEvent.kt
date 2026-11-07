@@ -143,7 +143,8 @@ object ProposedEvent {
             Summary(
                 label = "Pay ${Satoshi(pay.amountSat ?: 0).grouped()} sats from the Wavelength wallet",
                 detail = buildString {
-                    append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeSat).grouped()} sats")
+                    pay.payout?.let { append("To @${nameOf(it.member) ?: it.member.take(8)}'s Lightning address, as the proposer resolved it, ") } ?: append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, ")
+                    append("with a fee of at most ${Satoshi(pay.maxFeeSat).grouped()} sats")
                     invoice?.description?.takeIf { it.isNotBlank() }?.let { append(", for \"$it\"") }
                 },
             )

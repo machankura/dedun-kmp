@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.view.state
 
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.MemberBalances
 import com.machankura.dedun.compose.wallet.GroupWalletState
@@ -32,5 +33,7 @@ sealed interface GroupPayoutsUIState {
         val lightningWallet: GroupLightningWalletManager.Wallet? = null,
         /** What the Lightning wallet's channels hold, as its operator last reported, or null before a report. */
         val lightningSpendableMsat: Long? = null,
+        /** The group's Wavelength wallet, where it has one with someone running it and payouts are on for its network. */
+        val wavelengthWallet: GroupWavelengthWalletManager.Wallet? = null,
     ) : GroupPayoutsUIState
 }

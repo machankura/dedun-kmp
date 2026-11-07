@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -43,6 +44,7 @@ import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
@@ -52,6 +54,7 @@ import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
@@ -95,7 +98,15 @@ import dedun.composeapp.generated.resources.group_wavelength_deadline_urgent_s
 import dedun.composeapp.generated.resources.group_wavelength_held_s
 import dedun.composeapp.generated.resources.group_wavelength_no_report
 import dedun.composeapp.generated.resources.group_wavelength_operator_says_s
+import dedun.composeapp.generated.resources.group_wavelength_payout_approved
+import dedun.composeapp.generated.resources.group_wavelength_payout_failed_s
+import dedun.composeapp.generated.resources.group_wavelength_payout_in_flight
+import dedun.composeapp.generated.resources.group_wavelength_payout_paid
+import dedun.composeapp.generated.resources.group_wavelength_payout_s_s
+import dedun.composeapp.generated.resources.group_wavelength_payouts
+import dedun.composeapp.generated.resources.group_wavelength_payouts_off_on_mainnet
 import dedun.composeapp.generated.resources.group_wavelength_pending_s
+import dedun.composeapp.generated.resources.pay_out
 import dedun.composeapp.generated.resources.group_wavelength_report_cannot_confirm
 import dedun.composeapp.generated.resources.group_wavelength_report_differs
 import dedun.composeapp.generated.resources.group_wavelength_report_matches
@@ -221,6 +232,7 @@ fun GroupWavelengthWalletScreen(
                 onStepDown = { viewModel.stepDown(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                 onOpenAdvanced = { onNavigateToRoute(GroupWavelengthAdvancedRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 onReceive = { onNavigateToRoute(GroupWavelengthReceiveRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
+                onPayOut = { onNavigateToRoute(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
             )
         }
     }
@@ -241,6 +253,7 @@ internal fun GroupWavelengthWalletContent(
     onStepDown: () -> Unit = {},
     onOpenAdvanced: () -> Unit = {},
     onReceive: () -> Unit = {},
+    onPayOut: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
@@ -294,7 +307,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut)
     }
 }
 
@@ -374,13 +387,14 @@ private fun OpenedWallet(
     onStepDown: () -> Unit,
     onOpenAdvanced: () -> Unit,
     onReceive: () -> Unit,
+    onPayOut: () -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive)
+                moneyItems(state, chain, onReceive, onPayOut)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
@@ -391,17 +405,21 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive)
+            moneyItems(state, chain, onReceive, onPayOut)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
-    item { BalanceCard(state, onReceive) }
+    item { BalanceCard(state, chain, onReceive, onPayOut) }
     item { DeadlineLine(state.expiry) }
+    if (state.payouts.isNotEmpty()) {
+        item { Text(stringResource(Res.string.group_wavelength_payouts), style = MaterialTheme.typography.titleSmall) }
+        items(state.payouts, key = { "payout:${it.paymentHash}" }) { PayoutRow(it, state) }
+    }
     item { Text(stringResource(Res.string.group_wavelength_activity), style = MaterialTheme.typography.titleSmall) }
     val activity = state.snapshot?.activity.orEmpty()
     if (activity.isEmpty()) {
@@ -449,7 +467,7 @@ private fun AlarmCard(alarms: List<String>) {
 
 /** This device's own figure first, and the operator's beside it, since only one of them has been checked (U2). */
 @Composable
-private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, onReceive: () -> Unit) {
+private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.group_wavelength_balance_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -488,6 +506,16 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, onReceive: (
                         Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
                         Text(stringResource(Res.string.receive))
                     }
+                    if (GroupWavelengthRollout.paysOverLightning(chain)) {
+                        OutlinedButton(onClick = onPayOut) {
+                            Icon(Icons.AutoMirrored.Filled.CallMade, contentDescription = Decorative)
+                            Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                            Text(stringResource(Res.string.pay_out))
+                        }
+                    }
+                }
+                if (!GroupWavelengthRollout.paysOverLightning(chain)) {
+                    Text(stringResource(Res.string.group_wavelength_payouts_off_on_mainnet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -505,6 +533,29 @@ private fun DeadlineLine(expiry: WalletExpiry) {
         WalletExpiry.Expired -> stringResource(Res.string.group_wavelength_deadline_expired) to true
     }
     Text(text, style = MaterialTheme.typography.bodyMedium, color = if (isUrgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+}
+
+/** A payout the group approved, and where it's got to by the operator's report: all a device can know of a payment once it's gone. */
+@Composable
+private fun PayoutRow(payment: GroupWavelengthPaymentEvent.Payment, state: GroupWavelengthWalletUIState.Opened) {
+    val member = payment.payout?.member?.lowercase()
+    val name = state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == member }?.profile?.humanReadableNameOrPubkey() ?: member?.take(16).orEmpty()
+    val line = state.snapshot?.activity?.firstOrNull { it.paymentHash.equals(payment.paymentHash?.toString(), ignoreCase = true) }
+    val failed = line?.status == "failed"
+    ListItem(
+        headlineContent = { Text(stringResource(Res.string.group_wavelength_payout_s_s, Satoshi(payment.amountSat ?: 0).grouped(), name)) },
+        supportingContent = {
+            Text(
+                when {
+                    failed -> stringResource(Res.string.group_wavelength_payout_failed_s, line?.failure.orEmpty())
+                    line?.status == "complete" -> stringResource(Res.string.group_wavelength_payout_paid)
+                    line != null -> stringResource(Res.string.group_wavelength_payout_in_flight)
+                    else -> stringResource(Res.string.group_wavelength_payout_approved)
+                },
+                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }
 
 /** One thing the operator's daemon says the wallet did, in the daemon's words for what it was. */

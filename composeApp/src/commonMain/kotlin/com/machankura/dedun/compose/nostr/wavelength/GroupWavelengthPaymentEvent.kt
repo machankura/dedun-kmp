@@ -21,8 +21,12 @@ object GroupWavelengthPaymentEvent {
     private const val MAX_FEE_TAG = "max_fee_sat"
     private const val MAX_REFUND_TAG = "max_refund_height"
     private const val EXPIRES_TAG = "expires_at"
+    private const val PAYOUT_TAG = "payout"
 
-    data class Payment(val chain: Chain, val wallet: Long, val invoice: String, val maxFeeSat: Long, val maxRefundHeight: Long, val expiresAt: Long) {
+    /** Whose balance it comes from, and the destination of theirs it pays: the only thing the group's wallet pays (`docs/payouts-only.md`). */
+    data class Payout(val member: String, val destinationEventId: String)
+
+    data class Payment(val chain: Chain, val wallet: Long, val invoice: String, val maxFeeSat: Long, val maxRefundHeight: Long, val expiresAt: Long, val payout: Payout? = null) {
         private val decoded: Pair<ByteVector32, Long?>? get() = readInvoice(invoice, chain)
 
         val paymentHash: ByteVector32? get() = decoded?.first
@@ -92,7 +96,7 @@ object GroupWavelengthPaymentEvent {
                 arrayOf(MAX_FEE_TAG, payment.maxFeeSat.toString()),
                 arrayOf(MAX_REFUND_TAG, payment.maxRefundHeight.toString()),
                 arrayOf(EXPIRES_TAG, payment.expiresAt.toString()),
-            ),
+            ) + listOfNotNull(payment.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) }),
             content = "",
         )
 
@@ -107,6 +111,7 @@ object GroupWavelengthPaymentEvent {
             maxFeeSat = tag(MAX_FEE_TAG)?.toLongOrNull()?.takeIf { it >= 0 } ?: return null,
             maxRefundHeight = tag(MAX_REFUND_TAG)?.toLongOrNull() ?: return null,
             expiresAt = tag(EXPIRES_TAG)?.toLongOrNull() ?: return null,
+            payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout(it[1], it[2]) },
         )
         // A label can't say one hash while the invoice says another, and an invoice with no hash or amount approves nothing.
         return payment.takeIf { it.paymentHash?.toString() == identifier[2] && it.amountSat != null }

@@ -25,7 +25,7 @@ data class GroupWavelengthSnapshot(
 
     /** One thing the wallet did, in the daemon's own words for its [kind] and [status]. */
     @Serializable
-    data class Line(val id: String, val kind: String, val status: String, val amountSat: Long, val feeSat: Long = 0, val at: Long = 0, val failure: String = "")
+    data class Line(val id: String, val kind: String, val status: String, val amountSat: Long, val feeSat: Long = 0, val at: Long = 0, val failure: String = "", val paymentHash: String = "")
 
     /** The same claim, whenever it was made. */
     fun sameAs(other: GroupWavelengthSnapshot): Boolean = copy(sentAt = 0, tip = 0) == other.copy(sentAt = 0, tip = 0)

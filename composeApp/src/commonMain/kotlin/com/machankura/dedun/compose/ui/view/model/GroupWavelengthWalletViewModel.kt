@@ -156,6 +156,7 @@ class GroupWavelengthWalletViewModel(
         val alarms = repository.alarms(chatRoomId)
         val fees = repository.feesSince(chatRoomId, chain, number, term, monthAgo)
         val labels = repository.labelsLeft(chatRoomId, chain, number, activeUserPublicKey)
+        val payouts = repository.payouts(chatRoomId, chain, number)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
             uiState = it.copy(
                 expiry = if (tip != null) WalletExpiry.ofHeight(it.ledger.earliestExpiryHeight, tip, free) else it.expiry,
@@ -163,6 +164,7 @@ class GroupWavelengthWalletViewModel(
                 alarms = alarms,
                 feesSat = fees,
                 labelsLeft = labels,
+                payouts = payouts,
             )
         }
     }

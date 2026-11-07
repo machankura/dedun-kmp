@@ -10,6 +10,7 @@ import com.machankura.dedun.compose.managers.GroupArkTransport
 import com.machankura.dedun.compose.managers.GroupLightningLines
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
+import com.machankura.dedun.compose.managers.GroupWavelengthPayouts
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
@@ -105,6 +106,7 @@ class GroupWavelengthRunner(
         internal var treeTo: Long,
     ) {
         internal var lastReport: GroupWavelengthSnapshot? = null
+        internal val attempted = HashSet<String>()
     }
 
     private var running: Running? = null
@@ -268,6 +270,29 @@ class GroupWavelengthRunner(
     private suspend fun act(live: Running) {
         runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term) { daemon.newBoardingAddress() } }
             .onFailure { logger.w(it) { "Couldn't answer a request for a deposit address" } }
+        runCatching { payApproved(live) }.onFailure { logger.w(it) { "Couldn't look at what the group approved" } }
+    }
+
+    /**
+     * Pays what a quorum approved, each once. Only that: an unapproved attempt holds the coin for the transport's 50 s while every device
+     * refuses it, and a stale swap can block a real one (`docs/group-wavelength-wallet.md`, "What Lightning found"). It runs apart from
+     * this loop, since a payment takes the group's signatures and may take a while. A failed one needs a new invoice, so it isn't retried.
+     */
+    private suspend fun payApproved(live: Running) {
+        val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, live.wallet.statement.wallet)
+        val alreadyGone = database.groupArkDao().payments(walletKey).map { it.paymentHash.lowercase() }.toSet()
+        val reported = live.lastReport?.activity?.map { it.paymentHash.lowercase() }?.toSet().orEmpty()
+        val nowSeconds = now().epochSeconds
+        GroupWavelengthPayouts.signed(database, live.chatRoomId, live.chain)
+            .filter { it.wallet == live.wallet.statement.wallet && it.expiresAt > nowSeconds }
+            .forEach { payment ->
+                val hash = payment.paymentHash?.toString()?.lowercase() ?: return@forEach
+                if (hash in alreadyGone || hash in reported || !live.attempted.add(hash)) return@forEach
+                scope.launch {
+                    runCatching { daemon.pay(payment.invoice, payment.maxFeeSat) }
+                        .onFailure { logger.w(it) { "The payment for ${hash.take(12)} didn't go" } }
+                }
+            }
     }
 
     /** Each coin this device knows of came from a key the wallet has used, so a scan that wide finds them, and some margin finds the rest. */

@@ -11,13 +11,17 @@ import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
+import com.machankura.dedun.compose.managers.GroupWavelengthPayments
+import com.machankura.dedun.compose.managers.GroupWavelengthPayouts
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.managers.IcebergRitualManager
 import com.machankura.dedun.compose.network.GroupWavelengthTermsReader
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
@@ -29,6 +33,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 class DatabaseGroupWavelengthRepository(
@@ -81,6 +86,17 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession =
         GroupWavelengthOperatorManager.stepDown(database, localChatRoom, userPublicKey, chain, wallet)
 
+    override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> =
+        GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet }
+
+    override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession {
+        val chain = wallet.statement.chain
+        require(GroupWavelengthRollout.paysOverLightning(chain)) { "Payouts over Lightning are off on ${chain.name}" }
+        val tip = requireNotNull(tipHeight(chain)) { "No chain connection to set a refund limit from" }
+        val expiresAt = Clock.System.now().epochSeconds + APPROVAL_LASTS_SECONDS
+        return GroupWavelengthPayments.propose(database, localChatRoom, userPublicKey, wallet, invoice, maxFeeSat, tip + GroupWavelengthRollout.MAX_REFUND_BLOCKS, expiresAt, payout)
+    }
+
     override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean =
         member.lowercase() in Depositors.statementsIn(database, chatRoomId, chain).keys.map { it.lowercase() }
 
@@ -119,5 +135,8 @@ class DatabaseGroupWavelengthRepository(
 
     private companion object {
         const val ALARMS_SHOWN = 3
+
+        /** Long enough for people to get to it. An invoice can run out first, and then it takes a new one. */
+        const val APPROVAL_LASTS_SECONDS = 24L * 60 * 60
     }
 }

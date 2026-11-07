@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
@@ -526,6 +527,7 @@ data class ChatMessage(
         const val TYPE_GROUP_LIGHTNING_PAYMENT_AUTHORISED = "groupLightningPaymentAuthorised"
         const val TYPE_GROUP_WAVELENGTH_WALLET_OPENED = "groupWavelengthWalletOpened"
         const val TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED = "groupWavelengthOperatorElected"
+        const val TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED = "groupWavelengthPaymentApproved"
 
         /**
          * A transaction from the group's wallet confirmed. Written by each device
@@ -607,6 +609,7 @@ data class ChatMessage(
             TYPE_GROUP_LIGHTNING_PAYMENT_AUTHORISED,
             TYPE_GROUP_WAVELENGTH_WALLET_OPENED,
             TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED,
+            TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED,
             TYPE_GUARDED_WALLET_SHARED,
             TYPE_GUARDIAN_SPEND,
             TYPE_MEMBER_WALLET_REQUESTED,
@@ -1472,7 +1475,26 @@ data class ChatMessage(
                     )
                 }
 
-                // The Wavelength wallet's traffic, and the payment its group signs, which gets its line with its payouts.
+                // A payout the group signed for. Whether it went is the wallet's screen to say.
+                GroupWavelengthPaymentEvent.KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    if (!signed.verifies()) return null
+                    val payment = GroupWavelengthPaymentEvent.read(event.tags) ?: return null
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group approved paying " + (payment.payout?.let { "@${memberName(database, it.member)} " } ?: "") +
+                            "${payment.amountSat ?: 0} sats from the Wavelength wallet."
+                    )
+                }
+
+                // The Wavelength wallet's traffic.
                 in GroupWavelengthEvents.ALL -> null
 
                 ChatEvent.KIND -> {

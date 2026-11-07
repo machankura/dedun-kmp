@@ -35,6 +35,16 @@ object GroupWavelengthRollout {
     val MAINNET_CAP: Satoshi = Satoshi(100_000)
 
     /**
+     * Whether a payout goes out over Lightning from a wallet on [chain]. Not on mainnet until a failed payment's refund has run on a real
+     * operator: it has only met fixtures, and a funded vHTLC has no other way back through a device (`docs/group-wavelength-wallet.md`,
+     * "What Lightning found"). Leaving to the onchain wallet still works there, and pays out from that.
+     */
+    fun paysOverLightning(chain: Chain): Boolean = !chain.isMainnet()
+
+    /** How long a payment may tie its value up if it fails. A week: the server's real refund locktimes have only been seen on signet. */
+    const val MAX_REFUND_BLOCKS: Long = 1_008
+
+    /**
      * How deep a commitment has to be before a device believes its round happened, or that a conflict killed it. A reorg past this
      * leaves a device's record wrong until an election, which costs the group its coins' use and not the coins: the operator's own
      * terms on mainnet ask for 1, in November 2026, and a little more costs only a wait before a new coin can be spent.

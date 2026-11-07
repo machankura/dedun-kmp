@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
@@ -624,6 +625,15 @@ object FrostSigningManager {
             if (rebuilt.kind != DepositAttributionEvent.KIND) return@forEach
             DepositLedger.refuseAttribution(database, rebuilt.pubKey, rebuilt)?.let { reason ->
                 logger.w("Signing proposal $sessionId carries an attribution that $reason; dropping")
+                return null
+            }
+        }
+
+        // So does its Wavelength wallet.
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind != GroupWavelengthPaymentEvent.KIND) return@forEach
+            GroupWavelengthPayouts.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a Wavelength payment that $reason; dropping")
                 return null
             }
         }

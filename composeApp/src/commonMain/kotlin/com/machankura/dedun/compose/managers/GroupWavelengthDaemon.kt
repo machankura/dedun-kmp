@@ -13,6 +13,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import engineering.lightning.wavelength.HostedWalletClient
 import engineering.lightning.wavelength.Network
 import engineering.lightning.wavelength.RuntimeConfig
+import engineering.lightning.wavelength.SendRequest
 import engineering.lightning.wavelength.WatchOnlyWalletRequest
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
@@ -144,13 +145,18 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
             creditSat = balance.creditAvailableSat + balance.creditReservedSat,
             coins = coins.take(GroupWavelengthSnapshot.MAX_COINS).map { GroupWavelengthSnapshot.Coin(it.outpoint, it.amountSat, it.status, it.batchExpiry.toLong()) },
             activity = entries.take(GroupWavelengthSnapshot.MAX_ACTIVITY).map {
-                GroupWavelengthSnapshot.Line(it.id, it.kind?.wire.orEmpty(), it.status?.wire.orEmpty(), it.amountSat, it.feeSat, it.createdAt?.epochSeconds ?: 0, it.failureReason)
+                GroupWavelengthSnapshot.Line(it.id, it.kind?.wire.orEmpty(), it.status?.wire.orEmpty(), it.amountSat, it.feeSat, it.createdAt?.epochSeconds ?: 0, it.failureReason, it.progress?.paymentHash.orEmpty())
             },
         )
     }
 
     /** A new address for the group's boarding key, from the running daemon, which every device checks before believing. */
     suspend fun newBoardingAddress(): String = client.deposit().address
+
+    /** Pays an invoice the group approved. Every signature this needs is still the group's to give, and credit stays closed (D10). */
+    suspend fun pay(invoice: String, maxFeeSat: Long) {
+        client.send(SendRequest.Invoice(invoice, maxFeeSat = maxFeeSat, maxCreditSat = 0, maxCreditTopupSat = 0))
+    }
 
     /** How many exits the running daemon has under way, which nobody can rebuild from the chain (D14). */
     suspend fun exitsUnderWay(): Int = client.exitSummary().exits.size

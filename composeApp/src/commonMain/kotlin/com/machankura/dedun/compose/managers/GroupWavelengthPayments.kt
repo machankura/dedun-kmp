@@ -15,8 +15,8 @@ import kotlin.time.Clock
  */
 object GroupWavelengthPayments {
     /** Asks the group to approve a payment. [maxRefundHeight] is the longest it may tie the money up if the payment fails. */
-    suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, maxRefundHeight: Long, expiresAt: Long): FrostSigningSession {
-        val payment = GroupWavelengthPaymentEvent.Payment(wallet.statement.chain, wallet.statement.wallet, invoice, maxFeeSat, maxRefundHeight, expiresAt)
+    suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, maxRefundHeight: Long, expiresAt: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession {
+        val payment = GroupWavelengthPaymentEvent.Payment(wallet.statement.chain, wallet.statement.wallet, invoice, maxFeeSat, maxRefundHeight, expiresAt, payout)
         requireNotNull(payment.amountSat) { "That invoice names no amount, so there is nothing to approve" }
         val template = GroupWavelengthPaymentEvent.template(payment)
         return FrostSigningManager.proposeSigning(database, localChatRoom, userPublicKey, template.kind, template.tags, template.content)
@@ -27,7 +27,7 @@ object GroupWavelengthPayments {
         database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupWavelengthPaymentEvent.KIND)
             .filter { it.verifies() }
             .mapNotNull { GroupWavelengthPaymentEvent.read(it.tags) }
-            .filter { it.chain == wallet.statement.chain && it.wallet == wallet.statement.wallet && it.expiresAt > now }
+            .filter { it.chain == wallet.statement.chain && it.wallet == wallet.statement.wallet && it.expiresAt > now && it.payout != null }
             .mapNotNull { payment ->
                 val hash = payment.paymentHash ?: return@mapNotNull null
                 val maxSat = payment.maxSat ?: return@mapNotNull null

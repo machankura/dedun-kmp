@@ -220,6 +220,9 @@ object DepositLedger {
         lightningPayouts(database, chatRoomId, chain).forEach { (pay, _) ->
             paid[pay.payout!!.member] = (paid[pay.payout.member] ?: 0) + pay.amountMsat
         }
+        GroupWavelengthPayouts.balancesIn(database, chatRoomId, chain).forEach { (member, balance) ->
+            if (balance.paidSat > 0) paid[member] = (paid[member] ?: 0) + balance.paidSat * 1000
+        }
         return paid
     }
 

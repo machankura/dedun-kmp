@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
@@ -251,5 +252,28 @@ class GroupWavelengthWalletScreenJvmTest {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.CanAsk, Chain.Mainnet, onAsk = { asked++ }) } } }
         onNodeWithText("Get an address").performClick()
         assertEquals(1, asked)
+    }
+
+    private fun payout() = GroupWavelengthPaymentEvent.Payment(Chain.Signet, 0, "lntbs1000n1invalid", 50, 500, 4_000_000_000, GroupWavelengthPaymentEvent.Payout(OTHER, "d"))
+
+    @Test
+    fun `on mainnet there's no payout over Lightning, and it says why and what to do instead`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(chain = Chain.Mainnet), Chain.Mainnet) } } }
+        onNodeWithText("Payouts over Lightning stay off on mainnet until a failed payment's refund has been shown to work. Leaving moves the money to the onchain wallet, which pays out.").assertIsDisplayed()
+        assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Pay out")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `on signet a payout can be asked for`() = runDesktopComposeUiTest(phone, 1400) {
+        var paying = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(), Chain.Signet, onPayOut = { paying++ }) } } }
+        onNodeWithText("Pay out").performClick()
+        assertEquals(1, paying)
+    }
+
+    @Test
+    fun `an approved payout shows where it's got to`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(payouts = listOf(payout())), Chain.Signet) } } }
+        onNodeWithText("Approved. Waiting for whoever runs the wallet").assertIsDisplayed()
     }
 }

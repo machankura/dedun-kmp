@@ -7,6 +7,7 @@ import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
@@ -82,6 +83,8 @@ sealed class GroupWavelengthWalletUIState {
         val feesSat: Long = 0,
         /** How many more signatures round one is ready for, on this device's count. */
         val labelsLeft: Long = 0,
+        /** What the group has approved paying from this wallet. */
+        val payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
     ) : GroupWavelengthWalletUIState() {
         /** Whether enough signers have answered lately for a round to be likely to work: `2t-1` of them have to. */
         val enoughSeen: Boolean get() = seenRecently() >= 2 * wallet.statement.threshold - 1

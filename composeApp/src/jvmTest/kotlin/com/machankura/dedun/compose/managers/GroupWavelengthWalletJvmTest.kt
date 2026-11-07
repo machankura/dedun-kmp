@@ -276,7 +276,7 @@ class GroupWavelengthWalletJvmTest {
         val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
         val pay = invoice(10_000_500)
 
-        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, 4_000_000_000)
+        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, 4_000_000_000, fixture.payable(all, all[1], wallet, 200_000))
         assertEquals(emptyMap(), GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet), "proposed is not approved")
         fixture.signSession(all, all[1], session.id)
 
@@ -294,7 +294,7 @@ class GroupWavelengthWalletJvmTest {
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
         fixture.openWallet(all)
         val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
-        assertTrue(runCatching { GroupWavelengthPayments.propose(all[0].db, all[0].room, all[0].publicKey, wallet, invoice(null).write(), 1_000, 400_000, 4_000_000_000) }.isFailure)
+        assertTrue(runCatching { GroupWavelengthPayments.propose(all[0].db, all[0].room, all[0].publicKey, wallet, invoice(null).write(), 1_000, 400_000, 4_000_000_000, GroupWavelengthPaymentEvent.Payout("a", "b")) }.isFailure)
 
         val pay = invoice(10_000_000)
         val good = GroupWavelengthPaymentEvent.template(GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, pay.write(), 1_000, 400_000, 4_000_000_000))

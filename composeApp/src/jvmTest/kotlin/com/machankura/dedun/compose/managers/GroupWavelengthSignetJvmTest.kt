@@ -20,6 +20,7 @@ import fr.acinq.phoenix.managers.global.NetworkState
 import kotlinx.coroutines.flow.flowOf
 import kotlin.time.Duration.Companion.seconds
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkRequest
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkResponse
@@ -244,8 +245,8 @@ class GroupWavelengthSignetJvmTest {
             File(dir, "authorise.txt").takeIf { it.exists() }?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() && approvals.add(it) }?.forEach { line ->
                 val (invoice, maxFee, maxRefund) = line.split(" ")
                 runCatching {
-                    val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice, maxFee.toLong(), maxRefund.toLong(), Clock.System.now().epochSeconds + 3600)
-                    fixture.signSession(all, all[1], session.id)
+                    val template = GroupWavelengthPaymentEvent.template(GroupWavelengthPaymentEvent.Payment(statement.chain, statement.wallet, invoice, maxFee.toLong(), maxRefund.toLong(), Clock.System.now().epochSeconds + 3600, GroupWavelengthPaymentEvent.Payout(all[1].publicKey, "harness")))
+                    fixture.fileSignedAsRoom(all, template.kind, template.tags, template.content, createdAt = Clock.System.now().epochSeconds)
                     say("approved a payment: ${GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).size} approved now")
                 }.onFailure { say("couldn't approve a payment: ${it.message}") }
             }

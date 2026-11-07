@@ -970,6 +970,7 @@ private fun RitualNotice(
         ChatMessage.TYPE_GROUP_LIGHTNING_PAYMENT_AUTHORISED -> Icons.Default.Payments
         ChatMessage.TYPE_GROUP_WAVELENGTH_WALLET_OPENED -> Icons.Default.Waves
         ChatMessage.TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED -> Icons.Default.Badge
+        ChatMessage.TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED -> Icons.Default.Payments
         ChatMessage.TYPE_LIGHTNING_SEED_SHARED -> Icons.Default.Key
         ChatMessage.TYPE_LIGHTNING_INVOICE_REQUESTED -> Icons.Default.RequestQuote
         ChatMessage.TYPE_LIGHTNING_INVOICE_ISSUED -> Icons.Default.Receipt
