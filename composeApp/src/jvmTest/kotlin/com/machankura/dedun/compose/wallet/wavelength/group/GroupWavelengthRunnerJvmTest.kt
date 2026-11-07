@@ -446,6 +446,25 @@ class GroupWavelengthRunnerJvmTest {
     }
 
     @Test
+    fun `looking for more coins reopens the daemon with a scan, and only where it runs`() = runBlocking<Unit> {
+        // The first mainnet wallet's daemon never took in a claimed payment, and only a scan found it.
+        val setup = opened()
+        elect(setup)
+        setup.pumped { setup.runner.refresh() }
+        assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+        val scans = { setup.runtime.fake.requests.count { it.second.contains("manifest") && it.second.contains("\"recovery_window\":") } }
+        assertEquals(1, scans())
+
+        assertFalse(runnerFor(setup.all[1], Runtime(), Slot(), mutableListOf()).rescan(fixture.roomId, fixture.chain, 0), "a device that doesn't run it can't")
+        setup.pumped {
+            assertTrue(setup.runner.rescan(fixture.roomId, fixture.chain, 0))
+            withTimeoutOrNull(20.seconds) { while (scans() < 2 || setup.status() !is GroupWavelengthDaemonStatus.Running) delay(20) }
+        }
+        assertEquals(2, scans(), "it opened again, scanning")
+        assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+    }
+
+    @Test
     fun `once an open has finished, the next doesn't scan`() = runBlocking<Unit> {
         val setup = opened()
         elect(setup)

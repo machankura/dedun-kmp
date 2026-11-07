@@ -20,6 +20,9 @@ interface GroupWavelengthDaemonSource {
     /** Starts leaving without the Ark operator, for every coin. */
     suspend fun forceExit(chatRoomId: String, chain: Chain, wallet: Long) = Unit
 
+    /** Has the daemon look for the wallet's coins again, as its first open did: true on the device that runs it, which then restarts it. */
+    suspend fun rescan(chatRoomId: String, chain: Chain, wallet: Long): Boolean = false
+
     /** A device that runs no daemon at all. */
     object None : GroupWavelengthDaemonSource {
         override fun observe(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthDaemonStatus> = flowOf(GroupWavelengthDaemonStatus.NotOnThisDevice)

@@ -360,6 +360,25 @@ class GroupWavelengthRunner(
         GroupWavelengthExitPlan(coins, plan.canStart, plan.totalFundingShortfallSat, daemon.exitSummary().exits.map { GroupWavelengthExitPlan.Stage(it.outpoint, it.status?.wire.orEmpty(), it.vtxoAmountSat, it.estTotalFeeSat, it.estNetRecoveredSat) })
     }
 
+    /**
+     * Has the daemon scan for the wallet's coins again, which only a first open does. What it found the first time stays in its directory,
+     * and a coin it never took in -- one whose arrival it couldn't resolve, as the first mainnet wallet's claimed Lightning payment -- is
+     * found by the scan. The daemon stops for it, and the open runs in this runner's scope, so leaving the screen doesn't cut it short.
+     */
+    override suspend fun rescan(chatRoomId: String, chain: Chain, wallet: Long): Boolean {
+        val found = mutex.withLock {
+            val elected = elected().firstOrNull { it.room.chatRoom.id == chatRoomId && it.chain == chain && it.number == wallet } ?: return@withLock false
+            daemon.forgetOpened(elected.wallet.statement)
+            if (running?.let { it.chatRoomId == chatRoomId && it.chain == chain && it.wallet.statement.wallet == wallet } == true) halt()
+            true
+        }
+        if (found) {
+            logger.i { "Looking for the coins of ${chatRoomId.take(8)}'s wallet again" }
+            scope.launch { runCatching { refresh() }.onFailure { logger.e("Could not reopen the wallet to look for its coins", it) } }
+        }
+        return found
+    }
+
     /** Starts leaving without the Ark operator, for every coin. */
     override suspend fun forceExit(chatRoomId: String, chain: Chain, wallet: Long) {
         val live = running?.takeIf { it.chatRoomId == chatRoomId && it.chain == chain && it.wallet.statement.wallet == wallet } ?: return

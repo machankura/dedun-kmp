@@ -210,6 +210,20 @@ class GroupWavelengthWalletViewModel(
         act(onSession, onFailure) { repository.stepDown(state.localChatRoom, activeUserPublicKey, chain, state.wallet.statement.wallet) }
     }
 
+    /** Has this device's daemon look for the wallet's coins again. Only the device that runs it can, and nothing here is signed by the group. */
+    fun lookForMoreCoins(onStarted: () -> Unit, onFailure: () -> Unit) {
+        val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val started = runCatching { daemonSource.rescan(chatRoomId, chain, state.wallet.statement.wallet) }
+                .onFailure { logger.e("Looking for the coins of $chatRoomId's wallet failed", it) }
+                .getOrDefault(false)
+            isActionPending.value = false
+            withContext(Dispatchers.Main) { if (started) onStarted() else onFailure() }
+        }
+    }
+
     private fun act(onSession: (String) -> Unit, onFailure: () -> Unit, propose: suspend () -> FrostSigningSession) {
         if (isActionPending.value) return
         isActionPending.value = true
