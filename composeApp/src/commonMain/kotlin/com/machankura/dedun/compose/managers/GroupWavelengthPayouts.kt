@@ -254,10 +254,10 @@ object GroupWavelengthPayouts {
             .filter { (id, _) -> id != itself }
             .toMap()
 
-    /** The longest a device signs an approval to stand for. A far-off one could still be acted on long after anyone remembers it. */
     /** The daemon's word for a payment that didn't go, as its activity reports it. */
     private const val FAILED = "failed"
 
+    /** The longest a device signs an approval to stand for. A far-off one could still be acted on long after anyone remembers it. */
     private const val MAX_APPROVAL_SECONDS = 7L * 24 * 60 * 60
 
     /** The least a leave may pay: the dust limit of the costliest address type a destination can be. The operator's own floor is the screen's. */
