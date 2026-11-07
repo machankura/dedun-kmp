@@ -79,6 +79,19 @@ object GroupWavelengthRollout {
     }
 
     /**
+     * The most a spend of [balanceSat] may take out of a wallet holding [inWalletSat]: enough left behind for the least change the
+     * operator accepts, and never more than the member has. 0 where nothing can go, which is for the balance to explain and not this.
+     *
+     * A spend leaving no change at all would be taken too, but nothing here can ask for one: what leaves the wallet is the amount and
+     * the round's fee, and the fee is a limit rather than a figure until it's quoted. Aiming at no change pays off only when the round
+     * costs the whole limit, and lands in the change the operator refuses whenever it costs less -- so this aims at [MIN_CHANGE_SAT],
+     * which a cheaper round can only overshoot (`docs/group-wavelength-spendable-ceiling.md`, B2 and B3). Emptying the wallet is a
+     * sweep the daemon sizes itself, and its own note's business.
+     */
+    fun spendableSat(inWalletSat: Long, balanceSat: Long): Long =
+        (inWalletSat - MIN_CHANGE_SAT).coerceAtLeast(0).coerceAtMost(balanceSat.coerceAtLeast(0))
+
+    /**
      * Whether the wallet offers to leave without the Ark operator's help on [chain]. A unilateral exit has never run on any network, so
      * not on mainnet until one has, on signet, where this is what lets someone run it.
      */

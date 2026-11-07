@@ -140,6 +140,60 @@ class GroupWavelengthOnchainPayoutsJvmTest {
     }
 
     @Test
+    fun `the most the wallet can spend is what's in it less the operator's least change, and never more than the balance`() {
+        // The room this came from: 4,036 sats of a 4,048-sat wallet, which can spend 3,048 and keep the operator's 1,000.
+        assertEquals(3_048L, GroupWavelengthRollout.spendableSat(inWalletSat = 4_048, balanceSat = 4_036))
+        assertEquals(3_048L, GroupWavelengthRollout.spendableSat(inWalletSat = 4_048, balanceSat = 4_048), "the whole wallet is one member's, and still 1,000 stays")
+        assertEquals(3_048L, GroupWavelengthRollout.spendableSat(inWalletSat = 4_048, balanceSat = 5_000), "a balance over the wallet is the wallet's limit")
+        assertEquals(9_500L, GroupWavelengthRollout.spendableSat(inWalletSat = 10_500, balanceSat = 10_000), "what used to be refused for leaving 500")
+        assertEquals(10_000L, GroupWavelengthRollout.spendableSat(inWalletSat = 11_000, balanceSat = 10_000), "a balance that already left enough is untouched")
+        assertEquals(0L, GroupWavelengthRollout.spendableSat(inWalletSat = 1_000, balanceSat = 988), "the operator's own change can't be paid out")
+        assertEquals(0L, GroupWavelengthRollout.spendableSat(inWalletSat = 500, balanceSat = 400), "nor a wallet under it")
+        assertEquals(0L, GroupWavelengthRollout.spendableSat(inWalletSat = 0, balanceSat = 0))
+    }
+
+    @Test
+    fun `a spend at the ceiling leaves change the operator accepts, at every fee the round may cost`() {
+        // The invariant the ceiling exists for. The fee is a limit and not a figure, so this holds for every fee up to it -- and
+        // the fees that matter are the ones just under the limit, where aiming at no change lands in the band that's refused.
+        listOf(0L, 500L, 2_000L).forEach { maxFeeSat ->
+            for (inWalletSat in 0L..5_000L step 13) {
+                listOf(0L, inWalletSat / 2, inWalletSat - 1, inWalletSat, inWalletSat + 1_000).filter { it >= 0 }.forEach { balanceSat ->
+                    val amountSat = GroupWavelengthRollout.spendableSat(inWalletSat, balanceSat) - maxFeeSat
+                    if (amountSat < GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) return@forEach // no offer is made at all
+                    for (feeSat in 0L..maxFeeSat) {
+                        val change = inWalletSat - amountSat - feeSat
+                        assertTrue(
+                            change == 0L || change >= GroupWavelengthRollout.MIN_CHANGE_SAT,
+                            "a wallet of $inWalletSat paying $amountSat of a $balanceSat balance left $change at a fee of $feeSat",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `aiming at no change is what the ceiling refuses to do, because a cheaper round lands in the band`() {
+        // What the `change <= 0` branch does when a member's balance is the whole wallet: offer everything less the fee limit, which
+        // is only payable if the round costs the whole limit. The ceiling gives up 1,000 sats rather than an amount that works by luck.
+        val maxFeeSat = 2_000L
+        val aimedAtNoChange = 3_000L - maxFeeSat
+        assertEquals(0L, GroupWavelengthRollout.changeShortSat(3_000, aimedAtNoChange + maxFeeSat), "which is why it looks fine")
+        assertTrue(
+            GroupWavelengthRollout.changeShortSat(3_000, aimedAtNoChange + maxFeeSat - 1) > 0,
+            "but a round a single sat cheaper leaves 999 sats of change, and the operator refuses it",
+        )
+
+        // The ceiling's offer out of a wallet big enough to make one: 2,000 sats arriving, and every fee up to the limit leaves 1,000 or more.
+        val atTheCeiling = GroupWavelengthRollout.spendableSat(inWalletSat = 5_000, balanceSat = 5_000) - maxFeeSat
+        assertEquals(2_000L, atTheCeiling)
+        (0L..maxFeeSat).forEach { feeSat ->
+            assertEquals(0L, GroupWavelengthRollout.changeShortSat(5_000, atTheCeiling + feeSat), "a fee of $feeSat")
+        }
+    }
+
+    @Test
     fun `the Lightning payout that would leave too little change isn't offered, and the row says why`() = render(balance(1_214), UnusedAddressCheck.Usage.Unused, inWalletSat = 1_218, paysLightning = true) {
         onNodeWithText("Paying @Alice out over Lightning", substring = true).assertIsDisplayed()
         onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertDoesNotExist()
