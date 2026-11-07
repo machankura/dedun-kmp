@@ -78,7 +78,8 @@ class ArkPolicyJvmTest {
         maxOnchainFeeSat: Long = 5_000,
         isTreeKey: (PublicKey) -> Boolean = { it == treeKey },
         isOnchain: (ByteVector) -> Boolean = { it == onchain },
-        authorised: Map<ByteVector, Long> = emptyMap(),
+        leaves: Map<ByteVector, ArkPolicy.AuthorisedLeave> = emptyMap(),
+        leftIn: Map<String, String> = emptyMap(),
         capSat: Long? = null,
         operatorKey: PublicKey = operator,
         exitDelay: Long = fixtures.exitDelay,
@@ -93,7 +94,7 @@ class ArkPolicyJvmTest {
         approved: Map<ByteVector32, ArkPolicy.ApprovedPayment> = emptyMap(),
         paidIn: Map<ByteVector32, String> = emptyMap(),
     ) = ArkPolicy.Context(
-        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised,
+        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, leaves, leftIn,
         capSat, unspentSat, pendingFromSat, reservedFor, notedRounds, treeKeyRounds, minSweepDelay, recentFeesSat, maxRecentFeesSat,
         approvedPayments = approved, paidIn = paidIn,
     )
@@ -352,8 +353,39 @@ class ArkPolicyJvmTest {
     @Test
     fun `a leave the group didn't authorise is refused, and one it did is allowed`() {
         refused(fixtures.forfeit, "a leave to a script nobody authorised", context(isOnchain = { false }))
-        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(isOnchain = { false }, authorised = mapOf(onchain to 9_000)))
-        refused(fixtures.forfeit, "a leave to a script nobody authorised", context(isOnchain = { false }, authorised = mapOf(onchain to 8_999)))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice())
+    }
+
+    /** The fixture's 9,000-sat leave, as a payout to a member a quorum approved, in a round whose fee is 1,000. */
+    private fun payingAlice(amountSat: Long = 9_000, maxFeeSat: Long = 1_000, leftIn: Map<String, String> = emptyMap()) =
+        context(isOnchain = { false }, leaves = mapOf(onchain to ArkPolicy.AuthorisedLeave("alice", amountSat, maxFeeSat)), leftIn = leftIn)
+
+    @Test
+    fun `an approved leave pays exactly what was approved, neither less nor more`() {
+        refused(fixtures.forfeit, "a leave of 9000 sats where the group approved 9001", payingAlice(amountSat = 9_001))
+        refused(fixtures.forfeit, "a leave of 9000 sats where the group approved 8999", payingAlice(amountSat = 8_999))
+    }
+
+    @Test
+    fun `an approved leave is paid in one round, however many times that round is asked about`() {
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice(leftIn = mapOf("alice" to commitmentId)))
+        refused(fixtures.forfeit, "an approved leave already paid in another round", payingAlice(leftIn = mapOf("alice" to "another commitment")))
+        // Another approval having gone elsewhere says nothing about this one.
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice(leftIn = mapOf("bob" to "another commitment")))
+    }
+
+    @Test
+    fun `a round paying a leave costs no more than its payout allows`() {
+        refused(fixtures.forfeit, "more than the 999 a payout in it allows", payingAlice(maxFeeSat = 999))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice(maxFeeSat = 1_000))
+    }
+
+    @Test
+    fun `a round says which approved leave it pays, so the device can file it`() {
+        val verdict = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(payingAlice(), fixtures.forfeit))
+        assertEquals(listOf(ArkPolicy.Leave("alice", onchain, 9_000)), verdict.effect!!.leaves)
+        // A leave to the group's own wallet is nobody's payout.
+        assertEquals(emptyList(), assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), fixtures.forfeit)).effect!!.leaves)
     }
 
     @Test
@@ -667,6 +699,10 @@ class ArkPolicyJvmTest {
         }
         refused(stolen(fixtures.oorCheckpoint), "a transfer to a script nobody authorised")
         refused(stolen(fixtures.oorArk), "a transfer to a script nobody authorised")
+        // A leave's approval pays a round's output and nothing else: a VTXO at a member's onchain key is a coin their wallet can't see.
+        val approved = context(leaves = mapOf(thief to ArkPolicy.AuthorisedLeave("alice", 1_000_000, 1_000)))
+        refused(stolen(fixtures.oorCheckpoint), "a transfer to a script nobody authorised", approved)
+        refused(stolen(fixtures.oorArk), "a transfer to a script nobody authorised", approved)
     }
 
     @Test
@@ -692,10 +728,10 @@ class ArkPolicyJvmTest {
     }
 
     @Test
-    fun `the on-chain account pays the group's wallet or what was authorised, and nobody else`() {
+    fun `the on-chain account pays the group's wallet, and nobody else, not even an approved leave's script`() {
         assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), onchainSpend(onchain, 9_000)))
         refused(onchainSpend(thief, 9_000), "to a script nobody authorised")
-        assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(authorised = mapOf(thief to 9_000)), onchainSpend(thief, 9_000)))
+        refused(onchainSpend(thief, 9_000), "to a script nobody authorised", context(leaves = mapOf(thief to ArkPolicy.AuthorisedLeave("alice", 9_000, 1_000))))
         refused(onchainSpend(onchain, 1_000), "in fees")
         refused(onchainSpend(onchain, 9_000).copy(method = ArkRequest.METHOD_SCRIPT_PATH), "only by its key path")
         refused(onchainSpend(onchain, 9_000).copy(index = 1), "doesn't own")
