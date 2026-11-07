@@ -1,6 +1,8 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -30,6 +32,19 @@ object GroupWavelengthPayouts {
             .mapNotNull { GroupWavelengthPaymentEvent.read(it.tags) }
             .filter { it.chain == chain && it.payout != null }
             .distinctBy { it.paymentHash }
+
+    /** Every request the group has signed for [wallet] to leave, whenever it was. */
+    suspend fun signedExits(database: DedunDatabase, chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthExitEvent.Exit> =
+        database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupWavelengthExitEvent.KIND)
+            .filter { it.verifies() }
+            .mapNotNull { GroupWavelengthExitEvent.read(it.tags) }
+            .filter { it.chain == chain && it.wallet == wallet }
+
+    /** Asks the group to leave [wallet] for its onchain wallet. */
+    suspend fun proposeExit(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet) =
+        GroupWavelengthExitEvent.template(GroupWavelengthExitEvent.asking(wallet.statement.chain, wallet.statement.wallet)).let { template ->
+            FrostSigningManager.proposeSigning(database, localChatRoom, userPublicKey, template.kind, template.tags, template.content)
+        }
 
     /** Whether this device signed the transfer that makes [payment], which from then on can't be assumed not to have left. */
     private suspend fun wentOut(database: DedunDatabase, chatRoomId: String, payment: GroupWavelengthPaymentEvent.Payment): Boolean {
@@ -67,6 +82,8 @@ object GroupWavelengthPayouts {
 
     /** Why a signer won't sign [proposed], a Wavelength payment for [chatRoomId], or null when it will. */
     suspend fun refuse(database: DedunDatabase, chatRoomId: String, proposed: Event, nowSeconds: Long = Clock.System.now().epochSeconds): String? {
+        // Leaving pays only the group's own onchain wallet, which the policy checks when it's signed (D9).
+        if (GroupWavelengthExitEvent.read(proposed.tags) != null) return null
         val payment = GroupWavelengthPaymentEvent.read(proposed.tags) ?: return "isn't a payment this device can read"
         val payout = payment.payout ?: return "pays somebody it does not name as a member"
         val destination = GroupPayoutDestinations.payoutDestinationOf(database, chatRoomId, payment.chain, payout.member)

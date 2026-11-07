@@ -20,7 +20,10 @@ import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.PublicKey
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import engineering.lightning.wavelength.ExitRequest
 import engineering.lightning.wavelength.ListRequest
+import engineering.lightning.wavelength.model.ExitSummaryResult
+import engineering.lightning.wavelength.model.GetExitPlanResult
 import engineering.lightning.wavelength.model.ListView
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -158,6 +161,24 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
         client.send(SendRequest.Invoice(invoice, maxFeeSat = maxFeeSat, maxCreditSat = 0, maxCreditTopupSat = 0))
     }
 
+    /** The coins the running daemon can still move. */
+    suspend fun liveCoins(): List<String> =
+        client.list(ListRequest(view = ListView.VTXOS)).vtxos?.vtxos.orEmpty().filter { it.status == LIVE }.map { it.outpoint }
+
+    /** Leaves in a round to [destination]. A device signs only if that's the group's own onchain wallet. */
+    suspend fun leave(outpoint: String, destination: String) {
+        client.exit(ExitRequest.Cooperative(outpoint, destination))
+    }
+
+    suspend fun exitPlan(outpoints: List<String>): GetExitPlanResult = client.getExitPlan(outpoints)
+
+    suspend fun exitSummary(): ExitSummaryResult = client.exitSummary()
+
+    /** Leaves without the Ark operator's help, which has never been run on any network. */
+    suspend fun forceExit(outpoint: String) {
+        client.exit(ExitRequest.ForceUnroll(outpoint))
+    }
+
     /** How many exits the running daemon has under way, which nobody can rebuild from the chain (D14). */
     suspend fun exitsUnderWay(): Int = client.exitSummary().exits.size
 
@@ -178,6 +199,9 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
         val TRANSPORT_TIMEOUT = 50.seconds
 
         private const val PASSWORD_TAG = "dedun/group-wavelength/wallet-password/v1"
+
+        /** The daemon's word for a coin in no other state. */
+        private const val LIVE = "live"
 
         /** A watch-only wallet has no secret to derive this from but the seed, and any participant can reopen it. */
         internal fun passwordOf(seedHex: HexKey): ByteArray = Crypto.taggedHash(fr.acinq.secp256k1.Hex.decode(seedHex), PASSWORD_TAG).toByteArray()

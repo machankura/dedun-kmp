@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
@@ -138,7 +139,9 @@ object ProposedEvent {
         )
 
         // A payment from the Wavelength wallet: as with the Lightning wallet's, the amount and the most the fee can be come first.
-        GroupWavelengthPaymentEvent.KIND -> GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
+        GroupWavelengthPaymentEvent.KIND -> if (GroupWavelengthExitEvent.read(event.tags) != null) {
+            Summary(label = "Leave the Wavelength wallet", detail = "Everything in it goes to the group's onchain wallet, in the next round enough devices answer")
+        } else GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
             val invoice = runCatching { Bolt11Invoice.read(pay.invoice).get() }.getOrNull()
             Summary(
                 label = "Pay ${Satoshi(pay.amountSat ?: 0).grouped()} sats from the Wavelength wallet",

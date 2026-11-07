@@ -12,6 +12,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +35,7 @@ import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.group_wavelength_advanced
@@ -55,6 +57,7 @@ import dedun.composeapp.generated.resources.group_wavelength_coin_pending
 import dedun.composeapp.generated.resources.group_wavelength_coin_s_sats
 import dedun.composeapp.generated.resources.group_wavelength_coin_settled
 import dedun.composeapp.generated.resources.group_wavelength_coin_spent
+import dedun.composeapp.generated.resources.group_wavelength_exit_title
 import dedun.composeapp.generated.resources.group_wavelength_only_device_s
 import dedun.composeapp.generated.resources.group_wavelength_only_operator_s
 import fr.acinq.bitcoin.Chain
@@ -73,6 +76,7 @@ fun GroupWavelengthAdvancedScreen(
     chatRepository: ChatRepository,
     repository: GroupWavelengthRepository,
     daemonSource: GroupWavelengthDaemonSource,
+    onOpenExit: () -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupWavelengthWalletViewModel = viewModel(
@@ -89,7 +93,7 @@ fun GroupWavelengthAdvancedScreen(
         }
     ) { padding ->
         when (val state = viewModel.uiState) {
-            is GroupWavelengthWalletUIState.Opened -> GroupWavelengthAdvancedContent(Modifier.padding(padding), state)
+            is GroupWavelengthWalletUIState.Opened -> GroupWavelengthAdvancedContent(Modifier.padding(padding), state, chain, onOpenExit)
             is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = null)
             else -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
         }
@@ -97,7 +101,7 @@ fun GroupWavelengthAdvancedScreen(
 }
 
 @Composable
-internal fun GroupWavelengthAdvancedContent(modifier: Modifier, state: GroupWavelengthWalletUIState.Opened) {
+internal fun GroupWavelengthAdvancedContent(modifier: Modifier, state: GroupWavelengthWalletUIState.Opened, chain: Chain = state.wallet.statement.chain, onOpenExit: () -> Unit = {}) {
     val statement = state.wallet.statement
     val comparison = state.comparison
     LazyColumn(
@@ -125,6 +129,9 @@ internal fun GroupWavelengthAdvancedContent(modifier: Modifier, state: GroupWave
         item { Text(stringResource(Res.string.group_wavelength_advanced_untested_exit), style = MaterialTheme.typography.bodyMedium) }
         item { Text(stringResource(Res.string.group_wavelength_advanced_untested_refund), style = MaterialTheme.typography.bodyMedium) }
         item { Text(stringResource(Res.string.group_wavelength_advanced_untested_phones), style = MaterialTheme.typography.bodyMedium) }
+        if (GroupWavelengthRollout.offersUnilateralExit(chain) && state.isOperator) {
+            item { TextButton(onClick = onOpenExit) { Text(stringResource(Res.string.group_wavelength_exit_title)) } }
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
+import com.machankura.dedun.compose.repository.GroupWavelengthExitPlan
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthProcess
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -46,6 +47,13 @@ object GroupWavelengthProcess : GroupWavelengthDaemonSource {
             daemon = GroupWavelengthDaemon(client, root),
             onHolding = { WavelengthPlatform.holdForGroup(context, it) },
         ).also { it.start() }
+    }
+
+    override suspend fun exitPlan(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthExitPlan? =
+        runner.value?.exitPlan(chatRoomId, chain, wallet)
+
+    override suspend fun forceExit(chatRoomId: String, chain: Chain, wallet: Long) {
+        runner.value?.forceExit(chatRoomId, chain, wallet)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

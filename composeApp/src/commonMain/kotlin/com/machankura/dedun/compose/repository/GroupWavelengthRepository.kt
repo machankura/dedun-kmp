@@ -57,6 +57,12 @@ interface GroupWavelengthRepository {
     /** Asks the group to pay a member from their balance: a proposal `t` people have to sign, like any other. */
     suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession
 
+    /** Asks the group to leave [wallet] for its onchain wallet. */
+    suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession
+
+    /** Whether the group has asked [wallet] to leave, and that request still stands. */
+    suspend fun leaveAsked(chatRoomId: String, chain: Chain, wallet: Long): Boolean
+
     /** Whether [member] has a depositor statement on [chain]: nobody else gets an address. */
     suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean
 
@@ -104,6 +110,8 @@ interface GroupWavelengthRepository {
             override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> = emptyList()
             override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession = error("No room to propose in")
+            override suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession = error("No room to propose in")
+            override suspend fun leaveAsked(chatRoomId: String, chain: Chain, wallet: Long): Boolean = false
             override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false
             override suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String = error("No room to ask in")
             override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> = flowOf(emptyList())

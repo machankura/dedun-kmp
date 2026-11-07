@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +35,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,7 +86,14 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.a_wavelength_wallet_needs_four_signers
 import dedun.composeapp.generated.resources.couldn_t_propose_this
+import dedun.composeapp.generated.resources.cancel
 import dedun.composeapp.generated.resources.group_wallet
+import dedun.composeapp.generated.resources.group_wavelength_leave
+import dedun.composeapp.generated.resources.group_wavelength_leave_ask
+import dedun.composeapp.generated.resources.group_wavelength_leave_asked
+import dedun.composeapp.generated.resources.group_wavelength_leave_explainer
+import dedun.composeapp.generated.resources.group_wavelength_leave_question
+import dedun.composeapp.generated.resources.group_wavelength_run_it_yourself
 import dedun.composeapp.generated.resources.group_wavelength_activity
 import dedun.composeapp.generated.resources.group_wavelength_activity_fee_s
 import dedun.composeapp.generated.resources.group_wavelength_activity_line_s_s
@@ -233,6 +245,7 @@ fun GroupWavelengthWalletScreen(
                 onOpenAdvanced = { onNavigateToRoute(GroupWavelengthAdvancedRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 onReceive = { onNavigateToRoute(GroupWavelengthReceiveRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 onPayOut = { onNavigateToRoute(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
+                onLeave = { viewModel.proposeLeave(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
             )
         }
     }
@@ -254,6 +267,7 @@ internal fun GroupWavelengthWalletContent(
     onOpenAdvanced: () -> Unit = {},
     onReceive: () -> Unit = {},
     onPayOut: () -> Unit = {},
+    onLeave: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
@@ -307,7 +321,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave)
     }
 }
 
@@ -388,13 +402,14 @@ private fun OpenedWallet(
     onOpenAdvanced: () -> Unit,
     onReceive: () -> Unit,
     onPayOut: () -> Unit,
+    onLeave: () -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive, onPayOut)
+                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
@@ -405,17 +420,27 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive, onPayOut)
+            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
-    item { BalanceCard(state, chain, onReceive, onPayOut) }
+    item { BalanceCard(state, chain, onReceive, onPayOut, onLeave, isPending) }
+    if (state.leaveAsked) item { Text(stringResource(Res.string.group_wavelength_leave_asked), style = MaterialTheme.typography.bodyMedium) }
     item { DeadlineLine(state.expiry) }
+    // The way out when whoever runs it has gone: another member takes over, and renewal or leaving carries on from them.
+    if (state.isParticipant && !state.isOperator && state.canRunHere && (state.expiry is WalletExpiry.Urgent || state.expiry == WalletExpiry.Expired)) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                Text(stringResource(Res.string.group_wavelength_run_it_yourself), style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = onNominate, enabled = !isPending) { Text(stringResource(Res.string.run_this_wallet_on_my_device)) }
+            }
+        }
+    }
     if (state.payouts.isNotEmpty()) {
         item { Text(stringResource(Res.string.group_wavelength_payouts), style = MaterialTheme.typography.titleSmall) }
         items(state.payouts, key = { "payout:${it.paymentHash}" }) { PayoutRow(it, state) }
@@ -467,7 +492,8 @@ private fun AlarmCard(alarms: List<String>) {
 
 /** This device's own figure first, and the operator's beside it, since only one of them has been checked (U2). */
 @Composable
-private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit) {
+private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, isPending: Boolean) {
+    var isConfirmingLeave by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.group_wavelength_balance_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -517,6 +543,23 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                 if (!GroupWavelengthRollout.paysOverLightning(chain)) {
                     Text(stringResource(Res.string.group_wavelength_payouts_off_on_mainnet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (state.isParticipant && !state.leaveAsked && !state.ledger.isEmpty) {
+                    TextButton(onClick = { isConfirmingLeave = true }, enabled = !isPending) { Text(stringResource(Res.string.group_wavelength_leave)) }
+                }
+            }
+            if (isConfirmingLeave) {
+                AlertDialog(
+                    onDismissRequest = { isConfirmingLeave = false },
+                    title = { Text(stringResource(Res.string.group_wavelength_leave_question)) },
+                    text = { Text(stringResource(Res.string.group_wavelength_leave_explainer)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            isConfirmingLeave = false
+                            onLeave()
+                        }) { Text(stringResource(Res.string.group_wavelength_leave_ask)) }
+                    },
+                    dismissButton = { TextButton(onClick = { isConfirmingLeave = false }) { Text(stringResource(Res.string.cancel)) } },
+                )
             }
         }
     }

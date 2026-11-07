@@ -9,10 +9,12 @@ import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthPayments
+import com.machankura.dedun.compose.managers.GroupWavelengthPayouts
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.database.model.IcebergLabelAssignment
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import engineering.lightning.wavelength.FacadeBindings
+import engineering.lightning.wavelength.FacadeVerb
 import engineering.lightning.wavelength.FacadeWavelengthClient
 import engineering.lightning.wavelength.SignerHost
 import engineering.lightning.wavelength.testing.FakeFacadeBindings
@@ -74,6 +76,12 @@ class GroupWavelengthRunnerJvmTest {
     private class Runtime(val fake: FakeFacadeBindings = FakeFacadeBindings()) : FacadeBindings by fake {
         var manifest = ""
         var identity = ""
+        var coinsSaid: String? = null
+        override fun call(verb: FacadeVerb, request: ByteArray): ByteArray =
+            if (verb == FacadeVerb.LIST && coinsSaid != null && request.decodeToString().contains("vtxos")) {
+                coinsSaid!!.encodeToByteArray().also { fake.call(verb, request) }
+            } else fake.call(verb, request)
+
         override fun startHostedWatchOnlyWallet(request: ByteArray, host: SignerHost): ByteArray {
             val heard = request.decodeToString().replace(identity, fake.identityPubKey).encodeToByteArray()
             val body = fake.startHostedWatchOnlyWallet(heard, host).decodeToString()
@@ -295,5 +303,50 @@ class GroupWavelengthRunnerJvmTest {
         assertEquals(1, setup.runtime.fake.requests.count { invoice in it.second }, "once")
         val sent = setup.runtime.fake.requests.first { invoice in it.second }.second
         assertFalse(sent.contains("MaxCredit"), "credit stays closed, which on the wire is saying nothing of it: $sent")
+    }
+
+    /** The runner reads the coins it leaves with from the daemon. */
+    private fun Runtime.withCoin(outpoint: String) = apply { coinsSaid = """{"View":"vtxos","VTXOs":{"VTXOs":[{"Outpoint":"$outpoint","AmountSat":10000,"Status":"live"}],"Total":1}}""" }
+
+    private fun exitRequests(setup: Setup) = setup.runtime.fake.requests.filter { it.first == FacadeVerb.EXIT.wireName }
+
+    @Test
+    fun `nobody asking and plenty of time means nothing leaves`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.runtime.withCoin("cc:0")
+        setup.pumped { setup.runner.refresh() }
+        setup.runner.refresh()
+        assertEquals(emptyList(), exitRequests(setup).map { it.second })
+    }
+
+    @Test
+    fun `when a quorum asks, it leaves, once a coin, for the group's own onchain wallet`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.runtime.withCoin("cc:0")
+        setup.pumped { setup.runner.refresh() }
+        val asking = GroupWavelengthPayouts.proposeExit(setup.all[1].db, setup.all[1].room, setup.all[1].publicKey, setup.wallet)
+        fixture.signSession(setup.all, setup.all[1], asking.id)
+        setup.runner.refresh()
+        setup.runner.refresh()
+        withTimeoutOrNull(5.seconds) { while (exitRequests(setup).isEmpty()) delay(20) }
+        delay(100)
+        val leaving = exitRequests(setup)
+        assertEquals(1, leaving.size, "once")
+        assertTrue("cc:0" in leaving.single().second, leaving.single().second)
+    }
+
+    @Test
+    fun `a coin close to its deadline leaves by itself, with nobody asking`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.runtime.withCoin("cc:0")
+        val key = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)
+        setup.all[0].db.groupArkDao().upsertVtxo(GroupArkVtxo(key, "cc:0", 10_000, settled = true, expiresAtHeight = 100))
+        setup.pumped { setup.runner.refresh() }
+        setup.runner.refresh()
+        withTimeoutOrNull(5.seconds) { while (exitRequests(setup).isEmpty()) delay(20) }
+        assertEquals(1, exitRequests(setup).size, "nobody asked: its deadline did")
     }
 }

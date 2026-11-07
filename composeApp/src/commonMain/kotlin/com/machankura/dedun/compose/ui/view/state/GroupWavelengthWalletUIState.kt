@@ -83,6 +83,8 @@ sealed class GroupWavelengthWalletUIState {
         val feesSat: Long = 0,
         /** How many more signatures round one is ready for, on this device's count. */
         val labelsLeft: Long = 0,
+        /** Whether the group has asked the wallet to leave, and that request still stands. */
+        val leaveAsked: Boolean = false,
         /** What the group has approved paying from this wallet. */
         val payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
     ) : GroupWavelengthWalletUIState() {

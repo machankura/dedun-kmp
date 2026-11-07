@@ -14,6 +14,7 @@ import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.repository.GroupWavelengthExitPlan
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
@@ -275,5 +276,52 @@ class GroupWavelengthWalletScreenJvmTest {
     fun `an approved payout shows where it's got to`() = runDesktopComposeUiTest(phone, 1600) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(payouts = listOf(payout())), Chain.Signet) } } }
         onNodeWithText("Approved. Waiting for whoever runs the wallet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `leaving asks first, says what it does, and goes to the group`() = runDesktopComposeUiTest(phone, 1600) {
+        var asked = 0
+        val coins = listOf(settledCoin)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(null, coins), Chain.Mainnet, onLeave = { asked++ }) } } }
+        onNodeWithText("Leave").performClick()
+        onNodeWithText("Leave for the onchain wallet?").assertIsDisplayed()
+        assertEquals(0, asked)
+        onNodeWithText("Ask the group").performClick()
+        assertEquals(1, asked)
+    }
+
+    @Test
+    fun `once asked, it says so rather than offering again`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(null, listOf(settledCoin)).copy(leaveAsked = true), Chain.Mainnet) } } }
+        onNodeWithText("The group has asked to leave", substring = true).assertIsDisplayed()
+        assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Leave")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `with coins near their deadline, another signer can take over`() = runDesktopComposeUiTest(phone, 1600) {
+        var nominated = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(null, listOf(settledCoin), WalletExpiry.Urgent(100)), Chain.Signet, onNominate = { nominated++ }) } } }
+        onNodeWithText("If whoever runs it has gone, this device can take over", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a unilateral exit says first that it's never been run, and asks twice`() = runDesktopComposeUiTest(phone, 1400) {
+        var started = 0
+        val plan = GroupWavelengthExitPlan(listOf("a:0"), canStart = true, fundingShortfallSat = 0, underWay = emptyList())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthExitContent(Modifier, plan, onStart = { started++ }) } } }
+        onNodeWithText("This has never been run on any network", substring = true).assertIsDisplayed()
+        onNodeWithText("Start leaving").performClick()
+        assertEquals(0, started)
+        onNodeWithText("It can't be undone, and nobody has run it before.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a unilateral exit that can't start says what it's short of, and any other device isn't offered it`() = runDesktopComposeUiTest(phone, 1400) {
+        var plan: GroupWavelengthExitPlan? by androidx.compose.runtime.mutableStateOf(GroupWavelengthExitPlan(listOf("a:0"), canStart = false, fundingShortfallSat = 2_000, underWay = emptyList()))
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthExitContent(Modifier, plan) } } }
+        onNodeWithText("The wallet's onchain account needs 2,000 sats more for the fees before this can start.").assertIsDisplayed()
+        plan = null
+        waitForIdle()
+        onNodeWithText("Only the device that runs this wallet can do this.").assertIsDisplayed()
     }
 }

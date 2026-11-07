@@ -157,6 +157,7 @@ class GroupWavelengthWalletViewModel(
         val fees = repository.feesSince(chatRoomId, chain, number, term, monthAgo)
         val labels = repository.labelsLeft(chatRoomId, chain, number, activeUserPublicKey)
         val payouts = repository.payouts(chatRoomId, chain, number)
+        val leaveAsked = repository.leaveAsked(chatRoomId, chain, number)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
             uiState = it.copy(
                 expiry = if (tip != null) WalletExpiry.ofHeight(it.ledger.earliestExpiryHeight, tip, free) else it.expiry,
@@ -165,6 +166,7 @@ class GroupWavelengthWalletViewModel(
                 feesSat = fees,
                 labelsLeft = labels,
                 payouts = payouts,
+                leaveAsked = leaveAsked,
             )
         }
     }
@@ -181,6 +183,12 @@ class GroupWavelengthWalletViewModel(
     fun nominateSelf(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
         val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
         act(onSession, onFailure) { repository.nominateSelf(state.localChatRoom, activeUserPublicKey, chain, state.wallet.statement.wallet) }
+    }
+
+    /** Asks the group to leave for its onchain wallet. */
+    fun proposeLeave(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
+        act(onSession, onFailure) { repository.proposeExit(state.localChatRoom, activeUserPublicKey, state.wallet) }
     }
 
     fun stepDown(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {

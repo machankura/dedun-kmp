@@ -97,6 +97,12 @@ class DatabaseGroupWavelengthRepository(
         return GroupWavelengthPayments.propose(database, localChatRoom, userPublicKey, wallet, invoice, maxFeeSat, tip + GroupWavelengthRollout.MAX_REFUND_BLOCKS, expiresAt, payout)
     }
 
+    override suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession =
+        GroupWavelengthPayouts.proposeExit(database, localChatRoom, userPublicKey, wallet)
+
+    override suspend fun leaveAsked(chatRoomId: String, chain: Chain, wallet: Long): Boolean =
+        GroupWavelengthPayouts.signedExits(database, chatRoomId, chain, wallet).any { it.expiresAt > Clock.System.now().epochSeconds }
+
     override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean =
         member.lowercase() in Depositors.statementsIn(database, chatRoomId, chain).keys.map { it.lowercase() }
 

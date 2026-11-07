@@ -41,6 +41,12 @@ object GroupWavelengthRollout {
      */
     fun paysOverLightning(chain: Chain): Boolean = !chain.isMainnet()
 
+    /**
+     * Whether the wallet offers to leave without the Ark operator's help on [chain]. A unilateral exit has never run on any network, so
+     * not on mainnet until one has, on signet, where this is what lets someone run it.
+     */
+    fun offersUnilateralExit(chain: Chain): Boolean = !chain.isMainnet()
+
     /** How long a payment may tie its value up if it fails. A week: the server's real refund locktimes have only been seen on signet. */
     const val MAX_REFUND_BLOCKS: Long = 1_008
 

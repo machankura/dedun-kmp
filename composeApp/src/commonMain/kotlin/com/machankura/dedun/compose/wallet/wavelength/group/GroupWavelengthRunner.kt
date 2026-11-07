@@ -7,6 +7,12 @@ import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.GroupArkTransport
+import com.machankura.dedun.compose.managers.GroupWalletDerivation
+import com.machankura.dedun.compose.managers.GroupWalletManager
+import com.machankura.dedun.compose.repository.GroupWavelengthExitPlan
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
+import fr.acinq.bitcoin.Bitcoin
+import fr.acinq.bitcoin.Script
 import com.machankura.dedun.compose.managers.GroupLightningLines
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
@@ -107,6 +113,7 @@ class GroupWavelengthRunner(
     ) {
         internal var lastReport: GroupWavelengthSnapshot? = null
         internal val attempted = HashSet<String>()
+        internal val leaving = HashSet<String>()
     }
 
     private var running: Running? = null
@@ -271,6 +278,48 @@ class GroupWavelengthRunner(
         runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term) { daemon.newBoardingAddress() } }
             .onFailure { logger.w(it) { "Couldn't answer a request for a deposit address" } }
         runCatching { payApproved(live) }.onFailure { logger.w(it) { "Couldn't look at what the group approved" } }
+        runCatching { leaveIfAsked(live) }.onFailure { logger.w(it) { "Couldn't look at whether to leave" } }
+    }
+
+    /**
+     * Leaves for the group's onchain wallet: when a quorum has asked, and by itself when a coin has got this close to its deadline
+     * with no renewal (D11), which is the one thing here that moves money with nobody asking. It only ever pays the group's own wallet,
+     * and a device checks that before signing. Each coin once a run: a failed exit is tried again by whoever runs this next.
+     */
+    private suspend fun leaveIfAsked(live: Running) {
+        val number = live.wallet.statement.wallet
+        val nowSeconds = now().epochSeconds
+        val asked = GroupWavelengthPayouts.signedExits(database, live.chatRoomId, live.chain, number).any { it.expiresAt > nowSeconds }
+        val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, number)
+        val tip = live.lastReport?.tip
+        val earliest = GroupWavelengthLedger.of(database.groupArkDao().vtxos(walletKey)).earliestExpiryHeight
+        val free = GroupWavelengthTerms.of(live.chain)?.freeRefreshWindowBlocks ?: 0
+        val urgent = tip != null && WalletExpiry.ofHeight(earliest, tip, free).let { it is WalletExpiry.Urgent || it == WalletExpiry.Expired }
+        if (!asked && !urgent) return
+        val account = GroupWalletManager.walletFor(database, live.chatRoomId, live.chain, live.wallet.statement.onchainAccount)?.account ?: return
+        val script = GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, 0).pubkeyScript
+        val destination = Bitcoin.addressFromPublicKeyScript(live.chain.chainHash, Script.parse(script)).right ?: return
+        val coins = daemon.liveCoins().filter { live.leaving.add(it) }
+        if (coins.isEmpty()) return
+        logger.i { "Leaving ${live.chatRoomId.take(8)}'s wallet: ${if (asked) "the group asked" else "its coins are close to their deadline"}" }
+        coins.forEach { outpoint ->
+            scope.launch { runCatching { daemon.leave(outpoint, destination) }.onFailure { logger.w(it) { "Leaving with ${outpoint.take(12)} didn't go" } } }
+        }
+    }
+
+    /** What leaving by itself would involve, on the device that runs [wallet], or null on any other. */
+    override suspend fun exitPlan(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthExitPlan? = mutex.withLock {
+        val live = running?.takeIf { it.chatRoomId == chatRoomId && it.chain == chain && it.wallet.statement.wallet == wallet } ?: return@withLock null
+        val coins = daemon.liveCoins()
+        val plan = daemon.exitPlan(coins)
+        GroupWavelengthExitPlan(coins, plan.canStart, plan.totalFundingShortfallSat, daemon.exitSummary().exits.map { GroupWavelengthExitPlan.Stage(it.outpoint, it.status?.wire.orEmpty(), it.vtxoAmountSat, it.estTotalFeeSat, it.estNetRecoveredSat) })
+    }
+
+    /** Starts leaving without the Ark operator, for every coin. */
+    override suspend fun forceExit(chatRoomId: String, chain: Chain, wallet: Long) {
+        val live = running?.takeIf { it.chatRoomId == chatRoomId && it.chain == chain && it.wallet.statement.wallet == wallet } ?: return
+        require(GroupWavelengthRollout.offersUnilateralExit(live.chain)) { "A unilateral exit isn't offered on ${live.chain.name}" }
+        daemon.liveCoins().forEach { daemon.forceExit(it) }
     }
 
     /**

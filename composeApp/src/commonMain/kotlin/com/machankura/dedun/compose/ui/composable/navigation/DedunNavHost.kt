@@ -49,6 +49,8 @@ import com.machankura.dedun.compose.ui.composable.IcebergCeremonyScreen
 import com.machankura.dedun.compose.database.repository.DatabaseGroupLightningRepository
 import com.machankura.dedun.compose.database.repository.DatabaseGroupWavelengthRepository
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthAdvancedScreen
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthExitScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthExitRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthReceiveScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
@@ -1020,10 +1022,28 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     repository = databaseGroupWavelengthRepository,
                     daemonSource = GroupWavelengthProcess,
+                    onOpenExit = { navController.navigate(route = GroupWavelengthExitRoute(activeUserPublicKey = route.activeUserPublicKey, chatRoomId = route.chatRoomId, chain = route.chain)) },
                     onNavigateBack = {
                         navController.popBackStack()
                     }
                 )
+            }
+            composable<GroupWavelengthExitRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthExitRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+                var number by remember { mutableStateOf<Long?>(null) }
+                LaunchedEffect(route) { number = databaseGroupWavelengthRepository.wallets(route.chatRoomId, chain).lastOrNull()?.statement?.wallet ?: -1 }
+                number?.let { wallet ->
+                    GroupWavelengthExitScreen(
+                        chatRoomId = route.chatRoomId,
+                        chain = chain,
+                        wallet = wallet,
+                        daemonSource = GroupWavelengthProcess,
+                        onNavigateBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable<CreateSharedKeyRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<CreateSharedKeyRoute>()

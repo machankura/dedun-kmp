@@ -3,7 +3,9 @@ package com.machankura.dedun.compose.managers
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
+import com.machankura.dedun.compose.text.ProposedEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.PrivateKey
@@ -132,5 +134,19 @@ class GroupWavelengthPayoutsJvmTest {
         val (all, wallet) = opened()
         fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(payment(1_000, null)).tags, "", createdAt = now)
         assertTrue(GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).isEmpty())
+    }
+
+    @Test
+    fun `a request to leave isn't a payment, and a quorum can sign it naming nobody`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val template = GroupWavelengthExitEvent.template(GroupWavelengthExitEvent.asking(fixture.chain, 0))
+        val event = Event("00".repeat(32), "00".repeat(32), 0, template.kind, template.tags, template.content, "")
+        assertNull(GroupWavelengthPayouts.refuse(all[0].db, fixture.roomId, event))
+        assertNull(GroupWavelengthPaymentEvent.read(event.tags), "and nobody reads it as one")
+        val asking = GroupWavelengthPayouts.proposeExit(all[1].db, all[1].room, all[1].publicKey, wallet)
+        fixture.signSession(all, all[1], asking.id)
+        all.forEach { assertEquals(1, GroupWavelengthPayouts.signedExits(it.db, fixture.roomId, fixture.chain, 0).size, "device ${it.index}") }
+        assertTrue(GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).isEmpty())
+        assertEquals("Leave the Wavelength wallet", ProposedEvent.summarize(event).label)
     }
 }
