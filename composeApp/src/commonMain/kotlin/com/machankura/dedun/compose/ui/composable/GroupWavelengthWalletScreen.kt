@@ -2,12 +2,15 @@ package com.machankura.dedun.compose.ui.composable
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -16,6 +19,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -24,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,14 +40,19 @@ import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
+import com.machankura.dedun.compose.text.BlockDuration
+import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
@@ -53,10 +63,13 @@ import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
+import com.machankura.dedun.compose.ui.theme.breakpoint
+import com.machankura.dedun.compose.ui.theme.listPaneWidthFor
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -64,6 +77,33 @@ import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.a_wavelength_wallet_needs_four_signers
 import dedun.composeapp.generated.resources.couldn_t_propose_this
 import dedun.composeapp.generated.resources.group_wallet
+import dedun.composeapp.generated.resources.group_wavelength_activity
+import dedun.composeapp.generated.resources.group_wavelength_activity_fee_s
+import dedun.composeapp.generated.resources.group_wavelength_activity_line_s_s
+import dedun.composeapp.generated.resources.group_wavelength_activity_none
+import dedun.composeapp.generated.resources.group_wavelength_advanced
+import dedun.composeapp.generated.resources.group_wavelength_alarm_title
+import dedun.composeapp.generated.resources.group_wavelength_balance_label
+import dedun.composeapp.generated.resources.group_wavelength_balance_none
+import dedun.composeapp.generated.resources.group_wavelength_credit_s
+import dedun.composeapp.generated.resources.group_wavelength_deadline_expired
+import dedun.composeapp.generated.resources.group_wavelength_deadline_fine_s
+import dedun.composeapp.generated.resources.group_wavelength_deadline_renewing_s
+import dedun.composeapp.generated.resources.group_wavelength_deadline_urgent_s
+import dedun.composeapp.generated.resources.group_wavelength_held_s
+import dedun.composeapp.generated.resources.group_wavelength_no_report
+import dedun.composeapp.generated.resources.group_wavelength_operator_says_s
+import dedun.composeapp.generated.resources.group_wavelength_pending_s
+import dedun.composeapp.generated.resources.group_wavelength_report_cannot_confirm
+import dedun.composeapp.generated.resources.group_wavelength_report_differs
+import dedun.composeapp.generated.resources.group_wavelength_report_matches
+import dedun.composeapp.generated.resources.group_wavelength_seen_earlier
+import dedun.composeapp.generated.resources.group_wavelength_seen_enough_s_s
+import dedun.composeapp.generated.resources.group_wavelength_seen_never
+import dedun.composeapp.generated.resources.group_wavelength_seen_recently
+import dedun.composeapp.generated.resources.group_wavelength_seen_too_few_s_s
+import dedun.composeapp.generated.resources.group_wavelength_signers
+import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.group_wavelength_cap_s
 import dedun.composeapp.generated.resources.group_wavelength_commitment_cap_s
 import dedun.composeapp.generated.resources.group_wavelength_commitment_devices
@@ -113,8 +153,10 @@ import dedun.composeapp.generated.resources.this_group_has_no_wavelength_wallet_
 import dedun.composeapp.generated.resources.you
 import dedun.composeapp.generated.resources.your_share_of_this_key_is_stored_unencrypted
 import fr.acinq.bitcoin.Chain
+import fr.acinq.bitcoin.Satoshi
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
 
 /**
  * The group's Wavelength wallet: what it needs before it can exist, the statement that opened it, and who runs it
@@ -174,6 +216,7 @@ fun GroupWavelengthWalletScreen(
                 onOpenSession = toSession,
                 onNominate = { viewModel.nominateSelf(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                 onStepDown = { viewModel.stepDown(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
+                onOpenAdvanced = { onNavigateToRoute(GroupWavelengthAdvancedRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
             )
         }
     }
@@ -192,6 +235,7 @@ internal fun GroupWavelengthWalletContent(
     onOpenSession: (sessionId: String) -> Unit = {},
     onNominate: () -> Unit = {},
     onStepDown: () -> Unit = {},
+    onOpenAdvanced: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
@@ -245,7 +289,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
     }
 }
 
@@ -323,29 +367,181 @@ private fun OpenedWallet(
     isPending: Boolean,
     onNominate: () -> Unit,
     onStepDown: () -> Unit,
+    onOpenAdvanced: () -> Unit,
+) {
+    val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
+    if (paneWidth != null) {
+        // What the money is doing on the left, and what the group is doing on the right.
+        Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
+            LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+                moneyItems(state, chain)
+            }
+            LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+                groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+        ) {
+            moneyItems(state, chain)
+            groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
+        }
+    }
+}
+
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain) {
+    item { NetworkNote(chain) }
+    if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
+    item { BalanceCard(state) }
+    item { DeadlineLine(state.expiry) }
+    item { Text(stringResource(Res.string.group_wavelength_activity), style = MaterialTheme.typography.titleSmall) }
+    val activity = state.snapshot?.activity.orEmpty()
+    if (activity.isEmpty()) {
+        item { Text(stringResource(Res.string.group_wavelength_activity_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    items(activity, key = { it.id }) { ActivityRow(it) }
+}
+
+private fun LazyListScope.groupItems(
+    state: GroupWavelengthWalletUIState.Opened,
+    chain: Chain,
+    isPending: Boolean,
+    onNominate: () -> Unit,
+    onStepDown: () -> Unit,
+    onOpenAdvanced: () -> Unit,
 ) {
     val statement = state.wallet.statement
-    LazyColumn(
-        modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
-        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+    item { SignersCard(state) }
+    item { OperatorCard(state, isPending, onNominate, onStepDown) }
+    item {
+        ListItem(
+            leadingContent = { Icon(Icons.Default.Key, contentDescription = Decorative) },
+            headlineContent = {
+                Text(stringResource(Res.string.group_wavelength_signers_s_of_s, statement.threshold.toString(), statement.participants.size.toString(), (2 * statement.threshold - 1).toString()))
+            },
+            supportingContent = GroupWavelengthRollout.capFor(chain)?.let { cap -> { Text(stringResource(Res.string.group_wavelength_cap_s, cap.grouped())) } },
+        )
+    }
+    item { TextButton(onClick = onOpenAdvanced) { Text(stringResource(Res.string.group_wavelength_advanced)) } }
+}
+
+/** What this device itself refused, since a person never sees what it signs, and this is the one thing they're told of it (U4). */
+@Composable
+private fun AlarmCard(alarms: List<String>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
     ) {
-        item { NetworkNote(chain) }
-        item { OperatorCard(state, isPending, onNominate, onStepDown) }
-        item {
-            ListItem(
-                leadingContent = { Icon(Icons.Default.Key, contentDescription = Decorative) },
-                headlineContent = {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(stringResource(Res.string.group_wavelength_alarm_title), style = MaterialTheme.typography.titleSmall)
+            alarms.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }
+}
+
+/** This device's own figure first, and the operator's beside it, since only one of them has been checked (U2). */
+@Composable
+private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(stringResource(Res.string.group_wavelength_balance_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val ledger = state.ledger
+            if (ledger.isEmpty) {
+                Text(stringResource(Res.string.group_wavelength_balance_none), style = MaterialTheme.typography.bodyLarge)
+            } else {
+                Text(stringResource(Res.string.s_sats, Satoshi(ledger.settledSat).grouped()), style = MaterialTheme.typography.headlineMedium)
+            }
+            if (ledger.pendingSat > 0) {
+                Text(stringResource(Res.string.group_wavelength_pending_s, Satoshi(ledger.pendingSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+            }
+            if (ledger.heldSat > 0) {
+                Text(stringResource(Res.string.group_wavelength_held_s, Satoshi(ledger.heldSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val snapshot = state.snapshot
+            if (snapshot == null) {
+                Text(stringResource(Res.string.group_wavelength_no_report), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text(stringResource(Res.string.group_wavelength_operator_says_s, Satoshi(snapshot.confirmedSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+                when (state.comparison?.agreement) {
+                    GroupWavelengthReports.Agreement.MATCHES -> Text(stringResource(Res.string.group_wavelength_report_matches), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    GroupWavelengthReports.Agreement.DIFFERS -> Text(stringResource(Res.string.group_wavelength_report_differs), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    GroupWavelengthReports.Agreement.CANNOT_CONFIRM -> Text(stringResource(Res.string.group_wavelength_report_cannot_confirm), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    null -> Unit
+                }
+                if (snapshot.creditSat > 0) {
+                    Text(stringResource(Res.string.group_wavelength_credit_s, Satoshi(snapshot.creditSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
+/** When the coins run out of time, by this device's own count: said only when it has one. */
+@Composable
+private fun DeadlineLine(expiry: WalletExpiry) {
+    val (text, isUrgent) = when (expiry) {
+        WalletExpiry.Nothing -> return
+        is WalletExpiry.Fine -> stringResource(Res.string.group_wavelength_deadline_fine_s, BlockDuration.describe(expiry.blocksLeft)) to false
+        is WalletExpiry.Renewing -> stringResource(Res.string.group_wavelength_deadline_renewing_s, BlockDuration.describe(expiry.blocksLeft)) to false
+        is WalletExpiry.Urgent -> stringResource(Res.string.group_wavelength_deadline_urgent_s, BlockDuration.describe(expiry.blocksLeft)) to true
+        WalletExpiry.Expired -> stringResource(Res.string.group_wavelength_deadline_expired) to true
+    }
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = if (isUrgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+}
+
+/** One thing the operator's daemon says the wallet did, in the daemon's words for what it was. */
+@Composable
+private fun ActivityRow(line: GroupWavelengthSnapshot.Line) {
+    ListItem(
+        headlineContent = { Text(stringResource(Res.string.group_wavelength_activity_line_s_s, line.kind.replaceFirstChar { it.uppercase() }, Satoshi(line.amountSat).grouped())) },
+        supportingContent = {
+            Text(
+                buildString {
+                    append(line.status.replaceFirstChar { it.uppercase() })
+                    if (line.failure.isNotBlank()) append(": ").append(line.failure)
+                }
+            )
+        },
+        trailingContent = if (line.feeSat > 0) {
+            { Text(stringResource(Res.string.group_wavelength_activity_fee_s, Satoshi(line.feeSat).grouped())) }
+        } else null,
+    )
+}
+
+/** Who has answered lately, which is what can be known: nobody can say who's online (U5). */
+@Composable
+private fun SignersCard(state: GroupWavelengthWalletUIState.Opened) {
+    val needed = 2 * state.wallet.statement.threshold - 1
+    val recent = state.seenRecently()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(stringResource(Res.string.group_wavelength_signers), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(if (state.enoughSeen) Res.string.group_wavelength_seen_enough_s_s else Res.string.group_wavelength_seen_too_few_s_s, recent.toString(), needed.toString()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (state.enoughSeen) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+            )
+            state.wallet.statement.participants.forEach { participant ->
+                val name = if (participant == state.userPublicKey.lowercase()) stringResource(Res.string.you)
+                else state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == participant }?.profile?.humanReadableNameOrPubkey() ?: participant.take(16)
+                val at = state.seen[participant]
+                Column {
+                    Text(name, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         stringResource(
-                            Res.string.group_wavelength_signers_s_of_s,
-                            statement.threshold.toString(),
-                            statement.participants.size.toString(),
-                            (2 * statement.threshold - 1).toString(),
-                        )
+                            when {
+                                at == null -> Res.string.group_wavelength_seen_never
+                                Clock.System.now() - at <= GroupWavelengthWalletUIState.Opened.SEEN_WINDOW -> Res.string.group_wavelength_seen_recently
+                                else -> Res.string.group_wavelength_seen_earlier
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                },
-                supportingContent = GroupWavelengthRollout.capFor(chain)?.let { cap -> { Text(stringResource(Res.string.group_wavelength_cap_s, cap.grouped())) } },
-            )
+                }
+            }
         }
     }
 }

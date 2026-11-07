@@ -32,6 +32,10 @@ object GroupWavelengthOperatorManager {
     suspend fun current(database: DedunDatabase, chatRoomId: String, chain: Chain, wallet: Long = 0L): Operator? =
         terms(database, chatRoomId, chain, wallet).firstOrNull()
 
+    /** Who ran the wallet in [term], whether or not that's still the current one. */
+    suspend fun ofTerm(database: DedunDatabase, chatRoomId: String, chain: Chain, wallet: Long, term: Long): Operator? =
+        terms(database, chatRoomId, chain, wallet).firstOrNull { it.term == term }
+
     /** Asks the group to let this device run the wallet from the next term on. */
     suspend fun nominateSelf(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long = 0L): FrostSigningSession =
         propose(database, localChatRoom, userPublicKey, chain, wallet, userPublicKey.lowercase())

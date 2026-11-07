@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.managers.GroupLightningCoSigner
 import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
@@ -1646,6 +1647,14 @@ abstract class NostrDao(
                                 innerEvent = innerEvent,
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // What the operator says about the Wavelength wallet.
+                        innerEvent.kind == GroupWavelengthEvents.SNAPSHOT || innerEvent.kind == GroupWavelengthEvents.STOPPED ->
+                            GroupWavelengthReports.process(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
                             )
 
                         // What the operator says about the Lightning wallet, and the

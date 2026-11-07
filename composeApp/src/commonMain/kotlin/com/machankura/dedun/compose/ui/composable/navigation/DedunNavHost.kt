@@ -48,7 +48,9 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCerem
 import com.machankura.dedun.compose.ui.composable.IcebergCeremonyScreen
 import com.machankura.dedun.compose.database.repository.DatabaseGroupLightningRepository
 import com.machankura.dedun.compose.database.repository.DatabaseGroupWavelengthRepository
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthAdvancedScreen
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.wallet.GroupChainClients
@@ -282,8 +284,9 @@ fun DedunNavHost(
         DatabaseGroupLightningRepository(database = auxDatabaseManager.auxDatabase)
     }
 
+    val currentChainClients = remember { mutableStateOf<GroupChainClients?>(null) }
     val databaseGroupWavelengthRepository = remember {
-        DatabaseGroupWavelengthRepository(database = auxDatabaseManager.auxDatabase)
+        DatabaseGroupWavelengthRepository(database = auxDatabaseManager.auxDatabase, clients = { currentChainClients.value })
     }
 
     val databaseFrostSigningRepository = remember {
@@ -482,6 +485,8 @@ fun DedunNavHost(
     DisposableEffect(groupTransactionWatcher) {
         onDispose { groupTransactionWatcher?.stop() }
     }
+
+    LaunchedEffect(groupChainClients) { currentChainClients.value = groupChainClients }
 
     // Sees for itself which of the rounds this device signed for have happened, on the
     // same lifetime: without it, a device never spends a group's Wavelength coin.
@@ -981,6 +986,23 @@ fun DedunNavHost(
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthAdvancedRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthAdvancedRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthAdvancedScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    daemonSource = GroupWavelengthProcess,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

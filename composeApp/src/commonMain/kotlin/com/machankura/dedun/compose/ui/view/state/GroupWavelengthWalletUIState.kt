@@ -1,12 +1,19 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 /**
  * The group's Wavelength wallet screen, through every state a group passes on its way to one (`docs/group-wavelength-ui.md`): no
@@ -60,5 +67,30 @@ sealed class GroupWavelengthWalletUIState {
         val userPublicKey: HexKey = "",
         /** This device's daemon for the wallet, which only says anything on the operator's device. */
         val daemon: GroupWavelengthDaemonStatus = GroupWavelengthDaemonStatus.NotOnThisDevice,
-    ) : GroupWavelengthWalletUIState()
+        /** The rows [ledger] sums, for the advanced screen. */
+        val coins: List<GroupArkVtxo> = emptyList(),
+        /** What the operator last said it holds, or null before it has said anything. */
+        val snapshot: GroupWavelengthSnapshot? = null,
+        val comparison: GroupWavelengthReports.Comparison? = null,
+        /** When this device's coins run out of time, by its own count, or [WalletExpiry.Nothing] where it can't tell. */
+        val expiry: WalletExpiry = WalletExpiry.Nothing,
+        /** When each signer's device last answered anything: not whether it's online, which nobody can say. */
+        val seen: Map<HexKey, Instant> = emptyMap(),
+        /** What this device has lately refused, or been alarmed by, in its own words. */
+        val alarms: List<String> = emptyList(),
+        /** What this device has agreed to pay in fees this term, in the budget's window. */
+        val feesSat: Long = 0,
+        /** How many more signatures round one is ready for, on this device's count. */
+        val labelsLeft: Long = 0,
+    ) : GroupWavelengthWalletUIState() {
+        /** Whether enough signers have answered lately for a round to be likely to work: `2t-1` of them have to. */
+        val enoughSeen: Boolean get() = seenRecently() >= 2 * wallet.statement.threshold - 1
+
+        fun seenRecently(now: Instant = Clock.System.now()): Int =
+            wallet.statement.participants.count { p -> seen[p]?.let { now - it <= SEEN_WINDOW } == true }
+
+        companion object {
+            val SEEN_WINDOW = 1.hours
+        }
+    }
 }

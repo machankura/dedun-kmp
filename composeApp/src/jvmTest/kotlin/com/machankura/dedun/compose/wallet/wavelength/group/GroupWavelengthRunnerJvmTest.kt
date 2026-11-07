@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
+import com.machankura.dedun.compose.database.model.ChatMessage
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.GroupLightningFixture
@@ -228,5 +230,28 @@ class GroupWavelengthRunnerJvmTest {
         setup.runner.refresh()
         setup.pumped { delay(300) }
         assertTrue(dao.noncesFor(key, GroupWavelengthRunner.PLAIN_WINDOW + 10).isNotEmpty(), "asked for more before it ran out")
+    }
+
+    @Test
+    fun `the group is told what the daemon says it holds, and a later term ends with a line`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.pumped { setup.runner.refresh() }
+        val key = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)
+        assertNotNull(setup.all[0].db.groupArkDao().snapshot(key), "the operator files its own")
+        elect(setup, setup.all[1])
+        setup.runner.refresh()
+        assertTrue(fixture.lines(setup.all[0], ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED).isNotEmpty())
+    }
+
+    @Test
+    fun `a first open scans as wide as this device's record says, and no narrower than the least`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        val key = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)
+        repeat(12) { setup.all[0].db.groupArkDao().upsertVtxo(GroupArkVtxo(key, "c$it:0", 1)) }
+        setup.pumped { setup.runner.refresh() }
+        val sent = setup.runtime.fake.requests.first().second
+        assertTrue(sent.contains("\"recovery_window\":${12 + GroupWavelengthRunner.RECOVERY_WINDOW}"), sent)
     }
 }

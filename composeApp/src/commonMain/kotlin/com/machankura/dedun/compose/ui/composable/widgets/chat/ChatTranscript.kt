@@ -404,6 +404,18 @@ fun ChatTranscript(
                                     return@items
                                 }
 
+                                // What the Wavelength wallet's devices said.
+                                if (localChatMessage.chatMessage.messageType in ChatMessage.WAVELENGTH_TYPES) {
+                                    RitualNotice(
+                                        localChatMessage = localChatMessage,
+                                        isAnswered = true,
+                                        isSettled = true,
+                                        onClick = null,
+                                        opens = null,
+                                    )
+                                    return@items
+                                }
+
                                 // What the Lightning wallet's devices told each other.
                                 // Reports, not asks -- an invoice request is the
                                 // operator's node's to answer -- so they stay quiet,
@@ -971,6 +983,11 @@ private fun RitualNotice(
         ChatMessage.TYPE_LIGHTNING_LIQUIDITY_FAILED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_LIGHTNING_REFUSED -> Icons.Default.Block
         ChatMessage.TYPE_LIGHTNING_EQUIVOCATION -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_REFUSED -> Icons.Default.Block
+        ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_ROUND_DIED -> Icons.Default.ErrorOutline
+        ChatMessage.TYPE_WAVELENGTH_DEADLINE -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED -> Icons.Default.PowerSettingsNew
 
         else -> Icons.Default.PanTool
     }
@@ -997,6 +1014,9 @@ private fun RitualNotice(
             chatMessage.messageType == ChatMessage.TYPE_LIGHTNING_LIQUIDITY_FAILED ||
             chatMessage.messageType == ChatMessage.TYPE_LIGHTNING_REFUSED ||
             chatMessage.messageType == ChatMessage.TYPE_LIGHTNING_EQUIVOCATION ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_REFUSED ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEADLINE ||
             chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ->
             MaterialTheme.colorScheme.error
         isRequest -> MaterialTheme.colorScheme.primary
@@ -1032,6 +1052,7 @@ private fun RitualNotice(
                     if (chatMessage.messageType in ChatMessage.DKG_AUTHORED_TYPES ||
                         chatMessage.messageType in ChatMessage.ICEBERG_AUTHORED_TYPES ||
                         chatMessage.messageType in ChatMessage.FROST_AUTHORED_TYPES ||
+                        chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED ||
                         chatMessage.messageType in ChatMessage.LIGHTNING_AUTHORED_TYPES
                     ) {
                         withStyle(

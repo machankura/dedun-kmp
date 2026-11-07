@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.database.model
 
 import androidx.room3.Entity
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import kotlin.time.Instant
 
 /**
  * A participant's public share of one tree key (`docs/group-wavelength-wallet.md`, D5), from which everybody finds the key: a
@@ -87,6 +88,10 @@ data class GroupArkChecked(val wallet: String, val label: HexKey, val child: Lon
  */
 @Entity(primaryKeys = ["wallet"])
 data class GroupArkFloor(val wallet: String, val floor: Long? = null, val treeFloor: Long? = null)
+
+/** The newest thing the wallet's operator said it holds: a claim, whose [content] is a `GroupWavelengthSnapshot`. */
+@Entity(primaryKeys = ["wallet"])
+data class GroupArkSnapshotRow(val wallet: String, val sentBy: HexKey, val term: Long, val content: String, val sentAt: Instant)
 
 /** How far one participant says it has answered. */
 @Entity(primaryKeys = ["wallet", "participant"])

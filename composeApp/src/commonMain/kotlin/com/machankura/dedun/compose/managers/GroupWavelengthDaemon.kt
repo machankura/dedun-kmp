@@ -18,6 +18,9 @@ import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.PublicKey
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import engineering.lightning.wavelength.ListRequest
+import engineering.lightning.wavelength.model.ListView
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import kotlin.time.Duration.Companion.seconds
@@ -121,6 +124,33 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
         fileSystem.exists(dataDirOf(statement).toPath())
 
     fun isRunning(): Boolean = client.isRunning()
+
+    /**
+     * What the running daemon says it holds. Local reads, as far as anyone has measured: an idle wallet asked for no fund-key signature
+     * in the census, and nothing has counted what these cost on a wallet with coins, so whoever calls this should do so rarely.
+     */
+    suspend fun snapshotOf(walletKey: String, term: Long, now: Instant): GroupWavelengthSnapshot {
+        val balance = client.balance()
+        val coins = client.list(ListRequest(view = ListView.VTXOS)).vtxos?.vtxos.orEmpty()
+        val entries = client.list(ListRequest(limit = GroupWavelengthSnapshot.MAX_ACTIVITY.toLong())).activity?.entries.orEmpty()
+        return GroupWavelengthSnapshot(
+            wallet = walletKey,
+            term = term,
+            sentAt = now.epochSeconds,
+            tip = client.getInfo().blockHeight.toLong(),
+            confirmedSat = balance.confirmedSat,
+            pendingInSat = balance.pendingInSat,
+            pendingOutSat = balance.pendingOutSat,
+            creditSat = balance.creditAvailableSat + balance.creditReservedSat,
+            coins = coins.take(GroupWavelengthSnapshot.MAX_COINS).map { GroupWavelengthSnapshot.Coin(it.outpoint, it.amountSat, it.status, it.batchExpiry.toLong()) },
+            activity = entries.take(GroupWavelengthSnapshot.MAX_ACTIVITY).map {
+                GroupWavelengthSnapshot.Line(it.id, it.kind?.wire.orEmpty(), it.status?.wire.orEmpty(), it.amountSat, it.feeSat, it.createdAt?.epochSeconds ?: 0, it.failureReason)
+            },
+        )
+    }
+
+    /** How many exits the running daemon has under way, which nobody can rebuild from the chain (D14). */
+    suspend fun exitsUnderWay(): Int = client.exitSummary().exits.size
 
     /** Stops whatever daemon this client holds, which is safe to ask twice. */
     suspend fun stop() = client.stop()

@@ -13,6 +13,7 @@ import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkRound
+import com.machankura.dedun.compose.database.model.GroupArkSnapshotRow
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
@@ -28,6 +29,18 @@ interface GroupArkDao {
 
     @Query("SELECT MAX(child) FROM GroupArkTreeShare WHERE wallet = :wallet AND participant = :participant")
     suspend fun highestTreeShare(wallet: String, participant: String): Long?
+
+    @Upsert
+    suspend fun upsertSnapshot(row: GroupArkSnapshotRow)
+
+    @Query("SELECT * FROM GroupArkSnapshotRow WHERE wallet = :wallet")
+    suspend fun snapshot(wallet: String): GroupArkSnapshotRow?
+
+    @Query("SELECT * FROM GroupArkSnapshotRow WHERE wallet = :wallet")
+    fun observeSnapshot(wallet: String): Flow<GroupArkSnapshotRow?>
+
+    @Query("SELECT DISTINCT wallet FROM GroupArkVtxo WHERE spent = 0")
+    suspend fun walletsWithCoins(): List<String>
 
     @Upsert
     suspend fun upsertVtxo(row: GroupArkVtxo)

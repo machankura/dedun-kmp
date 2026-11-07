@@ -35,6 +35,10 @@ interface ChatMessageDao {
     @Query(TRANSCRIPT)
     fun observeChatMessagesByChatRoomId(chatRoomId: String): Flow<List<com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage>>
 
+    /** A room's lines of [types], newest first. */
+    @Query("SELECT * FROM ChatMessage WHERE chatRoomId = :chatRoomId AND messageType IN (:types) ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun linesOfTypes(chatRoomId: String, types: List<String>, limit: Int): List<ChatMessage>
+
     @Transaction
     @Query(TRANSCRIPT)
     suspend fun getChatMessagesByChatRoomId(chatRoomId: String): List<com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage>

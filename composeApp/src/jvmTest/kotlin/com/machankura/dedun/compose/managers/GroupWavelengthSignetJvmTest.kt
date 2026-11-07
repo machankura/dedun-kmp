@@ -250,8 +250,8 @@ class GroupWavelengthSignetJvmTest {
                 }.onFailure { say("couldn't approve a payment: ${it.message}") }
             }
             all.forEach { d ->
-                fixture.lines(d, ChatMessage.TYPE_LIGHTNING_REFUSED).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
-                fixture.lines(d, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
+                fixture.lines(d, ChatMessage.TYPE_WAVELENGTH_REFUSED).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
+                fixture.lines(d, ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
             }
             File(dir, "ledger.txt").writeText(all[0].db.groupArkDao().vtxos(key).filter { it.settled && !it.spent }.joinToString("\n") { "${it.outpoint} ${it.amountSat}" })
             val now = all.joinToString(" | ") { d -> runBlocking { d.db.groupArkDao().vtxos(key) }.joinToString { "${it.outpoint.take(12)} ${it.amountSat} settled=${it.settled} spent=${it.spent} by=${it.reservedBy?.take(12)}" } }

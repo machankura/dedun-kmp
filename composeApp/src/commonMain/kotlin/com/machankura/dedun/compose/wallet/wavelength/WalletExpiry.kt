@@ -29,8 +29,12 @@ sealed interface WalletExpiry {
         /** Coins in any other state are already on their way somewhere. */
         private const val LIVE = "live"
 
-        fun of(coins: List<WalletVTXO>, tip: Long, freeWindowBlocks: Long): WalletExpiry {
-            val earliest = coins.filter { it.status == LIVE && it.batchExpiry > 0 }.minOfOrNull { it.batchExpiry.toLong() } ?: return Nothing
+        fun of(coins: List<WalletVTXO>, tip: Long, freeWindowBlocks: Long): WalletExpiry =
+            ofHeight(coins.filter { it.status == LIVE && it.batchExpiry > 0 }.minOfOrNull { it.batchExpiry.toLong() }, tip, freeWindowBlocks)
+
+        /** From the soonest height a coin can be swept at, however that was worked out. */
+        fun ofHeight(earliest: Long?, tip: Long, freeWindowBlocks: Long): WalletExpiry {
+            earliest ?: return Nothing
             val left = earliest - tip
             return when {
                 left <= 0 -> Expired

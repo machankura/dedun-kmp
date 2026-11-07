@@ -14,20 +14,27 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.identity.Identity
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * The group's Wavelength wallet, read for what the room has agreed and what this device has itself signed. Every action is a
@@ -108,9 +115,26 @@ class GroupWavelengthWalletViewModel(
     private fun watch(opened: GroupWavelengthWalletUIState.Opened) {
         watching?.cancel()
         watching = viewModelScope.launch(Dispatchers.IO) {
+            val number = opened.wallet.statement.wallet
             launch {
-                repository.observeCoins(chatRoomId, chain, opened.wallet.statement.wallet).collect { coins ->
-                    (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(ledger = GroupWavelengthLedger.of(coins)) }
+                combine(repository.observeCoins(chatRoomId, chain, number), repository.observeSnapshot(chatRoomId, chain, number)) { coins, snapshot -> coins to snapshot }
+                    .collect { (coins, snapshot) ->
+                        (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
+                            uiState = it.copy(
+                                coins = coins,
+                                ledger = GroupWavelengthLedger.of(coins),
+                                snapshot = snapshot,
+                                comparison = snapshot?.let { said -> GroupWavelengthReports.compare(said, coins) },
+                            )
+                            refreshFacts()
+                        }
+                    }
+            }
+            // A block's about ten minutes, and who has answered changes as they do. Nothing here asks the daemon or the group for anything.
+            launch {
+                while (isActive) {
+                    refreshFacts()
+                    delay(FACTS_EVERY)
                 }
             }
             if (opened.isOperator) launch {
@@ -118,6 +142,28 @@ class GroupWavelengthWalletViewModel(
                     (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(daemon = status) }
                 }
             }
+        }
+    }
+
+    private suspend fun refreshFacts() {
+        val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
+        val number = state.wallet.statement.wallet
+        val tip = repository.tipHeight(chain)
+        val free = repository.terms(chain)?.freeRefreshWindowBlocks ?: 0
+        val term = state.operator?.term ?: 0
+        val monthAgo = Clock.System.now().epochSeconds - FEE_WINDOW_SECONDS
+        val seen = repository.seen(chatRoomId)
+        val alarms = repository.alarms(chatRoomId)
+        val fees = repository.feesSince(chatRoomId, chain, number, term, monthAgo)
+        val labels = repository.labelsLeft(chatRoomId, chain, number, activeUserPublicKey)
+        (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
+            uiState = it.copy(
+                expiry = if (tip != null) WalletExpiry.ofHeight(it.ledger.earliestExpiryHeight, tip, free) else it.expiry,
+                seen = seen,
+                alarms = alarms,
+                feesSat = fees,
+                labelsLeft = labels,
+            )
         }
     }
 
@@ -152,6 +198,10 @@ class GroupWavelengthWalletViewModel(
 
     companion object {
         private const val TAG = "GroupWavelengthWalletViewModel"
+        private val FACTS_EVERY = 1.minutes
+
+        /** The window the statement's fee budget runs over, in [com.machankura.dedun.compose.managers.GroupArkCoSigner]. */
+        private const val FEE_WINDOW_SECONDS = 30L * 24 * 60 * 60
 
         fun factory(
             activeUserPublicKey: HexKey,

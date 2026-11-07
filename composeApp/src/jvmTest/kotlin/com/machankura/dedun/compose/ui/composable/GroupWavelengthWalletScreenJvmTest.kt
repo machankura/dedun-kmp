@@ -9,7 +9,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.ME
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.OTHER
@@ -142,5 +147,72 @@ class GroupWavelengthWalletScreenJvmTest {
     fun `a member who doesn't hold a share is offered nothing to do`() = runDesktopComposeUiTest(phone, 1200) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(isParticipant = false), Chain.Signet) } } }
         assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Run this wallet on my device")).fetchSemanticsNodes().size)
+    }
+
+    private fun money(snapshot: GroupWavelengthSnapshot?, coins: List<GroupArkVtxo>, expiry: WalletExpiry = WalletExpiry.Nothing) = opened().copy(
+        coins = coins,
+        ledger = GroupWavelengthLedger.of(coins),
+        snapshot = snapshot,
+        comparison = snapshot?.let { GroupWavelengthReports.compare(it, coins) },
+        expiry = expiry,
+    )
+
+    private val settledCoin = GroupArkVtxo("w", "a:0", 10_000, settled = true)
+    private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
+
+    @Test
+    fun `the balance is what this device signed for, with the operator's figure beside it`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet) } } }
+        onNodeWithText("10,000 sats").assertIsDisplayed()
+        onNodeWithText("The operator says 10,000 sats, as of its last report").assertIsDisplayed()
+        onNodeWithText("Matches what your device signed").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an operator that lies is shown differing, and doesn't change the headline`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000, 90_000), listOf(settledCoin)), Chain.Signet) } } }
+        onNodeWithText("10,000 sats").assertIsDisplayed()
+        onNodeWithText("The operator says 100,000 sats, as of its last report").assertIsDisplayed()
+        onNodeWithText("Differs from what your device signed").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a restored phone says it can't confirm, rather than that the wallet is empty`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), emptyList()), Chain.Signet) } } }
+        onNodeWithText("Your device hasn't signed for any coins of this wallet yet.").assertIsDisplayed()
+        onNodeWithText("Your device has no record of these coins, so it can't confirm this. That's expected on a restored or new phone.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `coins near their deadline say so, and how long`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(null, listOf(settledCoin), WalletExpiry.Urgent(144)), Chain.Signet) } } }
+        onNodeWithText("Coins need renewing within", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refusal is on the screen, and too few signers seen says a round may not work`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(alarms = listOf("Your device refused to co-sign for the Wavelength wallet: a transfer to a script nobody authorised.")), Chain.Signet) } } }
+        onNodeWithText("Your device refused something").assertIsDisplayed()
+        onNodeWithText("Your device refused to co-sign for the Wavelength wallet: a transfer to a script nobody authorised.").assertIsDisplayed()
+        onNodeWithText("Only 0 of the 3 devices a round needs have answered in the last hour, so a round may not work.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `in a wide window the money and the group are side by side, and both are there`() = runDesktopComposeUiTest(wide, 1200) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet) } } }
+        onNodeWithText("10,000 sats").assertIsDisplayed()
+        onNodeWithText("Signers").assertIsDisplayed()
+    }
+
+    @Test
+    fun `advanced names what a device holds in detail, and what nobody has tried`() = runDesktopComposeUiTest(phone, 1800) {
+        val coins = listOf(settledCoin.copy(expiresAtHeight = 2_000), GroupArkVtxo("w", "b:0", 500), GroupArkVtxo("w", "c:0", 700, settled = true, reservedBy = "r"))
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthAdvancedContent(Modifier, money(said(10_000, 5), coins)) } } }
+        onNodeWithText("VTXOs on this device").assertIsDisplayed()
+        onNodeWithText("Settled. Can be swept from block 2,000").assertIsDisplayed()
+        onNodeWithText("Waiting to see its round finish").assertIsDisplayed()
+        onNodeWithText("Held for something signed").assertIsDisplayed()
+        onNodeWithText("The operator reports", substring = true).assertIsDisplayed()
+        onNodeWithText("A unilateral exit, which leaves without the Ark operator's help, has never been run on any network.").assertIsDisplayed()
     }
 }

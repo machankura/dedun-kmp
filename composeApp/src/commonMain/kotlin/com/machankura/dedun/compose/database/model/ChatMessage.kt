@@ -677,6 +677,24 @@ data class ChatMessage(
          */
         const val TYPE_LIGHTNING_EQUIVOCATION = "lightningEquivocation"
 
+        const val TYPE_WAVELENGTH_REFUSED = "wavelengthRefused"
+        const val TYPE_WAVELENGTH_EQUIVOCATION = "wavelengthEquivocation"
+        const val TYPE_WAVELENGTH_ROUND_DIED = "wavelengthRoundDied"
+        const val TYPE_WAVELENGTH_DEADLINE = "wavelengthDeadline"
+        const val TYPE_WAVELENGTH_OPERATOR_STOPPED = "wavelengthOperatorStopped"
+
+        /** What a group's Wavelength wallet writes in its room. Reports, so they stay quiet: the wallet's screen is where they lead, and it's per network. */
+        val WAVELENGTH_TYPES = setOf(
+            TYPE_WAVELENGTH_REFUSED,
+            TYPE_WAVELENGTH_EQUIVOCATION,
+            TYPE_WAVELENGTH_ROUND_DIED,
+            TYPE_WAVELENGTH_DEADLINE,
+            TYPE_WAVELENGTH_OPERATOR_STOPPED,
+        )
+
+        /** The ones a member should see on the wallet's screen as well. */
+        val WAVELENGTH_ALARM_TYPES = listOf(TYPE_WAVELENGTH_REFUSED, TYPE_WAVELENGTH_EQUIVOCATION)
+
         /** Every Lightning wallet line, for the one check the transcript dispatches on. */
         val LIGHTNING_TYPES = setOf(
             TYPE_LIGHTNING_SEED_SHARED,

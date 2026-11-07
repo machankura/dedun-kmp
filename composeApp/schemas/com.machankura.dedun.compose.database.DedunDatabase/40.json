@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 40,
-    "identityHash": "7a7b5cc5a0c6b849f3e8d51ee0ff899c",
+    "identityHash": "65e45362f84278b0b9676b377f92b2ae",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -2438,6 +2438,48 @@
           "columnNames": [
             "wallet",
             "commitment"
+          ]
+        }
+      },
+      {
+        "tableName": "GroupArkSnapshotRow",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `sentBy` TEXT NOT NULL, `term` INTEGER NOT NULL, `content` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, PRIMARY KEY(`wallet`))",
+        "fields": [
+          {
+            "fieldPath": "wallet",
+            "columnName": "wallet",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sentBy",
+            "columnName": "sentBy",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "term",
+            "columnName": "term",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sentAt",
+            "columnName": "sentAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wallet"
           ]
         }
       },
@@ -6112,7 +6154,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7a7b5cc5a0c6b849f3e8d51ee0ff899c')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '65e45362f84278b0b9676b377f92b2ae')"
     ]
   }
 }

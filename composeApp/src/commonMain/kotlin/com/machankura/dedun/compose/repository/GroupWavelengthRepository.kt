@@ -6,11 +6,13 @@ import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlin.time.Instant
 
 /** What a group's Wavelength wallet screens read and propose (`docs/group-wavelength-ui.md`). Nothing here moves money: a proposal is signed by the group. */
 interface GroupWavelengthRepository {
@@ -47,6 +49,24 @@ interface GroupWavelengthRepository {
 
     suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession
 
+    /** What the wallet's operator last said it holds, and when, which is a claim. */
+    fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?>
+
+    /** The chain's tip, from this device's own connection, or null if it has none just now. */
+    suspend fun tipHeight(chain: Chain): Long?
+
+    /** When each device in the room last answered anything for a wallet. */
+    suspend fun seen(chatRoomId: String): Map<HexKey, Instant>
+
+    /** What this device has refused or been alarmed by, newest first: its own words, for the wallet's screen. */
+    suspend fun alarms(chatRoomId: String): List<String>
+
+    /** What this device has agreed to pay in fees since [since], against the statement's budget, in [term]. */
+    suspend fun feesSince(chatRoomId: String, chain: Chain, wallet: Long, term: Long, since: Long): Long
+
+    /** How many signatures round one is ready for beyond what's been used, on this device's count. */
+    suspend fun labelsLeft(chatRoomId: String, chain: Chain, wallet: Long, userPublicKey: HexKey): Long
+
     /** What this device has itself signed for the wallet: its own ledger, never the operator's word. */
     fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>>
 
@@ -65,6 +85,12 @@ interface GroupWavelengthRepository {
             override suspend fun proposeWallet(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, chain: Chain): FrostSigningSession = error("No room to propose in")
             override suspend fun nominateSelf(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
+            override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> = flowOf(null)
+            override suspend fun tipHeight(chain: Chain): Long? = null
+            override suspend fun seen(chatRoomId: String): Map<HexKey, Instant> = emptyMap()
+            override suspend fun alarms(chatRoomId: String): List<String> = emptyList()
+            override suspend fun feesSince(chatRoomId: String, chain: Chain, wallet: Long, term: Long, since: Long): Long = 0
+            override suspend fun labelsLeft(chatRoomId: String, chain: Chain, wallet: Long, userPublicKey: HexKey): Long = 0
             override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(emptyList())
         }
     }

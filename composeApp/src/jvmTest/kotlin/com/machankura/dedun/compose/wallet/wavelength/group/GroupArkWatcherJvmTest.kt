@@ -3,9 +3,12 @@ package com.machankura.dedun.compose.wallet.wavelength.group
 import androidx.room3.Room
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupLightningFixture
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import fr.acinq.bitcoin.Block
 import fr.acinq.bitcoin.BlockHeader
@@ -233,5 +236,39 @@ class GroupArkWatcherJvmTest {
         confirmed(commitment, 1)
         watcher.pass()
         assertTrue(vtxo(newCoin)!!.settled)
+    }
+
+    /** A real room, since a line in the transcript needs one. */
+    private fun <T> inARoom(block: suspend (GroupLightningFixture, GroupLightningFixture.Device, GroupArkWatcher) -> T) = runBlocking<Unit> {
+        val fixture = GroupLightningFixture()
+        try {
+            val device = fixture.group()[0]
+            block(fixture, device, GroupArkWatcher(device.db, GroupChainClients.single(electrum), CoroutineScope(Dispatchers.Default)))
+        } finally {
+            fixture.close()
+        }
+    }
+
+    private suspend fun coinExpiring(fixture: GroupLightningFixture, device: GroupLightningFixture.Device, atHeight: Long) =
+        device.db.groupArkDao().upsertVtxo(GroupArkVtxo(GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0), "ee:0", 1_000, settled = true, expiresAtHeight = atHeight))
+
+    @Test
+    fun `a coin near its deadline gets one line per level, by this device's own count`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100L)
+        watching.deadlinePass()
+        watching.deadlinePass()
+        val urgent = fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE)
+        assertEquals(1, urgent.size, "urgent, and only once")
+        assertTrue("need renewing within" in urgent.single().content, urgent.single().content)
+        electrum.tip = CONNECTED_AT + 101
+        watching.deadlinePass()
+        assertEquals(2, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE).size, "and again once it has passed")
+    }
+
+    @Test
+    fun `a coin with plenty of time says nothing`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100_000L)
+        watching.deadlinePass()
+        assertEquals(0, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE).size)
     }
 }

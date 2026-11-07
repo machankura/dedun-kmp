@@ -91,6 +91,16 @@ object GroupArkCoSigner {
         "wavelength:$chatRoomId:${GroupWalletStatementEvent.chainName(chain)}:$wallet"
 
     /** Where a tree key's labels are filed: the shared nonce table, under a key of its own. */
+    /** The chain and number of [walletKey], if it's one of [chatRoomId]'s wallets. */
+    fun parseWalletKey(chatRoomId: String, walletKey: String): Pair<Chain, Long>? {
+        val prefix = "wavelength:$chatRoomId:"
+        if (!walletKey.startsWith(prefix)) return null
+        val parts = walletKey.removePrefix(prefix).split(":")
+        val chain = parts.getOrNull(0)?.let(GroupWalletStatementEvent::chainNamed) ?: return null
+        val number = parts.getOrNull(1)?.toLongOrNull() ?: return null
+        return if (parts.size == 2) chain to number else null
+    }
+
     fun treeKey(walletKey: String, child: Long): String = "$walletKey:tree:$child"
 
     /** The label for [counter] of [domain]: one sequence per wallet, under a tag of its own, so no other wallet's can collide even on one key. */
@@ -275,6 +285,13 @@ object GroupArkCoSigner {
         dao.forgetPendingFrom(key, commitment)
         dao.forgetFee(key, commitment)
         dao.deletePendingRound(key, commitment)
+        val roomId = key.split(":").getOrNull(1) ?: return
+        val reader = database.chatRoomDao().findChatRoomById(roomId)?.chatRoom?.userPublicKey ?: return
+        GroupLightningLines.writeFact(
+            database, roomId, ChatMessage.TYPE_WAVELENGTH_ROUND_DIED, commitment, reader,
+            "A round of the Wavelength wallet's didn't happen, so nothing it would have done has been done. Your device let go of the coins it had set aside for it.",
+            Clock.System.now(),
+        )
     }
 
     /** A round this device has now seen confirm at [height], and whatever it refused for not having seen that yet. */
@@ -407,7 +424,7 @@ object GroupArkCoSigner {
     private suspend fun sayRefused(database: DedunDatabase, roomId: String, requestId: String, userPublicKey: HexKey, refusal: String) {
         logger.w("Refusing request $requestId: $refusal")
         GroupLightningLines.writeFact(
-            database, roomId, ChatMessage.TYPE_LIGHTNING_REFUSED, requestId, userPublicKey,
+            database, roomId, ChatMessage.TYPE_WAVELENGTH_REFUSED, requestId, userPublicKey,
             "Your device refused to co-sign for the Wavelength wallet: $refusal.", Clock.System.now(),
         )
     }
@@ -508,7 +525,7 @@ object GroupArkCoSigner {
     /** The alarm the echo rule exists to raise: two challenges under one label. Said once per label, on every device that sees it. */
     private suspend fun raiseEquivocation(database: DedunDatabase, chatRoomId: String, label: String, operator: HexKey) =
         GroupLightningLines.writeFact(
-            database, chatRoomId, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION, label, operator,
+            database, chatRoomId, ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION, label, operator,
             "Devices in this group disagree about what the Wavelength wallet's operator asked them to sign. The operator or a member is misbehaving. Nothing is signed unless enough devices agree.",
             Clock.System.now(),
         )

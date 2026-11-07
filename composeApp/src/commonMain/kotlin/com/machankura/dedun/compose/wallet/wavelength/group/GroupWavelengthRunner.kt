@@ -2,10 +2,18 @@ package com.machankura.dedun.compose.wallet.wavelength.group
 
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.GroupArkTransport
+import com.machankura.dedun.compose.managers.GroupLightningLines
+import com.machankura.dedun.compose.managers.GroupLightningWalletManager
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
+import com.machankura.dedun.compose.network.serialization.CommonJson
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthStopped
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
@@ -91,9 +99,12 @@ class GroupWavelengthRunner(
         val term: Long,
         val transport: GroupArkTransport,
         val config: RuntimeConfig,
+        internal val room: LocalChatRoom,
         internal var plainTo: Long,
         internal var treeTo: Long,
-    )
+    ) {
+        internal var lastReport: GroupWavelengthSnapshot? = null
+    }
 
     private var running: Running? = null
 
@@ -140,7 +151,7 @@ class GroupWavelengthRunner(
         running?.let { live ->
             val still = elected.firstOrNull { it.room.chatRoom.id == live.chatRoomId && it.chain == live.chain && it.number == live.wallet.statement.wallet && it.term == live.term }
             when {
-                still == null -> halt()
+                still == null -> halt(announce = true)
                 slot.personalWanted.value -> {
                     halt()
                     say(still, GroupWavelengthDaemonStatus.PausedForPersonal)
@@ -149,7 +160,10 @@ class GroupWavelengthRunner(
                     logger.w("The daemon for ${still.name}'s wallet has stopped; starting it again")
                     halt()
                 }
-                else -> topUp(live)
+                else -> {
+                    topUp(live)
+                    report(live)
+                }
             }
         }
 
@@ -203,7 +217,7 @@ class GroupWavelengthRunner(
 
         say(elected, GroupWavelengthDaemonStatus.WaitingForSigners)
         val outcome = try {
-            daemon.open(database, elected.room, userPublicKey, elected.wallet, if (recovering) RECOVERY_WINDOW else null, heard, now()) { transport ->
+            daemon.open(database, elected.room, userPublicKey, elected.wallet, if (recovering) recoveryWindowFor(walletKey) else null, heard, now()) { transport ->
                 transport.provision(plainTo, treeTo)
                 transport.askFloors()
                 val ready = transport.awaitPool(plainFrom, treeFrom, poolWait)
@@ -221,10 +235,11 @@ class GroupWavelengthRunner(
         }
         when (outcome) {
             is GroupWavelengthDaemon.Outcome.Running -> {
-                running = Running(roomId, elected.chain, elected.wallet, elected.term, outcome.transport, outcome.config, plainTo, treeTo)
+                running = Running(roomId, elected.chain, elected.wallet, elected.term, outcome.transport, outcome.config, elected.room, plainTo, treeTo)
                 say(elected, GroupWavelengthDaemonStatus.Running(elected.term))
                 onHolding(elected.name)
                 logger.i { "Running ${elected.name}'s wallet on ${elected.chain.name}, term ${elected.term}" }
+                running?.let { report(it) }
             }
             is GroupWavelengthDaemon.Outcome.Refused -> {
                 slot.release()
@@ -247,9 +262,37 @@ class GroupWavelengthRunner(
         live.transport.provision(live.plainTo, live.treeTo)
     }
 
-    private suspend fun halt() {
-        if (running == null) return
+    /** Each coin this device knows of came from a key the wallet has used, so a scan that wide finds them, and some margin finds the rest. */
+    private suspend fun recoveryWindowFor(walletKey: String): Long =
+        maxOf(RECOVERY_WINDOW, database.groupArkDao().vtxos(walletKey).size + RECOVERY_WINDOW)
+
+    /** Tells the group what the daemon says it holds, when that's changed or it's been a while. Never lets a failure near the daemon. */
+    private suspend fun report(live: Running) {
+        val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, live.wallet.statement.wallet)
+        val snapshot = runCatching { daemon.snapshotOf(walletKey, live.term, now()) }
+            .onFailure { logger.i { "Couldn't read the wallet to report it: ${it.message}" } }
+            .getOrNull() ?: return
+        val last = live.lastReport
+        if (last != null && last.sameAs(snapshot) && snapshot.sentAt - last.sentAt < REPORT_AT_LEAST.inWholeSeconds) return
+        live.lastReport = snapshot
+        runCatching {
+            GroupLightningWalletManager.queue(database, live.room, userPublicKey, GroupWavelengthEvents.SNAPSHOT, CommonJson.encodeToString(GroupWavelengthSnapshot.serializer(), snapshot))
+            GroupWavelengthReports.receive(database, live.chatRoomId, userPublicKey, snapshot)
+        }.onFailure { logger.w(it) { "Couldn't report the wallet to the room" } }
+    }
+
+    private suspend fun halt(announce: Boolean = false) {
+        val live = running ?: return
         running = null
+        if (announce) {
+            val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, live.wallet.statement.wallet)
+            val inFlight = live.lastReport?.activity?.count { it.status == IN_FLIGHT } ?: 0
+            val stopped = GroupWavelengthStopped(walletKey, live.term, runCatching { daemon.exitsUnderWay() }.getOrDefault(0), inFlight)
+            runCatching {
+                val queued = GroupLightningWalletManager.queue(database, live.room, userPublicKey, GroupWavelengthEvents.STOPPED, CommonJson.encodeToString(GroupWavelengthStopped.serializer(), stopped))
+                GroupLightningLines.write(database, live.chatRoomId, queued.id, ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED, userPublicKey, GroupWavelengthReports.linesOfStopped(stopped), queued.createdAt)
+            }.onFailure { logger.w(it) { "Couldn't tell the room this device stopped" } }
+        }
         runCatching { daemon.stop() }.onFailure { logger.w(it) { "Stopping the group's daemon" } }
         slot.release()
         onHolding(null)
@@ -269,5 +312,11 @@ class GroupWavelengthRunner(
         const val PLAIN_LOW = 64L
         const val TREE_WINDOW = 7L
         const val TREE_LOW = 2L
+
+        /** How often the group hears from a wallet that hasn't changed, which is also how it knows the operator is there. */
+        val REPORT_AT_LEAST: Duration = 30.minutes
+
+        /** The daemon's word for an entry still on its way. */
+        private const val IN_FLIGHT = "pending"
     }
 }

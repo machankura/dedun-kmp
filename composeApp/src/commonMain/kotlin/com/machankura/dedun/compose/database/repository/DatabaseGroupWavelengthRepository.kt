@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.database.repository
 
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -11,6 +12,10 @@ import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.managers.IcebergRitualManager
 import com.machankura.dedun.compose.network.GroupWavelengthTermsReader
+import com.machankura.dedun.compose.network.serialization.CommonJson
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -21,10 +26,13 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlin.time.Instant
 
 class DatabaseGroupWavelengthRepository(
     private val database: DedunDatabase,
     private val termsReader: GroupWavelengthTermsReader = GroupWavelengthTermsReader(),
+    /** The identity's chain connections, which come and go with it. */
+    private val clients: () -> GroupChainClients? = { null },
 ) : GroupWavelengthRepository {
     override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean =
         GroupWalletManager.walletFor(database, chatRoomId, chain) != null
@@ -70,6 +78,34 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession =
         GroupWavelengthOperatorManager.stepDown(database, localChatRoom, userPublicKey, chain, wallet)
 
+    override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> =
+        database.groupArkDao().observeSnapshot(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { row ->
+            row?.let { runCatching { CommonJson.decodeFromString(GroupWavelengthSnapshot.serializer(), it.content) }.getOrNull() }
+        }
+
+    override suspend fun tipHeight(chain: Chain): Long? =
+        runCatching { clients()?.clientFor(chain)?.startHeaderSubscription()?.blockHeight?.toLong() }.getOrNull()
+
+    override suspend fun seen(chatRoomId: String): Map<HexKey, Instant> =
+        database.marmotInnerEventDao().newestBySender(chatRoomId, GroupWavelengthEvents.CO_SIGNING.toList()).associate { it.publicKey.lowercase() to it.at }
+
+    override suspend fun alarms(chatRoomId: String): List<String> =
+        database.chatMessageDao().linesOfTypes(chatRoomId, ChatMessage.WAVELENGTH_ALARM_TYPES, ALARMS_SHOWN).map { it.content }
+
+    override suspend fun feesSince(chatRoomId: String, chain: Chain, wallet: Long, term: Long, since: Long): Long =
+        database.groupArkDao().fees(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet), term, since).sumOf { it.feeSat }
+
+    override suspend fun labelsLeft(chatRoomId: String, chain: Chain, wallet: Long, userPublicKey: HexKey): Long {
+        val key = GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)
+        val coSigning = database.icebergCoSigningDao()
+        val made = coSigning.highestNonce(key, userPublicKey.lowercase()) ?: return 0
+        return (made - (coSigning.highestAssignment(key) ?: -1)).coerceAtLeast(0)
+    }
+
     override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> =
         database.groupArkDao().observeVtxos(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
+
+    private companion object {
+        const val ALARMS_SHOWN = 3
+    }
 }
