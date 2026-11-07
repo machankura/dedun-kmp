@@ -324,4 +324,28 @@ class GroupWavelengthWalletScreenJvmTest {
         waitForIdle()
         onNodeWithText("Only the device that runs this wallet can do this.").assertIsDisplayed()
     }
+
+    @Test
+    fun `someone who left is said, with what to do about it, and the old wallet can be left`() = runDesktopComposeUiTest(phone, 2000) {
+        var made = 0
+        var left = 0
+        var state: GroupWavelengthWalletUIState by androidx.compose.runtime.mutableStateOf(opened().copy(departed = listOf("f".repeat(64))))
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet, onOpenCeremony = { made++ }, onLeaveEarlier = { left++ }) } } }
+        onNodeWithText("1 people who left the group still hold a share", substring = true).assertIsDisplayed()
+        onNodeWithText("Make a key").performClick()
+        assertEquals(1, made)
+        state = opened().copy(earlier = listOf(GroupWavelengthWalletUIState.Earlier(wallet(), null, 5_000, leaveAsked = false)))
+        waitForIdle()
+        onNodeWithText("Your device signed for 5,000 sats still in it", substring = true).assertIsDisplayed()
+        onNodeWithText("Leave this wallet").performClick()
+        assertEquals(1, left)
+    }
+
+    @Test
+    fun `with a key ready, it offers the new wallet`() = runDesktopComposeUiTest(phone, 1600) {
+        var opened = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(departed = listOf("f".repeat(64)), canOpenNew = true), Chain.Signet, onOpenWallet = { opened++ }) } } }
+        onNodeWithText("Open a new Wavelength wallet").performClick()
+        assertEquals(1, opened)
+    }
 }

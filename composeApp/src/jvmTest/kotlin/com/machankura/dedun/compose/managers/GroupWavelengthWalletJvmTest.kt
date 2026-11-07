@@ -32,6 +32,7 @@ import fr.acinq.lightning.payment.Bolt11Invoice
 import fr.acinq.lightning.utils.msat
 import fr.acinq.secp256k1.Hex
 import kotlinx.coroutines.runBlocking
+import kotlin.time.Clock
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -81,6 +82,28 @@ class GroupWavelengthWalletJvmTest {
             assertTrue("a Wavelength wallet" in fixture.lines(d, ChatMessage.TYPE_GROUP_WAVELENGTH_WALLET_OPENED).single().content)
             assertTrue("runs the group's Wavelength wallet now" in fixture.lines(d, ChatMessage.TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED).single().content)
         }
+    }
+
+    @Test
+    fun `a signer who has left is named, and a second key opens a second wallet beside the first`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val first = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        assertTrue(GroupWavelengthWalletManager.departed(all[0].db, first).isEmpty())
+
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val wallets = GroupWavelengthWalletManager.wallets(all[0].db, fixture.roomId, fixture.chain)
+        assertEquals(listOf(0L, 1L), wallets.map { it.statement.wallet })
+        assertTrue(wallets[0].statement.icebergKey != wallets[1].statement.icebergKey)
+
+        all[0].db.participantDao().findParticipantsByChatRoomId(fixture.roomId).first { it.participantPublicKey.lowercase() == all[3].publicKey.lowercase() }.let {
+            all[0].db.participantDao().upsert(listOf(it.copy(deletedAt = Clock.System.now())))
+        }
+        assertEquals(listOf(all[3].publicKey.lowercase()), GroupWavelengthWalletManager.departed(all[0].db, first))
+        // A key needs at least four holders, so a group of four that loses one can't make another: leaving is what's left to it.
+        assertTrue(runCatching { fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH) }.isFailure)
     }
 
     @Test

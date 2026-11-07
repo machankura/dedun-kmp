@@ -112,6 +112,9 @@ interface ChatRepository {
      */
     suspend fun lightningParticipants(chatRoomId: String, chain: Chain): Set<HexKey> = emptySet()
 
+    /** Who holds a share of any of a room's Wavelength wallets, on any network it's offered on. */
+    suspend fun wavelengthParticipants(chatRoomId: String): Set<HexKey> = emptySet()
+
     /**
      * The account this group *would* open on [chain], whether or not it has, or
      * null for a room with no key: what a statement proposing the wallet carries.

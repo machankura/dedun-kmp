@@ -88,7 +88,13 @@ import dedun.composeapp.generated.resources.a_wavelength_wallet_needs_four_signe
 import dedun.composeapp.generated.resources.couldn_t_propose_this
 import dedun.composeapp.generated.resources.cancel
 import dedun.composeapp.generated.resources.group_wallet
+import dedun.composeapp.generated.resources.group_wavelength_departed_s
+import dedun.composeapp.generated.resources.group_wavelength_earlier_empty
+import dedun.composeapp.generated.resources.group_wavelength_earlier_holds_s
+import dedun.composeapp.generated.resources.group_wavelength_earlier_leave
+import dedun.composeapp.generated.resources.group_wavelength_earlier_s
 import dedun.composeapp.generated.resources.group_wavelength_leave
+import dedun.composeapp.generated.resources.open_a_new_wavelength_wallet
 import dedun.composeapp.generated.resources.group_wavelength_leave_ask
 import dedun.composeapp.generated.resources.group_wavelength_leave_asked
 import dedun.composeapp.generated.resources.group_wavelength_leave_explainer
@@ -246,6 +252,8 @@ fun GroupWavelengthWalletScreen(
                 onReceive = { onNavigateToRoute(GroupWavelengthReceiveRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 onPayOut = { onNavigateToRoute(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 onLeave = { viewModel.proposeLeave(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
+                onLeaveEarlier = { viewModel.proposeLeave(onSession = toSession, onFailure = { notify(couldNotPropose) }, earlier = it.wallet) },
+                onRunEarlier = { viewModel.nominateSelf(onSession = toSession, onFailure = { notify(couldNotPropose) }, wallet = it.wallet.statement.wallet) },
             )
         }
     }
@@ -268,6 +276,8 @@ internal fun GroupWavelengthWalletContent(
     onReceive: () -> Unit = {},
     onPayOut: () -> Unit = {},
     onLeave: () -> Unit = {},
+    onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit = {},
+    onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
@@ -321,7 +331,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier)
     }
 }
 
@@ -403,13 +413,17 @@ private fun OpenedWallet(
     onReceive: () -> Unit,
     onPayOut: () -> Unit,
     onLeave: () -> Unit,
+    onOpenNew: () -> Unit,
+    onMakeKey: () -> Unit,
+    onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit,
+    onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending)
+                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
@@ -420,15 +434,16 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending)
+            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
+    if (state.departed.isNotEmpty()) item { DepartedCard(state, isPending, onOpenNew, onMakeKey) }
     item { BalanceCard(state, chain, onReceive, onPayOut, onLeave, isPending) }
     if (state.leaveAsked) item { Text(stringResource(Res.string.group_wavelength_leave_asked), style = MaterialTheme.typography.bodyMedium) }
     item { DeadlineLine(state.expiry) }
@@ -451,6 +466,7 @@ private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened,
         item { Text(stringResource(Res.string.group_wavelength_activity_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     items(activity, key = { it.id }) { ActivityRow(it) }
+    items(state.earlier, key = { "earlier:${it.wallet.statement.wallet}" }) { earlier -> EarlierWallet(earlier, state, isPending, onLeaveEarlier, onRunEarlier) }
 }
 
 private fun LazyListScope.groupItems(
@@ -474,6 +490,42 @@ private fun LazyListScope.groupItems(
         )
     }
     item { TextButton(onClick = onOpenAdvanced) { Text(stringResource(Res.string.group_wavelength_advanced)) } }
+}
+
+/** Someone who left still holds a share, and Iceberg has no resharing: the money has to move, and only the group can move it. */
+@Composable
+private fun DepartedCard(state: GroupWavelengthWalletUIState.Opened, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(stringResource(Res.string.group_wavelength_departed_s, state.departed.size.toString()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Button(onClick = if (state.canOpenNew) onOpenNew else onMakeKey, enabled = !isPending) {
+                Text(stringResource(if (state.canOpenNew) Res.string.open_a_new_wavelength_wallet else Res.string.make_a_key))
+            }
+        }
+    }
+}
+
+/** A wallet a new one replaced, until what's in it has left. It keeps its operator until then, and anyone can take it over. */
+@Composable
+private fun EarlierWallet(earlier: GroupWavelengthWalletUIState.Earlier, state: GroupWavelengthWalletUIState.Opened, isPending: Boolean, onLeave: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRun: (GroupWavelengthWalletUIState.Earlier) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            Text(stringResource(Res.string.group_wavelength_earlier_s, earlier.wallet.statement.wallet.toString()), style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (earlier.settledSat > 0) stringResource(Res.string.group_wavelength_earlier_holds_s, Satoshi(earlier.settledSat).grouped()) else stringResource(Res.string.group_wavelength_earlier_empty),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (earlier.leaveAsked) {
+                Text(stringResource(Res.string.group_wavelength_leave_asked), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (earlier.settledSat > 0) {
+                OutlinedButton(onClick = { onLeave(earlier) }, enabled = !isPending) { Text(stringResource(Res.string.group_wavelength_earlier_leave)) }
+            }
+            val isMine = earlier.operator?.publicKey == state.userPublicKey.lowercase()
+            if (earlier.settledSat > 0 && !isMine && state.canRunHere && state.userPublicKey.lowercase() in earlier.wallet.statement.participants) {
+                TextButton(onClick = { onRun(earlier) }, enabled = !isPending) { Text(stringResource(Res.string.run_this_wallet_on_my_device)) }
+            }
+        }
+    }
 }
 
 /** What this device itself refused, since a person never sees what it signs, and this is the one thing they're told of it (U4). */

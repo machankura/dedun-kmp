@@ -51,6 +51,9 @@ interface GroupWavelengthRepository {
 
     suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession
 
+    /** Signers of [wallet] who have left the room and still hold a share. */
+    suspend fun departed(wallet: GroupWavelengthWalletManager.Wallet): List<HexKey>
+
     /** Every payout the group has approved from [wallet], for the screen to follow. */
     suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment>
 
@@ -108,6 +111,7 @@ interface GroupWavelengthRepository {
             override suspend fun proposeWallet(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, chain: Chain): FrostSigningSession = error("No room to propose in")
             override suspend fun nominateSelf(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
+            override suspend fun departed(wallet: GroupWavelengthWalletManager.Wallet): List<HexKey> = emptyList()
             override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> = emptyList()
             override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession = error("No room to propose in")
             override suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession = error("No room to propose in")

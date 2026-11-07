@@ -4,6 +4,8 @@ import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import fr.acinq.bitcoin.Chain
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
 import com.machankura.dedun.compose.managers.GroupWalletDerivation
@@ -157,6 +159,10 @@ class DatabaseChatRepository(
         logger.e("Error reading the guardians of $chatRoomId", e)
         null
     }
+
+    override suspend fun wavelengthParticipants(chatRoomId: String): Set<HexKey> = runCatching {
+        GroupWavelengthRollout.NETWORKS.flatMap { chain -> GroupWavelengthWalletManager.current(database, chatRoomId, chain)?.statement?.participants.orEmpty() }.toSet()
+    }.getOrDefault(emptySet())
 
     override suspend fun lightningParticipants(chatRoomId: String, chain: Chain): Set<HexKey> =
         runCatching { GroupLightningWalletManager.current(database, chatRoomId, chain)?.statement?.participants?.toSet() }.getOrNull().orEmpty()

@@ -143,4 +143,22 @@ class GroupWavelengthWalletViewModelJvmTest {
         assertEquals(300, ledger.pendingSat)
         assertEquals(400, ledger.earliestExpiryHeight)
     }
+
+    @Test
+    fun `a new key beside a wallet can open another, and the old one says what's still in it`() {
+        val old = wallet(number = 0)
+        val new = wallet(number = 1)
+        val repository = object : GroupWavelengthRepository by Wavelength(unused = key, pinned = null) {
+            override suspend fun wallets(chatRoomId: String, chain: Chain) = listOf(old, new)
+            override suspend fun departed(wallet: GroupWavelengthWalletManager.Wallet) = listOf("f".repeat(64))
+            override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> =
+                flowOf(if (wallet == 0L) listOf(GroupArkVtxo("w", "a:0", 5_000, settled = true)) else emptyList())
+            override fun observeCeremonies(chatRoomId: String): Flow<List<IcebergKeySession>> = flowOf(emptyList())
+        }
+        val state = assertIs<GroupWavelengthWalletUIState.Opened>(settled(repository))
+        assertEquals(1L, state.wallet.statement.wallet, "the newest is the wallet")
+        assertEquals(listOf("f".repeat(64)), state.departed)
+        assertEquals(5_000, state.earlier.single().settledSat)
+        assertTrue(!state.canOpenNew, "no way to propose from a device with no key")
+    }
 }

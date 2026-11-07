@@ -56,6 +56,12 @@ object GroupWavelengthWalletManager {
     /** The wallet a room uses on [chain] now: the highest-numbered one it has opened, or null. */
     suspend fun current(database: DedunDatabase, chatRoomId: String, chain: Chain): Wallet? = wallets(database, chatRoomId, chain).lastOrNull()
 
+    /** Signers of [wallet] who have left the room, and still hold a share and its seed: Iceberg has no resharing, so only a new wallet leaves them out. */
+    suspend fun departed(database: DedunDatabase, wallet: Wallet): List<HexKey> {
+        val inRoom = database.participantDao().findParticipantsByChatRoomId(wallet.signedEvent.chatRoomId).filter { it.deletedAt == null }.map { it.participantPublicKey.lowercase() }.toSet()
+        return wallet.statement.participants.filter { it !in inRoom }
+    }
+
     /** A completed Wavelength key in [chatRoomId] that this device holds a share of and no wallet uses yet. */
     suspend fun unusedKey(database: DedunDatabase, chatRoomId: String): IcebergKeySession? {
         val used = database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupWavelengthWalletStatementEvent.KIND)

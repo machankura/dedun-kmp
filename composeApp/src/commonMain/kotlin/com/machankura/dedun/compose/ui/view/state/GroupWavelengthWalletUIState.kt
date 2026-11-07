@@ -83,6 +83,12 @@ sealed class GroupWavelengthWalletUIState {
         val feesSat: Long = 0,
         /** How many more signatures round one is ready for, on this device's count. */
         val labelsLeft: Long = 0,
+        /** Signers who have left the room and still hold a share. Only a new wallet leaves them out. */
+        val departed: List<HexKey> = emptyList(),
+        /** Whether a new wallet can be proposed now: a key no wallet uses, and this device can propose. */
+        val canOpenNew: Boolean = false,
+        /** Wallets a new one replaced, with what this device has signed for in each, until they're empty. */
+        val earlier: List<Earlier> = emptyList(),
         /** Whether the group has asked the wallet to leave, and that request still stands. */
         val leaveAsked: Boolean = false,
         /** What the group has approved paying from this wallet. */
@@ -98,4 +104,7 @@ sealed class GroupWavelengthWalletUIState {
             val SEEN_WINDOW = 1.hours
         }
     }
+
+    /** A wallet a new one replaced, whose coins still need to leave. */
+    data class Earlier(val wallet: GroupWavelengthWalletManager.Wallet, val operator: GroupWavelengthOperatorManager.Operator?, val settledSat: Long, val leaveAsked: Boolean)
 }

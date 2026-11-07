@@ -86,6 +86,9 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession =
         GroupWavelengthOperatorManager.stepDown(database, localChatRoom, userPublicKey, chain, wallet)
 
+    override suspend fun departed(wallet: GroupWavelengthWalletManager.Wallet): List<HexKey> =
+        GroupWavelengthWalletManager.departed(database, wallet)
+
     override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> =
         GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet }
 

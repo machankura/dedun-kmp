@@ -74,7 +74,8 @@ class GroupWavelengthWalletViewModel(
 
     private suspend fun read(localChatRoom: LocalChatRoom): GroupWavelengthWalletUIState {
         if (!repository.hasOnchainWallet(chatRoomId, chain)) return GroupWavelengthWalletUIState.NeedsOnchainWallet(localChatRoom)
-        repository.wallets(chatRoomId, chain).lastOrNull()?.let { wallet ->
+        val wallets = repository.wallets(chatRoomId, chain)
+        wallets.lastOrNull()?.let { wallet ->
             val operator = repository.operator(chatRoomId, chain, wallet.statement.wallet)
             return GroupWavelengthWalletUIState.Opened(
                 localChatRoom = localChatRoom,
@@ -84,6 +85,17 @@ class GroupWavelengthWalletViewModel(
                 isOperator = operator?.publicKey == activeUserPublicKey.lowercase(),
                 canRunHere = canRunHere,
                 userPublicKey = activeUserPublicKey,
+                departed = repository.departed(wallet),
+                canOpenNew = repository.unusedKey(chatRoomId) != null && blocked() == null,
+                earlier = wallets.dropLast(1).map { earlier ->
+                    val number = earlier.statement.wallet
+                    GroupWavelengthWalletUIState.Earlier(
+                        wallet = earlier,
+                        operator = repository.operator(chatRoomId, chain, number),
+                        settledSat = GroupWavelengthLedger.of(repository.observeCoins(chatRoomId, chain, number).first()).settledSat,
+                        leaveAsked = repository.leaveAsked(chatRoomId, chain, number),
+                    )
+                },
             )
         }
         when (val why = repository.refusal(chatRoomId, chain)) {
@@ -173,22 +185,24 @@ class GroupWavelengthWalletViewModel(
 
     /** Proposes the wallet's statement; the wallet exists once a quorum signs, on the session it returns. */
     fun openWallet(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
-        val state = uiState as? GroupWavelengthWalletUIState.NotOpened ?: return
-        if (state.blocked != null) return
+        // The first wallet, or the one that leaves a departed member out, beside the current one under a new key.
+        val localChatRoom = (uiState as? GroupWavelengthWalletUIState.NotOpened)?.takeIf { it.blocked == null }?.localChatRoom
+            ?: (uiState as? GroupWavelengthWalletUIState.Opened)?.takeIf { it.canOpenNew }?.localChatRoom
+            ?: return
         val privateKey = activeIdentityStateFlow.value?.nostrPrivateKey?.value?.toByteArray() ?: return onFailure()
-        act(onSession, onFailure) { repository.proposeWallet(state.localChatRoom, activeUserPublicKey, privateKey, chain) }
+        act(onSession, onFailure) { repository.proposeWallet(localChatRoom, activeUserPublicKey, privateKey, chain) }
     }
 
-    /** Nominates this device to run the wallet. */
-    fun nominateSelf(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+    /** Nominates this device to run [wallet]: the current wallet's when null. */
+    fun nominateSelf(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit, wallet: Long? = null) {
         val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
-        act(onSession, onFailure) { repository.nominateSelf(state.localChatRoom, activeUserPublicKey, chain, state.wallet.statement.wallet) }
+        act(onSession, onFailure) { repository.nominateSelf(state.localChatRoom, activeUserPublicKey, chain, wallet ?: state.wallet.statement.wallet) }
     }
 
-    /** Asks the group to leave for its onchain wallet. */
-    fun proposeLeave(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+    /** Asks the group to leave for its onchain wallet: [earlier], or the current wallet when null. */
+    fun proposeLeave(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit, earlier: GroupWavelengthWalletManager.Wallet? = null) {
         val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
-        act(onSession, onFailure) { repository.proposeExit(state.localChatRoom, activeUserPublicKey, state.wallet) }
+        act(onSession, onFailure) { repository.proposeExit(state.localChatRoom, activeUserPublicKey, earlier ?: state.wallet) }
     }
 
     fun stepDown(onSession: (sessionId: String) -> Unit, onFailure: () -> Unit) {
