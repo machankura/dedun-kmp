@@ -19,10 +19,11 @@ import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.managers.MemberBalances
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
+import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
-import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.machankura.dedun.compose.repository.PayoutRepository
@@ -179,23 +180,30 @@ class GroupWavelengthOnchainPayoutsJvmTest {
 
     // ---- the wallet screen ----
 
-    private fun opened(rows: List<GroupWavelengthOnchainPayout>) =
-        GroupWavelengthWalletUIState.Opened(room, wallet, GroupWavelengthUiFixtures.operator(OTHER), true, false, true, userPublicKey = ME).copy(onchainPayouts = rows)
+    // The screen reads one history now, built from the same rows a device holds (T1), so these go in
+    // as the approval and the leave rather than as a row made by hand.
+    private fun opened(rows: GroupWavelengthHistory.Rows) =
+        GroupWavelengthWalletUIState.Opened(room, wallet, GroupWavelengthUiFixtures.operator(OTHER), true, false, true, userPublicKey = ME)
+            .copy(entries = GroupWavelengthHistory.of(rows, nowSeconds = 1_800_000_000))
 
-    private fun row(leftSat: Long? = null, confirmed: Boolean = false, expiresAt: Long = 4_000_000_000) = GroupWavelengthOnchainPayout(
-        GroupWavelengthOnchainPayoutEvent.Payout(chain, 0, OTHER, "d", address, 8_000, 2_000, expiresAt, 1), leftSat, confirmed,
-    )
+    private fun row(leftSat: Long? = null, confirmed: Boolean = false, expiresAt: Long = 4_000_000_000): GroupWavelengthHistory.Rows {
+        val payout = GroupWavelengthOnchainPayoutEvent.Payout(chain, 0, OTHER, "d", address, 8_000, 2_000, expiresAt, 1)
+        return GroupWavelengthHistory.Rows(
+            leaves = leftSat?.let { listOf(GroupArkLeave("w", payout.id, "round", "00", 8_000, it - 8_000, confirmed)) }.orEmpty(),
+            onchainPayouts = listOf(payout),
+        )
+    }
 
     @Test
     fun `an onchain payout shows where this device has seen it get to`() = runDesktopComposeUiTest(width = 400, height = 2400) {
         setContent {
             DedunTheme {
                 ProvideSnackbarHost {
-                    GroupWavelengthWalletContent(Modifier, opened(listOf(row(leftSat = 8_400, confirmed = true))), chain)
+                    GroupWavelengthWalletContent(Modifier, opened(row(leftSat = 8_400, confirmed = true)), chain)
                 }
             }
         }
-        onNodeWithText("Paid, with 400 sats in fees").assertIsDisplayed()
+        onNodeWithText("Paid, with 400 sats in fees", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -206,8 +214,8 @@ class GroupWavelengthOnchainPayoutsJvmTest {
             row(expiresAt = 2) to "No round paid it before the approval ran out. Nothing left",
         ).forEach { (row, says) ->
             runDesktopComposeUiTest(width = 400, height = 2400) {
-                setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(listOf(row)), chain) } } }
-                onNodeWithText(says).assertIsDisplayed()
+                setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(row), chain) } } }
+                onNodeWithText(says, substring = true).assertIsDisplayed()
             }
         }
     }

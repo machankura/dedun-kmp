@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
@@ -19,6 +20,7 @@ import com.machankura.dedun.compose.repository.GroupWavelengthExitPlan
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.ME
@@ -31,6 +33,7 @@ import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import fr.acinq.bitcoin.Chain
 import kotlin.test.Test
+import kotlin.time.Instant
 import kotlin.test.assertEquals
 
 /** The Wavelength wallet screen in each of its states before it holds anything, at phone width and in a wide window. */
@@ -287,8 +290,56 @@ class GroupWavelengthWalletScreenJvmTest {
 
     @Test
     fun `an approved payout shows where it's got to`() = runDesktopComposeUiTest(phone, 1600) {
-        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(payouts = listOf(payout())), Chain.Signet) } } }
-        onNodeWithText("Approved. Waiting for whoever runs the wallet").assertIsDisplayed()
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, withHistory(payouts = listOf(payout())), Chain.Signet) } } }
+        onNodeWithText("Approved. Waiting for whoever runs the wallet", substring = true).assertIsDisplayed()
+    }
+
+    private fun withHistory(
+        payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
+        deposits: List<DepositRow> = emptyList(),
+        snapshot: GroupWavelengthSnapshot? = null,
+    ) = opened().copy(
+        snapshot = snapshot,
+        entries = GroupWavelengthHistory.of(
+            GroupWavelengthHistory.Rows(deposits = deposits, payouts = payouts),
+            snapshot,
+            nowSeconds = 1_800_000_000,
+        ),
+    )
+
+    @Test
+    fun `a deposit this device saw land is in the history, which nothing showed before`() = runDesktopComposeUiTest(phone, 1600) {
+        val deposit = DepositRow(
+            chatRoomId = GroupWavelengthUiFixtures.chatRoomId, chain = "signet", depositKey = "${"1".repeat(64)}:0",
+            source = DepositRow.WAVELENGTH, amountMsat = 50_000_000, member = OTHER,
+            seenAt = Instant.fromEpochSeconds(1_799_999_000), confirmedAt = Instant.fromEpochSeconds(1_799_999_500),
+        )
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, withHistory(deposits = listOf(deposit)), Chain.Signet) } } }
+        onNodeWithText("50,000 sats from ", substring = true).assertIsDisplayed()
+        onNodeWithText("Settled · ", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a line the device can join to nothing is under its own heading, not among the device's own`() = runDesktopComposeUiTest(phone, 1800) {
+        val said = GroupWavelengthSnapshot("w", 3, 100, 500, 0, activity = listOf(GroupWavelengthSnapshot.Line("l1", "receive", "complete", 8_000, 0, 1_799_999_000)))
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, withHistory(snapshot = said), Chain.Signet) } } }
+        onNodeWithText("Only whoever runs the wallet says these happened. Your device has no record of them.").assertIsDisplayed()
+        onNodeWithText("Receive, 8,000 sats").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an empty history says so in words, under its own heading`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(), Chain.Signet) } } }
+        onNodeWithText("History").assertIsDisplayed()
+        onNodeWithText("Nothing has happened in this wallet yet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a row opens the entry it was built with`() = runDesktopComposeUiTest(phone, 1600) {
+        var opened: String? = null
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, withHistory(payouts = listOf(payout())), Chain.Signet, onOpenEntry = { opened = it }) } } }
+        onNodeWithText("Approved. Waiting for whoever runs the wallet", substring = true).performClick()
+        assertEquals("payout-ln:lntbs1000n1invalid", opened)
     }
 
     @Test

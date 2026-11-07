@@ -1,6 +1,5 @@
 package com.machankura.dedun.compose.ui.view.state
 
-import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -8,9 +7,9 @@ import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
-import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlin.time.Clock
@@ -92,10 +91,12 @@ sealed class GroupWavelengthWalletUIState {
         val earlier: List<Earlier> = emptyList(),
         /** Whether the group has asked the wallet to leave, and that request still stands. */
         val leaveAsked: Boolean = false,
-        /** What the group has approved paying from this wallet. */
-        val payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
-        /** The onchain payouts it has approved, and what this device has seen become of each. */
-        val onchainPayouts: List<GroupWavelengthOnchainPayout> = emptyList(),
+        /**
+         * Everything the wallet has done, as this device reads it: its own records with the operator's claim
+         * joined on (`docs/group-wavelength-transaction-details.md`). The one list the screen draws, in place
+         * of the three it drew before -- approved payouts, onchain payouts, and the operator's activity.
+         */
+        val entries: List<GroupWavelengthEntry> = emptyList(),
     ) : GroupWavelengthWalletUIState() {
         /** Whether enough signers have answered lately for a round to be likely to work: `2t-1` of them have to. */
         val enoughSeen: Boolean get() = seenRecently() >= 2 * wallet.statement.threshold - 1

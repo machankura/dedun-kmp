@@ -21,6 +21,7 @@ import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
@@ -168,8 +169,7 @@ class GroupWavelengthWalletViewModel(
         val alarms = repository.alarms(chatRoomId)
         val fees = repository.feesSince(chatRoomId, chain, number, term, monthAgo)
         val labels = repository.labelsLeft(chatRoomId, chain, number, activeUserPublicKey)
-        val payouts = repository.payouts(chatRoomId, chain, number)
-        val onchainPayouts = repository.onchainPayouts(chatRoomId, chain, number)
+        val historyRows = repository.historyRows(chatRoomId, chain, number)
         val leaveAsked = repository.leaveAsked(chatRoomId, chain, number)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
             uiState = it.copy(
@@ -178,8 +178,8 @@ class GroupWavelengthWalletViewModel(
                 alarms = alarms,
                 feesSat = fees,
                 labelsLeft = labels,
-                payouts = payouts,
-                onchainPayouts = onchainPayouts,
+                // Built here rather than stored, from the rows read a moment ago and the report held now.
+                entries = GroupWavelengthHistory.of(historyRows, it.snapshot),
                 leaveAsked = leaveAsked,
             )
         }

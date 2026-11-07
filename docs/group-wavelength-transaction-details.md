@@ -350,20 +350,32 @@ not one per table of six.
 
 ### Phase 3: one history on the wallet screen
 
-- `entries: List<GroupWavelengthEntry>` on `GroupWavelengthWalletUIState.Opened`, filled in the view
-  model's `watch` from the combined flow and in `refreshFacts` with the approvals it already reads.
-- `moneyItems` (`GroupWavelengthWalletScreen.kt:447`) loses its *Payouts* and *Activity* sections and
-  gains *History*: `EmptyState` with a required message when there is nothing, and one `HistoryRow` per
-  entry, `Modifier.clickable { … }.minimumInteractiveComponentSize()`, an `Icon` with a decided
-  description, the signed amount trailing.
+- `entries: List<GroupWavelengthEntry>` **replaces** `payouts` and `onchainPayouts` on
+  `GroupWavelengthWalletUIState.Opened`, rather than sitting beside them. Nothing outside this screen
+  read either, and two sources of truth for one list is the thing this plan is about. Filled in
+  `refreshFacts`, from the rows it now reads and the report the state holds.
+- `moneyItems` loses its *Payouts* and *Activity* sections and gains *History*: `EmptyState` with a
+  required message when there is nothing, and one `HistoryRow` per entry,
+  `Modifier.clickable { … }.minimumInteractiveComponentSize()`, an `Icon` with a decided description
+  (`Decorative`, since the headline says the direction in words), and the fee trailing as `ActivityRow`
+  already did.
 - `PayoutRow`, `OnchainPayoutRow` and `ActivityRow` collapse into the one row, keeping every sentence
-  they say today, read from the entry instead of from three different shapes.
+  they say today, read from the entry instead of from three different shapes. The amount stays in the
+  headline, where the group's rows already put it, rather than moving to the trailing slot as the
+  profile wallet's does.
+- The operator's own lines sit under their own heading, after the device's (T12).
+- `memberName` comes out of this screen, which wrote the same lookup four times (T8), and the retired
+  strings — *Activity*, *Nothing yet*, *Payouts* — come out of the catalogue with the lists they named.
 - **Tests,** in `GroupWavelengthWalletScreenJvmTest` and `GroupWavelengthOnchainPayoutsJvmTest`: the
-  existing payout and activity assertions, now against the merged list; a deposit appears, which nothing
-  asserted before; an operator-only line says so; a row opens the entry with the id it was built with;
-  an empty history says so once, in words, rather than *Nothing yet* under a heading.
+  existing payout and activity assertions, now against the merged list and built from the same rows a
+  device holds rather than from a row made by hand; a deposit appears, which nothing asserted before; an
+  operator-only line is under its own heading; a row opens the entry with the id it was built with; an
+  empty history says so in words rather than *Nothing yet* under a heading.
 
-**Done when** no assertion that used to hold has been deleted to make this pass.
+**Done when** no assertion that used to hold has been deleted to make this pass. One changed shape, not
+substance: a row's supporting line is now *status · when*, one `Text` as the profile wallet's
+`entrySubtitle` is, so the assertions that named a status exactly now name it as a substring of the same
+line.
 
 ### Phase 4: the detail screen
 

@@ -40,7 +40,7 @@
     <string name="be_the_first_to_comment">Be the first to comment.</string>
     <string name="being_signed">Being signed</string>
     <string name="bio">Bio</string>
-    <string name="bip39_seed_with_the_standard_bip84">BIP39 seed with the standard BIP84 derivation path. The profile\'s nostr key comes off the same seed, so these 12 words restore both.</string>
+    <string name="bip39_seed_with_the_standard_bip84">BIP39 seed with the standard BIP84 derivation path. The profile's nostr key comes off the same seed, so these 12 words restore both.</string>
     <string name="block_user">Block user</string>
     <string name="cancel">Cancel</string>
     <string name="choose_who_to_chat_with">Choose who to chat with</string>
@@ -1224,10 +1224,17 @@
     <string name="group_wavelength_deadline_renewing_s">Coins renew now, while it's free, and need it within %1$s</string>
     <string name="group_wavelength_deadline_urgent_s">Coins need renewing within %1$s, or the money stops being safe</string>
     <string name="group_wavelength_deadline_expired">These coins have passed their deadline. They now depend on the Ark operator to get back.</string>
-    <string name="group_wavelength_activity">Activity</string>
-    <string name="group_wavelength_activity_none">Nothing yet</string>
     <string name="group_wavelength_activity_line_s_s">%1$s, %2$s sats</string>
     <string name="group_wavelength_activity_fee_s">Fee %1$s sats</string>
+    <string name="group_wavelength_history">History</string>
+    <string name="group_wavelength_history_none">Nothing has happened in this wallet yet</string>
+    <string name="group_wavelength_history_operator_only">Only whoever runs the wallet says these happened. Your device has no record of them.</string>
+    <string name="group_wavelength_history_in_s_s">%1$s sats from %2$s</string>
+    <string name="group_wavelength_history_in_s">%1$s sats added</string>
+    <string name="group_wavelength_history_round">Wallet upkeep</string>
+    <string name="group_wavelength_history_exit_s">%1$s sats to the group's onchain wallet</string>
+    <string name="group_wavelength_history_ran_out">The request ran out before anything acted on it</string>
+    <string name="group_wavelength_history_when_unknown">When isn't known</string>
     <string name="group_wavelength_signers">Signers</string>
     <string name="group_wavelength_seen_enough_s_s">%1$s of the %2$s devices a round needs have answered in the last hour.</string>
     <string name="group_wavelength_seen_too_few_s_s">Only %1$s of the %2$s devices a round needs have answered in the last hour, so a round may not work.</string>
@@ -1280,7 +1287,6 @@
     <string name="wavelength_onchain_payout_no_address_s">%1$s hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.</string>
     <string name="wavelength_onchain_payout_waiting_s">A payout to %1$s from the Wavelength wallet is waiting for signatures or a round.</string>
     <string name="wavelength_onchain_payout_needs_s_more">%1$s sats more and the Wavelength balance is worth paying out onchain.</string>
-    <string name="group_wavelength_payouts">Payouts</string>
     <string name="group_wavelength_payout_s_s">%1$s sats to %2$s</string>
     <string name="group_wavelength_payout_approved">Approved. Waiting for whoever runs the wallet</string>
     <string name="group_wavelength_payout_in_flight">On its way</string>

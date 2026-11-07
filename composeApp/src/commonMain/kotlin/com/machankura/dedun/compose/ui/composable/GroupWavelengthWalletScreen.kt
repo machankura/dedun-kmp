@@ -5,6 +5,7 @@ import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_in_a
 import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_paid_s
 import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_s_s
 import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Key
@@ -32,6 +35,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -72,6 +76,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCerem
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
@@ -86,6 +92,8 @@ import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.memberName
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
@@ -105,10 +113,23 @@ import dedun.composeapp.generated.resources.group_wavelength_leave_asked
 import dedun.composeapp.generated.resources.group_wavelength_leave_explainer
 import dedun.composeapp.generated.resources.group_wavelength_leave_question
 import dedun.composeapp.generated.resources.group_wavelength_run_it_yourself
-import dedun.composeapp.generated.resources.group_wavelength_activity
 import dedun.composeapp.generated.resources.group_wavelength_activity_fee_s
+import dedun.composeapp.generated.resources.group_wavelength_coin_pending
+import dedun.composeapp.generated.resources.group_wavelength_coin_settled
+import dedun.composeapp.generated.resources.group_wavelength_history
+import dedun.composeapp.generated.resources.group_wavelength_history_exit_s
+import dedun.composeapp.generated.resources.group_wavelength_history_in_s
+import dedun.composeapp.generated.resources.group_wavelength_history_in_s_s
+import dedun.composeapp.generated.resources.group_wavelength_history_none
+import dedun.composeapp.generated.resources.group_wavelength_history_operator_only
+import dedun.composeapp.generated.resources.group_wavelength_history_ran_out
+import dedun.composeapp.generated.resources.group_wavelength_history_round
+import dedun.composeapp.generated.resources.group_wavelength_history_when_unknown
+import dedun.composeapp.generated.resources.wavelength_entry_failed
+import dedun.composeapp.generated.resources.wavelength_entry_s_dot_s
+import dedun.composeapp.generated.resources.wavelength_entry_succeeded
+import dedun.composeapp.generated.resources.wavelength_entry_waiting_for_payment
 import dedun.composeapp.generated.resources.group_wavelength_activity_line_s_s
-import dedun.composeapp.generated.resources.group_wavelength_activity_none
 import dedun.composeapp.generated.resources.group_wavelength_advanced
 import dedun.composeapp.generated.resources.group_wavelength_alarm_title
 import dedun.composeapp.generated.resources.group_wavelength_balance_label
@@ -126,7 +147,6 @@ import dedun.composeapp.generated.resources.group_wavelength_payout_failed_s
 import dedun.composeapp.generated.resources.group_wavelength_payout_in_flight
 import dedun.composeapp.generated.resources.group_wavelength_payout_paid
 import dedun.composeapp.generated.resources.group_wavelength_payout_s_s
-import dedun.composeapp.generated.resources.group_wavelength_payouts
 import dedun.composeapp.generated.resources.group_wavelength_pending_s
 import dedun.composeapp.generated.resources.pay_out
 import dedun.composeapp.generated.resources.group_wavelength_report_cannot_confirm
@@ -193,6 +213,7 @@ import fr.acinq.bitcoin.Satoshi
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * The group's Wavelength wallet: what it needs before it can exist, the statement that opened it, and who runs it
@@ -210,6 +231,8 @@ fun GroupWavelengthWalletScreen(
     daemonSource: GroupWavelengthDaemonSource,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
+    /** One entry of the history, in full. Wired to its route in Phase 4 of the transaction-details plan. */
+    onOpenEntry: (String) -> Unit = {},
 ) {
     val viewModel: GroupWavelengthWalletViewModel = viewModel(
         key = "wavelength:$chatRoomId:${GroupWalletStatementEvent.chainName(chain)}",
@@ -258,6 +281,7 @@ fun GroupWavelengthWalletScreen(
                 onLeave = { viewModel.proposeLeave(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                 onLeaveEarlier = { viewModel.proposeLeave(onSession = toSession, onFailure = { notify(couldNotPropose) }, earlier = it.wallet) },
                 onRunEarlier = { viewModel.nominateSelf(onSession = toSession, onFailure = { notify(couldNotPropose) }, wallet = it.wallet.statement.wallet) },
+                onOpenEntry = onOpenEntry,
             )
         }
     }
@@ -282,6 +306,7 @@ internal fun GroupWavelengthWalletContent(
     onLeave: () -> Unit = {},
     onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit = {},
     onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit = {},
+    onOpenEntry: (String) -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
@@ -335,7 +360,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry)
     }
 }
 
@@ -421,13 +446,14 @@ private fun OpenedWallet(
     onMakeKey: () -> Unit,
     onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit,
     onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit,
+    onOpenEntry: (String) -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier)
+                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
@@ -438,13 +464,13 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier)
+            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
     if (state.departed.isNotEmpty()) item { DepartedCard(state, isPending, onOpenNew, onMakeKey) }
@@ -460,18 +486,41 @@ private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened,
             }
         }
     }
-    if (state.payouts.isNotEmpty() || state.onchainPayouts.isNotEmpty()) {
-        item { Text(stringResource(Res.string.group_wavelength_payouts), style = MaterialTheme.typography.titleSmall) }
-        items(state.payouts, key = { "payout:${it.paymentHash}" }) { PayoutRow(it, state) }
-        items(state.onchainPayouts, key = { "onchain:${it.payout.id}" }) { OnchainPayoutRow(it, state) }
-    }
-    item { Text(stringResource(Res.string.group_wavelength_activity), style = MaterialTheme.typography.titleSmall) }
-    val activity = state.snapshot?.activity.orEmpty()
-    if (activity.isEmpty()) {
-        item { Text(stringResource(Res.string.group_wavelength_activity_none), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    }
-    items(activity, key = { it.id }) { ActivityRow(it) }
+    historyItems(state, onOpenEntry)
     items(state.earlier, key = { "earlier:${it.wallet.statement.wallet}" }) { earlier -> EarlierWallet(earlier, state, isPending, onLeaveEarlier, onRunEarlier) }
+}
+
+/**
+ * One history, in place of the three lists this screen drew before: approved payouts, onchain payouts and
+ * the operator's activity (`docs/group-wavelength-transaction-details.md`, T1).
+ *
+ * This device's own entries first, and the operator's unjoined lines under their own heading after them
+ * (T12). A line carries no outpoint, so a boarding deposit's can't be joined to the device's record of
+ * one; interleaved, a single deposit would read as two transactions.
+ */
+private fun LazyListScope.historyItems(state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit) {
+    val (theirs, mine) = state.entries.partition { it.source == GroupWavelengthEntry.Source.THE_OPERATOR }
+    item { Text(stringResource(Res.string.group_wavelength_history), style = MaterialTheme.typography.titleSmall) }
+    if (mine.isEmpty() && theirs.isEmpty()) {
+        item {
+            EmptyState(
+                modifier = Modifier.fillMaxWidth(),
+                message = stringResource(Res.string.group_wavelength_history_none),
+                icon = Icons.AutoMirrored.Filled.ReceiptLong,
+            )
+        }
+    }
+    items(mine, key = { it.id }) { HistoryRow(it, state, onOpenEntry) }
+    if (theirs.isNotEmpty()) {
+        item {
+            Text(
+                stringResource(Res.string.group_wavelength_history_operator_only),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        items(theirs, key = { it.id }) { HistoryRow(it, state, onOpenEntry) }
+    }
 }
 
 private fun LazyListScope.groupItems(
@@ -632,70 +681,102 @@ private fun DeadlineLine(expiry: WalletExpiry) {
     Text(text, style = MaterialTheme.typography.bodyMedium, color = if (isUrgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
 }
 
-/** A payout the group approved, and where it's got to by the operator's report: all a device can know of a payment once it's gone. */
-@Composable
-private fun PayoutRow(payment: GroupWavelengthPaymentEvent.Payment, state: GroupWavelengthWalletUIState.Opened) {
-    val member = payment.payout?.member?.lowercase()
-    val name = state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == member }?.profile?.humanReadableNameOrPubkey() ?: member?.take(16).orEmpty()
-    val line = state.snapshot?.activity?.firstOrNull { it.paymentHash.equals(payment.paymentHash?.toString(), ignoreCase = true) }
-    val failed = line?.status == "failed"
-    ListItem(
-        headlineContent = { Text(stringResource(Res.string.group_wavelength_payout_s_s, Satoshi(payment.amountSat ?: 0).grouped(), name)) },
-        supportingContent = {
-            Text(
-                when {
-                    failed -> stringResource(Res.string.group_wavelength_payout_failed_s, line?.failure.orEmpty())
-                    line?.status == "complete" -> stringResource(Res.string.group_wavelength_payout_paid)
-                    line != null -> stringResource(Res.string.group_wavelength_payout_in_flight)
-                    else -> stringResource(Res.string.group_wavelength_payout_approved)
-                },
-                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
-    )
-}
-
 /**
- * An onchain payout the group approved, by this device's own record and never the operator's: approved, in a round once this device
- * signed one paying it, paid once that round confirmed, or run out with nothing left.
+ * One thing the wallet did. What it was and how much on the headline, where it has got to and when
+ * underneath, and what it cost at the end -- the words each kind said before the three lists became one
+ * (T1), read off the entry instead of off three different shapes.
  */
 @Composable
-private fun OnchainPayoutRow(row: GroupWavelengthOnchainPayout, state: GroupWavelengthWalletUIState.Opened) {
-    val member = row.payout.member.lowercase()
-    val name = state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == member }?.profile?.humanReadableNameOrPubkey() ?: member.take(16)
+private fun HistoryRow(entry: GroupWavelengthEntry, state: GroupWavelengthWalletUIState.Opened, onOpen: (String) -> Unit) {
     ListItem(
-        headlineContent = { Text(stringResource(Res.string.group_wavelength_onchain_payout_s_s, Satoshi(row.payout.amountSat).grouped(), name)) },
+        modifier = Modifier.clickable { onOpen(entry.id) }.minimumInteractiveComponentSize(),
+        leadingContent = { Icon(historyIcon(entry.direction), contentDescription = Decorative) },
+        headlineContent = { Text(historyHeadline(entry, state), maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
+            val status = historyStatus(entry)
+            val at = entry.at?.let { Instant.fromEpochSeconds(it).toFormattedTimeAndDateString() }
+                ?: stringResource(Res.string.group_wavelength_history_when_unknown)
             Text(
-                when {
-                    row.confirmed -> stringResource(Res.string.group_wavelength_onchain_payout_paid_s, Satoshi((row.leftSat ?: 0) - row.payout.amountSat).grouped())
-                    row.leftSat != null -> stringResource(Res.string.group_wavelength_onchain_payout_in_a_round)
-                    row.isExpired(Clock.System.now().epochSeconds) -> stringResource(Res.string.group_wavelength_onchain_payout_expired)
-                    else -> stringResource(Res.string.group_wavelength_payout_approved)
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = stringResource(Res.string.wavelength_entry_s_dot_s, status, at),
+                color = if (entry.status == GroupWavelengthEntry.Status.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
+        trailingContent = if (entry.feeSat > 0) {
+            { Text(stringResource(Res.string.group_wavelength_activity_fee_s, Satoshi(entry.feeSat).grouped())) }
+        } else null,
     )
 }
 
-/** One thing the operator's daemon says the wallet did, in the daemon's words for what it was. */
+/** The direction, since the headline says it in words too: a row carries no state the text doesn't. */
+private fun historyIcon(direction: GroupWavelengthEntry.Direction): ImageVector = when (direction) {
+    GroupWavelengthEntry.Direction.IN -> Icons.AutoMirrored.Filled.CallReceived
+    GroupWavelengthEntry.Direction.OUT -> Icons.AutoMirrored.Filled.CallMade
+    GroupWavelengthEntry.Direction.NONE -> Icons.Default.Autorenew
+    GroupWavelengthEntry.Direction.UNKNOWN -> Icons.AutoMirrored.Filled.ReceiptLong
+}
+
 @Composable
-private fun ActivityRow(line: GroupWavelengthSnapshot.Line) {
-    ListItem(
-        headlineContent = { Text(stringResource(Res.string.group_wavelength_activity_line_s_s, line.kind.replaceFirstChar { it.uppercase() }, Satoshi(line.amountSat).grouped())) },
-        supportingContent = {
-            Text(
-                buildString {
-                    append(line.status.replaceFirstChar { it.uppercase() })
-                    if (line.failure.isNotBlank()) append(": ").append(line.failure)
-                }
-            )
-        },
-        trailingContent = if (line.feeSat > 0) {
-            { Text(stringResource(Res.string.group_wavelength_activity_fee_s, Satoshi(line.feeSat).grouped())) }
-        } else null,
-    )
+private fun historyHeadline(entry: GroupWavelengthEntry, state: GroupWavelengthWalletUIState.Opened): String {
+    val amount = Satoshi(entry.amountSat).grouped()
+    val who = memberName(state.localChatRoom, entry.member, state.userPublicKey)
+    return when (entry.kind) {
+        GroupWavelengthEntry.Kind.DEPOSIT_ONCHAIN, GroupWavelengthEntry.Kind.DEPOSIT_LIGHTNING ->
+            if (entry.member == null) stringResource(Res.string.group_wavelength_history_in_s, amount)
+            else stringResource(Res.string.group_wavelength_history_in_s_s, amount, who)
+        GroupWavelengthEntry.Kind.PAYOUT_LIGHTNING -> stringResource(Res.string.group_wavelength_payout_s_s, amount, who)
+        GroupWavelengthEntry.Kind.PAYOUT_ONCHAIN -> stringResource(Res.string.group_wavelength_onchain_payout_s_s, amount, who)
+        GroupWavelengthEntry.Kind.ROUND -> stringResource(Res.string.group_wavelength_history_round)
+        GroupWavelengthEntry.Kind.EXIT -> stringResource(Res.string.group_wavelength_history_exit_s, amount)
+        // The daemon's own word for what it was, which this device has no better name for.
+        GroupWavelengthEntry.Kind.OPERATOR -> {
+            val line = (entry.detail as? GroupWavelengthEntry.Detail.OperatorLine)?.line
+            stringResource(Res.string.group_wavelength_activity_line_s_s, line?.kind?.replaceFirstChar { it.uppercase() }.orEmpty(), amount)
+        }
+    }
+}
+
+/** Where it has got to, in the words each kind already used. */
+@Composable
+private fun historyStatus(entry: GroupWavelengthEntry): String = when (entry.kind) {
+    GroupWavelengthEntry.Kind.DEPOSIT_ONCHAIN, GroupWavelengthEntry.Kind.DEPOSIT_LIGHTNING -> when (entry.status) {
+        GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.wavelength_entry_waiting_for_payment)
+        GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.group_wavelength_coin_settled)
+        GroupWavelengthEntry.Status.FAILED -> stringResource(Res.string.wavelength_entry_failed)
+        else -> stringResource(Res.string.group_wavelength_coin_pending)
+    }
+
+    GroupWavelengthEntry.Kind.PAYOUT_LIGHTNING -> when (entry.status) {
+        GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.group_wavelength_payout_paid)
+        GroupWavelengthEntry.Status.FAILED -> stringResource(
+            Res.string.group_wavelength_payout_failed_s,
+            (entry.detail as? GroupWavelengthEntry.Detail.LightningPayout)?.line?.failure.orEmpty(),
+        )
+        GroupWavelengthEntry.Status.IN_FLIGHT -> stringResource(Res.string.group_wavelength_payout_in_flight)
+        GroupWavelengthEntry.Status.EXPIRED -> stringResource(Res.string.group_wavelength_onchain_payout_expired)
+        GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.group_wavelength_payout_approved)
+    }
+
+    GroupWavelengthEntry.Kind.PAYOUT_ONCHAIN -> when (entry.status) {
+        GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.group_wavelength_onchain_payout_paid_s, Satoshi(entry.feeSat).grouped())
+        GroupWavelengthEntry.Status.IN_FLIGHT -> stringResource(Res.string.group_wavelength_onchain_payout_in_a_round)
+        GroupWavelengthEntry.Status.EXPIRED -> stringResource(Res.string.group_wavelength_onchain_payout_expired)
+        else -> stringResource(Res.string.group_wavelength_payout_approved)
+    }
+
+    GroupWavelengthEntry.Kind.ROUND, GroupWavelengthEntry.Kind.EXIT -> when (entry.status) {
+        GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.wavelength_entry_succeeded)
+        GroupWavelengthEntry.Status.EXPIRED -> stringResource(Res.string.group_wavelength_history_ran_out)
+        GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.group_wavelength_payout_approved)
+        else -> stringResource(Res.string.group_wavelength_coin_pending)
+    }
+
+    GroupWavelengthEntry.Kind.OPERATOR -> {
+        val line = (entry.detail as? GroupWavelengthEntry.Detail.OperatorLine)?.line
+        buildString {
+            append(line?.status?.replaceFirstChar { it.uppercase() }.orEmpty())
+            if (line?.failure?.isNotBlank() == true) append(": ").append(line.failure)
+        }
+    }
 }
 
 /** Who has answered lately, which is what can be known: nobody can say who's online (U5). */
