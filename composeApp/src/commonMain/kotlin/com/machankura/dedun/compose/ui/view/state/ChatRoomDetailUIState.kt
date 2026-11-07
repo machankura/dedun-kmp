@@ -4,6 +4,8 @@ import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
+import fr.acinq.bitcoin.Chain
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.managers.SubgroupManager
@@ -70,6 +72,19 @@ sealed interface ChatRoomDetailUIState {
          * `GroupWalletScreen`.
          */
         val groupWallet: GroupWallet? = null,
+        /**
+         * The networks in [GroupWavelengthRollout.NETWORKS] the group has an
+         * onchain wallet on, which is where a Wavelength wallet's money leaves
+         * to. A row for a network absent here is disabled and says so, as the
+         * Lightning row does: the same question `GroupWavelengthWalletViewModel`
+         * asks before its screen's first state.
+         *
+         * Chain-keyed rather than one flag, because there is a row per network
+         * and each needs its own answer. [groupWallet] cannot stand in for it:
+         * that is the wallet on the app's own network, which is every network
+         * Wavelength offers today and need not stay so.
+         */
+        val wavelengthOnchainChains: Set<Chain> = emptySet(),
         /** Who holds a share of the group's Lightning wallet key, so removing one of them can say what it leaves. */
         val lightningParticipants: Set<HexKey> = emptySet(),
         val wavelengthParticipants: Set<HexKey> = emptySet(),
