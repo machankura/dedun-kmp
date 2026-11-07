@@ -123,6 +123,7 @@ import dedun.composeapp.generated.resources.group_wavelength_no_report
 import dedun.composeapp.generated.resources.group_wavelength_operator_says_s
 import dedun.composeapp.generated.resources.group_wavelength_payout_approved
 import dedun.composeapp.generated.resources.group_wavelength_payout_failed_s
+import dedun.composeapp.generated.resources.group_wavelength_payout_went_nowhere_s_s
 import dedun.composeapp.generated.resources.group_wavelength_payout_in_flight
 import dedun.composeapp.generated.resources.group_wavelength_payout_paid
 import dedun.composeapp.generated.resources.group_wavelength_payout_s_s
@@ -644,6 +645,8 @@ private fun PayoutRow(payment: GroupWavelengthPaymentEvent.Payment, state: Group
         supportingContent = {
             Text(
                 when {
+                    failed && payment.paymentHash?.toString()?.lowercase() in state.wentNowhere ->
+                        stringResource(Res.string.group_wavelength_payout_went_nowhere_s_s, line?.failure.orEmpty(), name)
                     failed -> stringResource(Res.string.group_wavelength_payout_failed_s, line?.failure.orEmpty())
                     line?.status == "complete" -> stringResource(Res.string.group_wavelength_payout_paid)
                     line != null -> stringResource(Res.string.group_wavelength_payout_in_flight)

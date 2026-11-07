@@ -95,6 +95,9 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> =
         GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet }
 
+    override suspend fun wentNowhere(chatRoomId: String, chain: Chain, wallet: Long): Set<String> =
+        payouts(chatRoomId, chain, wallet).filter { GroupWavelengthPayouts.wentNowhere(database, chatRoomId, it) }.mapNotNull { it.paymentHash?.toString()?.lowercase() }.toSet()
+
     override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession {
         val chain = wallet.statement.chain
         require(GroupWavelengthRollout.paysOverLightning(chain)) { "Payouts over Lightning are off on ${chain.name}" }

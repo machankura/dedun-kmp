@@ -94,6 +94,8 @@ sealed class GroupWavelengthWalletUIState {
         val leaveAsked: Boolean = false,
         /** What the group has approved paying from this wallet. */
         val payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
+        /** The payment hashes of [payouts] that failed before this device signed anything of them: nothing of those left the wallet. */
+        val wentNowhere: Set<String> = emptySet(),
         /** The onchain payouts it has approved, and what this device has seen become of each. */
         val onchainPayouts: List<GroupWavelengthOnchainPayout> = emptyList(),
     ) : GroupWavelengthWalletUIState() {

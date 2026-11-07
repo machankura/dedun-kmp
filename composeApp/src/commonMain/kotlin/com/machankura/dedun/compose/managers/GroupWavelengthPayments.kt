@@ -29,13 +29,15 @@ object GroupWavelengthPayments {
     /**
      * What the group has approved for [wallet] that hasn't expired, the same one per hash that a member's balance is charged with, and
      * only where everything open for that member fits their balance by this device's own count: a device that missed a payment the
-     * quorum's other members saw would approve the same money twice (`docs/group-wavelength-payouts.md`, "What the review found").
+     * quorum's other members saw would approve the same money twice (`docs/group-wavelength-payouts.md`, "What the review found"). Never
+     * one that [GroupWavelengthPayouts.wentNowhere]: its member's balance is free again on this device.
      */
     suspend fun approved(database: DedunDatabase, chatRoomId: String, wallet: GroupWavelengthWalletManager.Wallet, now: Long = Clock.System.now().epochSeconds): Map<ByteVector32, ArkPolicy.ApprovedPayment> {
         val balances = GroupWavelengthPayouts.balancesIn(database, chatRoomId, wallet.statement.chain, now)
         return GroupWavelengthPayouts.signed(database, chatRoomId, wallet.statement.chain)
             .filter { it.wallet == wallet.statement.wallet && it.expiresAt > now }
             .filter { balances[it.payout?.member?.lowercase()]?.bearsWhatsOpen == true }
+            .filterNot { GroupWavelengthPayouts.wentNowhere(database, chatRoomId, it) }
             .mapNotNull { payment ->
                 val hash = payment.paymentHash ?: return@mapNotNull null
                 val maxSat = payment.maxSat ?: return@mapNotNull null

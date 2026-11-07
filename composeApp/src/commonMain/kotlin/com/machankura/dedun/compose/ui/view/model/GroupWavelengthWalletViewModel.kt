@@ -169,6 +169,7 @@ class GroupWavelengthWalletViewModel(
         val fees = repository.feesSince(chatRoomId, chain, number, term, monthAgo)
         val labels = repository.labelsLeft(chatRoomId, chain, number, activeUserPublicKey)
         val payouts = repository.payouts(chatRoomId, chain, number)
+        val wentNowhere = repository.wentNowhere(chatRoomId, chain, number)
         val onchainPayouts = repository.onchainPayouts(chatRoomId, chain, number)
         val leaveAsked = repository.leaveAsked(chatRoomId, chain, number)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
@@ -179,6 +180,7 @@ class GroupWavelengthWalletViewModel(
                 feesSat = fees,
                 labelsLeft = labels,
                 payouts = payouts,
+                wentNowhere = wentNowhere,
                 onchainPayouts = onchainPayouts,
                 leaveAsked = leaveAsked,
             )

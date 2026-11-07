@@ -388,6 +388,8 @@ against real servers.
 | the payee pays a renewal's fee | a little of the member's money pays for other people's coins | bounded by `max_fee_sat`, stated in W6, and question 1 |
 | a Lightning payee is still the proposer's word | a lying proposer can take one member's balance | `lnurl` narrows it; the transcript names the proposer; the cap bounds it |
 | older devices in the room | payouts fail to gather a quorum, with nothing saying why | W10's line on the approval screen |
+| a payment that fails before anything is signed | the member's balance is held for the approval's 24 hours, with nothing to wait for (seen on mainnet, 7 November) | `wentNowhere`: once the operator reports it failed and this device signed no transfer for it, the balance is free and the approval dead on this device |
+| a payout leaving change under the operator's minimum | the daemon refuses it before any signing: on mainnet, 12 sats of change against a 1,000-sat minimum, with another member's 4 sats still in the wallet | open: the SDK doesn't say the minimum, and paying the whole balance out to the last members leaves dust nobody can take |
 
 ## Questions, for the owner
 

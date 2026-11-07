@@ -1289,6 +1289,7 @@
     <string name="group_wavelength_onchain_payout_in_a_round">In a round. Paid once it confirms</string>
     <string name="group_wavelength_onchain_payout_paid_s">Paid, with %1$s sats in fees</string>
     <string name="group_wavelength_onchain_payout_expired">No round paid it before the approval ran out. Nothing left</string>
+    <string name="group_wavelength_payout_went_nowhere_s_s">Didn't go: %1$s. Nothing left the wallet, so %2$s can be paid out again.</string>
     <string name="group_wavelength_payout_failed_s">Didn't go: %1$s. It needs a new invoice, and whatever was tied up comes back when the refund does.</string>
     <string name="group_wavelength_leave">Leave</string>
     <string name="group_wavelength_leave_question">Leave for the onchain wallet?</string>
