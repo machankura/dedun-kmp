@@ -10,4 +10,6 @@ actual object WavelengthPlatform {
     actual fun dataRoot(context: PlatformContext): String? = null
 
     actual fun scheduleRenewal(context: PlatformContext) = Unit
+
+    actual fun holdForGroup(context: PlatformContext, group: String?) = Unit
 }

@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.database.model
 
 import androidx.room3.Entity
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import kotlin.time.Instant
 
 /**
  * A participant's public share of one tree key (`docs/group-wavelength-wallet.md`, D5), from which everybody finds the key: a
@@ -33,6 +34,13 @@ data class GroupArkVtxo(
     val term: Long? = null,
     /** Whether what it was reserved for has taken effect. */
     val spent: Boolean = false,
+    /** How many blocks after its commitment confirms the batch it's in can be swept, from the round this device checked. */
+    val sweepDelay: Long? = null,
+    /**
+     * The height the operator can sweep it from, by this device's own count and never the operator's: the commitment's height as this
+     * device's Electrum says, plus [sweepDelay], or the soonest of what a transfer spent. Null where this device hasn't worked one out.
+     */
+    val expiresAtHeight: Long? = null,
 )
 
 /**
@@ -80,6 +88,37 @@ data class GroupArkChecked(val wallet: String, val label: HexKey, val child: Lon
  */
 @Entity(primaryKeys = ["wallet"])
 data class GroupArkFloor(val wallet: String, val floor: Long? = null, val treeFloor: Long? = null)
+
+/** The newest thing the wallet's operator said it holds: a claim, whose [content] is a `GroupWavelengthSnapshot`. */
+@Entity(primaryKeys = ["wallet"])
+data class GroupArkSnapshotRow(val wallet: String, val sentBy: HexKey, val term: Long, val content: String, val sentAt: Instant)
+
+/**
+ * A member's request for a boarding address and what the operator answered, on every device: an address is one member's for good, and
+ * [script] is only ever one this device recomputed from the statement, so a deposit is attributed before it can be shown.
+ */
+@Entity(primaryKeys = ["wallet", "requestId"])
+data class GroupArkDepositAddress(
+    val wallet: String,
+    val requestId: String,
+    val requester: HexKey,
+    val requestedAt: Instant,
+    val address: String? = null,
+    val script: HexKey? = null,
+    /** What a Lightning request asks for, or null for a boarding address. */
+    val invoiceAmountSat: Long? = null,
+    /** The operator's answer to a Lightning request, whose amount this device has read. Nothing can prove where it pays: spike 6. */
+    val invoice: String? = null,
+    val paymentHash: HexKey? = null,
+)
+
+/** A boarding coin this device signed into a round it hasn't seen happen: it becomes a deposit when the round does. */
+@Entity(primaryKeys = ["wallet", "commitment", "outpoint"])
+data class GroupArkBoarded(val wallet: String, val outpoint: String, val commitment: String, val amountSat: Long, val script: HexKey)
+
+/** A Lightning payment this device has signed the claim of and not seen settle. [amountSat] is what the claim itself keeps. */
+@Entity(primaryKeys = ["wallet", "ark"])
+data class GroupArkClaim(val wallet: String, val ark: String, val paymentHash: HexKey, val amountSat: Long)
 
 /** How far one participant says it has answered. */
 @Entity(primaryKeys = ["wallet", "participant"])

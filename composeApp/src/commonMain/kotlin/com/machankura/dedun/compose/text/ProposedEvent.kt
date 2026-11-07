@@ -15,6 +15,8 @@ import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -137,16 +139,26 @@ object ProposedEvent {
         )
 
         // A payment from the Wavelength wallet: as with the Lightning wallet's, the amount and the most the fee can be come first.
-        GroupWavelengthPaymentEvent.KIND -> GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
+        GroupWavelengthPaymentEvent.KIND -> if (GroupWavelengthExitEvent.read(event.tags) != null) {
+            Summary(label = "Leave the Wavelength wallet", detail = "Everything in it goes to the group's onchain wallet, in the next round enough devices answer")
+        } else GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
             val invoice = runCatching { Bolt11Invoice.read(pay.invoice).get() }.getOrNull()
             Summary(
                 label = "Pay ${Satoshi(pay.amountSat ?: 0).grouped()} sats from the Wavelength wallet",
                 detail = buildString {
-                    append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, with a fee of at most ${Satoshi(pay.maxFeeSat).grouped()} sats")
+                    pay.payout?.let { append("To @${nameOf(it.member) ?: it.member.take(8)}'s Lightning address, as the proposer resolved it, ") } ?: append("To ${invoice?.nodeId?.toString()?.take(16) ?: "a node"}, ")
+                    append("with a fee of at most ${Satoshi(pay.maxFeeSat).grouped()} sats")
                     invoice?.description?.takeIf { it.isNotBlank() }?.let { append(", for \"$it\"") }
                 },
             )
         } ?: Summary(label = "Pay from the Wavelength wallet", detail = "A payment this device cannot read")
+
+        GroupWavelengthOperatorStatementEvent.KIND -> Summary(
+            label = "Choose who runs the Wavelength wallet",
+            detail = GroupWavelengthOperatorStatementEvent.read(event.tags)?.let { statement ->
+                statement.operator?.let { "Term ${statement.term}: ${nameOf(it) ?: it.take(8)} runs the wallet on their device" } ?: "Term ${statement.term}: nobody runs the wallet"
+            } ?: "An operator statement this device cannot read"
+        )
 
         GroupLightningOperatorStatementEvent.KIND -> Summary(
             label = "Choose who runs the Lightning wallet",

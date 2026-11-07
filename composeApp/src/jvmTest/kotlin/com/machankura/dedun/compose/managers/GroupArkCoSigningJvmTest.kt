@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
+import com.machankura.dedun.compose.database.model.IcebergLabelAssignment
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
@@ -152,7 +153,7 @@ class GroupArkCoSigningJvmTest {
         val answer = answered(group, request)
         assertTrue(answer.isFailure, "the operator gets nothing")
         group.all.forEach {
-            assertEquals(1, fixture.lines(it, ChatMessage.TYPE_LIGHTNING_REFUSED).size, "device ${it.index} says it refused")
+            assertEquals(1, fixture.lines(it, ChatMessage.TYPE_WAVELENGTH_REFUSED).size, "device ${it.index} says it refused")
         }
     }
 
@@ -212,7 +213,7 @@ class GroupArkCoSigningJvmTest {
         group.all.forEach { d ->
             assertEquals(0, dao(d).sharesFor(group.key, "a").size + dao(d).sharesFor(group.key, "b").size, "device ${d.index} holds no share")
             assertTrue(dao(d).ledgerFor(group.key, label)?.signedAt == null, "device ${d.index} did not sign")
-            assertTrue(fixture.lines(d, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).isNotEmpty(), "device ${d.index} raises the alarm")
+            assertTrue(fixture.lines(d, ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION).isNotEmpty(), "device ${d.index} raises the alarm")
         }
     }
 
@@ -452,7 +453,7 @@ class GroupArkCoSigningJvmTest {
         repeat(3) { pump(group.all) }
         others.forEach { assertEquals(true, vtxoOn(it, group, transfer.made)?.settled) }
         assertEquals(null, vtxoOn(behind, group, transfer.made), "it refused, so it knows nothing of what the spend made")
-        assertTrue(fixture.lines(behind, ChatMessage.TYPE_LIGHTNING_REFUSED).any { "doesn't know of" in it.content })
+        assertTrue(fixture.lines(behind, ChatMessage.TYPE_WAVELENGTH_REFUSED).any { "doesn't know of" in it.content })
 
         GroupArkCoSigner.roundSettled(behind.db, GroupArkPendingRound(group.key, "ff".repeat(32), fixture.roomId, "regtest", ""))
         repeat(3) { pump(group.all) }
@@ -468,10 +469,10 @@ class GroupArkCoSigningJvmTest {
         assertTrue(answered(group, theft).isFailure)
         pump(group.all)
         val device = group.all.last()
-        val before = fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size
+        val before = fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).size
         assertTrue(before > 0)
         GroupArkCoSigner.roundSettled(device.db, GroupArkPendingRound(group.key, "ff".repeat(32), fixture.roomId, "regtest", ""))
-        assertEquals(before, fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size)
+        assertEquals(before, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).size)
         assertEquals(null, device.db.icebergCoSigningDao().ledgerFor(group.key, labelAt(group, device.db.groupArkDao().highestPlainChecked(group.key)!! + 1)), "and it still refuses")
     }
 
@@ -496,13 +497,13 @@ class GroupArkCoSigningJvmTest {
         val device = group.all[1]
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("a", ArkWire.Domain(), counter, request, contributions))))
         val checked = assertNotNull(device.db.groupArkDao().checked(group.key, labelAt(group, counter)))
-        val refusedBefore = fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size
+        val refusedBefore = fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).size
 
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("b", ArkWire.Domain(), counter, request, contributions.reversed()))))
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("c", ArkWire.Domain(), counter, request, contributions, cosignerNonce = "ab".repeat(66)))))
 
-        assertEquals(refusedBefore + 2, fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size, "the device refuses each")
-        assertTrue(fixture.lines(device, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).isNotEmpty(), "and raises the alarm")
+        assertEquals(refusedBefore + 2, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).size, "the device refuses each")
+        assertTrue(fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION).isNotEmpty(), "and raises the alarm")
         assertEquals(checked.item, device.db.groupArkDao().checked(group.key, labelAt(group, counter))?.item, "what it would sign is still what it checked first")
     }
 
@@ -543,7 +544,7 @@ class GroupArkCoSigningJvmTest {
         assertEquals(2L, floor.treeFloor)
         assertEquals(null, restored.db.groupArkDao().checked(group.key, labelAt(group, 9)), "an old term's request is nothing now")
         assertEquals(null, restored.db.groupArkDao().checked(group.key, labelAt(group, 0, ArkWire.Domain(1))), "nor is a tree key below the floor")
-        val said = fixture.lines(restored, ChatMessage.TYPE_LIGHTNING_REFUSED)
+        val said = fixture.lines(restored, ChatMessage.TYPE_WAVELENGTH_REFUSED)
         assertTrue(said.any { it.content.contains("tree key from before") }, "and it says so")
     }
 
@@ -561,7 +562,7 @@ class GroupArkCoSigningJvmTest {
         val response = answered(group, request).getOrThrow()
         val message = Transaction.read(request.tx!!).hashForSigningTaprootScriptPath(0, listOf(funding.txOut[0]), SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
         assertTrue(Crypto.verifySignatureSchnorr(message, ByteVector64(response.signature!!), group.keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 3).xOnly()))
-        group.all.take(3).forEach { assertTrue(fixture.lines(it, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).isNotEmpty(), "device ${it.index} says so") }
+        group.all.take(3).forEach { assertTrue(fixture.lines(it, ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION).isNotEmpty(), "device ${it.index} says so") }
     }
 
     @Test
@@ -587,7 +588,7 @@ class GroupArkCoSigningJvmTest {
     }
 
     @Test
-    fun `nonces nobody published, or too few of them, are refused`() = runBlocking<Unit> {
+    fun `nonces nobody published get silence, and too few of them, or one twice, are refused`() = runBlocking<Unit> {
         val group = group()
         floorsKnown(group)
         val device = group.all[1]
@@ -597,7 +598,8 @@ class GroupArkCoSigningJvmTest {
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("forged", ArkWire.Domain(), 1, sweep(group, 4).first, forged))))
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("few", ArkWire.Domain(), 2, sweep(group, 4).first, contributionsAt(group, 2).take(2)))))
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("twice", ArkWire.Domain(), 3, sweep(group, 4).first, contributionsAt(group, 3).let { it + it.first() }))))
-        assertEquals(3, fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).count { it.content.contains("hasn't seen published") })
+        // Nonces nobody published look like ones still on their way, so that's a wait and nothing's said. It still gets no answer, below.
+        assertEquals(2, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).count { it.content.contains("too little of round one") })
         (1L..3L).forEach { assertEquals(null, device.db.groupArkDao().checked(group.key, labelAt(group, it))) }
     }
 
@@ -652,7 +654,7 @@ class GroupArkCoSigningJvmTest {
         val item = ArkWire.SigningItem("crossed", domain, 0, sweep(group, 4).first, emptyList())
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, currentTerm(group), listOf(item)))
         assertEquals(null, device.db.groupArkDao().checked(group.key, labelAt(group, 0, domain)))
-        assertTrue(fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).any { it.content.contains("another kind of signature") })
+        assertTrue(fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).any { it.content.contains("another kind of signature") })
     }
 
     @Test
@@ -698,5 +700,27 @@ class GroupArkCoSigningJvmTest {
         val nobody = statement.copy(operator = null)
         assertEquals(nobody, GroupWavelengthOperatorStatementEvent.read(GroupWavelengthOperatorStatementEvent.template(nobody).tags))
         assertFalse(GroupWavelengthEvents.CO_SIGNING.contains(GroupWavelengthOperatorStatementEvent.KIND))
+    }
+
+    @Test
+    fun `a request that gets here before what it's built from waits for it, and is answered, with nothing said`() = runBlocking<Unit> {
+        val group = group()
+        val late = group.all[3]
+        val others = group.all.dropLast(1)
+        // New labels, which the last device hasn't heard about, signed by the other three.
+        group.transport.provision(plainTo = 40, treeTo = 4)
+        pump(others)
+        group.operator.db.icebergCoSigningDao().insertAssignment(IcebergLabelAssignment(group.key, 20, "", "skip"))
+        assertTrue(answered(group, sweep(group, 3).first, on = others).isSuccess)
+        val label = GroupArkCoSigner.label(group.wallet.statement, ArkWire.Domain(), 21).let { Hex.encode(it.toByteArray()) }
+
+        // The request reaches it first, as a relay is free to do.
+        fixture.pump(group.all, allKinds - GroupWavelengthEvents.PROVISION)
+        assertEquals(null, late.db.icebergCoSigningDao().ledgerFor(group.key, label), "it can't answer yet")
+        assertEquals(emptyList(), fixture.lines(late, ChatMessage.TYPE_WAVELENGTH_REFUSED), "and it isn't a refusal")
+
+        pump(group.all)
+        assertNotNull(late.db.icebergCoSigningDao().ledgerFor(group.key, label), "answered once round one arrived")
+        assertEquals(emptyList(), fixture.lines(late, ChatMessage.TYPE_WAVELENGTH_REFUSED))
     }
 }

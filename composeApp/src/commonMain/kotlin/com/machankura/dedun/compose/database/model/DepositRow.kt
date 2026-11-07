@@ -34,6 +34,7 @@ data class DepositRow(
     companion object {
         const val ONCHAIN = "onchain"
         const val LIGHTNING = "lightning"
+        const val WAVELENGTH = "wavelength"
 
         /** Paid to an address on the member's own deposit branch. */
         const val BY_BRANCH = "branch"
@@ -46,13 +47,15 @@ data class DepositRow(
          * the address is checked, the outpoint and amount are the operator's word (`docs/group-lightning-swap-in.md`, Phase 5).
          */
         const val BY_SWAP_IN = "swap-in"
+        /** A boarding coin at an address this device recomputed, on the record as that member's before it was paid. */
+        const val BY_BOARDING_ADDRESS = "boarding-address"
         /** The group's signed attribution (30340) says whose it is. */
         const val BY_GROUP = "signed"
 
         /** How sure each source is, so a weaker one never overwrites a stronger. */
         fun strength(attributedBy: String?): Int = when (attributedBy) {
             BY_GROUP -> 4
-            BY_BRANCH, BY_INVOICE -> 3
+            BY_BRANCH, BY_INVOICE, BY_BOARDING_ADDRESS -> 3
             BY_OPERATOR, BY_SWAP_IN -> 2
             else -> 0
         }

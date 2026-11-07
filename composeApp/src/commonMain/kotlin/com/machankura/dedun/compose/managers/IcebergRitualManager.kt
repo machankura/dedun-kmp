@@ -160,8 +160,9 @@ object IcebergRitualManager {
         val roomId = localChatRoom.chatRoom.id
         require(localChatRoom.chatRoom.mlsGroupState != null) { "An Iceberg ceremony runs in a Marmot room" }
 
+        // Each wallet's own: a key being made for the other wallet is no reason to hand that one back.
         database.icebergKeySessionDao().getSessionsForChatRoom(roomId)
-            .firstOrNull { it.stage != IcebergRitualStage.FAILED && it.stage != IcebergRitualStage.COMPLETE }
+            .firstOrNull { it.purpose == purpose && it.stage != IcebergRitualStage.FAILED && it.stage != IcebergRitualStage.COMPLETE }
             ?.let { return it }
 
         val onchainKey = FrostSigningManager.completedKey(database, roomId)
@@ -553,9 +554,9 @@ object IcebergRitualManager {
         return "${names.joinToString(", ")} didn't take their part within $hours hours of it being proposed."
     }
 
-    /** The share this device holds for the room's newest completed ceremony, with what it is a share of. */
-    suspend fun completedKey(database: DedunDatabase, chatRoomId: String): IcebergKeySession? =
-        database.icebergKeySessionDao().getSessionsForChatRoom(chatRoomId).firstOrNull { it.stage == IcebergRitualStage.COMPLETE && it.share != null }
+    /** The share this device holds for the room's newest completed ceremony for [purpose], with what it is a share of. */
+    suspend fun completedKey(database: DedunDatabase, chatRoomId: String, purpose: String = IcebergKeySession.PURPOSE_LIGHTNING): IcebergKeySession? =
+        database.icebergKeySessionDao().getSessionsForChatRoom(chatRoomId).firstOrNull { it.purpose == purpose && it.stage == IcebergRitualStage.COMPLETE && it.share != null }
 
     fun shareOf(session: IcebergKeySession): Share? = session.share?.let { Share(it.hexToByteArray()) }
 

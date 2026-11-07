@@ -6,6 +6,10 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- While this device runs a group's Wavelength wallet: a daemon stopped in the background can't answer a round. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application
         android:name=".DedunApplication"
         android:allowBackup="true"
@@ -14,6 +18,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <service
+            android:name="com.machankura.dedun.compose.wallet.wavelength.GroupWavelengthService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a group's self-custodial wallet daemon answering time-limited signing rounds, which the group's coins depend on, while this device is its elected operator." />
+        </service>
+
         <activity
             android:exported="true"
             android:name="com.machankura.dedun.android.MainActivity">

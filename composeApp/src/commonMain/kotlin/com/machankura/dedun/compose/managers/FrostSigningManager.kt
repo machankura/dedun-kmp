@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
@@ -624,6 +625,15 @@ object FrostSigningManager {
             if (rebuilt.kind != DepositAttributionEvent.KIND) return@forEach
             DepositLedger.refuseAttribution(database, rebuilt.pubKey, rebuilt)?.let { reason ->
                 logger.w("Signing proposal $sessionId carries an attribution that $reason; dropping")
+                return null
+            }
+        }
+
+        // So does its Wavelength wallet.
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind != GroupWavelengthPaymentEvent.KIND) return@forEach
+            GroupWavelengthPayouts.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a Wavelength payment that $reason; dropping")
                 return null
             }
         }
@@ -2945,6 +2955,15 @@ object FrostSigningManager {
             val refused = checkedSpend(database, sessionId)?.let { refusePayout(database, session.chatRoomId, it) }
             if (refused != null) {
                 logger.w("Session $sessionId $refused; declining instead of signing")
+                decline(database, localChatRoom, sessionId)
+                return
+            }
+        }
+
+        // And a Wavelength payment again at approval: what a balance could bear may have changed since it arrived.
+        items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }.filter { it.kind == GroupWavelengthPaymentEvent.KIND }.forEach { payment ->
+            GroupWavelengthPayouts.refuse(database, session.chatRoomId, payment)?.let { reason ->
+                logger.w("Session $sessionId carries a Wavelength payment that $reason; declining instead of signing")
                 decline(database, localChatRoom, sessionId)
                 return
             }

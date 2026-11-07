@@ -135,6 +135,19 @@ class GroupArkTransport(
     /** Asks the group for round one up to these. Each device publishes it, this one included. */
     suspend fun provision(plainTo: Long, treeTo: Long) = send(ArkWire.SigningBatch(key, term, provisionPlainTo = plainTo, provisionTreeTo = treeTo))
 
+    /** Has every device that doesn't yet know how far the group has answered find out, rather than during the first round. */
+    suspend fun askFloors() = send(ArkWire.SigningBatch(key, term, askFloor = true))
+
+    /**
+     * Whether round one is in for the next plain label and the next tree key, within [wait]: a signature the daemon asks for before
+     * then fails, and what fails in a round fails the round.
+     */
+    suspend fun awaitPool(plainFrom: Long, treeFrom: Long, wait: Duration): Boolean =
+        withTimeoutOrNull(wait) {
+            while (contributions(key, plainFrom) == null || treeKeyAt(treeFrom) == null) delay(500.milliseconds)
+            true
+        } ?: false
+
     private suspend fun send(batch: ArkWire.SigningBatch) {
         val queued = GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.SIGNING_REQUEST, CommonJson.encodeToString(ArkWire.SigningBatch.serializer(), batch))
         // The operator holds a share like everyone else, and doesn't read its own messages back.

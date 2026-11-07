@@ -8,6 +8,9 @@ import com.machankura.dedun.compose.network.LightningAddressResolver
 import com.machankura.dedun.compose.managers.GroupLightningAuthorisations
 import com.machankura.dedun.compose.managers.MemberBalances
 import com.machankura.dedun.compose.repository.GroupLightningRepository
+import com.machankura.dedun.compose.repository.GroupWavelengthRepository
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.MutableState
@@ -57,6 +60,7 @@ class GroupPayoutsViewModel(
     private val payoutDestinationRepository: PayoutDestinationRepository,
     private val wallets: GroupOnchainWallets?,
     private val lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
+    private val wavelengthRepository: GroupWavelengthRepository = GroupWavelengthRepository.NO_OP,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -93,6 +97,8 @@ class GroupPayoutsViewModel(
                 lightningRepository.observeReport(chatRoomId, chain, wallet.statement.wallet).first()
                     ?.snapshot?.channels?.filter { it.state.equals("Normal", ignoreCase = true) }?.sumOf { it.oursMsat }
             }
+            val wavelengthWallet = wavelengthRepository.wallets(chatRoomId, chain).lastOrNull()
+                ?.takeIf { GroupWavelengthRollout.paysOverLightning(chain) && wavelengthRepository.operator(chatRoomId, chain, it.statement.wallet)?.publicKey != null }
             val loaded = GroupPayoutsUIState.Loaded(
                 localChatRoom = localChatRoom,
                 balances = payoutRepository.balances(chatRoomId, chain, null),
@@ -104,6 +110,7 @@ class GroupPayoutsViewModel(
                 self = activeUserPublicKey.lowercase(),
                 lightningWallet = lightningWallet,
                 lightningSpendableMsat = lightningSpendable,
+                wavelengthWallet = wavelengthWallet,
             )
             uiState = loaded
 
@@ -219,6 +226,39 @@ class GroupPayoutsViewModel(
         return LightningBalance.payable(available)
     }
 
+    /** What a payout from the Wavelength wallet would be, as (amount, fee limit) in msat, or null when nothing can be paid. */
+    fun wavelengthPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? = LightningBalance.payable(balance.wavelength.availableSat * 1000)
+
+    /**
+     * Asks the group to pay [member] from their Wavelength balance, whole: as [payOutLightning] does, their address is resolved again on
+     * this device and asked for an invoice of the amount, and a device signs only if it fits what it can see of that balance.
+     */
+    fun payOutWavelength(member: HexKey, onSuccess: (sessionId: String) -> Unit, onProblem: (LightningProblem) -> Unit) {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return
+        val wallet = state.wavelengthWallet ?: return
+        val balance = state.balances.members[member] ?: return
+        val destination = balance.destination ?: return
+        val (amountMsat, maxFeeMsat) = wavelengthPayable(balance) ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val problem: LightningProblem? = run {
+                val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountMsat), wallet.statement.chain)
+                val ready = invoice as? LightningAddressResolver.PayoutInvoice.Ready ?: return@run LightningProblem.NoInvoice(invoice)
+                val payout = GroupWavelengthPaymentEvent.Payout(member, destination.event.id)
+                val session = runCatching { wavelengthRepository.proposePayout(state.localChatRoom, activeUserPublicKey, wallet, ready.bolt11, (maxFeeMsat + 999) / 1000, payout) }
+                    .onFailure { logger.e("Failed to propose a Wavelength payout from $chatRoomId", it) }.getOrNull()
+                    ?: return@run LightningProblem.CouldNotPropose
+                withContext(Dispatchers.Main) { onSuccess(session.id) }
+                null
+            }
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                problem?.let(onProblem)
+            }
+        }
+    }
+
     /** Why a Lightning payout went no further: the address's answer, or the authorisation's. */
     sealed interface LightningProblem {
         data class NoInvoice(val answer: LightningAddressResolver.PayoutInvoice) : LightningProblem
@@ -273,11 +313,12 @@ class GroupPayoutsViewModel(
             payoutDestinationRepository: PayoutDestinationRepository,
             wallets: GroupOnchainWallets?,
             lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
+            wavelengthRepository: GroupWavelengthRepository = GroupWavelengthRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupPayoutsViewModel(
                     activeUserPublicKey, chatRoomId, chain, initialUIState,
-                    chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository,
+                    chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository, wavelengthRepository,
                 )
             }
         }

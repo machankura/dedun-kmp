@@ -3,7 +3,9 @@ package com.machankura.dedun.compose.managers
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
@@ -51,6 +53,8 @@ import fr.acinq.bitcoin.utils.Either
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * A member's device answering for a group's Wavelength wallet -- `docs/group-wavelength-wallet.md`, Phase 6.
@@ -75,6 +79,9 @@ object GroupArkCoSigner {
     const val TREE_LABELS = 12
 
     private const val MAX_PLAIN_BATCH = 128L
+
+    /** How long ago a request can have been for what arrives now to still be worth answering: past the daemon's own 55 seconds, with room for clocks. */
+    private val ROUND_ONE_WAIT = 2.minutes
     private const val MAX_TREE_BATCH = 32L
 
     /** How long the group's fee budget looks back. */
@@ -91,6 +98,16 @@ object GroupArkCoSigner {
         "wavelength:$chatRoomId:${GroupWalletStatementEvent.chainName(chain)}:$wallet"
 
     /** Where a tree key's labels are filed: the shared nonce table, under a key of its own. */
+    /** The chain and number of [walletKey], if it's one of [chatRoomId]'s wallets. */
+    fun parseWalletKey(chatRoomId: String, walletKey: String): Pair<Chain, Long>? {
+        val prefix = "wavelength:$chatRoomId:"
+        if (!walletKey.startsWith(prefix)) return null
+        val parts = walletKey.removePrefix(prefix).split(":")
+        val chain = parts.getOrNull(0)?.let(GroupWalletStatementEvent::chainNamed) ?: return null
+        val number = parts.getOrNull(1)?.toLongOrNull() ?: return null
+        return if (parts.size == 2) chain to number else null
+    }
+
     fun treeKey(walletKey: String, child: Long): String = "$walletKey:tree:$child"
 
     /** The label for [counter] of [domain]: one sequence per wallet, under a tag of its own, so no other wallet's can collide even on one key. */
@@ -103,16 +120,15 @@ object GroupArkCoSigner {
     private fun shareOf(wallet: GroupWavelengthWalletManager.Wallet, domain: ArkWire.Domain, base: Share): Share =
         domain.child?.let { IcebergChildKeys.share(base, it) } ?: base
 
-    private fun keysOf(wallet: GroupWavelengthWalletManager.Wallet) =
+    internal fun keysOf(wallet: GroupWavelengthWalletManager.Wallet) =
         GroupArkKeys(PublicKey.fromHex(wallet.statement.icebergKey), wallet.statement.chain, wallet.statement.wallet)
 
     private suspend fun baseShare(database: DedunDatabase, wallet: GroupWavelengthWalletManager.Wallet): Share? =
         database.icebergKeySessionDao().getSessionById(wallet.statement.ceremonyId)?.let(IcebergRitualManager::shareOf)
 
     private suspend fun walletOf(database: DedunDatabase, chatRoomId: String, key: String): GroupWavelengthWalletManager.Wallet? {
-        val parts = key.removePrefix("wavelength:").split(":").takeIf { it.size >= 3 } ?: return null
-        val chain = GroupWalletStatementEvent.chainNamed(parts[parts.size - 2]) ?: return null
-        val number = parts.last().toLongOrNull() ?: return null
+        // This room's and no other's: an operator here says nothing about a wallet in another room this device is also in.
+        val (chain, number) = parseWalletKey(chatRoomId, key) ?: return null
         return GroupWavelengthWalletManager.wallets(database, chatRoomId, chain).firstOrNull { it.statement.wallet == number }
     }
 
@@ -160,7 +176,7 @@ object GroupArkCoSigner {
     suspend fun process(database: DedunDatabase, localChatRoom: LocalChatRoom, innerEvent: Event, userPublicKey: HexKey) {
         try {
             when (innerEvent.kind) {
-                GroupWavelengthEvents.PROVISION -> fileProvision(database, localChatRoom, innerEvent)
+                GroupWavelengthEvents.PROVISION -> fileProvision(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.SIGNING_REQUEST -> handleBatch(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.ECHO -> fileEchoes(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.SIGNATURE_SHARES -> fileShares(database, localChatRoom, innerEvent, userPublicKey)
@@ -172,7 +188,7 @@ object GroupArkCoSigner {
         }
     }
 
-    private suspend fun fileProvision(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event) {
+    private suspend fun fileProvision(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
         val batch = CommonJson.decodeFromString(ArkWire.Provision.serializer(), event.content)
         val wallet = walletOf(database, localChatRoom.chatRoom.id, batch.wallet) ?: return
         if (indexOf(wallet, event.pubKey) == null) return
@@ -185,6 +201,8 @@ object GroupArkCoSigner {
             database.groupArkDao().insertTreeShare(GroupArkTreeShare(batch.wallet, tree.child, participant, tree.publicShare))
             tree.nonces.forEachIndexed { i, c -> dao.insertNonce(IcebergNonceRow(treeKey(batch.wallet, tree.child), i.toLong(), participant, c)) }
         }
+        // Relays don't keep order, so a request can get here before what it's built from. Only lately's: the daemon has given up on anything older.
+        catchUp(database, localChatRoom, wallet, batch.wallet, userPublicKey, since = Clock.System.now() - ROUND_ONE_WAIT)
     }
 
     private suspend fun fileShares(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
@@ -262,6 +280,7 @@ object GroupArkCoSigner {
     suspend fun settled(database: DedunDatabase, key: String, origin: String) {
         database.groupArkDao().settle(key, origin)
         database.groupArkDao().spendReservedBy(key, origin)
+        GroupWavelengthDeposits.claimSettled(database, key, origin)
     }
 
     /**
@@ -274,12 +293,22 @@ object GroupArkCoSigner {
         dao.releaseReservedBy(key, commitment)
         dao.forgetPendingFrom(key, commitment)
         dao.forgetFee(key, commitment)
+        dao.forgetBoarded(key, commitment)
         dao.deletePendingRound(key, commitment)
+        val roomId = key.split(":").getOrNull(1) ?: return
+        val reader = database.chatRoomDao().findChatRoomById(roomId)?.chatRoom?.userPublicKey ?: return
+        GroupLightningLines.writeFact(
+            database, roomId, ChatMessage.TYPE_WAVELENGTH_ROUND_DIED, commitment, reader,
+            "A round of the Wavelength wallet's didn't happen, so nothing it would have done has been done. Your device let go of the coins it had set aside for it.",
+            Clock.System.now(),
+        )
     }
 
-    /** A round this device has now seen confirm, and whatever it refused for not having seen that yet. */
-    suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound) {
+    /** A round this device has now seen confirm at [height], and whatever it refused for not having seen that yet. */
+    suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound, height: Long? = null) {
+        height?.let { database.groupArkDao().expireFrom(row.wallet, row.commitment, it) }
         settled(database, row.wallet, row.commitment)
+        GroupWavelengthDeposits.roundHappened(database, row.chatRoomId, row.chain, row.wallet, row.commitment)
         database.groupArkDao().deletePendingRound(row.wallet, row.commitment)
         val localChatRoom = database.chatRoomDao().findChatRoomById(row.chatRoomId) ?: return
         val wallet = walletOf(database, row.chatRoomId, row.wallet) ?: return
@@ -339,12 +368,12 @@ object GroupArkCoSigner {
      * and go on refusing everything after. Every check is made again, so the worst this does is agree to a request late. It says nothing
      * about what it still refuses, having said so the first time.
      */
-    private suspend fun catchUp(database: DedunDatabase, localChatRoom: LocalChatRoom, wallet: GroupWavelengthWalletManager.Wallet, key: String, userPublicKey: HexKey) {
+    private suspend fun catchUp(database: DedunDatabase, localChatRoom: LocalChatRoom, wallet: GroupWavelengthWalletManager.Wallet, key: String, userPublicKey: HexKey, since: Instant? = null) {
         if (userPublicKey.lowercase() !in wallet.statement.participants) return
         val roomId = localChatRoom.chatRoom.id
         val operator = GroupWavelengthOperatorManager.current(database, roomId, wallet.statement.chain, wallet.statement.wallet) ?: return
         val publicKey = operator.publicKey ?: return
-        val unanswered = requestsOf(database, roomId, key, publicKey, operator.term)
+        val unanswered = requestsOf(database, roomId, key, publicKey, operator.term, since)
             .filter { database.icebergCoSigningDao().ledgerFor(key, label(wallet.statement, it.domain, it.counter).toHex()) == null }
         if (unanswered.isEmpty()) return
         val floor = floorOf(database, localChatRoom, key, userPublicKey, wallet) ?: return
@@ -392,6 +421,8 @@ object GroupArkCoSigner {
         if (batch.provisionPlainTo != null || batch.provisionTreeTo != null) {
             provision(database, localChatRoom, userPublicKey, wallet, batch.provisionPlainTo ?: -1, batch.provisionTreeTo ?: -1)
         }
+        // Asked ahead of the first signature, which is inside a round's deadline.
+        if (batch.askFloor) floorOf(database, localChatRoom, batch.wallet, userPublicKey, wallet)
         if (batch.items.isEmpty()) return
 
         // A device that doesn't yet know how far the group has answered asks, and answers nothing until it knows.
@@ -404,7 +435,7 @@ object GroupArkCoSigner {
     private suspend fun sayRefused(database: DedunDatabase, roomId: String, requestId: String, userPublicKey: HexKey, refusal: String) {
         logger.w("Refusing request $requestId: $refusal")
         GroupLightningLines.writeFact(
-            database, roomId, ChatMessage.TYPE_LIGHTNING_REFUSED, requestId, userPublicKey,
+            database, roomId, ChatMessage.TYPE_WAVELENGTH_REFUSED, requestId, userPublicKey,
             "Your device refused to co-sign for the Wavelength wallet: $refusal.", Clock.System.now(),
         )
     }
@@ -441,7 +472,8 @@ object GroupArkCoSigner {
         if (child != null && child < (floor.treeFloor ?: 0)) return "a tree key from before this device last knew how far the group had answered"
         if (child != null && item.counter !in 0 until TREE_LABELS) return "a label a tree key doesn't have"
 
-        val sessionKey = child?.let { treeKeys(database, wallet, key)[it] ?: return "a tree key the group hasn't finished making" }
+        // Not yet isn't no. The members' shares of a tree key are on their way, and nothing has been said or signed in the meantime.
+        val sessionKey = child?.let { treeKeys(database, wallet, key)[it] ?: return null }
         val verdict = ArkPolicy.check(contextOf(database, roomId, wallet, key, term), item.request, sessionKey)
         val allowed = when (verdict) {
             is ArkPolicy.Verdict.Refuse -> return verdict.reason
@@ -453,7 +485,9 @@ object GroupArkCoSigner {
         // The nonces the challenge is built from are what members themselves published, not what the operator says they published.
         val seen = database.icebergCoSigningDao().noncesFor(child?.let { treeKey(key, it) } ?: key, item.counter).map { it.contribution }.toSet()
         val enough = item.contributions.size >= 2 * wallet.statement.threshold - 1 && item.contributions.toSet().size == item.contributions.size
-        if (!enough || !seen.containsAll(item.contributions)) return "round one this device hasn't seen published"
+        if (!enough) return "too little of round one to sign from"
+        // Waits rather than refuses, and [fileProvision] comes back to it. An operator naming nonces nobody published only ever gets this silence.
+        if (!seen.containsAll(item.contributions)) return null
 
         val message = allowed.message.toHex()
         val binding = bindingOf(item, label, message)
@@ -485,8 +519,15 @@ object GroupArkCoSigner {
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }
         effect.reserves.forEach { outpoint -> known[outpoint]?.let { dao.upsertVtxo(it.copy(reservedBy = effect.towards, term = term)) } }
+        effect.claimedHash?.let { dao.upsertClaim(GroupArkClaim(key, effect.towards, it.toHex(), effect.claimedSat)) }
+        effect.boarded.forEach { dao.upsertBoarded(GroupArkBoarded(key, it.outpoint, effect.towards, it.amountSat, it.script.toHex())) }
         // A credit never overwrites: what this device has already seen settle isn't for a note to change.
-        effect.credits.forEach { (outpoint, amount) -> if (outpoint !in known) dao.upsertVtxo(GroupArkVtxo(key, outpoint, amount, origin = effect.towards, term = term)) }
+        // A transfer makes coins in the batches it spent from, so they go no later than the soonest of those.
+        // And if this device can't say for one of them, it can't say.
+        val inherited = effect.reserves.map { known[it]?.expiresAtHeight }.takeIf { it.isNotEmpty() && null !in it }?.filterNotNull()?.min()
+        effect.credits.forEach { (outpoint, amount) ->
+            if (outpoint !in known) dao.upsertVtxo(GroupArkVtxo(key, outpoint, amount, origin = effect.towards, term = term, sweepDelay = effect.sweepDelay, expiresAtHeight = inherited))
+        }
     }
 
     private suspend fun fileEchoes(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
@@ -501,15 +542,15 @@ object GroupArkCoSigner {
     /** The alarm the echo rule exists to raise: two challenges under one label. Said once per label, on every device that sees it. */
     private suspend fun raiseEquivocation(database: DedunDatabase, chatRoomId: String, label: String, operator: HexKey) =
         GroupLightningLines.writeFact(
-            database, chatRoomId, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION, label, operator,
+            database, chatRoomId, ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION, label, operator,
             "Devices in this group disagree about what the Wavelength wallet's operator asked them to sign. The operator or a member is misbehaving. Nothing is signed unless enough devices agree.",
             Clock.System.now(),
         )
 
     /** What the current operator has asked this wallet for in its term: a request from anyone else, or from before, is nothing now. */
-    private suspend fun requestsOf(database: DedunDatabase, chatRoomId: String, key: String, operator: HexKey, term: Long): List<ArkWire.SigningItem> =
+    private suspend fun requestsOf(database: DedunDatabase, chatRoomId: String, key: String, operator: HexKey, term: Long, since: Instant? = null): List<ArkWire.SigningItem> =
         database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupWavelengthEvents.SIGNING_REQUEST))
-            .filter { it.publicKey.lowercase() == operator }
+            .filter { it.publicKey.lowercase() == operator && (since == null || it.createdAt >= since) }
             .mapNotNull { runCatching { CommonJson.decodeFromString(ArkWire.SigningBatch.serializer(), it.content) }.getOrNull() }
             .filter { it.wallet == key && it.term == term }
             .flatMap { it.items }
@@ -623,7 +664,7 @@ object GroupArkCoSigner {
         val dao = database.groupArkDao()
         if (message.asking) {
             // How far this device has checked, which is further than it has signed: a label it echoed is already spoken for.
-            val answer = ArkWire.HighWater(message.wallet, asking = false, highest = dao.highestPlainChecked(message.wallet) ?: -1, highestChild = dao.highestChildChecked(message.wallet) ?: -1)
+            val answer = ArkWire.HighWater(message.wallet, asking = false, highest = dao.highestPlainChecked(message.wallet) ?: -1, highestChild = dao.highestChildChecked(message.wallet) ?: -1, answers = event.id)
             queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.HIGH_WATER, CommonJson.encodeToString(ArkWire.HighWater.serializer(), answer))
             return
         }

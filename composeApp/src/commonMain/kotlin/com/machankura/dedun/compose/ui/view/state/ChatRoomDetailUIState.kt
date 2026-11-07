@@ -72,6 +72,7 @@ sealed interface ChatRoomDetailUIState {
         val groupWallet: GroupWallet? = null,
         /** Who holds a share of the group's Lightning wallet key, so removing one of them can say what it leaves. */
         val lightningParticipants: Set<HexKey> = emptySet(),
+        val wavelengthParticipants: Set<HexKey> = emptySet(),
         /**
          * Whether this device could open a subgroup here at all.
          *

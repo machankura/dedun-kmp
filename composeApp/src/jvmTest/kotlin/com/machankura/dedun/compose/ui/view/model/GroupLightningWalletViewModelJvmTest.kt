@@ -115,7 +115,7 @@ class GroupLightningWalletViewModelJvmTest {
         override suspend fun ceremonyThresholds(chatRoomId: String): List<Int> = thresholds
         override suspend fun keyHolderCount(chatRoomId: String): Int = 4
         override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean = onchain
-        override suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain): IcebergKeySession = error("unused")
+        override suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain, purpose: String): IcebergKeySession = error("unused")
         override suspend fun approveCeremony(localChatRoom: LocalChatRoom, sessionId: String, step: IcebergApprovalStep, nostrPrivateKey: ByteArray) = Unit
         override suspend fun resumeCeremony(localChatRoom: LocalChatRoom, sessionId: String, nostrPrivateKey: ByteArray) = Unit
         override suspend fun abandonCeremony(localChatRoom: LocalChatRoom, sessionId: String): Boolean = false

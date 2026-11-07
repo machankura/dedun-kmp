@@ -21,8 +21,12 @@ object GroupWavelengthPaymentEvent {
     private const val MAX_FEE_TAG = "max_fee_sat"
     private const val MAX_REFUND_TAG = "max_refund_height"
     private const val EXPIRES_TAG = "expires_at"
+    private const val PAYOUT_TAG = "payout"
 
-    data class Payment(val chain: Chain, val wallet: Long, val invoice: String, val maxFeeSat: Long, val maxRefundHeight: Long, val expiresAt: Long) {
+    /** Whose balance it comes from, and the destination of theirs it pays: the only thing the group's wallet pays (`docs/payouts-only.md`). */
+    data class Payout(val member: String, val destinationEventId: String)
+
+    data class Payment(val chain: Chain, val wallet: Long, val invoice: String, val maxFeeSat: Long, val maxRefundHeight: Long, val expiresAt: Long, val payout: Payout? = null) {
         private val decoded: Pair<ByteVector32, Long?>? get() = readInvoice(invoice, chain)
 
         val paymentHash: ByteVector32? get() = decoded?.first
@@ -50,10 +54,10 @@ object GroupWavelengthPaymentEvent {
         val amount = hrp.removePrefix(prefixOf(chain)!!).takeIf { hrp.startsWith(prefixOf(chain)!!) } ?: return null
         val millisatoshi = when {
             amount.isEmpty() -> null
-            amount.last().isDigit() -> amount.toLong() * 100_000_000_000
-            amount.last() == 'm' -> amount.dropLast(1).toLong() * 100_000_000
-            amount.last() == 'u' -> amount.dropLast(1).toLong() * 100_000
-            amount.last() == 'n' -> amount.dropLast(1).toLong() * 100
+            amount.last().isDigit() -> scaled(amount, 100_000_000_000) ?: return null
+            amount.last() == 'm' -> scaled(amount.dropLast(1), 100_000_000) ?: return null
+            amount.last() == 'u' -> scaled(amount.dropLast(1), 100_000) ?: return null
+            amount.last() == 'n' -> scaled(amount.dropLast(1), 100) ?: return null
             amount.last() == 'p' -> amount.dropLast(1).toLong().also { require(it % 10 == 0L) } / 10
             else -> return null
         }
@@ -82,6 +86,12 @@ object GroupWavelengthPaymentEvent {
         return null
     }.getOrNull()
 
+    /** [amount] times [scale], or null past all the bitcoin there is: an amount that overflowed would come out negative, and pass any limit. */
+    private fun scaled(amount: String, scale: Long): Long? = amount.toLong().takeIf { it in 0..MAX_MSAT / scale }?.let { it * scale }
+
+    private const val MAX_MSAT = 2_100_000_000_000_000_000L
+    private const val MAX_SAT = MAX_MSAT / 1000
+
     fun template(payment: Payment, createdAt: Long = Clock.System.now().epochSeconds): EventTemplate<*> =
         EventTemplate<Nothing>(
             createdAt = createdAt,
@@ -92,7 +102,7 @@ object GroupWavelengthPaymentEvent {
                 arrayOf(MAX_FEE_TAG, payment.maxFeeSat.toString()),
                 arrayOf(MAX_REFUND_TAG, payment.maxRefundHeight.toString()),
                 arrayOf(EXPIRES_TAG, payment.expiresAt.toString()),
-            ),
+            ) + listOfNotNull(payment.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) }),
             content = "",
         )
 
@@ -104,11 +114,12 @@ object GroupWavelengthPaymentEvent {
             chain = chain,
             wallet = identifier[1].toLongOrNull() ?: return null,
             invoice = tag(INVOICE_TAG) ?: return null,
-            maxFeeSat = tag(MAX_FEE_TAG)?.toLongOrNull()?.takeIf { it >= 0 } ?: return null,
+            maxFeeSat = tag(MAX_FEE_TAG)?.toLongOrNull()?.takeIf { it in 0..MAX_SAT } ?: return null,
             maxRefundHeight = tag(MAX_REFUND_TAG)?.toLongOrNull() ?: return null,
             expiresAt = tag(EXPIRES_TAG)?.toLongOrNull() ?: return null,
+            payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout(it[1], it[2]) },
         )
         // A label can't say one hash while the invoice says another, and an invoice with no hash or amount approves nothing.
-        return payment.takeIf { it.paymentHash?.toString() == identifier[2] && it.amountSat != null }
+        return payment.takeIf { it.paymentHash?.toString() == identifier[2] && it.amountSat != null && it.maxSat in 1..MAX_SAT }
     }
 }

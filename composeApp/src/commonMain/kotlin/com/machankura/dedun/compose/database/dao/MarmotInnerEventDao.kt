@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface MarmotInnerEventDao {
 
+    /** When each sender last sent anything of [kinds] in a room. */
+    @Query("SELECT publicKey, MAX(createdAt) AS at FROM MarmotInnerEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds) GROUP BY publicKey")
+    suspend fun newestBySender(chatRoomId: String, kinds: List<Int>): List<SenderSeen>
+
     /**
      * Everything this key has queued for the group and not yet sent, oldest first.
      *
@@ -73,3 +77,6 @@ interface MarmotInnerEventDao {
     suspend fun deleteById(id: String)
 
 }
+
+/** When a member's device last said something. */
+data class SenderSeen(val publicKey: String, val at: kotlin.time.Instant)

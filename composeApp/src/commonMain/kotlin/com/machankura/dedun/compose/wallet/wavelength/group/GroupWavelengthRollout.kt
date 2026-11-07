@@ -14,10 +14,11 @@ import fr.acinq.bitcoin.Satoshi
  */
 object GroupWavelengthRollout {
     /**
-     * Whether the group's screen offers this wallet, and whether this device runs the daemon it is elected to. Lifts when
-     * a signet group has been through Phases 8 to 13 by hand. No coin has moved through it on any network.
+     * Whether the group's screen offers this wallet, and whether this device runs the daemon it is elected to. On by decision on
+     * 7 November 2026, ahead of what the plan named for it: a signet group through Phases 8 to 13 by hand, and a real round on real
+     * phones. Neither has happened: no phone has co-signed, and no screen or runner has met a real daemon or a coin.
      */
-    const val ENABLED: Boolean = false
+    const val ENABLED: Boolean = true
 
     /**
      * The chains a wallet may be on. Mainnet by decision on 6 November 2026, ahead of what the plan named for it: a review
@@ -28,8 +29,30 @@ object GroupWavelengthRollout {
      */
     fun allows(chain: Chain): Boolean = chain == Chain.Mainnet || chain == Chain.Signet || chain == Chain.Regtest
 
+    /**
+     * The networks a group's screen offers a wallet on, each with a row of its own: mainnet alone, by decision on 7 November 2026.
+     * [allows] still takes signet, so a device believes and co-signs for a signet wallet, but nothing here opens or runs one.
+     */
+    val NETWORKS: List<Chain> = listOf(Chain.Mainnet)
+
     /** The most the group's unspent coins may come to on mainnet, against each co-signer's own ledger. */
     val MAINNET_CAP: Satoshi = Satoshi(100_000)
+
+    /**
+     * Whether a payout goes out over Lightning from a wallet on [chain]. Not on mainnet until a failed payment's refund has run on a real
+     * operator: it has only met fixtures, and a funded vHTLC has no other way back through a device (`docs/group-wavelength-wallet.md`,
+     * "What Lightning found"). Leaving to the onchain wallet still works there, and pays out from that.
+     */
+    fun paysOverLightning(chain: Chain): Boolean = !chain.isMainnet()
+
+    /**
+     * Whether the wallet offers to leave without the Ark operator's help on [chain]. A unilateral exit has never run on any network, so
+     * not on mainnet until one has, on signet, where this is what lets someone run it.
+     */
+    fun offersUnilateralExit(chain: Chain): Boolean = !chain.isMainnet()
+
+    /** How long a payment may tie its value up if it fails. A week: the server's real refund locktimes have only been seen on signet. */
+    const val MAX_REFUND_BLOCKS: Long = 1_008
 
     /**
      * How deep a commitment has to be before a device believes its round happened, or that a conflict killed it. A reorg past this

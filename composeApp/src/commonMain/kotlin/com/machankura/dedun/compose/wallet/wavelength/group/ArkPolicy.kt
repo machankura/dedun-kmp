@@ -58,6 +58,13 @@ object ArkPolicy {
         val checkpoints: List<String> = emptyList(),
         /** The one of [checkpoints] this signature is on, or null for an Ark transaction's. */
         val signing: String? = null,
+        /** A round's batch life in blocks, which with the commitment's height says when its coins can be swept. */
+        val sweepDelay: Long? = null,
+        /** The Lightning payment a claim brings in, by its hash, and what it keeps: somebody's deposit once it has settled. */
+        val claimedHash: ByteVector32? = null,
+        val claimedSat: Long = 0,
+        /** The boarding coins a round brings in, which are somebody's deposits once it happens. */
+        val boarded: List<BoardedCoin> = emptyList(),
     )
 
     sealed class Verdict {
@@ -103,6 +110,9 @@ object ArkPolicy {
         /** The Ark transaction this device has already paid each hash in. A payment goes once. */
         val paidIn: Map<ByteVector32, String> = emptyMap(),
     )
+
+    /** A boarding coin going into a round: its outpoint, its script and what it holds. */
+    data class BoardedCoin(val outpoint: String, val script: ByteVector, val amountSat: Long)
 
     /** What the group approved: at most [maxSat], and no vHTLC locked for the group past [maxRefundHeight]. */
     data class ApprovedPayment(val maxSat: Long, val maxRefundHeight: Long)
@@ -261,7 +271,7 @@ object ArkPolicy {
                 val swapKey = slot == GroupArkDerivation.Slot.OOR_RECEIVE && request.index == 0L
                 val back = ArkScripts.claimHash(leaf, own) != null || ArkScripts.isRefundLeaf(leaf, own)
                 if (!swapKey || !back) refuse("a leaf this device doesn't recognise as this key's")
-                claimInput(context, request, note, tx, prevOuts, spentScript, leaf, message)
+                claimInput(context, request, note, tx, prevOuts, spentScript, leaf, message, ArkScripts.claimHash(leaf, own))
             }
         }
     }
@@ -538,8 +548,12 @@ object ArkPolicy {
             forfeited += known
         }
         var into = forfeited
-        outputsOf(round.prevOuts).forEach { prev ->
-            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.boardingDelay)) into += prev.amount.sat
+        val boarded = ArrayList<BoardedCoin>()
+        outputsOf(round.prevOuts).forEachIndexed { index, prev ->
+            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.boardingDelay)) {
+                into += prev.amount.sat
+                commitment.txIn.getOrNull(index)?.outPoint?.let { boarded += BoardedCoin("${it.txid}:${it.index}", prev.publicKeyScript, prev.amount.sat) }
+            }
             if (into > MAX_MONEY) refuse("a note with an impossible value")
         }
         val out = ownOut + leavesOut
@@ -551,7 +565,7 @@ object ArkPolicy {
             if (context.unspentSat - (context.pendingFromSat[id] ?: 0) - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
         }
         checkFeeBudget(context, id, fee)
-        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment))))
+        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment)), sweepDelay = round.sweepDelay, boarded = boarded))
     }
 
     /** That a forfeit's connector comes from this commitment: the chain of transactions that makes the forfeit conditional. */
@@ -678,7 +692,7 @@ object ArkPolicy {
      * transaction paying the group. BIP-341 holds it to the leaf and the prevout, so a leaf the output doesn't commit to signs nothing
      * that spends.
      */
-    private fun claimInput(context: Context, request: ArkRequest, note: ArkNote?, tx: Transaction, prevOuts: List<TxOut>, spentScript: ByteVector, leaf: ByteVector, message: ByteVector32): Verdict {
+    private fun claimInput(context: Context, request: ArkRequest, note: ArkNote?, tx: Transaction, prevOuts: List<TxOut>, spentScript: ByteVector, leaf: ByteVector, message: ByteVector32, claimedHash: ByteVector32?): Verdict {
         if (note?.kind != ArkNote.OOR) refuse("a claim nothing explains")
         val transfer = decode(NotedTransfer.serializer(), note.material)
         val ark = tx(transfer.ark.tx, "Ark transaction")
@@ -703,7 +717,8 @@ object ArkPolicy {
         }
         if (out != input.amount.sat) refuse("a claim that doesn't keep what it claims")
         context.capSat?.let { cap -> if (context.unspentSat - (context.pendingFromSat[arkId] ?: 0) + out > cap) refuse("a claim taking the wallet over its cap") }
-        val effect = Effect(arkId, credits, emptyList(), checkpoints = listOf(checkpoint.txid.toString()))
+        // A refund's hash is null, since that's the group's own money coming back. The leaf is what the checkpoint pays and the Ark server co-signs.
+        val effect = Effect(arkId, credits, emptyList(), checkpoints = listOf(checkpoint.txid.toString()), claimedHash = claimedHash, claimedSat = out)
 
         return when {
             tx.txid == ark.txid -> {

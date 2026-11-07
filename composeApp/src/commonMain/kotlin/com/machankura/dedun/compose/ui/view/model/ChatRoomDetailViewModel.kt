@@ -123,6 +123,7 @@ class ChatRoomDetailViewModel(
                     guardianDelay = chatRepository.guardiansOf(chatRoomId)?.firstOrNull()?.delay,
                     groupWallet = chatRepository.groupWallet(chatRoomId, NodeParamsManager.chain),
                     lightningParticipants = if (GroupLightningRollout.ENABLED) chatRepository.lightningParticipants(chatRoomId, GroupLightningRollout.NETWORK) else emptySet(),
+                    wavelengthParticipants = chatRepository.wavelengthParticipants(chatRoomId),
                     canAddSubgroup = canSign,
                     canGovern = canGovern,
                     isDisbanded = isDisbanded,

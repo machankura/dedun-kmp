@@ -3,9 +3,13 @@ package com.machankura.dedun.compose.wallet.wavelength.group
 import androidx.room3.Room
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupLightningFixture
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import fr.acinq.bitcoin.Block
 import fr.acinq.bitcoin.BlockHeader
@@ -95,7 +99,7 @@ class GroupArkWatcherJvmTest {
         val name = if (chain == Chain.Mainnet) "mainnet" else "regtest"
         dao.upsertPendingRound(GroupArkPendingRound(key, commitment.txid.toString(), "room", name, Hex.encode(Transaction.write(commitment))))
         dao.upsertVtxo(GroupArkVtxo(key, oldCoin, 40_000, settled = true, reservedBy = commitment.txid.toString(), term = 1))
-        dao.upsertVtxo(GroupArkVtxo(key, newCoin, 39_000, origin = commitment.txid.toString(), term = 1))
+        dao.upsertVtxo(GroupArkVtxo(key, newCoin, 39_000, origin = commitment.txid.toString(), term = 1, sweepDelay = 1_008))
         dao.upsertFee(GroupArkFee(key, commitment.txid.toString(), 1_000, 1, 5))
     }
 
@@ -137,6 +141,16 @@ class GroupArkWatcherJvmTest {
         assertTrue(vtxo(newCoin)!!.settled)
         assertTrue(vtxo(oldCoin)!!.spent)
         assertEquals(emptyList(), dao.pendingRounds(), "and nothing is waited on")
+    }
+
+    @Test
+    fun `a coin can be swept from the height this device saw its commitment at, plus the batch's life`() = runBlocking<Unit> {
+        signedRound()
+        electrum.tip = CONNECTED_AT + 10
+        confirmed(commitment, 2)
+        watcher.pass()
+        assertEquals(CONNECTED_AT + 10 - 2 + 1 + 1_008L, vtxo(newCoin)!!.expiresAtHeight)
+        assertEquals(null, vtxo(oldCoin)!!.expiresAtHeight, "and what this device never worked out, it doesn't guess")
     }
 
     @Test
@@ -223,5 +237,73 @@ class GroupArkWatcherJvmTest {
         confirmed(commitment, 1)
         watcher.pass()
         assertTrue(vtxo(newCoin)!!.settled)
+    }
+
+    /** A real room, since a line in the transcript needs one. */
+    private fun <T> inARoom(block: suspend (GroupLightningFixture, GroupLightningFixture.Device, GroupArkWatcher) -> T) = runBlocking<Unit> {
+        val fixture = GroupLightningFixture()
+        try {
+            val device = fixture.group()[0]
+            block(fixture, device, GroupArkWatcher(device.db, GroupChainClients.single(electrum), CoroutineScope(Dispatchers.Default)))
+        } finally {
+            fixture.close()
+        }
+    }
+
+    private suspend fun coinExpiring(fixture: GroupLightningFixture, device: GroupLightningFixture.Device, atHeight: Long) =
+        device.db.groupArkDao().upsertVtxo(GroupArkVtxo(GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0), "ee:0", 1_000, settled = true, expiresAtHeight = atHeight))
+
+    @Test
+    fun `a coin near its deadline gets one line per level, by this device's own count`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100L)
+        watching.deadlinePass()
+        watching.deadlinePass()
+        val urgent = fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE)
+        assertEquals(1, urgent.size, "urgent, and only once")
+        assertTrue("need renewing within" in urgent.single().content, urgent.single().content)
+        electrum.tip = CONNECTED_AT + 101
+        watching.deadlinePass()
+        assertEquals(2, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE).size, "and again once it has passed")
+    }
+
+    @Test
+    fun `a coin with plenty of time says nothing`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100_000L)
+        watching.deadlinePass()
+        assertEquals(0, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE).size)
+    }
+
+    private suspend fun boardedRound(amountSaid: Long, chatRoom: String = "room") {
+        signedRound()
+        electrum.txs[funding.txid] = funding
+        dao.upsertBoarded(GroupArkBoarded(key, "${funding.txid}:0", commitment.txid.toString(), amountSaid, script.toByteArray().let { Hex.encode(it) }))
+        confirmed(commitment, 1)
+    }
+
+    @Test
+    fun `a boarded coin the chain doesn't bear out is dropped before the round can make it a deposit`() = runBlocking<Unit> {
+        boardedRound(amountSaid = 999_999_999)
+        watcher.pass()
+        assertEquals(emptyList(), dao.boardedIn(key, commitment.txid.toString()), "the operator's word for what it held")
+        assertTrue(vtxo(newCoin)!!.settled, "and the round still happened")
+    }
+
+    @Test
+    fun `a boarded coin that's what it says goes on to be a deposit`() = runBlocking<Unit> {
+        boardedRound(amountSaid = 1_000_000)
+        watcher.pass()
+        assertTrue(vtxo(newCoin)!!.settled)
+        assertEquals(emptyList(), dao.boardedIn(key, commitment.txid.toString()), "filed once it happened, which leaves none waiting")
+        assertEquals(1_000_000_000, db.depositDao().inRoom("room", "regtest").single().amountMsat)
+    }
+
+    @Test
+    fun `a parent nobody can find yet means waiting, not believing and not refusing`() = runBlocking<Unit> {
+        signedRound()
+        dao.upsertBoarded(GroupArkBoarded(key, "${funding.txid}:0", commitment.txid.toString(), 1_000_000, "51"))
+        confirmed(commitment, 1)
+        watcher.pass()
+        assertFalse(vtxo(newCoin)!!.settled)
+        assertEquals(1, dao.pendingRounds().size)
     }
 }

@@ -25,6 +25,10 @@ import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
+import com.machankura.dedun.compose.database.model.GroupArkSnapshotRow
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
@@ -171,7 +175,11 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkFee::class,
         GroupArkCheckpoint::class,
         GroupArkPayment::class,
+        GroupArkBoarded::class,
+        GroupArkClaim::class,
+        GroupArkDepositAddress::class,
         GroupArkPendingRound::class,
+        GroupArkSnapshotRow::class,
         GroupArkRound::class,
         GroupArkTreeBinding::class,
         GroupArkChecked::class,
@@ -217,7 +225,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 39,
+    version = 41,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -465,6 +473,14 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // the checkpoints of transfers it hasn't seen signed (docs/group-wavelength-wallet.md). v38 had reached `dedun`,
         // so this is a version of its own. New tables are a shape Room migrates itself, and nothing can be pending yet.
         AutoMigration(from = 38, to = 39),
+        // v40 adds when a group's Wavelength coin can be swept, by the device's own count, so that a member's deadline
+        // isn't the operator's word, what the operator last said it holds, and who each boarding address is for
+        // (docs/group-wavelength-ui.md, Phases 1, 5 and 6).
+        // Nullable columns and a new table, which Room migrates itself.
+        AutoMigration(from = 39, to = 40),
+        // v41 adds Lightning deposits to a group's Wavelength wallet: an invoice beside each address, and the claims a device
+        // has signed and not seen settle (docs/group-wavelength-ui.md, Phase 6). v40 had reached `dedun`, so a version of its own.
+        AutoMigration(from = 40, to = 41),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

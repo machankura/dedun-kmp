@@ -2,12 +2,23 @@ package com.machankura.dedun.compose.wallet.wavelength.group
 
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupLightningLines
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.text.BlockDuration
+import com.machankura.dedun.compose.text.describe
+import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.wallet.confirmationsOf
+import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.wallet.standingOf
 import fr.acinq.bitcoin.ByteVector
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.byteVector32
@@ -19,8 +30,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Sees for itself what became of each round this device signed for, on its own connection to the chain and never on the word of
@@ -40,6 +55,7 @@ class GroupArkWatcher(
 ) {
     private val logger = Logger.withTag("GroupArkWatcher")
     private var job: Job? = null
+    private var deadlines: Job? = null
 
     /** Runs a pass every [POLL] while any round is waited on. */
     fun start() {
@@ -52,11 +68,65 @@ class GroupArkWatcher(
                 }
             }
         }
+        deadlines?.cancel()
+        deadlines = scope.launch {
+            while (isActive) {
+                try {
+                    deadlinePass()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    logger.e("Could not look at the wallets' deadlines", e)
+                }
+                delay(DEADLINE_CHECK)
+            }
+        }
+    }
+
+    /**
+     * Says in the room when a coin this device signed for is running out of time, by this device's own count and whatever the operator
+     * says: an operator can let renewal slip, or lie about it, and that's when this matters (D11). Each level of each coin's deadline
+     * gets one line, and it names who hasn't answered lately, since that's who can do something about it.
+     */
+    suspend fun deadlinePass() {
+        database.groupArkDao().walletsWithCoins().forEach { key ->
+            val roomId = key.split(":").getOrNull(1) ?: return@forEach
+            val (chain, _) = GroupArkCoSigner.parseWalletKey(roomId, key) ?: return@forEach
+            val earliest = database.groupArkDao().vtxos(key).filter { it.settled && !it.spent }.mapNotNull { it.expiresAtHeight }.minOrNull() ?: return@forEach
+            val tip = clients.clientFor(chain).startHeaderSubscription().blockHeight.toLong()
+            val free = GroupWavelengthTerms.of(chain)?.freeRefreshWindowBlocks ?: 0
+            val expiry = WalletExpiry.ofHeight(earliest, tip, free)
+            val level = when (expiry) {
+                is WalletExpiry.Renewing -> "renewing"
+                is WalletExpiry.Urgent -> "urgent"
+                WalletExpiry.Expired -> "expired"
+                else -> return@forEach
+            }
+            val reader = database.chatRoomDao().findChatRoomById(roomId)?.chatRoom?.userPublicKey ?: return@forEach
+            val left = earliest - tip
+            val when_ = if (left > 0) "within ${BlockDuration.describe(left)}" else "now, or the Ark operator can take them back"
+            val quiet = quietSigners(roomId, key)
+            GroupLightningLines.writeFact(
+                database, roomId, ChatMessage.TYPE_WAVELENGTH_DEADLINE, "$key:$earliest:$level", reader,
+                "Coins in the Wavelength wallet need renewing $when_." + if (quiet.isEmpty()) "" else " Not heard from lately: ${quiet.joinToString()}.",
+                Clock.System.now(),
+            )
+        }
+    }
+
+    private suspend fun quietSigners(roomId: String, key: String): List<String> {
+        val (chain, number) = GroupArkCoSigner.parseWalletKey(roomId, key) ?: return emptyList()
+        val wallet = GroupWavelengthWalletManager.wallets(database, roomId, chain).firstOrNull { it.statement.wallet == number } ?: return emptyList()
+        val seen = database.marmotInnerEventDao().newestBySender(roomId, GroupWavelengthEvents.CO_SIGNING.toList()).associate { it.publicKey.lowercase() to it.at }
+        val since = Clock.System.now() - QUIET_AFTER
+        return wallet.statement.participants.filter { (seen[it] ?: Instant.DISTANT_PAST) < since }.map { ChatMessage.memberName(database, it) }
     }
 
     fun stop() {
         job?.cancel()
         job = null
+        deadlines?.cancel()
+        deadlines = null
     }
 
     /** One look at every round still waited on. */
@@ -78,14 +148,39 @@ class GroupArkWatcher(
         val depth = GroupWavelengthRollout.settleDepth(chain)
         val commitment = Transaction.read(round.commitmentTx)
         // Null while Electrum hasn't heard of it, which is also what a dead commitment looks like.
-        val confirmations = electrum.confirmationsOf(commitment)
+        val standing = electrum.standingOf(commitment)
         when {
-            confirmations == null -> if (conflicted(electrum, commitment, depth)) {
+            standing == null -> if (conflicted(electrum, commitment, depth)) {
                 logger.i { "Round ${round.commitment} lost to a conflict: its coins are free again" }
                 GroupArkCoSigner.abandoned(database, round.wallet, round.commitment)
             }
-            confirmations >= depth -> GroupArkCoSigner.roundSettled(database, round)
+            standing.confirmations >= depth -> if (boardingHoldsUp(electrum, round)) GroupArkCoSigner.roundSettled(database, round, standing.height?.toLong())
         }
+    }
+
+    /**
+     * Drops any boarding coin of [round] the chain doesn't bear out, and says whether this device can tell yet. A txid commits to what a
+     * transaction spends and not to what that held, so what a round's note says of a boarding coin is the operator's word until the
+     * coin's own parent is read: without this, a note about any confirmed transaction would make a deposit for whoever the operator liked.
+     */
+    private suspend fun boardingHoldsUp(electrum: IElectrumClient, round: GroupArkPendingRound): Boolean {
+        val dao = database.groupArkDao()
+        dao.boardedIn(round.wallet, round.commitment).forEach { coin ->
+            val parts = coin.outpoint.split(":")
+            val vout = parts.getOrNull(1)?.toIntOrNull() ?: return@forEach dao.forgetBoardedCoin(round.wallet, round.commitment, coin.outpoint)
+            val parent = electrum.getTx(TxId(ByteVector32(parts[0]))) ?: return false
+            val output = parent.txOut.getOrNull(vout)
+            if (output == null || output.amount.sat != coin.amountSat || output.publicKeyScript.toHex() != coin.script) {
+                dao.forgetBoardedCoin(round.wallet, round.commitment, coin.outpoint)
+                val reader = database.chatRoomDao().findChatRoomById(round.chatRoomId)?.chatRoom?.userPublicKey ?: return@forEach
+                GroupLightningLines.writeFact(
+                    database, round.chatRoomId, ChatMessage.TYPE_WAVELENGTH_REFUSED, "boarded:${coin.outpoint}", reader,
+                    "The Wavelength wallet's operator described a coin going into a round as something the chain says it isn't. Your device won't count it as anyone's deposit.",
+                    Clock.System.now(),
+                )
+            }
+        }
+        return true
     }
 
     /** Whether something other than [commitment] spent one of its inputs, at least [depth] deep. A conflict in the mempool settles nothing. */
@@ -112,5 +207,11 @@ class GroupArkWatcher(
 
     companion object {
         val POLL: Duration = 30.seconds
+
+        /** Blocks are ten minutes apart, and this is about days. */
+        val DEADLINE_CHECK: Duration = 30.minutes
+
+        /** Long enough that a phone that's only been asleep overnight isn't named. */
+        val QUIET_AFTER: Duration = 1.days
     }
 }

@@ -38,6 +38,8 @@ object ArkWire {
         val items: List<SigningItem> = emptyList(),
         val provisionPlainTo: Long? = null,
         val provisionTreeTo: Long? = null,
+        /** Asks a device that doesn't know how far the group has answered to find out now. */
+        val askFloor: Boolean = false,
     )
 
     @Serializable
@@ -54,5 +56,8 @@ object ArkWire {
 
     /** How far this device has answered, in labels and in tree keys, or a question to the others about how far they have. */
     @Serializable
-    data class HighWater(val wallet: String, val asking: Boolean, val highest: Long, val highestChild: Long = -1)
+    data class HighWater(val wallet: String, val asking: Boolean, val highest: Long, val highestChild: Long = -1,
+        /** The question this answers. Two answers are otherwise the same message, and one to a later question would be lost as a repeat. */
+        val answers: String? = null,
+    )
 }

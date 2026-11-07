@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkPolicy
+import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.ByteVector32
 import kotlin.time.Clock
@@ -15,19 +16,20 @@ import kotlin.time.Clock
  */
 object GroupWavelengthPayments {
     /** Asks the group to approve a payment. [maxRefundHeight] is the longest it may tie the money up if the payment fails. */
-    suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, maxRefundHeight: Long, expiresAt: Long): FrostSigningSession {
-        val payment = GroupWavelengthPaymentEvent.Payment(wallet.statement.chain, wallet.statement.wallet, invoice, maxFeeSat, maxRefundHeight, expiresAt)
+    suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, maxRefundHeight: Long, expiresAt: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession {
+        val payment = GroupWavelengthPaymentEvent.Payment(wallet.statement.chain, wallet.statement.wallet, invoice, maxFeeSat, maxRefundHeight, expiresAt, payout)
         requireNotNull(payment.amountSat) { "That invoice names no amount, so there is nothing to approve" }
         val template = GroupWavelengthPaymentEvent.template(payment)
+        // The proposer's device takes it in as anyone else's would.
+        val asEvent = Event("00".repeat(32), "00".repeat(32), 0, template.kind, template.tags, template.content, "")
+        GroupWavelengthPayouts.refuse(database, localChatRoom.chatRoom.id, asEvent)?.let { throw IllegalArgumentException("This payment $it") }
         return FrostSigningManager.proposeSigning(database, localChatRoom, userPublicKey, template.kind, template.tags, template.content)
     }
 
-    /** What the group has approved for [wallet] that hasn't expired: signed by the room, for this chain and wallet number. */
+    /** What the group has approved for [wallet] that hasn't expired, the same one per hash that a member's balance is charged with. */
     suspend fun approved(database: DedunDatabase, chatRoomId: String, wallet: GroupWavelengthWalletManager.Wallet, now: Long = Clock.System.now().epochSeconds): Map<ByteVector32, ArkPolicy.ApprovedPayment> =
-        database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupWavelengthPaymentEvent.KIND)
-            .filter { it.verifies() }
-            .mapNotNull { GroupWavelengthPaymentEvent.read(it.tags) }
-            .filter { it.chain == wallet.statement.chain && it.wallet == wallet.statement.wallet && it.expiresAt > now }
+        GroupWavelengthPayouts.signed(database, chatRoomId, wallet.statement.chain)
+            .filter { it.wallet == wallet.statement.wallet && it.expiresAt > now }
             .mapNotNull { payment ->
                 val hash = payment.paymentHash ?: return@mapNotNull null
                 val maxSat = payment.maxSat ?: return@mapNotNull null

@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.composable.widgets.chat
 
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.LinkOff
@@ -393,6 +394,18 @@ fun ChatTranscript(
                                 // section of the group's detail screen is where
                                 // that lives.
                                 if (localChatMessage.chatMessage.messageType in ChatMessage.SUBGROUP_TYPES) {
+                                    RitualNotice(
+                                        localChatMessage = localChatMessage,
+                                        isAnswered = true,
+                                        isSettled = true,
+                                        onClick = null,
+                                        opens = null,
+                                    )
+                                    return@items
+                                }
+
+                                // What the Wavelength wallet's devices said.
+                                if (localChatMessage.chatMessage.messageType in ChatMessage.WAVELENGTH_TYPES) {
                                     RitualNotice(
                                         localChatMessage = localChatMessage,
                                         isAnswered = true,
@@ -955,6 +968,9 @@ private fun RitualNotice(
         ChatMessage.TYPE_GROUP_LIGHTNING_WALLET_OPENED -> Icons.Default.Bolt
         ChatMessage.TYPE_GROUP_LIGHTNING_OPERATOR_ELECTED -> Icons.Default.Badge
         ChatMessage.TYPE_GROUP_LIGHTNING_PAYMENT_AUTHORISED -> Icons.Default.Payments
+        ChatMessage.TYPE_GROUP_WAVELENGTH_WALLET_OPENED -> Icons.Default.Waves
+        ChatMessage.TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED -> Icons.Default.Badge
+        ChatMessage.TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED -> Icons.Default.Payments
         ChatMessage.TYPE_LIGHTNING_SEED_SHARED -> Icons.Default.Key
         ChatMessage.TYPE_LIGHTNING_INVOICE_REQUESTED -> Icons.Default.RequestQuote
         ChatMessage.TYPE_LIGHTNING_INVOICE_ISSUED -> Icons.Default.Receipt
@@ -968,6 +984,11 @@ private fun RitualNotice(
         ChatMessage.TYPE_LIGHTNING_LIQUIDITY_FAILED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_LIGHTNING_REFUSED -> Icons.Default.Block
         ChatMessage.TYPE_LIGHTNING_EQUIVOCATION -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_REFUSED -> Icons.Default.Block
+        ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_ROUND_DIED -> Icons.Default.ErrorOutline
+        ChatMessage.TYPE_WAVELENGTH_DEADLINE -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED -> Icons.Default.PowerSettingsNew
 
         else -> Icons.Default.PanTool
     }
@@ -994,6 +1015,9 @@ private fun RitualNotice(
             chatMessage.messageType == ChatMessage.TYPE_LIGHTNING_LIQUIDITY_FAILED ||
             chatMessage.messageType == ChatMessage.TYPE_LIGHTNING_REFUSED ||
             chatMessage.messageType == ChatMessage.TYPE_LIGHTNING_EQUIVOCATION ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_REFUSED ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEADLINE ||
             chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ->
             MaterialTheme.colorScheme.error
         isRequest -> MaterialTheme.colorScheme.primary
@@ -1029,6 +1053,7 @@ private fun RitualNotice(
                     if (chatMessage.messageType in ChatMessage.DKG_AUTHORED_TYPES ||
                         chatMessage.messageType in ChatMessage.ICEBERG_AUTHORED_TYPES ||
                         chatMessage.messageType in ChatMessage.FROST_AUTHORED_TYPES ||
+                        chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED ||
                         chatMessage.messageType in ChatMessage.LIGHTNING_AUTHORED_TYPES
                     ) {
                         withStyle(

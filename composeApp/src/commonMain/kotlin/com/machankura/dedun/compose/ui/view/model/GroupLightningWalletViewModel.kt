@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.repository.ChatRepository
@@ -88,7 +89,7 @@ class GroupLightningWalletViewModel(
                             canPropose = canPropose(),
                         )
                         else -> {
-                            val running = lightningRepository.observeCeremonies(chatRoomId).first().firstOrNull { it.stage != IcebergRitualStage.FAILED }
+                            val running = lightningRepository.observeCeremonies(chatRoomId).first().firstOrNull { it.purpose == IcebergKeySession.PURPOSE_LIGHTNING && it.stage != IcebergRitualStage.FAILED }
                             GroupLightningWalletUIState.NeedsKey(localChatRoom, running, canMakeKey = lightningRepository.ceremonyThresholds(chatRoomId).isNotEmpty())
                         }
                     }

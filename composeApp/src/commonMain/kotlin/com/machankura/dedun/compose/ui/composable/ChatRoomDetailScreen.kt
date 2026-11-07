@@ -12,8 +12,16 @@ import androidx.compose.material.icons.filled.Savings
 import com.machankura.dedun.compose.repository.DepositRepository
 import androidx.compose.material.icons.filled.Bolt
 import dedun.composeapp.generated.resources.lightning_wallet
+import dedun.composeapp.generated.resources.group_wavelength_on_s
+import dedun.composeapp.generated.resources.group_wavelength_test_network_s
+import dedun.composeapp.generated.resources.group_wavelength_wallet
+import androidx.compose.material.icons.filled.Waves
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
+import fr.acinq.bitcoin.Chain
 import dedun.composeapp.generated.resources.lightning_needs_an_onchain_wallet
 import dedun.composeapp.generated.resources.member_removal_requested_lightning
+import dedun.composeapp.generated.resources.member_removal_requested_wavelength
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import androidx.compose.foundation.layout.Row
@@ -270,6 +278,7 @@ fun ChatRoomDetailScreen(
     val notify = rememberNotifier(rememberCoroutineScope())
     val removalRequested = stringResource(Res.string.member_removal_requested)
     val removalLeavesLightningShare = stringResource(Res.string.member_removal_requested_lightning)
+    val removalLeavesWavelengthShare = stringResource(Res.string.member_removal_requested_wavelength)
 
     ScreenStateTransition(chatRoomDetailViewModel.chatRoomDetailUIState) { uiState ->
     when (val chatRoomDetailUIState = uiState) {
@@ -495,6 +504,23 @@ fun ChatRoomDetailScreen(
                                             )
                                         }
                                     )
+                                }
+
+                                // The group's Wavelength wallet, a row per network. Each stays open with no
+                                // onchain wallet behind it: its screen says so and leads there, and that's
+                                // the one way to a signet onchain wallet from here.
+                                if (GroupWavelengthRollout.ENABLED) {
+                                    items(GroupWavelengthRollout.NETWORKS, key = { "wavelength:" + GroupWalletStatementEvent.chainName(it) }) { chain ->
+                                        WavelengthWalletRow(chain) {
+                                            onNavigateToRoute.invoke(
+                                                GroupWavelengthWalletRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    chain = GroupWalletStatementEvent.chainName(chain),
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
 
                                 item {
@@ -867,7 +893,8 @@ fun ChatRoomDetailScreen(
                                                             // They keep a share of the Lightning wallet's key and its seed: say so,
                                                             // since only a new wallet takes it from them (Phase 14).
                                                             val holdsShare = memberPublicKey.lowercase() in chatRoomDetailUIState.lightningParticipants
-                                                            notify(failure ?: if (holdsShare) removalLeavesLightningShare else removalRequested)
+                                                            val holdsWavelengthShare = memberPublicKey.lowercase() in chatRoomDetailUIState.wavelengthParticipants
+                                                            notify(failure ?: if (holdsWavelengthShare) removalLeavesWavelengthShare else if (holdsShare) removalLeavesLightningShare else removalRequested)
                                                         }
                                                     }
                                                 ) {
@@ -1349,6 +1376,18 @@ internal fun GroupKeyStateSheetContent(
             Text(text = stringResource(Res.string.copy_the_signed_event))
         }
     }
+}
+
+/** A group's Wavelength wallet on one network: a test network says its coins have no value. */
+@Composable
+internal fun WavelengthWalletRow(chain: Chain, onOpen: () -> Unit) {
+    val name = GroupWalletStatementEvent.chainName(chain)
+    SignedWorkRow(
+        icon = Icons.Default.Waves,
+        headline = stringResource(Res.string.group_wavelength_wallet),
+        supporting = if (chain.isMainnet()) stringResource(Res.string.group_wavelength_on_s, name) else stringResource(Res.string.group_wavelength_test_network_s, name),
+        onOpen = onOpen,
+    )
 }
 
 /**

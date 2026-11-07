@@ -2,12 +2,15 @@ package com.machankura.dedun.compose.ui.composable
 
 import dedun.composeapp.generated.resources.pays_s_s_sats_up_to_s_in_fees_to_s
 import dedun.composeapp.generated.resources.pay_out_over_lightning
+import dedun.composeapp.generated.resources.pay_out_over_wavelength
+import dedun.composeapp.generated.resources.wavelength_s_sats
 import dedun.composeapp.generated.resources.something_went_wrong
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import com.machankura.dedun.compose.repository.GroupLightningRepository
+import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -123,13 +126,14 @@ fun GroupPayoutsScreen(
     payoutDestinationRepository: PayoutDestinationRepository,
     wallets: GroupOnchainWallets?,
     lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
+    wavelengthRepository: GroupWavelengthRepository = GroupWavelengthRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupPayoutsViewModel = viewModel(
         factory = GroupPayoutsViewModel.factory(
             activeUserPublicKey, chatRoomId, chain, initialUIState,
-            chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository,
+            chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository, wavelengthRepository,
         )
     )
     LaunchedEffect(chatRoomId, chain) {
@@ -204,6 +208,22 @@ fun GroupPayoutsScreen(
                                 lightningOffer = if (state.canSign && state.lightningWallet != null && balance.destination != null) {
                                     viewModel.lightningPayable(balance)
                                 } else null,
+                                // The whole Wavelength balance, through the group's Wavelength wallet.
+                                wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && balance.destination != null) {
+                                    viewModel.wavelengthPayable(balance)
+                                } else null,
+                                onPayWavelength = if (!viewModel.isActionPending.value) {
+                                    {
+                                        viewModel.payOutWavelength(
+                                            member = balance.member,
+                                            onSuccess = { sessionId ->
+                                                notify(asked)
+                                                onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId))
+                                            },
+                                            onProblem = { lightningProblem = it },
+                                        )
+                                    }
+                                } else null,
                                 onPayLightning = if (!viewModel.isActionPending.value) {
                                     {
                                         viewModel.payOutLightning(
@@ -272,6 +292,9 @@ private fun MemberPayoutRow(
     /** The Lightning payout this member's balance makes, as (amount, fee limit) in msat, or null where there is none to offer. */
     lightningOffer: Pair<Long, Long>?,
     onPayLightning: (() -> Unit)?,
+    /** The same from the Wavelength wallet. */
+    wavelengthOffer: Pair<Long, Long>? = null,
+    onPayWavelength: (() -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space50)) {
         Row(
@@ -311,6 +334,9 @@ private fun MemberPayoutRow(
                 if (balance.lightning.depositedMsat > 0) {
                     Text(stringResource(Res.string.lightning_s_sats, Satoshi(balance.lightning.availableMsat / 1000).grouped()), style = MaterialTheme.typography.bodyMedium)
                 }
+                if (balance.wavelength.depositedSat > 0) {
+                    Text(stringResource(Res.string.wavelength_s_sats, Satoshi(balance.wavelength.availableSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+                }
             }
             if (onToggle != null) Checkbox(checked = selected, onCheckedChange = null)
         }
@@ -332,6 +358,20 @@ private fun MemberPayoutRow(
             )
             TextButton(onClick = { onPayLightning?.invoke() }, enabled = onPayLightning != null) {
                 Text(stringResource(Res.string.pay_out_over_lightning))
+            }
+        }
+        if (wavelengthOffer != null) {
+            val (amount, fee) = wavelengthOffer
+            Text(
+                stringResource(
+                    Res.string.pays_s_s_sats_up_to_s_in_fees_to_s,
+                    name, Satoshi(amount / 1000).grouped(), Satoshi(fee / 1000).grouped(), balance.destination?.lightningAddress.toString(),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { onPayWavelength?.invoke() }, enabled = onPayWavelength != null) {
+                Text(stringResource(Res.string.pay_out_over_wavelength))
             }
         }
     }

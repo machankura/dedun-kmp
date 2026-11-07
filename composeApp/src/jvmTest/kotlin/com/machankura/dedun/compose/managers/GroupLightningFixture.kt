@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import kotlin.time.Clock
 import kotlin.test.assertTrue
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
@@ -241,5 +243,24 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
         }
         pump(all, GroupLightningEvents.CEREMONY)
         return proposed
+    }
+
+    /**
+     * Gives [member] somewhere to be paid and [sat] of deposits in [wallet] on every device, as if it had boarded and settled, so a payout to
+     * them can be signed: what a Wavelength payment has to name.
+     */
+    suspend fun payable(all: List<Device>, member: Device, wallet: GroupWavelengthWalletManager.Wallet, sat: Long): GroupWavelengthPaymentEvent.Payout {
+        val destination = GroupPayoutDestinationEvent.build(PrivateKey(ByteVector32(member.privateKey)), roomId, chain, LightningAddress("member${member.index}", "example.com"), createdAt = 1_700_000_000)
+        val tags = arrayOf(arrayOf("h", roomId))
+        val id = EventHasher.hashId(member.publicKey, destination.createdAt, GroupPayoutDestinationEvent.KIND, tags, destination.toJson())
+        val key = GroupArkCoSigner.walletKey(roomId, chain, wallet.statement.wallet)
+        all.forEach { device ->
+            device.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(id = id, publicKey = member.publicKey, kind = GroupPayoutDestinationEvent.KIND, createdAt = Instant.fromEpochSeconds(destination.createdAt), tags = tags, content = destination.toJson(), chatRoomId = roomId)
+            )
+            device.db.depositDao().upsert(DepositRow(chatRoomId = roomId, chain = GroupWalletStatementEvent.chainName(chain), depositKey = "${"ab".repeat(32)}:${member.index}", source = DepositRow.WAVELENGTH, amountMsat = sat * 1000, member = member.publicKey.lowercase(), attributedBy = DepositRow.BY_BOARDING_ADDRESS))
+            device.db.groupArkDao().upsertVtxo(GroupArkVtxo(key, "coin${member.index}:0", sat, settled = true))
+        }
+        return GroupWavelengthPaymentEvent.Payout(member.publicKey.lowercase(), assertNotNull(GroupPayoutDestinations.payoutDestinationOf(member.db, roomId, chain, member.publicKey)).event.id)
     }
 }
