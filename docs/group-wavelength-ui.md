@@ -2,7 +2,7 @@
 
 How a group gets from nothing to a Wavelength wallet it can see, fund, pay from and leave, using screens rather than a test harness.
 
-**Built, on 7 November 2026, and not yet on a phone or behind an open gate.** Written against `3648764f`, and files and lines named in the plan below are as they stood at that commit. It takes over the screen work in Phases 4, 5 and 9 to 13 of [group-wavelength-wallet.md](./group-wavelength-wallet.md), and that note's decisions (D1 to D16) still apply. **`GroupWavelengthRollout.ENABLED` is still off, so nobody sees any of this.** Phase 4, the real round on phones, hasn't run.
+**Built on 7 November 2026, and on by decision the same day, on mainnet only, ahead of a real round on phones.** No phone has co-signed, and neither these screens nor the runner have met a real daemon or a coin. Written against `3648764f`, and files and lines named in the plan below are as they stood at that commit. It takes over the screen work in Phases 4, 5 and 9 to 13 of [group-wavelength-wallet.md](./group-wavelength-wallet.md), and that note's decisions (D1 to D16) still apply. **`GroupWavelengthRollout.ENABLED` is on, and `NETWORKS` is mainnet alone, so any build from `dedun` offers this wallet with real money.** Phase 4, the real round on phones, hasn't run. Without signet on the screen, it now either runs on mainnet under the cap or needs a test build that puts signet back.
 
 ### Where the build stands
 
@@ -17,7 +17,7 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 | 7 | done, with payouts-only now enforced on this wallet. Off on mainnet. Nobody has read the new rule but a reviewer that isn't a person (below) |
 | 8 | done except the part that matters most: **a unilateral exit still hasn't run.** Its screen is there, signet only |
 | 9 | done, by leaving through the onchain wallet (below) |
-| 10 | the final pass is done for `jvmTest` and the audit. **The gate is left for the owner** |
+| 10 | the final pass is done for `jvmTest` and the audit. **The gate was lifted by the owner's decision, with the wallet note's condition unmet.** What bounds a loss is the 100,000-sat cap and every device's checks. Lightning payouts and the unilateral exit stay off on mainnet |
 
 **An adversarial reading of the signing code, by a reviewer that isn't a person, before anything was pushed.** It found these, and all are fixed, each with a test:
 
@@ -127,7 +127,7 @@ Each row is a known gap from the wallet note, and what the UI does about it unti
 
 **U7. Only Android operates.** Desktop and iOS co-sign (D2). Their screen shows everything except the nomination button, and says why. On desktop: *leave this open*.
 
-**U8. Mainnet and signet, side by side.** `GroupWavelengthRollout.NETWORKS` lists them. `ChatRoomDetailScreen` has a row for each, the route carries its chain, and the runner looks after every wallet on every network. A signet wallet says it's a test wallet, whose coins have no value. Tests pass a chain in.
+**U8. Networks are a list, which is now mainnet alone.** `GroupWavelengthRollout.NETWORKS` lists them. `ChatRoomDetailScreen` has a row for each, the route carries its chain, and the runner looks after every wallet on every network in it. Signet was offered beside mainnet until the gate was lifted, and the screens still say a test wallet's coins have no value. `allows` still takes signet, so a device co-signs for a signet wallet if one exists. Tests pass a chain in.
 
 **U9. `ENABLED` is read in two places:** the row on `ChatRoomDetailScreen` and the runner. A device with it off still verifies and co-signs, as its comment says. Screen tests take state directly, so they don't depend on it. A build for phones turns it on in a commit on a test branch, which never merges.
 
@@ -242,9 +242,9 @@ On the screen: the daemon's status row on the operator card, with reasons from s
 
 | result | what happens next |
 |---|---|
-| phones clear the bar | the gate can lift (Phase 10) |
-| only with a desktop or always-on co-signer | the commitment says so, the ceremony asks for one, and the gate can lift |
-| not at all | everything stays behind the gate, and `ENABLED` stays off |
+| phones clear the bar | nothing changes |
+| only with a desktop or always-on co-signer | the commitment says so, and the ceremony asks for one |
+| not at all | **the gate has to close again, under the rule below for a wallet that already exists:** no new wallets, and every existing one keeps opening and co-signing until its money has left |
 
 **Done when** the wallet note has the numbers and the owner has said which row applies.
 
@@ -308,7 +308,7 @@ As `GroupLightningWalletScreen` does it, once the wallet note's Phase 13 exists:
 
 ### Phase 10: the gate
 
-- **`ENABLED`** lifts on the wallet note's condition: Phases 8 to 13 by hand on a signet group, which Phases 4 to 9 here make possible with people rather than a harness.
+- **`ENABLED`** was to lift on the wallet note's condition: Phases 8 to 13 by hand on a signet group. **It was lifted by decision on 7 November 2026 with that unmet.**
 - **The final pass:** `m3Audit`, each screen on a phone, a 1280 dp window and desktop, light, dark and high contrast, reduced motion, large text.
 
 ## Order
@@ -332,7 +332,7 @@ As `GroupLightningWalletScreen` does it, once the wallet note's Phase 13 exists:
 
 | risk | why it matters | what to do |
 |---|---|---|
-| phones miss the forfeit window | the wallet can't renew on phones, and each miss costs other people in the round. Everything else is built before this is known, by decision | Phase 4 with a bar agreed in advance, and `ENABLED` off until it has run |
+| phones miss the forfeit window | the wallet can't renew on phones, and each miss costs other people in the round. It's on before this is known, by decision | Phase 4 with a bar agreed in advance, and leaving by deadline if rounds don't work. If leaving needs a round too, the money waits on the operator's sweep or on a unilateral exit nothing here offers on mainnet |
 | the foreground service is refused or limited | no background daemon, so no operator on a phone | check the type first. A plugged-in, always-open phone is the fallback, and the commitment says so |
 | the holder breaks the personal wallet | it's on mainnet and shares the client | its own commit, its tests kept green, and a run by hand |
 | the screen gives a false sense of safety | a clean balance card reads as *your money is fine* | U2, and "What the screens may not promise", which goes with each phase's review |

@@ -255,7 +255,9 @@ No device refused anything and no request failed, from the restart to the end.
 
 ## What mainnet has and hasn't been shown
 
-**Allowed on mainnet by decision, on 6 November 2026, ahead of Phase 14's conditions.** `GroupWavelengthRollout.allows` now takes mainnet: neither the outside review nor the month on signet has happened, and D12 asked that this wallet not be moved early. What bounds a loss is `MAINNET_CAP`, 100,000 sats, and every co-signer's checks. Testnets stay refused. `ENABLED` stays off, and nothing reads it yet.
+**Offered on mainnet by decision on 7 November 2026, with `ENABLED` on and mainnet the only network on the screen, ahead of every condition below: see [group-wavelength-ui.md](./group-wavelength-ui.md).**
+
+**Allowed on mainnet by decision, on 6 November 2026, ahead of Phase 14's conditions.** `GroupWavelengthRollout.allows` now takes mainnet: neither the outside review nor the month on signet has happened, and D12 asked that this wallet not be moved early. What bounds a loss is `MAINNET_CAP`, 100,000 sats, and every co-signer's checks. Testnets stay refused. `ENABLED` was off when this was written.
 
 **No mainnet coin has moved.** What was shown, with an empty throwaway group whose keys were then destroyed:
 
@@ -278,7 +280,7 @@ No device refused anything and no request failed, from the restart to the end.
 | fees are guesses | `maxRoundFeeSat` 2,000 against a minimum operator fee of 1,000, before chain fees. A busy mempool could put a renewal past the cap |
 | the Esplora host says staging | shared with the personal wallet, and still owed by it (`wavelength-wallet.md`, D6) |
 
-**Rolling back is still an ordinary revert,** since no wallet can exist yet. That stops being true with the first mainnet coin: Phase 14's rule is that a wallet that exists always opens and co-signs, and `allows` refusing a chain would leave one's coins with nobody to sign for them.
+**Rolling back is an ordinary revert only until the first mainnet coin,** and with the gate open nothing stops one arriving: Phase 14's rule is that a wallet that exists always opens and co-signs, and `allows` refusing a chain would leave one's coins with nobody to sign for them.
 
 ## What Phase 0 found
 
@@ -706,7 +708,7 @@ The removal flow says what a removal leaves. **A removed member keeps a share an
 
 | gate | lifts when |
 |---|---|
-| `GroupWavelengthRollout.ENABLED`, off | Phases 0 to 13 are in, the JVM suite and audit pass, and a signet group has done Phases 8 to 13 by hand |
+| `GroupWavelengthRollout.ENABLED`: **lifted by decision on 7 November 2026, with this condition unmet** | Phases 0 to 13 are in, the JVM suite and audit pass, and a signet group has done Phases 8 to 13 by hand |
 | signet only, mainnet refused in code: **lifted by decision, with neither condition met** | a signet group has run for a month with real devices, with no refused label, no missed renewal it wasn't warned of and no lost coin, **and** somebody outside the project has reviewed the Iceberg module, the DKG, D4's single-participant signing, D5's child keys and Phase 7's policy |
 | `MAINNET_CAP` | small, and held by co-signers (D12). It also can't exceed what the mainnet operator allows: 300,000 sats per wallet and 50,000 per VTXO on the terms it gave in November 2026, re-read at the time. Lifts on the shape `GroupWalletRollout` uses |
 

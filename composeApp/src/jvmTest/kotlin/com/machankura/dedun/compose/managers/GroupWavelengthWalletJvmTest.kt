@@ -205,8 +205,11 @@ class GroupWavelengthWalletJvmTest {
     }
 
     @Test
-    fun `mainnet is allowed and capped, testnets are refused, and the screen's gate is shut`() = runBlocking<Unit> {
-        assertFalse(GroupWavelengthRollout.ENABLED)
+    fun `mainnet is allowed, offered and capped, testnets are refused, and the screen's gate is open by decision`() = runBlocking<Unit> {
+        assertTrue(GroupWavelengthRollout.ENABLED)
+        assertEquals(listOf(Chain.Mainnet), GroupWavelengthRollout.NETWORKS)
+        assertFalse(GroupWavelengthRollout.paysOverLightning(Chain.Mainnet), "a refund still hasn't really run")
+        assertFalse(GroupWavelengthRollout.offersUnilateralExit(Chain.Mainnet), "nor has a unilateral exit")
         assertTrue(GroupWavelengthRollout.allows(Chain.Mainnet))
         assertTrue(GroupWavelengthRollout.allows(Chain.Signet))
         assertFalse(GroupWavelengthRollout.allows(Chain.Testnet3))
