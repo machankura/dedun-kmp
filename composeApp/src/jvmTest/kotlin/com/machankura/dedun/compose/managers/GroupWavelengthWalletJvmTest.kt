@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
@@ -66,6 +67,19 @@ class GroupWavelengthWalletJvmTest {
         all.forEach {
             val seed = assertNotNull(it.db.groupWavelengthSeedDao().get(fixture.roomId, statement.identity))
             assertEquals(statement.identity, GroupArkAuth.of(ByteVector32(seed.seed), fixture.chain).identity().toString())
+        }
+    }
+
+    @Test
+    fun `the transcript says the group opened it and who runs it, on every device`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val nomination = GroupWavelengthOperatorManager.nominateSelf(all[1].db, all[1].room, all[1].publicKey, fixture.chain)
+        fixture.signSession(all, all[1], nomination.id)
+        all.forEach { d ->
+            assertTrue("a Wavelength wallet" in fixture.lines(d, ChatMessage.TYPE_GROUP_WAVELENGTH_WALLET_OPENED).single().content)
+            assertTrue("runs the group's Wavelength wallet now" in fixture.lines(d, ChatMessage.TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED).single().content)
         }
     }
 

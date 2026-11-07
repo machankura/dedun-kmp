@@ -24,6 +24,9 @@ interface GroupWavelengthRepository {
 
     suspend fun unusedKey(chatRoomId: String): IcebergKeySession?
 
+    /** The signing session already asking the group to open a wallet with [keyId], so a second isn't proposed beside it. */
+    suspend fun openingSession(chatRoomId: String, keyId: String): String?
+
     /** Every wallet this device believes on [chain], lowest number first. */
     suspend fun wallets(chatRoomId: String, chain: Chain): List<GroupWavelengthWalletManager.Wallet>
 
@@ -53,6 +56,7 @@ interface GroupWavelengthRepository {
             override suspend fun ceremonyThresholds(chatRoomId: String): List<Int> = emptyList()
             override fun observeCeremonies(chatRoomId: String): Flow<List<IcebergKeySession>> = flowOf(emptyList())
             override suspend fun unusedKey(chatRoomId: String): IcebergKeySession? = null
+            override suspend fun openingSession(chatRoomId: String, keyId: String): String? = null
             override suspend fun wallets(chatRoomId: String, chain: Chain): List<GroupWavelengthWalletManager.Wallet> = emptyList()
             override suspend fun refusal(chatRoomId: String, chain: Chain): GroupWavelengthWalletManager.Refusal? = null
             override suspend fun operator(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthOperatorManager.Operator? = null

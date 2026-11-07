@@ -47,6 +47,9 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightni
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.IcebergCeremonyScreen
 import com.machankura.dedun.compose.database.repository.DatabaseGroupLightningRepository
+import com.machankura.dedun.compose.database.repository.DatabaseGroupWavelengthRepository
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.ui.composable.MemberWalletPolicyScreen
@@ -276,6 +279,10 @@ fun DedunNavHost(
 
     val databaseGroupLightningRepository = remember {
         DatabaseGroupLightningRepository(database = auxDatabaseManager.auxDatabase)
+    }
+
+    val databaseGroupWavelengthRepository = remember {
+        DatabaseGroupWavelengthRepository(database = auxDatabaseManager.auxDatabase)
     }
 
     val databaseFrostSigningRepository = remember {
@@ -945,6 +952,27 @@ fun DedunNavHost(
                     activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
                     chatRepository = databaseChatRepository,
                     lightningRepository = databaseGroupLightningRepository,
+                    purpose = route.purpose,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: GroupLightningRollout.NETWORK,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthWalletRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthWalletRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthWalletScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    onNavigateToRoute = { actionRoute ->
+                        navController.navigate(route = actionRoute)
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }

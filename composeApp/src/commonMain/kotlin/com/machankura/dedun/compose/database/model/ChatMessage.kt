@@ -6,6 +6,9 @@ import com.machankura.dedun.compose.text.grouped
 import fr.acinq.bitcoin.Satoshi
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.text.describe
@@ -521,6 +524,8 @@ data class ChatMessage(
         const val TYPE_GROUP_LIGHTNING_WALLET_OPENED = "groupLightningWalletOpened"
         const val TYPE_GROUP_LIGHTNING_OPERATOR_ELECTED = "groupLightningOperatorElected"
         const val TYPE_GROUP_LIGHTNING_PAYMENT_AUTHORISED = "groupLightningPaymentAuthorised"
+        const val TYPE_GROUP_WAVELENGTH_WALLET_OPENED = "groupWavelengthWalletOpened"
+        const val TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED = "groupWavelengthOperatorElected"
 
         /**
          * A transaction from the group's wallet confirmed. Written by each device
@@ -600,6 +605,8 @@ data class ChatMessage(
             TYPE_GROUP_LIGHTNING_WALLET_OPENED,
             TYPE_GROUP_LIGHTNING_OPERATOR_ELECTED,
             TYPE_GROUP_LIGHTNING_PAYMENT_AUTHORISED,
+            TYPE_GROUP_WAVELENGTH_WALLET_OPENED,
+            TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED,
             TYPE_GUARDED_WALLET_SHARED,
             TYPE_GUARDIAN_SPEND,
             TYPE_MEMBER_WALLET_REQUESTED,
@@ -1408,8 +1415,46 @@ data class ChatMessage(
                 // of their own below.
                 in GroupLightningEvents.PROTOCOL -> null
 
-                // The Wavelength wallet's, and for now the three its group signs too, which get
-                // their lines with its screens (docs/group-wavelength-wallet.md, Phase 9).
+                // The group keeping a Wavelength wallet, checked as the wallet screen checks it.
+                GroupWavelengthWalletStatementEvent.KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    val wallet = GroupWavelengthWalletManager.verify(database, groupId, signed) ?: return null
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_WAVELENGTH_WALLET_OPENED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group opened a Wavelength wallet on ${GroupWalletStatementEvent.chainName(wallet.statement.chain)}. " +
+                            "${wallet.statement.threshold} of ${wallet.statement.participants.size} sign for it."
+                    )
+                }
+
+                // A new operator, or none. Signed by the room, which is all the line claims.
+                GroupWavelengthOperatorStatementEvent.KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    if (!signed.verifies()) return null
+                    val statement = GroupWavelengthOperatorStatementEvent.read(event.tags) ?: return null
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_WAVELENGTH_OPERATOR_ELECTED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = when (val operator = statement.operator) {
+                            null -> "Nobody runs the group's Wavelength wallet now. Its coins still need renewing, so someone has to be chosen soon."
+                            else -> "@${memberName(database, operator)} runs the group's Wavelength wallet now."
+                        }
+                    )
+                }
+
+                // The Wavelength wallet's traffic, and the payment its group signs, which gets its line with its payouts.
                 in GroupWavelengthEvents.ALL -> null
 
                 ChatEvent.KIND -> {

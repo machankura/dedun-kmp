@@ -15,7 +15,11 @@ import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
+import com.machankura.dedun.compose.database.model.types.FrostSigningStage
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
+import com.vitorpamplona.quartz.nip01Core.core.Event
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class DatabaseGroupWavelengthRepository(
@@ -33,6 +37,14 @@ class DatabaseGroupWavelengthRepository(
 
     override suspend fun unusedKey(chatRoomId: String): IcebergKeySession? =
         GroupWavelengthWalletManager.unusedKey(database, chatRoomId)
+
+    override suspend fun openingSession(chatRoomId: String, keyId: String): String? =
+        database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId).first()
+            .filter { it.session.stage != FrostSigningStage.FAILED && it.session.stage != FrostSigningStage.COMPLETE }
+            .firstOrNull { signing ->
+                signing.items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
+                    .any { it.kind == GroupWavelengthWalletStatementEvent.KIND && GroupWavelengthWalletStatementEvent.read(it.tags)?.ceremonyId == keyId }
+            }?.session?.id
 
     override suspend fun wallets(chatRoomId: String, chain: Chain): List<GroupWavelengthWalletManager.Wallet> =
         GroupWavelengthWalletManager.wallets(database, chatRoomId, chain)
