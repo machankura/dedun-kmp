@@ -2,6 +2,9 @@ package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkSnapshotRow
+import com.machankura.dedun.compose.network.serialization.CommonJson
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
@@ -28,6 +31,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 /** The Wavelength wallet pays only its members, from what they put in. Until this rule, a quorum could approve paying anyone. */
 class GroupWavelengthPayoutsJvmTest {
@@ -136,6 +140,34 @@ class GroupWavelengthPayoutsJvmTest {
         val sent = GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain, now + 200).getValue(member)
         assertEquals(4_050, sent.paidSat)
         assertEquals(5_950, sent.availableSat, "and doesn't come back when the approval ends")
+    }
+
+    @Test
+    fun `a payment the operator says failed before this device signed anything frees the balance, and is never signed after`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val member = all[1].publicKey.lowercase()
+        val approved = payment(4_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(approved).tags, "", createdAt = now)
+        val hash = approved.paymentHash!!.toString()
+        assertEquals(5_950, GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(member).availableSat)
+        assertTrue(approved.paymentHash in GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet))
+
+        // The change it would have left was under the operator's minimum, so it never reached a signer.
+        report(all[0], GroupWavelengthSnapshot.Line("a1", "send", "failed", 4_005, failure = "change 12 is below minimum change amount 1000", paymentHash = hash))
+        assertTrue(GroupWavelengthPayouts.wentNowhere(all[0].db, fixture.roomId, approved))
+        assertEquals(10_000, GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(member).availableSat)
+        assertTrue(GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).isEmpty(), "whatever the operator asks after")
+
+        // Where this device did sign its transfer, the operator's word that it failed changes nothing: only a settled refund does.
+        all[0].db.groupArkDao().upsertPayment(GroupArkPayment(key, hash, "ark", 4_005))
+        assertEquals(false, GroupWavelengthPayouts.wentNowhere(all[0].db, fixture.roomId, approved))
+        assertEquals(4_005, GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(member).paidSat)
+    }
+
+    private suspend fun report(device: GroupLightningFixture.Device, vararg lines: GroupWavelengthSnapshot.Line) {
+        val snapshot = GroupWavelengthSnapshot(wallet = key, term = 1, sentAt = now, tip = 0, confirmedSat = 0, activity = lines.toList())
+        device.db.groupArkDao().upsertSnapshot(GroupArkSnapshotRow(key, device.publicKey, 1, CommonJson.encodeToString(GroupWavelengthSnapshot.serializer(), snapshot), Instant.fromEpochSeconds(now)))
     }
 
     @Test
@@ -384,7 +416,7 @@ class GroupWavelengthPayoutsJvmTest {
         fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(first).tags, "", createdAt = first.askedAt)
         val dao = all[0].db.groupArkDao()
         dao.upsertLeave(GroupArkLeave(key, first.id, "round", "00", 6_000, 400))
-        dao.confirmLeaves(key, "round")
+        dao.confirmLeaves(key, "round", now)
         // A device that missed that round would approve this, and with the member's own device that's a quorum of two.
         val second = onchain(payout, 3_000, at = now + 1)
         fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(second).tags, "", createdAt = second.askedAt)
@@ -417,7 +449,7 @@ class GroupWavelengthPayoutsJvmTest {
         val dao = all[0].db.groupArkDao()
         dao.upsertLeave(GroupArkLeave(key, first.id, "round", "00", 6_000, 400))
         assertEquals("pays an address another payout is still being paid to", refused(all[0], onchain(payout, 1_000, at = now + 1)))
-        dao.confirmLeaves(key, "round")
+        dao.confirmLeaves(key, "round", now)
         val later = onchain(payout, 9_000, at = now + 2)
         assertNull(refused(all[0], later))
         fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(later).tags, "", createdAt = later.askedAt)

@@ -66,6 +66,7 @@ import dedun.composeapp.generated.resources.join_the_ceremony
 import dedun.composeapp.generated.resources.joining_publishes_commitments
 import dedun.composeapp.generated.resources.lightning_wallet_key
 import dedun.composeapp.generated.resources.open_the_group_s_onchain_wallet_first
+import dedun.composeapp.generated.resources.open_the_group_s_onchain_wallet_first_wavelength
 import dedun.composeapp.generated.resources.s_of_3_steps
 import dedun.composeapp.generated.resources.send_your_contributions
 import dedun.composeapp.generated.resources.sending_contributions_encrypts_each
@@ -161,7 +162,7 @@ fun IcebergCeremonyScreen(
                     EmptyState(
                         modifier = Modifier.padding(padding).readableContent(),
                         message = when {
-                            !state.hasOnchainWallet -> stringResource(Res.string.open_the_group_s_onchain_wallet_first)
+                            !state.hasOnchainWallet -> stringResource(if (isWavelength) Res.string.open_the_group_s_onchain_wallet_first_wavelength else Res.string.open_the_group_s_onchain_wallet_first)
                             state.thresholds.isEmpty() -> stringResource(if (isWavelength) Res.string.a_wavelength_wallet_needs_four_signers else Res.string.a_lightning_wallet_needs_four_signers)
                             else -> stringResource(if (isWavelength) Res.string.this_group_has_no_wavelength_wallet_key_yet else Res.string.this_group_has_no_lightning_wallet_key_yet)
                         },

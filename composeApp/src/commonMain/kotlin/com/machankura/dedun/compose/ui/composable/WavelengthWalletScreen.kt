@@ -53,6 +53,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.DetailLine
 import com.machankura.dedun.compose.ui.theme.breakpoint
 import com.machankura.dedun.compose.ui.theme.listPaneWidthFor
 import com.machankura.dedun.compose.ui.theme.readableContent
@@ -399,9 +400,6 @@ fun WavelengthEntryDetail(entry: Entry?, modifier: Modifier = Modifier, preimage
         EmptyState(modifier = modifier.readableContent(), message = stringResource(Res.string.wavelength_entry_not_found), icon = Icons.AutoMirrored.Filled.ReceiptLong)
         return
     }
-    val clipboard = LocalClipboardManager.current
-    val notify = rememberNotifier(rememberCoroutineScope())
-    val copied = stringResource(Res.string.copied)
     Column(
         modifier = modifier.fillMaxSize().readableContent().verticalScroll(rememberScrollState()).padding(MaterialTheme.spacing.containerPadding),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
@@ -416,24 +414,15 @@ fun WavelengthEntryDetail(entry: Entry?, modifier: Modifier = Modifier, preimage
             entry.updatedAt?.let { DetailLine(stringResource(Res.string.wavelength_entry_finished), it.toFormattedTimeAndDateString()) }
         }
         entry.counterparty.ifEmpty { null }?.let { counterparty ->
-            DetailLine(stringResource(Res.string.wavelength_entry_to), counterparty, onCopy = { clipboard.setText(AnnotatedString(counterparty)); notify(copied) })
+            DetailLine(stringResource(Res.string.wavelength_entry_to), counterparty, copyable = true)
         }
         entry.progress?.paymentHash?.ifEmpty { null }?.let { hash ->
-            DetailLine(stringResource(Res.string.wavelength_entry_payment_hash), hash, onCopy = { clipboard.setText(AnnotatedString(hash)); notify(copied) })
+            DetailLine(stringResource(Res.string.wavelength_entry_payment_hash), hash, copyable = true)
         }
         preimage?.let { proof ->
-            DetailLine(stringResource(Res.string.wavelength_preimage), proof, onCopy = { clipboard.setText(AnnotatedString(proof)); notify(copied) })
+            DetailLine(stringResource(Res.string.wavelength_preimage), proof, copyable = true)
         }
         entry.failureReason.ifEmpty { null }?.let { DetailLine(stringResource(Res.string.wavelength_entry_failure), it) }
-    }
-}
-
-@Composable
-private fun DetailLine(label: String, value: String, onCopy: (() -> Unit)? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space25)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyLarge)
-        onCopy?.let { TextButton(onClick = it) { Text(stringResource(Res.string.copy)) } }
     }
 }
 

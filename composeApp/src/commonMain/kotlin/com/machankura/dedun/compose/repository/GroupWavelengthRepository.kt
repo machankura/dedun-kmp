@@ -13,6 +13,7 @@ import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
@@ -60,6 +61,9 @@ interface GroupWavelengthRepository {
 
     /** Every payout the group has approved from [wallet], for the screen to follow. */
     suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment>
+
+    /** The payment hashes of those [payouts] that went nowhere, by [GroupWavelengthPayouts.wentNowhere]. */
+    suspend fun wentNowhere(chatRoomId: String, chain: Chain, wallet: Long): Set<String>
 
     /** Asks the group to pay a member from their balance: a proposal `t` people have to sign, like any other. */
     suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession
@@ -110,6 +114,12 @@ interface GroupWavelengthRepository {
     fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>>
 
     /**
+     * Every row a history is built from (`docs/group-wavelength-transaction-details.md`, Phase 2). Read rather than
+     * observed: it is re-read whenever the coins or the operator's report change, which is when any of this does.
+     */
+    suspend fun historyRows(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthHistory.Rows
+
+    /**
      * Boarding coins this device has signed into a round it hasn't seen happen, which is how it
      * knows a member's deposit address was paid (`docs/paid-requests.md`, Phase 3).
      */
@@ -136,6 +146,7 @@ interface GroupWavelengthRepository {
             override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun departed(wallet: GroupWavelengthWalletManager.Wallet): List<HexKey> = emptyList()
             override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> = emptyList()
+            override suspend fun wentNowhere(chatRoomId: String, chain: Chain, wallet: Long): Set<String> = emptySet()
             override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession = error("No room to propose in")
             override suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout> = emptyList()
             override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession = error("No room to propose in")
@@ -152,6 +163,7 @@ interface GroupWavelengthRepository {
             override suspend fun feesSince(chatRoomId: String, chain: Chain, wallet: Long, term: Long, since: Long): Long = 0
             override suspend fun labelsLeft(chatRoomId: String, chain: Chain, wallet: Long, userPublicKey: HexKey): Long = 0
             override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(emptyList())
+            override suspend fun historyRows(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthHistory.Rows = GroupWavelengthHistory.Rows()
             override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> = flowOf(emptyList())
             override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> = flowOf(emptyList())
         }

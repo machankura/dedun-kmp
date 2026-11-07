@@ -58,6 +58,10 @@ interface GroupArkDao {
     @Query("DELETE FROM GroupArkClaim WHERE wallet = :wallet AND ark = :ark")
     suspend fun forgetClaim(wallet: String, ark: String)
 
+    /** Every claim of this wallet not yet seen settle, for the history. */
+    @Query("SELECT * FROM GroupArkClaim WHERE wallet = :wallet")
+    suspend fun claims(wallet: String): List<GroupArkClaim>
+
     @Query("SELECT * FROM GroupArkDepositAddress WHERE wallet = :wallet")
     suspend fun depositAddresses(wallet: String): List<GroupArkDepositAddress>
 
@@ -69,6 +73,10 @@ interface GroupArkDao {
 
     @Query("SELECT * FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment")
     suspend fun boardedIn(wallet: String, commitment: String): List<GroupArkBoarded>
+
+    /** Every boarding coin of this wallet still waiting on its round, for the history. */
+    @Query("SELECT * FROM GroupArkBoarded WHERE wallet = :wallet")
+    suspend fun boarded(wallet: String): List<GroupArkBoarded>
 
     @Query("SELECT * FROM GroupArkBoarded WHERE wallet = :wallet")
     fun observeBoarded(wallet: String): Flow<List<GroupArkBoarded>>
@@ -173,8 +181,8 @@ interface GroupArkDao {
     @Query("SELECT * FROM GroupArkLeave WHERE wallet = :wallet")
     fun observeLeaves(wallet: String): Flow<List<GroupArkLeave>>
 
-    @Query("UPDATE GroupArkLeave SET confirmed = 1 WHERE wallet = :wallet AND commitment = :commitment")
-    suspend fun confirmLeaves(wallet: String, commitment: String)
+    @Query("UPDATE GroupArkLeave SET confirmed = 1, confirmedAtEpochSeconds = :atEpochSeconds WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun confirmLeaves(wallet: String, commitment: String, atEpochSeconds: Long)
 
     @Query("DELETE FROM GroupArkLeave WHERE wallet = :wallet AND commitment = :commitment")
     suspend fun forgetLeaves(wallet: String, commitment: String)
@@ -184,6 +192,10 @@ interface GroupArkDao {
 
     @Query("SELECT * FROM GroupArkFee WHERE wallet = :wallet AND term = :term AND atEpochSeconds >= :since")
     suspend fun fees(wallet: String, term: Long, since: Long): List<GroupArkFee>
+
+    /** Every fee this device has agreed to for this wallet, in any term, for the history. */
+    @Query("SELECT * FROM GroupArkFee WHERE wallet = :wallet")
+    suspend fun allFees(wallet: String): List<GroupArkFee>
 
     @Upsert
     suspend fun upsertRound(row: GroupArkRound)

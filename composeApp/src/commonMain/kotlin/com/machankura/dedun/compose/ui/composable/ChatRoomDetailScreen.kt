@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Bolt
 import dedun.composeapp.generated.resources.lightning_wallet
 import dedun.composeapp.generated.resources.group_wavelength_on_s
 import dedun.composeapp.generated.resources.group_wavelength_test_network_s
+import dedun.composeapp.generated.resources.group_wavelength_needs_an_onchain_wallet
 import dedun.composeapp.generated.resources.group_wavelength_wallet
 import androidx.compose.material.icons.filled.Waves
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
@@ -506,12 +507,17 @@ fun ChatRoomDetailScreen(
                                     )
                                 }
 
-                                // The group's Wavelength wallet, a row per network. Each stays open with no
-                                // onchain wallet behind it: its screen says so and leads there, and that's
-                                // the one way to a signet onchain wallet from here.
+                                // The group's Wavelength wallet, a row per network. Its coins leave to the
+                                // group's onchain wallet on the same network, so until the group has opened
+                                // one there is nothing behind the row: it stays, disabled, and says what it
+                                // is waiting for -- as the Lightning row above does.
+                                //
+                                // Its screen keeps its own gate. A deep link reaches it, and so does a
+                                // wallet read between this row being drawn and tapped: a row is not a
+                                // boundary, only the first place to say so.
                                 if (GroupWavelengthRollout.ENABLED) {
                                     items(GroupWavelengthRollout.NETWORKS, key = { "wavelength:" + GroupWalletStatementEvent.chainName(it) }) { chain ->
-                                        WavelengthWalletRow(chain) {
+                                        WavelengthWalletRow(chain, chain in chatRoomDetailUIState.wavelengthOnchainChains) {
                                             onNavigateToRoute.invoke(
                                                 GroupWavelengthWalletRoute(
                                                     activeUserPublicKey = activeUserPublicKey,
@@ -1378,14 +1384,29 @@ internal fun GroupKeyStateSheetContent(
     }
 }
 
-/** A group's Wavelength wallet on one network: a test network says its coins have no value. */
+/**
+ * A group's Wavelength wallet on one network: a test network says its coins have no value, and a
+ * network the group has no onchain wallet on says that instead and opens nothing, since that is
+ * where this wallet's money leaves to.
+ *
+ * The reason wins over the network line. A disabled row has one thing to say, and the network is
+ * on the screen it opens -- the same ordering the Lightning row above it uses.
+ *
+ * [hasOnchainWallet] has no default on purpose: there are two call sites and a default of true
+ * would let a third forget the gate without saying so.
+ */
 @Composable
-internal fun WavelengthWalletRow(chain: Chain, onOpen: () -> Unit) {
+internal fun WavelengthWalletRow(chain: Chain, hasOnchainWallet: Boolean, onOpen: () -> Unit) {
     val name = GroupWalletStatementEvent.chainName(chain)
     SignedWorkRow(
         icon = Icons.Default.Waves,
         headline = stringResource(Res.string.group_wavelength_wallet),
-        supporting = if (chain.isMainnet()) stringResource(Res.string.group_wavelength_on_s, name) else stringResource(Res.string.group_wavelength_test_network_s, name),
+        supporting = when {
+            !hasOnchainWallet -> stringResource(Res.string.group_wavelength_needs_an_onchain_wallet)
+            chain.isMainnet() -> stringResource(Res.string.group_wavelength_on_s, name)
+            else -> stringResource(Res.string.group_wavelength_test_network_s, name)
+        },
+        enabled = hasOnchainWallet,
         onOpen = onOpen,
     )
 }

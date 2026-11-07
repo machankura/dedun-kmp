@@ -21,13 +21,16 @@ import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.active
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRoomId
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.wallet.GroupWalletRollout
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.secp256k1.Hex
 import kotlin.test.Test
@@ -101,6 +104,57 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     @Test
+    fun `the Wavelength wallet's row opens it`() {
+        if (!GroupWalletRollout.ENABLED || !GroupWavelengthRollout.ENABLED) return
+        val chain = GroupWavelengthRollout.NETWORKS.first()
+        var opened: Route? = null
+
+        render(state(wavelengthOnchainChains = setOf(chain)), onNavigateToRoute = { opened = it }) {
+            onNode(hasText("Wavelength wallet") and hasText("On " + GroupWalletStatementEvent.chainName(chain))).assertIsDisplayed()
+            onNodeWithText("Wavelength wallet").performClick()
+        }
+
+        assertEquals(
+            GroupWavelengthWalletRoute(activeUserPublicKey, chatRoomId, GroupWalletStatementEvent.chainName(chain)),
+            opened,
+        )
+    }
+
+    /** Its coins leave to the onchain wallet, so until there is one it says so and opens nothing. */
+    @Test
+    fun `the Wavelength wallet's row waits for an onchain wallet`() {
+        if (!GroupWalletRollout.ENABLED || !GroupWavelengthRollout.ENABLED) return
+        var opened: Route? = null
+
+        render(state(), onNavigateToRoute = { opened = it }) {
+            onNode(hasText("Wavelength wallet") and hasText(WAVELENGTH_WAITS)).assertIsDisplayed()
+            onNodeWithText("Wavelength wallet").performClick()
+        }
+
+        assertNull(opened)
+    }
+
+    /**
+     * The row asks about its own network and not whether the group has any wallet at all. A
+     * network that is not offered standing in for one that is would make the gate meaningless
+     * the moment `NETWORKS` holds more than one chain again -- it held signet until 7 November
+     * 2026, and `allows` still takes it.
+     */
+    @Test
+    fun `the Wavelength wallet's row waits on its own network, not another`() {
+        if (!GroupWalletRollout.ENABLED || !GroupWavelengthRollout.ENABLED) return
+        val other = Chain.Signet.takeIf { it !in GroupWavelengthRollout.NETWORKS } ?: return
+        var opened: Route? = null
+
+        render(state(wavelengthOnchainChains = setOf(other)), onNavigateToRoute = { opened = it }) {
+            onNode(hasText("Wavelength wallet") and hasText(WAVELENGTH_WAITS)).assertIsDisplayed()
+            onNodeWithText("Wavelength wallet").performClick()
+        }
+
+        assertNull(opened)
+    }
+
+    @Test
     fun `the group's screen has no nostr profile, relays, posts or paste`() = render(state()) {
         onNodeWithText("Nostr profile").assertDoesNotExist()
         onNodeWithText("Relays").assertDoesNotExist()
@@ -123,10 +177,18 @@ class GroupSignedWorkRowsJvmTest {
     /** The wallet row is named for its room: the fixture's subject. */
     private val WALLET_ROW = "Translation room onchain wallet"
 
-    private fun state(mlsGroupState: String? = "state", groupWallet: GroupWallet? = null) = ChatRoomDetailUIState.Loaded(
+    /** What a Wavelength row says while there is no onchain wallet on its network. */
+    private val WAVELENGTH_WAITS = "A Wavelength wallet is only available once the group has an onchain wallet."
+
+    private fun state(
+        mlsGroupState: String? = "state",
+        groupWallet: GroupWallet? = null,
+        wavelengthOnchainChains: Set<Chain> = emptySet(),
+    ) = ChatRoomDetailUIState.Loaded(
         localChatRoom = GroupSignedWorkFixtures.localChatRoom(mlsGroupState),
         groupKeyState = GroupSignedWorkFixtures.groupKeyState,
         groupWallet = groupWallet,
+        wavelengthOnchainChains = wavelengthOnchainChains,
     )
 
     /** An onchain wallet on the Lightning wallet's network; only its presence matters to these rows. */

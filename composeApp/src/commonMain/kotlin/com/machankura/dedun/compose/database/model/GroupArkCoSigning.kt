@@ -72,6 +72,8 @@ data class GroupArkPayment(
     val amountSat: Long? = null,
     val vhtlcScript: HexKey? = null,
     val refundedIn: String? = null,
+    /** When this device signed it, so a history can put it in order. Null on a row from before it was kept. */
+    val atEpochSeconds: Long? = null,
 )
 
 /**
@@ -88,15 +90,23 @@ data class GroupArkLeave(
     val amountSat: Long,
     val feeSat: Long,
     val confirmed: Boolean = false,
+    /** When this device signed the round. Null on a row from before it was kept. */
+    val atEpochSeconds: Long? = null,
+    /** When it saw that round confirm, which is the one moment a payout finished that nobody has to be believed about. */
+    val confirmedAtEpochSeconds: Long? = null,
 )
 
 /** A fee this device has agreed to, on what, when and in which term, against the group's budget for them. */
 @Entity(primaryKeys = ["wallet", "tx"])
 data class GroupArkFee(val wallet: String, val tx: String, val feeSat: Long, val term: Long, val atEpochSeconds: Long)
 
-/** The one account of a round this device has signed anything under: a second is a mistake or an attack. */
+/**
+ * The one account of a round this device has signed anything under: a second is a mistake or an attack.
+ * [atEpochSeconds] is when it signed, kept so a round the free refresh window cost nothing still has a
+ * place in the history; null on a row from before it was kept.
+ */
 @Entity(primaryKeys = ["wallet", "commitment"])
-data class GroupArkRound(val wallet: String, val commitment: String, val noteHash: String)
+data class GroupArkRound(val wallet: String, val commitment: String, val noteHash: String, val atEpochSeconds: Long? = null)
 
 /** The one commitment a tree key has signed for, ever. */
 @Entity(primaryKeys = ["wallet", "treeKey"])
@@ -140,13 +150,32 @@ data class GroupArkDepositAddress(
     val paymentHash: HexKey? = null,
 )
 
-/** A boarding coin this device signed into a round it hasn't seen happen: it becomes a deposit when the round does. */
+/**
+ * A boarding coin this device signed into a round it hasn't seen happen: it becomes a deposit when the round does.
+ * [atEpochSeconds] is when it signed; null on a row from before it was kept.
+ */
 @Entity(primaryKeys = ["wallet", "commitment", "outpoint"])
-data class GroupArkBoarded(val wallet: String, val outpoint: String, val commitment: String, val amountSat: Long, val script: HexKey)
+data class GroupArkBoarded(
+    val wallet: String,
+    val outpoint: String,
+    val commitment: String,
+    val amountSat: Long,
+    val script: HexKey,
+    val atEpochSeconds: Long? = null,
+)
 
-/** A Lightning payment this device has signed the claim of and not seen settle. [amountSat] is what the claim itself keeps. */
+/**
+ * A Lightning payment this device has signed the claim of and not seen settle. [amountSat] is what the claim itself keeps,
+ * and [atEpochSeconds] when it signed; null on a row from before it was kept.
+ */
 @Entity(primaryKeys = ["wallet", "ark"])
-data class GroupArkClaim(val wallet: String, val ark: String, val paymentHash: HexKey, val amountSat: Long)
+data class GroupArkClaim(
+    val wallet: String,
+    val ark: String,
+    val paymentHash: HexKey,
+    val amountSat: Long,
+    val atEpochSeconds: Long? = null,
+)
 
 /** How far one participant says it has answered. */
 @Entity(primaryKeys = ["wallet", "participant"])

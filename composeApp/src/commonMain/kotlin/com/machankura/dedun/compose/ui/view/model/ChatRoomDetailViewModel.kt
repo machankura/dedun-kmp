@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.view.model
 
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import androidx.compose.runtime.MutableState
@@ -122,6 +123,13 @@ class ChatRoomDetailViewModel(
                     walletPolicy = chatRepository.walletPolicyOf(chatRoomId),
                     guardianDelay = chatRepository.guardiansOf(chatRoomId)?.firstOrNull()?.delay,
                     groupWallet = chatRepository.groupWallet(chatRoomId, NodeParamsManager.chain),
+                    // One query per network a Wavelength wallet is offered on, which the
+                    // row for that network needs before it can say whether it waits. A
+                    // read that fails is logged and comes back null, which leaves the row
+                    // disabled with its reason -- the safe direction for a gate.
+                    wavelengthOnchainChains = if (GroupWavelengthRollout.ENABLED) {
+                        GroupWavelengthRollout.NETWORKS.filter { chatRepository.groupWallet(chatRoomId, it) != null }.toSet()
+                    } else emptySet(),
                     lightningParticipants = if (GroupLightningRollout.ENABLED) chatRepository.lightningParticipants(chatRoomId, GroupLightningRollout.NETWORK) else emptySet(),
                     wavelengthParticipants = chatRepository.wavelengthParticipants(chatRoomId),
                     canAddSubgroup = canSign,

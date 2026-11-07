@@ -399,7 +399,7 @@ object GroupArkCoSigner {
         val dao = database.groupArkDao()
         val paid = dao.leaves(row.wallet).filter { it.commitment == row.commitment && !it.confirmed }
         if (paid.isEmpty()) return
-        dao.confirmLeaves(row.wallet, row.commitment)
+        dao.confirmLeaves(row.wallet, row.commitment, Clock.System.now().epochSeconds)
         val reader = database.chatRoomDao().findChatRoomById(row.chatRoomId)?.chatRoom?.userPublicKey ?: return
         val chain = GroupWalletStatementEvent.chainNamed(row.chain) ?: return
         val payouts = GroupWavelengthPayouts.signedOnchain(database, row.chatRoomId, chain).associateBy { it.id }
@@ -625,24 +625,27 @@ object GroupArkCoSigner {
     /** What signing this means for this device's own record. Written before the echo, so it is never behind one. */
     private suspend fun remember(database: DedunDatabase, roomId: String, wallet: GroupWavelengthWalletManager.Wallet, key: String, term: Long, effect: ArkPolicy.Effect, sessionKey: PublicKey?, label: String) {
         val dao = database.groupArkDao()
+        // One moment for everything this signature files, so a history reads them in the order they happened
+        // (`docs/group-wavelength-transaction-details.md`, T3).
+        val at = Clock.System.now().epochSeconds
         effect.commitmentTx?.let { dao.upsertPendingRound(GroupArkPendingRound(key, effect.towards, roomId, GroupWalletStatementEvent.chainName(wallet.statement.chain), it.toHex())) }
         effect.checkpoints.forEach { dao.insertCheckpoint(GroupArkCheckpoint(key, effect.towards, it)) }
         effect.signing?.let { dao.signedCheckpoint(key, effect.towards, it, label) }
-        effect.noteHash?.let { dao.upsertRound(GroupArkRound(key, effect.towards, it)) }
+        effect.noteHash?.let { dao.upsertRound(GroupArkRound(key, effect.towards, it, at)) }
         effect.payments.forEach { hash ->
             val funded = effect.funded.firstOrNull { it.paymentHash == hash }
-            dao.insertPayment(GroupArkPayment(key, hash.toHex(), effect.towards, funded?.amountSat, funded?.script?.toHex()))
+            dao.insertPayment(GroupArkPayment(key, hash.toHex(), effect.towards, funded?.amountSat, funded?.script?.toHex(), atEpochSeconds = at))
         }
         effect.refunded?.let { dao.refundPayment(key, it.toHex(), effect.towards) }
         // A round's fee once, shared by the payouts in it in proportion, as the onchain wallet's payouts share theirs (payouts-only D5).
         val feeShares = if (effect.leaves.isEmpty()) emptyMap() else PayoutFees.split(effect.leaves.associate { it.authorisation to it.amountSat }, effect.feeSat)
-        effect.leaves.forEach { dao.upsertLeave(GroupArkLeave(key, it.authorisation, effect.towards, it.script.toHex(), it.amountSat, feeShares[it.authorisation] ?: 0)) }
-        if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, Clock.System.now().epochSeconds))
+        effect.leaves.forEach { dao.upsertLeave(GroupArkLeave(key, it.authorisation, effect.towards, it.script.toHex(), it.amountSat, feeShares[it.authorisation] ?: 0, atEpochSeconds = at)) }
+        if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, at))
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }
         effect.reserves.forEach { outpoint -> known[outpoint]?.let { dao.upsertVtxo(it.copy(reservedBy = effect.towards, term = term)) } }
-        effect.claimedHash?.let { dao.upsertClaim(GroupArkClaim(key, effect.towards, it.toHex(), effect.claimedSat)) }
-        effect.boarded.forEach { dao.upsertBoarded(GroupArkBoarded(key, it.outpoint, effect.towards, it.amountSat, it.script.toHex())) }
+        effect.claimedHash?.let { dao.upsertClaim(GroupArkClaim(key, effect.towards, it.toHex(), effect.claimedSat, at)) }
+        effect.boarded.forEach { dao.upsertBoarded(GroupArkBoarded(key, it.outpoint, effect.towards, it.amountSat, it.script.toHex(), at)) }
         // A credit never overwrites: what this device has already seen settle isn't for a note to change.
         // A transfer makes coins in the batches it spent from, so they go no later than the soonest of those.
         // And if this device can't say for one of them, it can't say.

@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.database.repository
 
 import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -26,6 +27,7 @@ import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
@@ -96,6 +98,9 @@ class DatabaseGroupWavelengthRepository(
 
     override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> =
         GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet }
+
+    override suspend fun wentNowhere(chatRoomId: String, chain: Chain, wallet: Long): Set<String> =
+        payouts(chatRoomId, chain, wallet).filter { GroupWavelengthPayouts.wentNowhere(database, chatRoomId, it) }.mapNotNull { it.paymentHash?.toString()?.lowercase() }.toSet()
 
     override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession {
         val chain = wallet.statement.chain
@@ -171,6 +176,29 @@ class DatabaseGroupWavelengthRepository(
 
     override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> =
         database.groupArkDao().observeVtxos(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
+
+    override suspend fun historyRows(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthHistory.Rows {
+        val key = GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)
+        val dao = database.groupArkDao()
+        return GroupWavelengthHistory.Rows(
+            coins = dao.vtxos(key),
+            boarded = dao.boarded(key),
+            claims = dao.claims(key),
+            payments = dao.payments(key),
+            leaves = dao.leaves(key),
+            fees = dao.allFees(key),
+            rounds = dao.rounds(key),
+            addresses = dao.depositAddresses(key),
+            // The deposit ledger is kept per room and holds every rail's, so this wallet's are the ones it marked as such.
+            // A room that replaced a Wavelength wallet has the earlier one's here too, which the history does not separate.
+            deposits = database.depositDao().inRoom(chatRoomId, GroupWalletStatementEvent.chainName(chain)),
+            payouts = GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet },
+            payoutsAskedAt = GroupWavelengthPayouts.signedAt(database, chatRoomId, chain),
+            payoutsWentNowhere = wentNowhere(chatRoomId, chain, wallet),
+            onchainPayouts = GroupWavelengthPayouts.signedOnchain(database, chatRoomId, chain).filter { it.wallet == wallet },
+            exits = GroupWavelengthPayouts.signedExits(database, chatRoomId, chain, wallet),
+        )
+    }
 
     private companion object {
         const val ALARMS_SHOWN = 3
