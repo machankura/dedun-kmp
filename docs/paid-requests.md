@@ -2,8 +2,10 @@
 
 An invoice or an address this app has handed out stops being shown as a QR code
 once money has arrived against it, and the place it was says what arrived
-instead. Today three screens show a paid request for as long as they are open,
-and four more quietly swap the address for the next one and say nothing at all.
+instead. Before this, three screens showed a paid request for as long as they
+were open, and four more quietly swapped the address for the next one and said
+nothing at all. The survey below is that *before* picture, and the phases are
+kept as they were written.
 
 Read [group-wallet-addresses.md](./group-wallet-addresses.md) first. Its rule --
 *a used address can be copied but never shown as a QR code* -- is already built,
@@ -12,10 +14,33 @@ surfaces and across to Lightning. [member-deposits.md](./member-deposits.md) say
 why each of these requests belongs to one member, which is what makes "paid"
 answerable per request rather than per wallet.
 
-**Planned, not built.** Written against the code at `a17dbd26`, with
-`experimental/wavelength-kmp` uninitialised in this worktree -- which is why
-Phase 2 opens with a spike instead of a change: the `Entry` model it has to match
-against can be read here only through its call sites.
+**Built, phases 0-5**, one commit per phase. Written against the code as it stood
+at `a17dbd26`. Phase 7, expiry, is not built and was never in scope; Phase 6 is
+this note.
+
+The plan was written with `experimental/wavelength-kmp` uninitialised in this
+worktree, which is why Phase 2 opened with a spike. Initialising it answered both
+of the spike's questions and changed Phase 2's design; the phases are kept as
+written, and the table below says where the build chose differently.
+
+| what the plan said | what it turned out to be |
+|---|---|
+| the worktree builds | it did not: both submodules were uninitialised, so no Gradle task could even configure, and `git submodule update` was refused by `protocol.file.allow`. Initialising them with `-c protocol.file.allow=always` and writing a `local.properties` in each build root was the first work of Phase 0 |
+| Phase 2's spike: `counterparty` is the candidate field for a deposit's address | `EntryRequest.onchainAddress` is the field. But neither it nor `lightningInvoice` is used in the end: `Receive` and `Deposit` each hand back the entry they created, so the entry's **id** is the match. `Entry.request` is documented as nil when the backing subsystem persisted none, and the SDK's own fake daemon never sets it at all -- a screen matching on it would take its QR code down never, or at the daemon's discretion |
+| Phase 2's spike: is there a phase between waiting and completion? | `PAYMENT_DETECTED`, and `WAITING_FOR_CONFIRMATION` for its onchain twin. There is also an `UNSPECIFIED` that `isUnpaidRequest` left out, which labelled a request the daemon had said nothing about as *Pending* |
+| `isUnpaidRequest` moves to the model layer so both read one predicate | it stays where it is, with `UNSPECIFIED` added, and the receive screen states paid the other way round -- from the phases that say a payment happened. Negating a list of waiting phases claims a payment for a failed receive, a refund, and any status a newer daemon invents |
+| `GroupLightningReceiveUIState.Invoice` gains `paymentHash` and `amountMsat` | it gains neither: the view model holds the invoice row, and the amount comes from the payment rather than from the invoice. `Paid` carries the operator's name instead, which the plan did not foresee needing |
+| `PaymentReceived(amount, note, onTheWordOf, action)` | that, and it prints nothing for a zero amount -- a deposit's amount is zero until the chain says otherwise, and a zero is as uninformative as no figure. `note` is a parameter the plan's signature left out |
+| the group Wavelength invoice falls back to the operator's snapshot | only on `status == "complete"`. A `"pending"` line exists from the moment the invoice is made, so pending can never mean paid |
+| the group Wavelength address falls back to the operator's snapshot too | it cannot: the snapshot's activity lines carry a payment hash and nothing that names an address. That rail is this device's own `GroupArkBoarded` rows alone, so the panel comes when the group signs for the coin rather than at first sight of it in the mempool -- and those rows are deleted when the round confirms, so it is the window between the two |
+| the cap is recomputed on every emission | the limits are; the `AtTheCap` gate is left one-shot, so a member whose deposit filled the cap sees the payment rather than the cap |
+| each of the three rotating view models grows a `justPaid` | one `PaidAddressWatch`, because all three turned out to have the same shape -- a current address and a list with a `USED` status -- with `GroupWalletState` serving two of them |
+| `DepositCard` takes the just-paid address | it takes the amount. `GroupWalletDerivation.Derived` needs real keys and a tweak cache, which is an expensive fixture for a card that only prints a figure |
+| Phase 5 is a source scan over `QRCodeView` call sites | a Compose UI test. `runDesktopComposeUiTest` is already in this tree, which the plan missed, and `QRCodeView` gives its image the request as a content description -- so *is this scannable?* is a question the semantics tree answers. A new rail that forgets the rule fails on what it draws rather than passing a scan of its imports |
+
+Nothing here has been seen on a phone, or against a real payment: every phase was
+checked with `:composeApp:jvmTest`, `:composeApp:compileKotlinJvm` and
+`m3-audit.sh --check`. The regtest run named under Phase 1 has not been done.
 
 The headline: **a payment request has three states and only the first of them is
 a QR code -- waiting, paid, and no longer this screen's business. The signal for
@@ -248,21 +273,21 @@ than a requirement.
 
 ### Phase 2 — Personal Wavelength
 
-**First, a spike, before any change.** Initialise `experimental/wavelength-kmp`
-and read the `Entry`, `EntryProgress` and request models. Two questions, and the
-rest of the phase is written against the answers:
+**The spike ran first and changed this phase.** Initialising
+`experimental/wavelength-kmp` made the `Entry`, `EntryProgress` and `EntryRequest`
+models readable, and they answered both questions:
 
-1. what field of a `DEPOSIT` entry carries the boarding address -- `counterparty`
-   is the candidate, since `WavelengthEntryDetail` shows it under *To*, but an
-   entry for money coming *in* naming the payer there would make it the wrong
-   field;
-2. whether `EntryPhase` has a phase between `WAITING_FOR_PAYMENT` and completion
-   that `isUnpaidRequest` is already reading correctly, or whether a receive jumps
-   from waiting to `COMPLETE`.
-
-If (1) has no answer, the Lightning half of this phase ships alone and the
-boarding address keeps its QR, with a line in this note's outcome table saying so.
-That is a real possible outcome and not a reason to hold the phase.
+1. a `DEPOSIT` entry's address is `EntryRequest.onchainAddress`, not
+   `counterparty` -- which `WavelengthEntryDetail` renders as *To* and is the
+   wrong end of a payment coming in. But the field is moot: `Receive` and
+   `Deposit` each return the entry they created alongside the request, so the
+   **entry's id** is an exact match, and `EntryRequest` is documented as nil when
+   the backing subsystem persisted none. Both halves of this phase ship.
+2. `EntryPhase` has `PAYMENT_DETECTED` between waiting and settling, and
+   `WAITING_FOR_CONFIRMATION` for an onchain payment seen but unconfirmed, so
+   money seen is nameable. It also has `UNSPECIFIED`, meaning "no lifecycle
+   hint", which `isUnpaidRequest` did not list -- so a request the daemon had said
+   nothing about read as *Pending* rather than *Waiting for payment*.
 
 Then:
 
@@ -401,8 +426,16 @@ every line of plumbing Phases 0 through 3 lay down.
 ```
 
 ```bash
-./gradlew :composeApp:compileDebugKotlinAndroid :composeApp:jvmTest
+./gradlew :composeApp:compileKotlinJvm :composeApp:jvmTest
 ```
+
+`compileKotlinJvm` rather than `compileDebugKotlinAndroid`, which this worktree
+cannot run: the Android build needs the Wavelength bindings staged under
+`experimental/wavelength-kmp/bindings/android`, and a fresh worktree has none.
+`settings.gradle.kts` warns rather than fails, and the desktop target and
+`jvmTest` go on without them, which is what every phase here was checked with.
+A change to this work that touches the Android target needs
+`experimental/wavelength-kmp/scripts/fetch-bindings.sh android` first.
 
 The audit's budgets are the ones that bite here: the panel's spacing comes from
 `MaterialTheme.spacing`, its colours from a theme pair rather than a success
