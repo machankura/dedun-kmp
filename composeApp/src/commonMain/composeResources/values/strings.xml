@@ -1359,4 +1359,11 @@
     <string name="group_wavelength_leave_this_open">Leave Dedun open on this device: it only signs for the wallet while it's running.</string>
     <string name="group_wavelength_signers_s_of_s">%1$s of %2$s to sign, %3$s devices online to renew</string>
     <string name="group_wavelength_cap_s">At most %1$s sats on mainnet</string>
+    <string name="payment_received">Payment received</string>
+    <string name="the_operator_says_a_payment_arrived">%1$s says a payment arrived</string>
+    <string name="ask_for_another_invoice">Ask for another invoice</string>
+    <string name="ask_for_another_address">Ask for another address</string>
+    <string name="this_invoice_was_paid_and_should_not_be_paid_again">This invoice was paid. Paying it again would send money nobody can credit.</string>
+    <string name="this_address_was_paid_and_the_next_one_is_below">This address was paid. The one below it is fresh.</string>
+    <string name="this_address_was_paid_ask_for_another">This address was paid. Ask for another to keep your deposits apart.</string>
 </resources>

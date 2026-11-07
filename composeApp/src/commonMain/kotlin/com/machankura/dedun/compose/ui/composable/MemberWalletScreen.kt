@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
 import com.machankura.dedun.compose.managers.MemberWalletManager
+import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.s_has_stopped_guarding_members_wallets_discard
 import dedun.composeapp.generated.resources.s_has_changed_its_delay_since_you_asked
 import dedun.composeapp.generated.resources.s_would_refuse_this_request_asked_before
@@ -94,6 +95,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
@@ -271,6 +273,14 @@ fun MemberWalletScreen(
                                                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
                                                 ) {
                                                     Text(stringResource(Res.string.receive_address), style = MaterialTheme.typography.titleMedium)
+                                                    // The address below has already rotated; what was
+                                                    // missing was the saying so (docs/paid-requests.md, D7).
+                                                    state.justPaid?.let { paid ->
+                                                        PaymentReceived(
+                                                            amount = paid.balance,
+                                                            note = stringResource(Res.string.this_address_was_paid_and_the_next_one_is_below),
+                                                        )
+                                                    }
                                                     QRCodeView(bip21Uri(address))
                                                     SelectionContainer { Text(text = address, style = MaterialTheme.typography.bodyMedium) }
                                                     TextButton(onClick = {

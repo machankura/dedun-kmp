@@ -37,6 +37,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
@@ -48,9 +49,13 @@ import com.machankura.dedun.compose.wallet.wavelength.IdentityWavelength
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthWalletRollout
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.amount_in_sats
+import dedun.composeapp.generated.resources.ask_for_another_address
+import dedun.composeapp.generated.resources.ask_for_another_invoice
 import dedun.composeapp.generated.resources.copied
 import dedun.composeapp.generated.resources.copy
 import dedun.composeapp.generated.resources.receive
+import dedun.composeapp.generated.resources.this_address_was_paid_ask_for_another
+import dedun.composeapp.generated.resources.this_invoice_was_paid_and_should_not_be_paid_again
 import dedun.composeapp.generated.resources.wavelength_not_turned_on
 import dedun.composeapp.generated.resources.wavelength_receive_above_balance_limit
 import dedun.composeapp.generated.resources.wavelength_receive_above_cap_s_sats
@@ -146,11 +151,20 @@ private fun LightningTab(state: WavelengthReceiveUIState, onAmountChange: (Strin
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
-    Button(onClick = onMakeInvoice, enabled = !state.working) { Text(stringResource(Res.string.wavelength_receive_make_invoice)) }
+    Button(onClick = onMakeInvoice, enabled = !state.working) {
+        Text(stringResource(if (state.invoicePaid != null) Res.string.ask_for_another_invoice else Res.string.wavelength_receive_make_invoice))
+    }
     state.invoice?.let { invoice ->
-        RequestCode(invoice)
-        if (state.invoiceIsCredit) Text(stringResource(Res.string.wavelength_receive_credit), style = MaterialTheme.typography.bodyMedium)
-        Text(stringResource(Res.string.wavelength_receive_keep_open), style = MaterialTheme.typography.bodyMedium)
+        val paid = state.invoicePaid
+        if (paid != null) {
+            // The button above is the way to another invoice, so the panel needs no action of its own.
+            PaymentReceived(amount = paid, note = stringResource(Res.string.this_invoice_was_paid_and_should_not_be_paid_again))
+            RequestText(invoice)
+        } else {
+            RequestCode(invoice)
+            if (state.invoiceIsCredit) Text(stringResource(Res.string.wavelength_receive_credit), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(Res.string.wavelength_receive_keep_open), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
@@ -160,6 +174,18 @@ private fun OnchainTab(state: WavelengthReceiveUIState, onMakeAddress: () -> Uni
     val address = state.address
     if (address == null) {
         Button(onClick = onMakeAddress, enabled = !state.working) { Text(stringResource(Res.string.wavelength_receive_make_address)) }
+        return
+    }
+    val paid = state.addressPaid
+    if (paid != null) {
+        PaymentReceived(
+            amount = paid,
+            note = stringResource(Res.string.this_address_was_paid_ask_for_another),
+            action = {
+                Button(onClick = onMakeAddress, enabled = !state.working) { Text(stringResource(Res.string.ask_for_another_address)) }
+            },
+        )
+        RequestText(address)
     } else {
         RequestCode(address)
     }
@@ -167,10 +193,20 @@ private fun OnchainTab(state: WavelengthReceiveUIState, onMakeAddress: () -> Uni
 
 @Composable
 private fun RequestCode(text: String) {
+    QRCodeView(text)
+    RequestText(text)
+}
+
+/**
+ * The request as text, with a copy button: what a paid request keeps when its QR code goes
+ * (`docs/paid-requests.md`, D6). Still worth reading against what a payer says they paid, and
+ * never worth scanning again.
+ */
+@Composable
+private fun RequestText(text: String) {
     val clipboard = LocalClipboardManager.current
     val notify = rememberNotifier(rememberCoroutineScope())
     val copied = stringResource(Res.string.copied)
-    QRCodeView(text)
     Text(text, style = MaterialTheme.typography.bodySmall)
     TextButton(onClick = { clipboard.setText(AnnotatedString(text)); notify(copied) }) { Text(stringResource(Res.string.copy)) }
 }

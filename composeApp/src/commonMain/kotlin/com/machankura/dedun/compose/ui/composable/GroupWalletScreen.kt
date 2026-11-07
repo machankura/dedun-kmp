@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.your_device_signs_only_payouts
 import dedun.composeapp.generated.resources.pay_out
 import dedun.composeapp.generated.resources.members_balances_and_payouts
@@ -176,6 +177,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
@@ -611,6 +613,7 @@ private fun OpenWallet(
                     DepositCard(
                         standing = state.deposits,
                         address = (state.deposits as? DepositRepository.Standing.Open)?.let { walletState.depositAddressOf(it.depositor.member) },
+                        justPaidSat = state.justPaidDeposit?.balance,
                         isPending = isPending,
                         onCopy = { address ->
                             clipboardManager.setText(buildAnnotatedString { append(address) })
@@ -1056,6 +1059,8 @@ internal fun BalanceCard(walletState: GroupWalletState?) {
 internal fun DepositCard(
     standing: DepositRepository.Standing,
     address: String?,
+    /** What arrived at the address this card was handing out, once it has been paid (`docs/paid-requests.md`, D7). */
+    justPaidSat: Satoshi?,
     isPending: Boolean,
     onCopy: (String) -> Unit,
     onOpenAddresses: () -> Unit,
@@ -1098,6 +1103,13 @@ internal fun DepositCard(
                 is DepositRepository.Standing.Open -> if (address == null) {
                     LoadingDataIndicator(fillScreen = false, text = stringResource(Res.string.finding_the_group_s_coins))
                 } else {
+                    // The address below has already rotated; what was missing was the saying so.
+                    justPaidSat?.let { arrived ->
+                        PaymentReceived(
+                            amount = arrived,
+                            note = stringResource(Res.string.this_address_was_paid_and_the_next_one_is_below),
+                        )
+                    }
                     // BIP21, so a scanning wallet knows what the text is.
                     QRCodeView(bip21Uri(address))
                     SelectionContainer {
