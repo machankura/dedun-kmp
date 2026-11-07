@@ -77,13 +77,13 @@ class GroupArkWatcher(
         val depth = GroupWavelengthRollout.settleDepth(chain)
         val commitment = Transaction.read(round.commitmentTx)
         // Null while Electrum hasn't heard of it, which is also what a dead commitment looks like.
-        val confirmations = confirmationsOf(electrum, commitment)
+        val standing = standingOf(electrum, commitment)
         when {
-            confirmations == null -> if (conflicted(electrum, commitment, depth)) {
+            standing == null -> if (conflicted(electrum, commitment, depth)) {
                 logger.i { "Round ${round.commitment} lost to a conflict: its coins are free again" }
                 GroupArkCoSigner.abandoned(database, round.wallet, round.commitment)
             }
-            confirmations >= depth -> GroupArkCoSigner.roundSettled(database, round)
+            standing.confirmations >= depth -> GroupArkCoSigner.roundSettled(database, round, standing.height)
         }
     }
 
@@ -100,7 +100,7 @@ class GroupArkWatcher(
                 .filter { it.blockHeight > 0 && it.txid != commitment.txid }
                 .any { item ->
                     val spender = electrum.getTx(item.txid) ?: return@any false
-                    spender.txIn.any { it.outPoint == input.outPoint } && (confirmationsOf(electrum, spender) ?: 0) >= depth
+                    spender.txIn.any { it.outPoint == input.outPoint } && (standingOf(electrum, spender)?.confirmations ?: 0) >= depth
                 }
             if (found) return true
         }
@@ -112,10 +112,14 @@ class GroupArkWatcher(
      * its connection began at, so a block newer than the connection never reaches any depth until the connection drops: a signet run sat
      * over an hour on a coin ten blocks deep. The tip is read last, so it is never behind the history it is measured against.
      */
-    private suspend fun confirmationsOf(electrum: IElectrumClient, tx: Transaction): Int? {
+    private suspend fun standingOf(electrum: IElectrumClient, tx: Transaction): Standing? {
         val item = electrum.getScriptHashHistory(scriptHashOf(tx.txOut.first().publicKeyScript)).find { it.txid == tx.txid } ?: return null
-        return if (item.blockHeight > 0) electrum.startHeaderSubscription().blockHeight - item.blockHeight + 1 else 0
+        val height = item.blockHeight.toLong()
+        return if (height > 0) Standing(electrum.startHeaderSubscription().blockHeight - height + 1, height) else Standing(0, null)
     }
+
+    /** How deep a transaction is, and the block it's in when it's in one. */
+    private class Standing(val confirmations: Long, val height: Long?)
 
     private fun scriptHashOf(script: ByteVector) = Crypto.sha256(script).byteVector32().reversed()
 

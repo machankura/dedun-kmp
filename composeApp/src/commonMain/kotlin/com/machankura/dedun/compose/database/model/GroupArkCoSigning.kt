@@ -33,6 +33,13 @@ data class GroupArkVtxo(
     val term: Long? = null,
     /** Whether what it was reserved for has taken effect. */
     val spent: Boolean = false,
+    /** How many blocks after its commitment confirms the batch it's in can be swept, from the round this device checked. */
+    val sweepDelay: Long? = null,
+    /**
+     * The height the operator can sweep it from, by this device's own count and never the operator's: the commitment's height as this
+     * device's Electrum says, plus [sweepDelay], or the soonest of what a transfer spent. Null where this device hasn't worked one out.
+     */
+    val expiresAtHeight: Long? = null,
 )
 
 /**

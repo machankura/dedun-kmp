@@ -35,8 +35,15 @@ interface GroupArkDao {
     @Query("SELECT * FROM GroupArkVtxo WHERE wallet = :wallet")
     suspend fun vtxos(wallet: String): List<GroupArkVtxo>
 
+    @Query("SELECT * FROM GroupArkVtxo WHERE wallet = :wallet")
+    fun observeVtxos(wallet: String): Flow<List<GroupArkVtxo>>
+
     @Query("UPDATE GroupArkVtxo SET settled = 1 WHERE wallet = :wallet AND origin = :origin")
     suspend fun settle(wallet: String, origin: String)
+
+    /** What a commitment's height says of the coins it made: when their batch can be swept. */
+    @Query("UPDATE GroupArkVtxo SET expiresAtHeight = :height + sweepDelay WHERE wallet = :wallet AND origin = :origin AND sweepDelay IS NOT NULL")
+    suspend fun expireFrom(wallet: String, origin: String, height: Long)
 
     @Query("UPDATE GroupArkVtxo SET spent = 1 WHERE wallet = :wallet AND reservedBy = :by")
     suspend fun spendReservedBy(wallet: String, by: String)

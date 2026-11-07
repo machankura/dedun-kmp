@@ -58,6 +58,8 @@ object ArkPolicy {
         val checkpoints: List<String> = emptyList(),
         /** The one of [checkpoints] this signature is on, or null for an Ark transaction's. */
         val signing: String? = null,
+        /** A round's batch life in blocks, which with the commitment's height says when its coins can be swept. */
+        val sweepDelay: Long? = null,
     )
 
     sealed class Verdict {
@@ -551,7 +553,7 @@ object ArkPolicy {
             if (context.unspentSat - (context.pendingFromSat[id] ?: 0) - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
         }
         checkFeeBudget(context, id, fee)
-        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment))))
+        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment)), sweepDelay = round.sweepDelay))
     }
 
     /** That a forfeit's connector comes from this commitment: the chain of transactions that makes the forfeit conditional. */

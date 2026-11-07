@@ -3,16 +3,19 @@ package com.machankura.dedun.compose.managers
 import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
+import com.machankura.dedun.compose.network.GroupWavelengthTermsReader
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.text.ProposedEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkAuth
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
@@ -85,6 +88,25 @@ class GroupWavelengthWalletJvmTest {
     }
 
     @Test
+    fun `a key made for this wallet isn't the Lightning wallet's completed key, nor the reverse`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        all.forEach { d ->
+            assertNull(IcebergRitualManager.completedKey(d.db, fixture.roomId), "the Lightning screen must not see this key")
+            assertNotNull(IcebergRitualManager.completedKey(d.db, fixture.roomId, IcebergKeySession.PURPOSE_WAVELENGTH))
+        }
+    }
+
+    @Test
+    fun `a ceremony running for one wallet doesn't stand in for the other's`() = runBlocking<Unit> {
+        val all = fixture.group()
+        val first = IcebergRitualManager.proposeCeremony(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, 2, fixture.chain, IcebergKeySession.PURPOSE_LIGHTNING)
+        val second = IcebergRitualManager.proposeCeremony(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, 2, fixture.chain, IcebergKeySession.PURPOSE_WAVELENGTH)
+        assertTrue(first.id != second.id)
+        assertEquals(IcebergKeySession.PURPOSE_WAVELENGTH, second.purpose)
+    }
+
+    @Test
     fun `a proposal that names no purpose is the Lightning wallet's, as every old one was`() = runBlocking<Unit> {
         val all = fixture.group()
         val proposed = fixture.runCeremony(all)
@@ -123,6 +145,10 @@ class GroupWavelengthWalletJvmTest {
         fixture.pump(all, FrostSigningEvents.ALL)
         assertNull(GroupWavelengthWalletManager.current(all[1].db, fixture.roomId, fixture.chain))
         assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        // And a screen can tell that from a group with no wallet.
+        assertEquals(GroupWavelengthWalletManager.Refusal.WAITING_FOR_SEED, GroupWavelengthWalletManager.refusalOn(all[1].db, fixture.roomId, fixture.chain))
+        assertNull(GroupWavelengthWalletManager.refusalOn(all[0].db, fixture.roomId, fixture.chain))
+        assertNull(GroupWavelengthWalletManager.refusalOn(all[0].db, fixture.roomId, Chain.Signet.takeIf { it != fixture.chain } ?: Chain.Mainnet), "nor is another chain's business")
     }
 
     @Test
@@ -308,6 +334,26 @@ class GroupWavelengthWalletJvmTest {
         val summary = ProposedEvent.summarize(Event("0".repeat(64), "0".repeat(64), 0, template.kind, template.tags, template.content, ""))
         assertEquals("Open a Wavelength wallet", summary.label)
         assertTrue(summary.detail.contains("3 devices online"), summary.detail)
+    }
+
+    @Test
+    fun `a member approving a nomination is told who and which term`() {
+        val template = GroupWavelengthOperatorStatementEvent.template(GroupWavelengthOperatorStatementEvent.Statement(Chain.Signet, 0, "ab".repeat(32), 3))
+        val event = Event("00".repeat(32), "00".repeat(32), 0, template.kind, template.tags, template.content, "")
+        val summary = ProposedEvent.summarize(event) { "Thandi" }
+        assertEquals("Choose who runs the Wavelength wallet", summary.label)
+        assertTrue("Term 3" in summary.detail && "Thandi" in summary.detail, summary.detail)
+    }
+
+    @Test
+    fun `the terms this build proposes under are the ones a real operator sent`() {
+        val mainnet = """{"pubkey":"Axm1Ki1Wc+WPk7rT1bpZ2FVl8li8PakIe3ZZ5n3MIpsX","boarding_exit_delay":512,"vtxo_exit_delay":144,"min_boarding_amount":"1000","max_vtxo_amount":"50000","min_confirmations":6,"min_operator_fee":"1000","max_user_balance":"300000","free_refresh_window_blocks":648}"""
+        val signet = """{"pubkey":"A302LPU/X+OrdSl04rgAgwI1nPeuQqXzFscvkERQjzC5","boarding_exit_delay":512,"vtxo_exit_delay":144,"min_boarding_amount":"1000","max_vtxo_amount":"200000","min_confirmations":1,"min_operator_fee":"1000","max_user_balance":"100000000","free_refresh_window_blocks":504}"""
+        assertEquals(GroupWavelengthTerms.of(Chain.Mainnet), GroupWavelengthTermsReader.parse(mainnet))
+        assertEquals(GroupWavelengthTerms.of(Chain.Signet), GroupWavelengthTermsReader.parse(signet))
+        assertNull(GroupWavelengthTermsReader.parse("not an answer"))
+        assertNull(GroupWavelengthTerms.of(Chain.Regtest))
+        GroupWavelengthRollout.NETWORKS.forEach { assertNotNull(GroupWavelengthTerms.of(it), "a network the screen offers needs terms") }
     }
 
     @Test

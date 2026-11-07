@@ -71,64 +71,82 @@ object GroupWavelengthWalletManager {
      * made for this purpose, and the authentication seed this device holds makes the identity and manifest it names. A
      * reader who is not a participant checks everything but the last two. Null otherwise, with the reason in the log.
      */
-    suspend fun verify(database: DedunDatabase, chatRoomId: String, signed: GroupSignedEvent): Wallet? {
-        if (signed.kind != GroupWavelengthWalletStatementEvent.KIND || !signed.verifies()) return null
-        val statement = GroupWavelengthWalletStatementEvent.read(signed.tags) ?: return null
-        // Not only what this device offers: a statement it doesn't believe is a wallet it has nothing to co-sign for.
-        if (!GroupWavelengthRollout.allows(statement.chain)) {
-            logger.w("Wavelength wallet ${signed.id} is on ${statement.chain.name}, where this build refuses one")
-            return null
-        }
-        GroupWalletManager.thresholdKeyFor(database, chatRoomId) ?: return null
-        // The echo rule only holds for a group of this shape: see [GroupArkCoSigner].
-        if (!IcebergDkg.isDeployable(statement.participants.size, statement.threshold)) {
-            logger.w("Wavelength wallet ${signed.id} asks for ${statement.threshold}-of-${statement.participants.size}, which isn't deployable")
-            return null
-        }
-        if (GroupWalletManager.walletFor(database, chatRoomId, statement.chain, statement.onchainAccount) == null) {
-            logger.w("Wavelength wallet ${signed.id} leaves to an onchain wallet this room has not opened")
-            return null
-        }
-        FrostSigningManager.completedKey(database, chatRoomId)?.participantPublicKeySet()?.let { holders ->
-            if (!holders.map { it.lowercase() }.containsAll(statement.participants)) {
-                logger.w("Wavelength wallet ${signed.id} names participants who do not hold the onchain key")
-                return null
+    suspend fun verify(database: DedunDatabase, chatRoomId: String, signed: GroupSignedEvent): Wallet? =
+        when (val verdict = checked(database, chatRoomId, signed)) {
+            is Verdict.Believed -> verdict.wallet
+            is Verdict.Refused -> {
+                logger.w("Wavelength wallet ${signed.id} refused: ${verdict.why}")
+                null
             }
+        }
+
+    /** Why a device doesn't stand behind a statement, for the screen that has to say so. */
+    enum class Refusal {
+        /** Not signed by the room, or not a statement anybody can read. */
+        UNREADABLE,
+        CHAIN_REFUSED,
+        NO_GROUP_KEY,
+        SIZE_NOT_DEPLOYABLE,
+        NO_ONCHAIN_WALLET,
+        NOT_KEY_HOLDERS,
+        NO_CEREMONY,
+        CEREMONY_DISAGREES,
+        /** Nothing is wrong yet: the seed the opener sent is still on its way to this device. */
+        WAITING_FOR_SEED,
+        KEYS_DISAGREE,
+    }
+
+    sealed interface Verdict {
+        data class Believed(val wallet: Wallet) : Verdict
+        data class Refused(val why: Refusal, val statement: GroupWavelengthWalletStatementEvent.Statement? = null) : Verdict
+    }
+
+    /** [verify], saying why. */
+    suspend fun checked(database: DedunDatabase, chatRoomId: String, signed: GroupSignedEvent): Verdict {
+        if (signed.kind != GroupWavelengthWalletStatementEvent.KIND || !signed.verifies()) return Verdict.Refused(Refusal.UNREADABLE)
+        val statement = GroupWavelengthWalletStatementEvent.read(signed.tags) ?: return Verdict.Refused(Refusal.UNREADABLE)
+        fun refused(why: Refusal) = Verdict.Refused(why, statement)
+        // Not only what this device offers: a statement it doesn't believe is a wallet it has nothing to co-sign for.
+        if (!GroupWavelengthRollout.allows(statement.chain)) return refused(Refusal.CHAIN_REFUSED)
+        GroupWalletManager.thresholdKeyFor(database, chatRoomId) ?: return refused(Refusal.NO_GROUP_KEY)
+        // The echo rule only holds for a group of this shape: see [GroupArkCoSigner].
+        if (!IcebergDkg.isDeployable(statement.participants.size, statement.threshold)) return refused(Refusal.SIZE_NOT_DEPLOYABLE)
+        if (GroupWalletManager.walletFor(database, chatRoomId, statement.chain, statement.onchainAccount) == null) return refused(Refusal.NO_ONCHAIN_WALLET)
+        FrostSigningManager.completedKey(database, chatRoomId)?.participantPublicKeySet()?.let { holders ->
+            if (!holders.map { it.lowercase() }.containsAll(statement.participants)) return refused(Refusal.NOT_KEY_HOLDERS)
         }
 
         val ceremony = database.icebergKeySessionDao().getSessionById(statement.ceremonyId)
         val user = ceremony?.userPublicKey ?: database.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.userPublicKey
         val isParticipant = user != null && user.lowercase() in statement.participants
-        if (ceremony == null && isParticipant) {
-            logger.w("Wavelength wallet ${signed.id} names a ceremony this participant has no record of")
-            return null
-        }
+        if (ceremony == null && isParticipant) return refused(Refusal.NO_CEREMONY)
         if (ceremony != null) {
             val agrees = ceremony.purpose == IcebergKeySession.PURPOSE_WAVELENGTH &&
                 ceremony.stage == IcebergRitualStage.COMPLETE &&
                 ceremony.groupPublicKey == statement.icebergKey &&
                 ceremony.threshold == statement.threshold &&
                 ceremony.participants() == statement.participants
-            if (!agrees) {
-                logger.w("Wavelength wallet ${signed.id} disagrees with this device's ceremony ${ceremony.id}")
-                return null
-            }
+            if (!agrees) return refused(Refusal.CEREMONY_DISAGREES)
         }
 
         if (isParticipant) {
-            val seed = database.groupWavelengthSeedDao().get(chatRoomId, statement.identity)
-            if (seed == null) {
-                logger.w("Wavelength wallet ${signed.id} names an identity this participant holds no seed for")
-                return null
-            }
+            val seed = database.groupWavelengthSeedDao().get(chatRoomId, statement.identity) ?: return refused(Refusal.WAITING_FOR_SEED)
             val (identity, manifest) = bindingOf(PublicKey.fromHex(statement.icebergKey), ByteVector32(seed.seed), statement.chain, statement.wallet)
-            if (identity != statement.identity || manifest != statement.manifestHash) {
-                logger.w("Wavelength wallet ${signed.id} names a manifest this device's keys don't make")
-                return null
-            }
+            if (identity != statement.identity || manifest != statement.manifestHash) return refused(Refusal.KEYS_DISAGREE)
         }
-        return Wallet(signed, statement)
+        return Verdict.Believed(Wallet(signed, statement))
     }
+
+    /**
+     * Why [chatRoomId] seems to have a wallet on [chain] that this device doesn't believe, or null when it believes them all or
+     * there are none. A screen has to tell a member waiting for a seed from a group with no wallet.
+     */
+    suspend fun refusalOn(database: DedunDatabase, chatRoomId: String, chain: Chain): Refusal? =
+        database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupWavelengthWalletStatementEvent.KIND)
+            .sortedWith(compareByDescending<GroupSignedEvent> { it.createdAt }.thenBy { it.id })
+            .map { checked(database, chatRoomId, it) }
+            .firstOrNull { (it as? Verdict.Refused)?.statement?.chain == chain || (it as? Verdict.Believed)?.wallet?.statement?.chain == chain }
+            .let { (it as? Verdict.Refused)?.why }
 
     /**
      * Proposes the wallet: makes its authentication seed, sends it to every other participant encrypted to them, and opens

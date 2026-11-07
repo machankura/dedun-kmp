@@ -277,8 +277,9 @@ object GroupArkCoSigner {
         dao.deletePendingRound(key, commitment)
     }
 
-    /** A round this device has now seen confirm, and whatever it refused for not having seen that yet. */
-    suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound) {
+    /** A round this device has now seen confirm at [height], and whatever it refused for not having seen that yet. */
+    suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound, height: Long? = null) {
+        height?.let { database.groupArkDao().expireFrom(row.wallet, row.commitment, it) }
         settled(database, row.wallet, row.commitment)
         database.groupArkDao().deletePendingRound(row.wallet, row.commitment)
         val localChatRoom = database.chatRoomDao().findChatRoomById(row.chatRoomId) ?: return
@@ -486,7 +487,11 @@ object GroupArkCoSigner {
         val known = dao.vtxos(key).associateBy { it.outpoint }
         effect.reserves.forEach { outpoint -> known[outpoint]?.let { dao.upsertVtxo(it.copy(reservedBy = effect.towards, term = term)) } }
         // A credit never overwrites: what this device has already seen settle isn't for a note to change.
-        effect.credits.forEach { (outpoint, amount) -> if (outpoint !in known) dao.upsertVtxo(GroupArkVtxo(key, outpoint, amount, origin = effect.towards, term = term)) }
+        // A transfer makes coins in the batches it spent from, so they go no later than the soonest of those.
+        val inherited = effect.reserves.mapNotNull { known[it]?.expiresAtHeight }.minOrNull()
+        effect.credits.forEach { (outpoint, amount) ->
+            if (outpoint !in known) dao.upsertVtxo(GroupArkVtxo(key, outpoint, amount, origin = effect.towards, term = term, sweepDelay = effect.sweepDelay, expiresAtHeight = inherited))
+        }
     }
 
     private suspend fun fileEchoes(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {

@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -147,6 +148,13 @@ object ProposedEvent {
                 },
             )
         } ?: Summary(label = "Pay from the Wavelength wallet", detail = "A payment this device cannot read")
+
+        GroupWavelengthOperatorStatementEvent.KIND -> Summary(
+            label = "Choose who runs the Wavelength wallet",
+            detail = GroupWavelengthOperatorStatementEvent.read(event.tags)?.let { statement ->
+                statement.operator?.let { "Term ${statement.term}: ${nameOf(it) ?: it.take(8)} runs the wallet on their device" } ?: "Term ${statement.term}: nobody runs the wallet"
+            } ?: "An operator statement this device cannot read"
+        )
 
         GroupLightningOperatorStatementEvent.KIND -> Summary(
             label = "Choose who runs the Lightning wallet",

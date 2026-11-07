@@ -18,6 +18,7 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
 import com.machankura.dedun.compose.ui.view.state.IcebergCeremonyUIState
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Watches a group's Lightning wallet key ceremony, opens one, joins it, and abandons it.
+ * Watches a group's wallet key ceremony, opens one, joins it, and abandons it. [purpose] says which wallet's, when the
+ * caller is asking for one by what it's for rather than by which it is.
  *
  * Nothing here drives the protocol: [com.machankura.dedun.compose.managers.IcebergRitualManager]
  * advances as messages arrive, and this only reads the session and asks its owner whether to join.
@@ -43,6 +45,7 @@ class IcebergCeremonyViewModel(
     private val activeIdentityStateFlow: StateFlow<Identity?>,
     private val chatRepository: ChatRepository,
     private val lightningRepository: GroupLightningRepository,
+    val purpose: String = IcebergKeySession.PURPOSE_LIGHTNING,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -75,7 +78,7 @@ class IcebergCeremonyViewModel(
             val sessions = if (sessionId != null) {
                 lightningRepository.observeCeremony(sessionId)
             } else {
-                lightningRepository.observeCeremonies(chatRoomId).map { it.firstOrNull() }
+                lightningRepository.observeCeremonies(chatRoomId).map { sessions -> sessions.firstOrNull { it.purpose == purpose } }
             }
             sessions.collect { session ->
                 if (session != null) resume(localChatRoom, session)
@@ -109,9 +112,12 @@ class IcebergCeremonyViewModel(
     fun canPropose(): Boolean {
         val loaded = uiState as? IcebergCeremonyUIState.Loaded ?: return false
         val running = loaded.session?.stage?.let { it != IcebergRitualStage.FAILED && it != IcebergRitualStage.COMPLETE } == true
-        return !running && loaded.thresholds.isNotEmpty() && loaded.hasOnchainWallet && GroupLightningRollout.allows(chain) &&
+        return !running && loaded.thresholds.isNotEmpty() && loaded.hasOnchainWallet && allowed() &&
             activeIdentityStateFlow.value?.nostrPrivateKey != null
     }
+
+    private fun allowed(): Boolean =
+        if (purpose == IcebergKeySession.PURPOSE_WAVELENGTH) GroupWavelengthRollout.allows(chain) else GroupLightningRollout.allows(chain)
 
     fun propose(onFailure: () -> Unit) {
         val loaded = uiState as? IcebergCeremonyUIState.Loaded ?: return
@@ -120,8 +126,8 @@ class IcebergCeremonyViewModel(
         if (isActionPending.value) return
         isActionPending.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            val proposed = runCatching { lightningRepository.proposeCeremony(loaded.localChatRoom, activeUserPublicKey, privateKey, t, chain) }
-                .onFailure { logger.e("Could not open a Lightning wallet key ceremony in $chatRoomId", it) }
+            val proposed = runCatching { lightningRepository.proposeCeremony(loaded.localChatRoom, activeUserPublicKey, privateKey, t, chain, purpose) }
+                .onFailure { logger.e("Could not open a $purpose wallet key ceremony in $chatRoomId", it) }
                 .getOrNull()
             isActionPending.value = false
             if (proposed == null) withContext(Dispatchers.Main) { onFailure() }
@@ -177,6 +183,7 @@ class IcebergCeremonyViewModel(
             activeIdentityStateFlow: StateFlow<Identity?>,
             chatRepository: ChatRepository,
             lightningRepository: GroupLightningRepository,
+            purpose: String = IcebergKeySession.PURPOSE_LIGHTNING,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 IcebergCeremonyViewModel(
@@ -188,6 +195,7 @@ class IcebergCeremonyViewModel(
                     activeIdentityStateFlow = activeIdentityStateFlow,
                     chatRepository = chatRepository,
                     lightningRepository = lightningRepository,
+                    purpose = purpose,
                 )
             }
         }

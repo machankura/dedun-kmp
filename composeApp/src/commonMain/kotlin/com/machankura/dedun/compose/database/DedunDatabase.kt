@@ -217,7 +217,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 39,
+    version = 40,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -465,6 +465,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // the checkpoints of transfers it hasn't seen signed (docs/group-wavelength-wallet.md). v38 had reached `dedun`,
         // so this is a version of its own. New tables are a shape Room migrates itself, and nothing can be pending yet.
         AutoMigration(from = 38, to = 39),
+        // v40 adds when a group's Wavelength coin can be swept, by the device's own count, so that a member's deadline
+        // isn't the operator's word (docs/group-wavelength-ui.md, Phase 1). Two nullable columns, which Room migrates itself.
+        AutoMigration(from = 39, to = 40),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

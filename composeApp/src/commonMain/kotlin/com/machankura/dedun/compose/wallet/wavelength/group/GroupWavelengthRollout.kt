@@ -28,6 +28,9 @@ object GroupWavelengthRollout {
      */
     fun allows(chain: Chain): Boolean = chain == Chain.Mainnet || chain == Chain.Signet || chain == Chain.Regtest
 
+    /** The networks a group's screen offers a wallet on, each with a row of its own: both by decision, and regtest only for tests. */
+    val NETWORKS: List<Chain> = listOf(Chain.Mainnet, Chain.Signet)
+
     /** The most the group's unspent coins may come to on mainnet, against each co-signer's own ledger. */
     val MAINNET_CAP: Satoshi = Satoshi(100_000)
 

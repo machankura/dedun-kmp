@@ -95,7 +95,7 @@ class GroupArkWatcherJvmTest {
         val name = if (chain == Chain.Mainnet) "mainnet" else "regtest"
         dao.upsertPendingRound(GroupArkPendingRound(key, commitment.txid.toString(), "room", name, Hex.encode(Transaction.write(commitment))))
         dao.upsertVtxo(GroupArkVtxo(key, oldCoin, 40_000, settled = true, reservedBy = commitment.txid.toString(), term = 1))
-        dao.upsertVtxo(GroupArkVtxo(key, newCoin, 39_000, origin = commitment.txid.toString(), term = 1))
+        dao.upsertVtxo(GroupArkVtxo(key, newCoin, 39_000, origin = commitment.txid.toString(), term = 1, sweepDelay = 1_008))
         dao.upsertFee(GroupArkFee(key, commitment.txid.toString(), 1_000, 1, 5))
     }
 
@@ -137,6 +137,16 @@ class GroupArkWatcherJvmTest {
         assertTrue(vtxo(newCoin)!!.settled)
         assertTrue(vtxo(oldCoin)!!.spent)
         assertEquals(emptyList(), dao.pendingRounds(), "and nothing is waited on")
+    }
+
+    @Test
+    fun `a coin can be swept from the height this device saw its commitment at, plus the batch's life`() = runBlocking<Unit> {
+        signedRound()
+        electrum.tip = CONNECTED_AT + 10
+        confirmed(commitment, 2)
+        watcher.pass()
+        assertEquals(CONNECTED_AT + 10 - 2 + 1 + 1_008L, vtxo(newCoin)!!.expiresAtHeight)
+        assertEquals(null, vtxo(oldCoin)!!.expiresAtHeight, "and what this device never worked out, it doesn't guess")
     }
 
     @Test
