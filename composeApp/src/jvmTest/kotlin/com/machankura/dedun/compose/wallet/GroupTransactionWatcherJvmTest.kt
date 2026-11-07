@@ -30,6 +30,7 @@ import fr.acinq.lightning.blockchain.electrum.GetMerkleResponse
 import fr.acinq.lightning.blockchain.electrum.HeaderSubscriptionResponse
 import fr.acinq.lightning.blockchain.electrum.IElectrumClient
 import fr.acinq.lightning.blockchain.electrum.ScriptHashSubscriptionResponse
+import fr.acinq.lightning.blockchain.electrum.ServerVersionResponse
 import fr.acinq.lightning.blockchain.electrum.TransactionHistoryItem
 import fr.acinq.lightning.blockchain.electrum.UnspentItem
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
@@ -55,19 +56,19 @@ import kotlin.time.Instant
  * spend of the same coins.
  */
 class GroupTransactionWatcherJvmTest {
+    /** A connection as the real client keeps one: its status holds the height it began at, and only asking gets the tip. */
     private class FakeElectrum : IElectrumClient {
+        var tip = CONNECTED_AT
         val broadcasts = mutableListOf<TxId>()
-        /** Confirmations by txid; absent is "Electrum has not heard of it". */
-        val confirmations = mutableMapOf<TxId, Int>()
         /** What each script hash still holds, has seen, and the transactions behind both. */
         val unspents = mutableMapOf<ByteVector32, List<UnspentItem>>()
         val histories = mutableMapOf<ByteVector32, List<TransactionHistoryItem>>()
         val txs = mutableMapOf<TxId, Transaction>()
 
         override val notifications = MutableSharedFlow<ElectrumSubscriptionResponse>()
-        override val connectionStatus: StateFlow<ElectrumConnectionStatus> = MutableStateFlow(ElectrumConnectionStatus.Closed(null))
+        override val connectionStatus: StateFlow<ElectrumConnectionStatus> =
+            MutableStateFlow(ElectrumConnectionStatus.Connected(ServerVersionResponse("fake", "1.4"), CONNECTED_AT, Block.RegtestGenesisBlock.header))
         override suspend fun broadcastTransaction(tx: Transaction): TxId = tx.txid.also { broadcasts += it }
-        override suspend fun getConfirmations(tx: Transaction): Int? = confirmations[tx.txid]
         override suspend fun getTx(txId: TxId): Transaction? = txs[txId]
         override suspend fun getHeader(blockHeight: Int): BlockHeader? = null
         override suspend fun getHeaders(startHeight: Int, count: Int): List<BlockHeader> = emptyList()
@@ -76,7 +77,11 @@ class GroupTransactionWatcherJvmTest {
         override suspend fun getScriptHashUnspents(scriptHash: ByteVector32): List<UnspentItem> = unspents[scriptHash].orEmpty()
         override suspend fun estimateFees(confirmations: Int): FeeratePerKw? = null
         override suspend fun startScriptHashSubscription(scriptHash: ByteVector32) = ScriptHashSubscriptionResponse(scriptHash, null)
-        override suspend fun startHeaderSubscription() = HeaderSubscriptionResponse(0, Block.RegtestGenesisBlock.header)
+        override suspend fun startHeaderSubscription() = HeaderSubscriptionResponse(tip, Block.RegtestGenesisBlock.header)
+    }
+
+    private companion object {
+        const val CONNECTED_AT = 1_000
     }
 
     private val db: DedunDatabase = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
@@ -96,6 +101,12 @@ class GroupTransactionWatcherJvmTest {
     private fun spending(vararg coins: OutPoint, pay: Long) = Transaction(
         2, coins.map { TxIn(it, ByteVector.empty, 0xfffffffdL) }, listOf(TxOut(Satoshi(pay), ByteVector("0014" + "00".repeat(20)))), 0,
     )
+
+    /** [tx] at the address Electrum is asked about it at, confirmed at [height] (0 for the mempool). */
+    private fun onChain(tx: Transaction, height: Int) {
+        val at = ByteVector32(fr.acinq.bitcoin.Crypto.sha256(tx.txOut.first().publicKeyScript.toByteArray()).reversedArray())
+        electrum.histories[at] = electrum.histories[at].orEmpty().filter { it.txid != tx.txid } + TransactionHistoryItem(height, tx.txid)
+    }
 
     private suspend fun seed() {
         val eventId = "c".repeat(64)
@@ -159,7 +170,7 @@ class GroupTransactionWatcherJvmTest {
         watcher.pass()
         assertEquals(2, electrum.broadcasts.size, "sent again once the interval has passed, still unseen")
 
-        electrum.confirmations[tx.txid] = 0
+        onChain(tx, height = 0)
         watcher.pass()
         val seen = assertNotNull(db.groupTransactionDao().getBySessionId("a"))
         assertNotNull(seen.seenAt, "in the mempool is seen")
@@ -183,7 +194,7 @@ class GroupTransactionWatcherJvmTest {
         // And one of some other coin, which none of this touches.
         spend("unrelated", spending(OutPoint(TxId(ByteVector32(ByteArray(32) { 5 })), 1), pay = 1_000), FrostSigningStage.COLLECTING_NONCES, signed = false)
 
-        electrum.confirmations[winner.txid] = 1
+        onChain(winner, height = CONNECTED_AT)
         watcher.pass()
 
         assertNotNull(db.groupTransactionDao().getBySessionId("winner")?.confirmedAt)
@@ -201,6 +212,24 @@ class GroupTransactionWatcherJvmTest {
             .filter { it.chatMessage.messageType == ChatMessage.TYPE_GROUP_TRANSACTION_CONFIRMED }
         assertEquals(1, lines.size)
         assertTrue(db.groupTransactionDao().getUnsettled().isEmpty(), "neither signed spend is still on its way")
+    }
+
+    @Test
+    fun `a spend mined after the connection opened is confirmed`() = runBlocking<Unit> {
+        seed()
+        val tx = spending(coin, pay = 9_000)
+        spend("a", tx, FrostSigningStage.COMPLETE, signed = true)
+        onChain(tx, height = 0)
+        watcher.pass()
+        assertNull(db.groupTransactionDao().getBySessionId("a")?.confirmedAt, "in the mempool")
+
+        // Nothing drops the connection: its status still says the height it began at.
+        electrum.tip = CONNECTED_AT + 10
+        onChain(tx, height = CONNECTED_AT + 3)
+        assertEquals(-2, electrum.getConfirmations(tx), "which is why the watcher doesn't ask it")
+
+        watcher.pass()
+        assertNotNull(db.groupTransactionDao().getBySessionId("a")?.confirmedAt)
     }
 
     // ---- Coins another room's transaction took ------------------------------

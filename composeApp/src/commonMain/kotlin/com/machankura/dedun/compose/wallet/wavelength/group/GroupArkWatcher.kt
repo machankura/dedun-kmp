@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.wallet.GroupChainClients
+import com.machankura.dedun.compose.wallet.confirmationsOf
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.Transaction
@@ -77,7 +78,7 @@ class GroupArkWatcher(
         val depth = GroupWavelengthRollout.settleDepth(chain)
         val commitment = Transaction.read(round.commitmentTx)
         // Null while Electrum hasn't heard of it, which is also what a dead commitment looks like.
-        val confirmations = confirmationsOf(electrum, commitment)
+        val confirmations = electrum.confirmationsOf(commitment)
         when {
             confirmations == null -> if (conflicted(electrum, commitment, depth)) {
                 logger.i { "Round ${round.commitment} lost to a conflict: its coins are free again" }
@@ -100,21 +101,11 @@ class GroupArkWatcher(
                 .filter { it.blockHeight > 0 && it.txid != commitment.txid }
                 .any { item ->
                     val spender = electrum.getTx(item.txid) ?: return@any false
-                    spender.txIn.any { it.outPoint == input.outPoint } && (confirmationsOf(electrum, spender) ?: 0) >= depth
+                    spender.txIn.any { it.outPoint == input.outPoint } && (electrum.confirmationsOf(spender) ?: 0) >= depth
                 }
             if (found) return true
         }
         return false
-    }
-
-    /**
-     * How deep [tx] is now: 0 in the mempool, null if Electrum hasn't heard of it. [IElectrumClient.getConfirmations] counts from the height
-     * its connection began at, so a block newer than the connection never reaches any depth until the connection drops: a signet run sat
-     * over an hour on a coin ten blocks deep. The tip is read last, so it is never behind the history it is measured against.
-     */
-    private suspend fun confirmationsOf(electrum: IElectrumClient, tx: Transaction): Int? {
-        val item = electrum.getScriptHashHistory(scriptHashOf(tx.txOut.first().publicKeyScript)).find { it.txid == tx.txid } ?: return null
-        return if (item.blockHeight > 0) electrum.startHeaderSubscription().blockHeight - item.blockHeight + 1 else 0
     }
 
     private fun scriptHashOf(script: ByteVector) = Crypto.sha256(script).byteVector32().reversed()

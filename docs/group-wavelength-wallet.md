@@ -251,7 +251,7 @@ No device refused anything and no request failed, from the restart to the end.
 - **The dead-round path has only met a fake Electrum.** No round has died since the watcher existed.
 - **Coins sent to the group by anyone else aren't in the ledger,** so a device won't spend them.
 - **It runs while the app is alive,** as `GroupTransactionWatcher` does. The four devices shared one process and one connection, and mainnet's depth of 3 hasn't run.
-- **`GroupTransactionWatcher` and `MemberWalletViewModel` still call `getConfirmations`,** so they have the stale height too. Not changed here.
+- **`lightning-kmp` and its app library still call `getConfirmations`,** so they have the stale height. Everything in this app asks `IElectrumClient.confirmationsOf` (`ElectrumConfirmations.kt`) instead: `GroupTransactionWatcher` and `MemberWalletViewModel` were moved onto it after this run. That bug was found by reading and by a fake with a frozen height, and hasn't been seen on the on-chain group wallet itself.
 
 ## What mainnet has and hasn't been shown
 

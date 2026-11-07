@@ -123,7 +123,7 @@ class GroupOnchainWallets(
     }
 
     /** How deep [tx] is on [chain]: 0 in the mempool, null while Electrum has not heard of it or cannot be asked. */
-    suspend fun confirmationsOf(tx: Transaction, chain: Chain): Int? = runCatching { clients.clientFor(chain).getConfirmations(tx) }.getOrNull()
+    suspend fun confirmationsOf(tx: Transaction, chain: Chain): Int? = runCatching { clients.clientFor(chain).confirmationsOf(tx) }.getOrNull()
 
     /**
      * Whether [script] has ever been paid on [chain], or is one of [ownWallet]'s addresses: what a

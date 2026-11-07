@@ -17,6 +17,7 @@ import fr.acinq.lightning.blockchain.electrum.GetMerkleResponse
 import fr.acinq.lightning.blockchain.electrum.HeaderSubscriptionResponse
 import fr.acinq.lightning.blockchain.electrum.IElectrumClient
 import fr.acinq.lightning.blockchain.electrum.ScriptHashSubscriptionResponse
+import fr.acinq.lightning.blockchain.electrum.ServerVersionResponse
 import fr.acinq.lightning.blockchain.electrum.TransactionHistoryItem
 import fr.acinq.lightning.blockchain.electrum.UnspentItem
 import fr.acinq.lightning.blockchain.fee.FeeratePerKw
@@ -29,6 +30,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * `IElectrumClient` is small and documented never to throw, so a fake of it is
  * a few maps: what each script has been paid, what of it is unspent, and the
  * transactions that paid it.
+ *
+ * Closed until [connect], and a connection is as the real client keeps one: its status holds the
+ * height it began at, whatever [mine] does after, and only asking gets the tip.
  */
 internal class FakeElectrum : IElectrumClient {
     val unspents = mutableMapOf<ByteVector32, List<UnspentItem>>()
@@ -37,13 +41,29 @@ internal class FakeElectrum : IElectrumClient {
     override val notifications = MutableSharedFlow<ElectrumSubscriptionResponse>(extraBufferCapacity = 64)
     override val connectionStatus = MutableStateFlow<ElectrumConnectionStatus>(ElectrumConnectionStatus.Closed(null))
 
+    /** The best block: what asking for the header answers, and never what [connectionStatus] says after the handshake. */
+    var tip = 100
+        private set
+
     /** How many transactions have touched each script: Electrum's status is over the history, not the unspents. */
     private val history = mutableMapOf<ByteVector32, Int>()
 
     /** The transactions that touched each script, in order: what `get_history` answers. */
-    private val historyTxs = mutableMapOf<ByteVector32, List<TxId>>()
+    private val historyTxs = mutableMapOf<ByteVector32, List<TransactionHistoryItem>>()
 
     private fun status(scriptHash: ByteVector32): String? = history[scriptHash]?.let { "used:$it" }
+
+    /** Opens a connection with the tip at [height], which is where its status stays. */
+    fun connect(height: Int) {
+        tip = height
+        connectionStatus.value = ElectrumConnectionStatus.Connected(ServerVersionResponse("fake", "1.4"), height, Block.RegtestGenesisBlock.header)
+    }
+
+    /** The chain reaches [height]: a header notification, and nothing on the connection's status. */
+    suspend fun mine(height: Int) {
+        tip = height
+        notifications.emit(HeaderSubscriptionResponse(height, Block.RegtestGenesisBlock.header))
+    }
 
     /** Pays [script] in a fresh transaction, confirmed at [height] (0 for the mempool), and tells the wallet. */
     suspend fun pay(script: ByteVector, amount: Satoshi, height: Long = 100) {
@@ -57,7 +77,7 @@ internal class FakeElectrum : IElectrumClient {
         val hash = scriptHash(script)
         unspents[hash] = unspents[hash].orEmpty() + UnspentItem(tx.txid, 0, amount.sat, height)
         history[hash] = (history[hash] ?: 0) + 1
-        historyTxs[hash] = historyTxs[hash].orEmpty() + tx.txid
+        historyTxs[hash] = historyTxs[hash].orEmpty() + TransactionHistoryItem(height.toInt(), tx.txid)
         notifications.emit(ScriptHashSubscriptionResponse(hash, status(hash)))
     }
 
@@ -70,14 +90,21 @@ internal class FakeElectrum : IElectrumClient {
     }
 
     /** The transaction paying [script] most recently, as [pay] made it. */
-    fun fundingOf(script: ByteVector): Transaction = txs.getValue(historyTxs.getValue(scriptHash(script)).last())
+    fun fundingOf(script: ByteVector): Transaction = txs.getValue(historyTxs.getValue(scriptHash(script)).last().txid)
 
-    /** Spends what [script] holds with [tx] itself, which joins its history as a real spend would. */
-    suspend fun spendWith(script: ByteVector, tx: Transaction) {
+    /** Spends what [script] holds with [tx] itself, which joins its history as a real spend would, confirmed at [height]. */
+    suspend fun spendWith(script: ByteVector, tx: Transaction, height: Int = 100) {
         val hash = scriptHash(script)
         txs[tx.txid] = tx
-        historyTxs[hash] = historyTxs[hash].orEmpty() + tx.txid
+        historyTxs[hash] = historyTxs[hash].orEmpty() + TransactionHistoryItem(height, tx.txid)
         spend(script)
+    }
+
+    /** [tx] at the address it pays, confirmed at [height] (0 for the mempool), as a spend the wallet sent would be. */
+    fun sent(tx: Transaction, height: Int) {
+        val hash = scriptHash(tx.txOut.first().publicKeyScript)
+        txs[tx.txid] = tx
+        historyTxs[hash] = historyTxs[hash].orEmpty().filter { it.txid != tx.txid } + TransactionHistoryItem(height, tx.txid)
     }
 
     override suspend fun startScriptHashSubscription(scriptHash: ByteVector32): ScriptHashSubscriptionResponse {
@@ -90,11 +117,10 @@ internal class FakeElectrum : IElectrumClient {
     override suspend fun getHeader(blockHeight: Int): BlockHeader? = null
     override suspend fun getHeaders(startHeight: Int, count: Int): List<BlockHeader> = emptyList()
     override suspend fun getMerkle(txId: TxId, blockHeight: Int, contextOpt: Transaction?): GetMerkleResponse? = null
-    override suspend fun getScriptHashHistory(scriptHash: ByteVector32): List<TransactionHistoryItem> =
-        historyTxs[scriptHash].orEmpty().map { TransactionHistoryItem(100, it) }
+    override suspend fun getScriptHashHistory(scriptHash: ByteVector32): List<TransactionHistoryItem> = historyTxs[scriptHash].orEmpty()
     override suspend fun broadcastTransaction(tx: Transaction): TxId = tx.txid
     override suspend fun estimateFees(confirmations: Int): FeeratePerKw? = null
-    override suspend fun startHeaderSubscription() = HeaderSubscriptionResponse(0, Block.RegtestGenesisBlock.header)
+    override suspend fun startHeaderSubscription() = HeaderSubscriptionResponse(tip, Block.RegtestGenesisBlock.header)
 
     companion object {
         /** Electrum's script hash: sha256 of the script, byte-reversed. */
