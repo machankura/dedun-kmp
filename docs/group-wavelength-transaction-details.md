@@ -4,13 +4,31 @@ A member taps a line in the wallet's activity and gets a screen about that one t
 much, whose, where it got to, and what it cost. Behind a *Technical details* button, a bottom sheet with
 every field this device holds and every field the operator claims, each marked as one or the other.
 
-**Not built. Written against `9f99e06b`,** and the files and lines named below are as they stood at that
-commit. It takes over nothing from the earlier notes: it adds a screen the UI plan never had, on top of
+**Phases 1 to 5 and 7 are built and merged into `dedun`; Phase 6 is not.** Written against `9f99e06b`,
+and the files and lines named below are as they stood at that commit; `dedun` had moved 25 commits on by
+the time it merged, which "What merging `dedun` found" below accounts for. It takes over nothing from
+the earlier notes: it adds a screen the UI plan never had, on top of
 what [group-wavelength-ui.md](./group-wavelength-ui.md) Phase 5 and
 [group-wavelength-payouts.md](./group-wavelength-payouts.md) built. Those notes' decisions (D1 to D16,
 W1 to W12) all still apply, and **nothing in this plan changes what a device signs.** No phase here is
 marked *policy*, because none touches `ArkPolicy`, `GroupArkCoSigner`, an event's wire shape, or a
 refusal rule. If a phase below ever needs to, it stops and gets the reading those notes ask for first.
+
+### Where the build stands
+
+| phase | state |
+|---|---|
+| 1 | done. `GroupWavelengthEntry` and `GroupWavelengthHistory.of`, pure, 36 tests |
+| 2 | done. Schema 44: six nullable columns over five tables, and `historyRows` |
+| 3 | done. One *History* on the wallet screen, in place of three lists |
+| 4 | done. The detail screen, pushed at every width |
+| 5 | done. The *Technical details* sheet |
+| 6 | **not done.** Most of its behaviour is already in -- a restored device's entries are all `THE_OPERATOR`, the screen groups them under their own heading, and the Lightning-claim deadline gap is on the sheet -- so what is missing is its tests, and saying it once at the list's head rather than per row |
+| 7 | done, with this table and the link from the UI note |
+
+**Nothing here has met a real wallet.** Every fixture is hand-built or from the signet harness, and the
+wallet note's own account stands: no phone has co-signed a real round. The history reads what the tables
+hold, and what they hold on a funded mainnet wallet is still unobserved.
 
 Read these first:
 
