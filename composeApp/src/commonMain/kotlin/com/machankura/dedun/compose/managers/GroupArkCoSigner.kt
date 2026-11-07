@@ -50,6 +50,8 @@ import fr.acinq.bitcoin.crypto.iceberg.SignatureShare
 import fr.acinq.bitcoin.crypto.musig2.AggregatedNonce
 import fr.acinq.bitcoin.crypto.musig2.KeyAggCache
 import fr.acinq.bitcoin.utils.Either
+import androidx.room3.immediateTransaction
+import androidx.room3.useWriterConnection
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
@@ -71,7 +73,16 @@ import kotlin.time.Instant
  */
 object GroupArkCoSigner {
     private val logger = Logger.withTag("GroupArkCoSigner")
-    private val answering = Mutex()
+    private val answeringLock = Mutex()
+
+    /**
+     * Runs [block] as the one caller answering, with the database's writer already held. The order is the point: a message arriving is
+     * filed inside the inbound transaction, which holds the writer and then asks for this lock, so a caller taking the lock first and the
+     * writer second -- the operator's own requests, a settled round -- waited on it while it waited on them, and every write in the app
+     * stopped (`docs/group-wavelength-ui.md`). Inside a transaction already, this is a nested one on the same connection.
+     */
+    private suspend fun <T> answering(database: DedunDatabase, block: suspend () -> T): T =
+        database.useWriterConnection { transactor -> transactor.immediateTransaction { answeringLock.withLock { block() } } }
 
     /** When a device last asked for each participant's round one, and last said its own again, by its own key first: under [answering]. */
     private val roundOneAsked = HashMap<String, Instant>()
@@ -240,11 +251,11 @@ object GroupArkCoSigner {
      * device that has it already ignores it. A new message is at a generation the asker can read, which is the whole of the fix. Once
      * in [ROUND_ONE_WAIT] for each window, however many ask.
      */
-    private suspend fun sayAgain(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, key: String, wanted: ArkWire.Wanted, asked: String) = answering.withLock {
+    private suspend fun sayAgain(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, key: String, wanted: ArkWire.Wanted, asked: String) = answering(database) {
         val now = Clock.System.now()
         val me = userPublicKey.lowercase()
         val tag = "$me:$key:again:${wanted.plainFrom}:${wanted.childFrom}"
-        if (roundOneAsked[tag]?.let { now - it < ROUND_ONE_WAIT } == true) return@withLock
+        if (roundOneAsked[tag]?.let { now - it < ROUND_ONE_WAIT } == true) return@answering
         roundOneAsked[tag] = now
         val dao = database.icebergCoSigningDao()
 
@@ -259,7 +270,7 @@ object GroupArkCoSigner {
                 if (nonces.size == TREE_LABELS) ArkWire.TreeProvision(share.child, share.share, nonces) else null
             }
         }.orEmpty()
-        if (plain.isEmpty() && trees.isEmpty()) return@withLock
+        if (plain.isEmpty() && trees.isEmpty()) return@answering
         logger.i("Saying round one again: ${plain.size} labels from $plainFrom, ${trees.size} tree keys")
         queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.PROVISION, CommonJson.encodeToString(ArkWire.Provision.serializer(), ArkWire.Provision(key, plainFrom, plain, trees, answers = asked)))
     }
@@ -451,7 +462,7 @@ object GroupArkCoSigner {
         userPublicKey: HexKey,
         operator: HexKey,
         sayRefused: Boolean,
-    ) = answering.withLock {
+    ) = answering(database) {
         val roomId = localChatRoom.chatRoom.id
         val echoes = mutableListOf<ArkWire.EchoItem>()
         val wanted = mutableListOf<ArkWire.Wanted>()
@@ -613,7 +624,7 @@ object GroupArkCoSigner {
         val wallet = walletOf(database, localChatRoom.chatRoom.id, batch.wallet) ?: return
         if (indexOf(wallet, event.pubKey) == null) return
         batch.items.forEach { database.icebergCoSigningDao().insertEcho(IcebergEchoRow(batch.wallet, it.label, event.pubKey.lowercase(), it.messageHash)) }
-        answering.withLock { maybeSign(database, localChatRoom, wallet, batch.wallet, batch.items.map { it.label }, userPublicKey) }
+        answering(database) { maybeSign(database, localChatRoom, wallet, batch.wallet, batch.items.map { it.label }, userPublicKey) }
         settleTransfers(database, localChatRoom, wallet, batch.wallet, userPublicKey)
     }
 
@@ -770,7 +781,7 @@ object GroupArkCoSigner {
         if (echoes.isNotEmpty()) {
             queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.ECHO, CommonJson.encodeToString(ArkWire.EchoBatch.serializer(), ArkWire.EchoBatch(key, echoes)))
         }
-        answering.withLock { askForRoundOne(database, localChatRoom, userPublicKey, key, wanted) }
+        answering(database) { askForRoundOne(database, localChatRoom, userPublicKey, key, wanted) }
         maybeSign(database, localChatRoom, wallet, key, pending.map { label(wallet.statement, it.domain, it.counter).toHex() }, userPublicKey)
     }
 }

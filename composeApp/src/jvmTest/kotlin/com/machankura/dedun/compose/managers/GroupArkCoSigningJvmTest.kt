@@ -25,7 +25,10 @@ import com.machankura.dedun.compose.wallet.wavelength.group.NotedTx
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedRound
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedTree
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedVtxo
+import androidx.room3.immediateTransaction
+import androidx.room3.useWriterConnection
 import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.utils.RandomInstance
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
@@ -48,10 +51,14 @@ import fr.acinq.bitcoin.crypto.musig2.Musig2
 import fr.acinq.bitcoin.crypto.musig2.Session
 import fr.acinq.bitcoin.utils.Either
 import fr.acinq.secp256k1.Hex
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,7 +72,9 @@ import kotlin.time.Duration.Companion.seconds
  * interpreter, through the same pipe a daemon's requests take.
  */
 class GroupArkCoSigningJvmTest {
-    private val fixture = GroupLightningFixture().also { f ->
+    private var fixture = fixture()
+
+    private fun fixture(onDisk: Boolean = false) = GroupLightningFixture(onDisk = onDisk).also { f ->
         val inherited = f.dispatch
         f.dispatch = { to, event ->
             when (event.kind) {
@@ -633,6 +642,41 @@ class GroupArkCoSigningJvmTest {
             assertEquals(operator.icebergCoSigningDao().noncesOf(group.key, operatorKey, 0, 12), d.db.icebergCoSigningDao().noncesOf(group.key, operatorKey, 0, 12), "device ${d.index} has every label's, as first published")
             assertEquals(operator.groupArkDao().treeShares(group.key).filter { it.participant == operatorKey }.toSet(), d.db.groupArkDao().treeShares(group.key).filter { it.participant == operatorKey }.toSet(), "and every tree key's")
         }
+    }
+
+    @Test
+    fun `a message filed inside the inbound transaction and the device's own work beside it never wait on each other`() = runBlocking<Unit> {
+        // What stopped every write on the first mainnet operator once signatures flowed both ways: the inbound path holds the writer
+        // and then wants the co-signer, and the operator's own requests took the co-signer and then wanted the writer. Only on disk:
+        // in memory, reads share the writer's one connection, so the work beside it never got as far as the co-signer.
+        fixture.close()
+        fixture = fixture(onDisk = true)
+        val group = group()
+        val device = group.operator
+        val asker = group.all[1]
+        fun askFor(wanted: ArkWire.Wanted): Event {
+            val content = CommonJson.encodeToString(ArkWire.Provision.serializer(), ArkWire.Provision(group.key, 0, emptyList(), emptyList(), listOf(wanted)))
+            return Event(RandomInstance.bytes(32).toHexKey(), asker.publicKey, 0, GroupWavelengthEvents.PROVISION, emptyArray(), content, "")
+        }
+        val inTransaction = CompletableDeferred<Unit>()
+        // Its own scope, and only waited on: a deadlock is two coroutines that won't be cancelled, and joining them would hang the suite.
+        val scope = CoroutineScope(Dispatchers.Default)
+        val inbound = scope.launch {
+            device.db.useWriterConnection { it.immediateTransaction {
+                inTransaction.complete(Unit)
+                delay(500) // long enough for the work beside it to get as far as it can
+                GroupArkCoSigner.process(device.db, device.room, askFor(ArkWire.Wanted(device.publicKey, childFrom = 0)), device.publicKey)
+            } }
+        }
+        inTransaction.await()
+        val beside = scope.launch {
+            GroupArkCoSigner.process(device.db, device.room, askFor(ArkWire.Wanted(device.publicKey, plainFrom = 0)), device.publicKey)
+        }
+        val finished = withTimeoutOrNull(10.seconds) { inbound.join(); beside.join() }
+        assertNotNull(finished, "the inbound transaction and the work beside it waited on each other")
+        val said = device.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.PROVISION))
+            .filter { it.publicKey == device.publicKey && it.content.contains("\"answers\"") }
+        assertEquals(2, said.size, "both asks were answered")
     }
 
     @Test

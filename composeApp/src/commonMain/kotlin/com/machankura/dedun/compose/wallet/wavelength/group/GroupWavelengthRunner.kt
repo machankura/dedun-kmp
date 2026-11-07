@@ -219,6 +219,7 @@ class GroupWavelengthRunner(
         val heard = lastHeard(roomId)
         if (!GroupWavelengthOperatorManager.mayRunDaemon(database, roomId, elected.chain, userPublicKey, heard, now(), elected.number)) {
             say(elected, GroupWavelengthDaemonStatus.CatchingUp)
+            askTheRoom(elected)
             return
         }
         val statement = elected.wallet.statement
@@ -279,6 +280,26 @@ class GroupWavelengthRunner(
             }
         }
     }
+
+    /**
+     * Asks every device how far it has answered, which each one does, when this device hasn't heard from the room lately. A quiet room
+     * is otherwise as good as a stale one: members only speak when the operator asks, and the operator waited to hear from them before
+     * asking anything, so a room that went quiet with no daemon running stayed that way (`docs/group-wavelength-ui.md`). The answers are
+     * the room being heard. The question changes nothing on this device, whose floor, once it knows it, an answer doesn't touch.
+     */
+    private suspend fun askTheRoom(elected: Elected) {
+        val at = now()
+        if (askedRoomAt?.let { at - it < ASK_ROOM_EVERY } == true) return
+        askedRoomAt = at
+        val walletKey = GroupArkCoSigner.walletKey(elected.room.chatRoom.id, elected.chain, elected.number)
+        runCatching {
+            GroupLightningWalletManager.queue(database, elected.room, userPublicKey, GroupWavelengthEvents.HIGH_WATER, CommonJson.encodeToString(ArkWire.HighWater.serializer(), ArkWire.HighWater(walletKey, asking = true, highest = -1)))
+        }.onFailure { logger.w(it) { "Couldn't ask the room for ${elected.name}'s wallet" } }
+        logger.i { "Haven't heard from ${elected.name} lately; asking it before starting the wallet" }
+    }
+
+    /** When this device last asked the room, under [mutex]. */
+    private var askedRoomAt: Instant? = null
 
     /** Keeps round one ahead of what the daemon has used, or a signature it asks for fails where it can't be retried. */
     private suspend fun topUp(live: Running) {
@@ -413,6 +434,9 @@ class GroupWavelengthRunner(
 
         /** How long a daemon's start waits for the group's devices to publish round one before trying again. */
         val POOL_WAIT: Duration = 2.minutes
+
+        /** How often a device that hasn't heard from the room asks it something. Well inside the five minutes it must have heard within. */
+        val ASK_ROOM_EVERY: Duration = 2.minutes
 
         /** How many keys of each family a first open scans. About five group signatures a key, so as few as a young wallet can use (D14). */
         const val RECOVERY_WINDOW = 8L

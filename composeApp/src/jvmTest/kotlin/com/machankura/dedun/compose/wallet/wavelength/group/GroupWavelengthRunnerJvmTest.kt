@@ -50,6 +50,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -137,7 +138,15 @@ class GroupWavelengthRunnerJvmTest {
         suspend fun status() = runner.observe(fixture.roomId, fixture.chain, 0).first()
     }
 
-    private fun runnerFor(device: GroupLightningFixture.Device, runtime: Runtime, slot: Slot, held: MutableList<String?>, poolWait: kotlin.time.Duration = 20.seconds, enabled: Boolean = true) = GroupWavelengthRunner(
+    private fun runnerFor(
+        device: GroupLightningFixture.Device,
+        runtime: Runtime,
+        slot: Slot,
+        held: MutableList<String?>,
+        poolWait: kotlin.time.Duration = 20.seconds,
+        enabled: Boolean = true,
+        lastHeard: suspend (String) -> kotlin.time.Instant? = { Clock.System.now() },
+    ) = GroupWavelengthRunner(
         database = device.db,
         userPublicKey = device.publicKey,
         scope = scope,
@@ -147,7 +156,7 @@ class GroupWavelengthRunnerJvmTest {
         chains = listOf(fixture.chain),
         onHolding = { held += it },
         poolWait = poolWait,
-        lastHeard = { Clock.System.now() },
+        lastHeard = lastHeard,
     )
 
     private suspend fun opened(): Setup {
@@ -204,6 +213,40 @@ class GroupWavelengthRunnerJvmTest {
             }
         }
         setup.all.forEach { assertEquals(0L, it.db.groupArkDao().floor(key)?.floor, "device ${it.index}") }
+    }
+
+    @Test
+    fun `a quiet room is asked, and the answers let the daemon start`() = runBlocking<Unit> {
+        // As after the first mainnet operator's app was restarted: the room's last word was an hour old, and nobody would speak first.
+        val setup = opened()
+        elect(setup)
+        val operator = setup.all[0]
+        val answers = suspend {
+            operator.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.HIGH_WATER))
+                .filter { it.publicKey != operator.publicKey }
+        }
+        val silence = Clock.System.now() - 1.hours
+        val asked = suspend {
+            operator.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.HIGH_WATER))
+                .count { it.publicKey == operator.publicKey && it.content.contains("\"asking\":true") }
+        }
+        val runner = runnerFor(operator, setup.runtime, setup.slot, setup.held, lastHeard = { answers().maxOfOrNull { it.createdAt } ?: silence })
+
+        runner.refresh()
+        assertEquals(GroupWavelengthDaemonStatus.CatchingUp, runner.observe(fixture.roomId, fixture.chain, 0).first())
+        assertEquals(1, asked(), "it asks the room")
+        runner.refresh()
+        assertEquals(1, asked(), "and not again straight away")
+
+        setup.pumped {
+            withTimeoutOrNull(5.seconds) { while (answers().size < setup.all.size - 1) delay(20) }
+            runner.refresh()
+        }
+        val question = operator.db.marmotInnerEventDao().getByChatRoomAndKinds(fixture.roomId, listOf(GroupWavelengthEvents.HIGH_WATER))
+            .first { it.publicKey == operator.publicKey && it.content.contains("\"asking\":true") }
+        assertEquals(setup.all.size - 1, answers().filter { it.content.contains(question.id) }.map { it.publicKey }.toSet().size, "every other device answered it")
+        assertEquals(GroupWavelengthDaemonStatus.Running(1), runner.observe(fixture.roomId, fixture.chain, 0).first())
+        assertTrue(setup.runtime.isRunning())
     }
 
     @Test

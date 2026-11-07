@@ -53,7 +53,13 @@ import kotlin.test.assertNotNull
  * [pump] delivers every queued message of the given kinds to every other device, and hands each to the
  * manager the inbound path would, until nothing new moves.
  */
-class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val chain: Chain = Chain.Regtest) {
+class GroupLightningFixture(
+    val n: Int = 4,
+    val frostThreshold: Int = 3,
+    val chain: Chain = Chain.Regtest,
+    /** A database file per device, as on a phone: reads then have connections of their own, apart from the one writer. */
+    val onDisk: Boolean = false,
+) {
     val keyMaterial: KeyMaterial = Frost.trustedDealerKeygen(
         thresholdSecretKey = PrivateKey(ByteVector32("1ceb".padEnd(62, '0') + "a1")),
         nParticipants = n,
@@ -85,7 +91,10 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
     }
 
     suspend fun device(index: Int, holders: List<HexKey> = members): Device {
-        val db = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
+        val db = getRoomDatabase(
+            if (onDisk) Room.databaseBuilder<DedunDatabase>(name = kotlin.io.path.createTempDirectory("dedun").resolve("aux.db").toString())
+            else Room.inMemoryDatabaseBuilder<DedunDatabase>()
+        )
         members.forEach { member ->
             val eventId = "e$member".take(64)
             db.nostrEventDao().upsert(NostrEvent(id = eventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
