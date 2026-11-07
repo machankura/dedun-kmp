@@ -130,6 +130,9 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
     /** Whether this device has finished opening this wallet before: a wallet's directory rebuilds from the chain, at a cost in group signatures (D14). */
     fun hasOpened(statement: GroupWavelengthWalletStatementEvent.Statement): Boolean = fileSystem.exists(openedMarkerOf(statement))
 
+    /** Has the next open scan as a first one does. The directory stays: a scan over it adds what it finds and loses nothing. */
+    fun forgetOpened(statement: GroupWavelengthWalletStatementEvent.Statement) = fileSystem.delete(openedMarkerOf(statement), mustExist = false)
+
     private fun markOpened(statement: GroupWavelengthWalletStatementEvent.Statement) {
         val marker = openedMarkerOf(statement)
         marker.parent?.let { fileSystem.createDirectories(it) }

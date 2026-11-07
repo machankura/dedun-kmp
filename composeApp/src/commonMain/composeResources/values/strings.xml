@@ -1256,6 +1256,9 @@
     <string name="group_wavelength_advanced_untested_exit">A unilateral exit, which leaves without the Ark operator's help, has never been run on any network.</string>
     <string name="group_wavelength_advanced_untested_refund">A failed Lightning payment's refund has only been tested against fixtures, so its money could be tied up.</string>
     <string name="group_wavelength_advanced_untested_phones">No phone has co-signed yet, and rounds give a minute to answer.</string>
+    <string name="group_wavelength_look_explainer">If the group's devices have signed for a coin this device's daemon doesn't hold, it can look for the wallet's coins again. The wallet stops while it looks, which takes a few minutes and some of the group's signatures.</string>
+    <string name="group_wavelength_looking">Your device is looking for the wallet's coins. It takes a few minutes.</string>
+    <string name="group_wavelength_look_failed">Your device couldn't look for the wallet's coins. It only can while it runs the wallet.</string>
     <string name="group_wavelength_receive_title">Add to the wallet</string>
     <string name="group_wavelength_receive_not_a_depositor">Only a member who has started depositing gets an address, or nobody could say whose a deposit was. You can start from the group's onchain wallet.</string>
     <string name="group_wavelength_receive_nobody_runs_it">Nobody runs this wallet at the moment, and whoever does makes the address.</string>

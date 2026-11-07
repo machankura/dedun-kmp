@@ -2,10 +2,12 @@ package com.machankura.dedun.compose.wallet.wavelength.group
 
 import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
 import com.machankura.dedun.compose.managers.GroupLightningFixture
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
@@ -477,6 +479,51 @@ class GroupWavelengthRunnerJvmTest {
         assertEquals(GroupWavelengthDaemonStatus.Running(1), setup.status())
         assertTrue(setup.runtime.fake.requests.last { it.second.contains("manifest") }.second.contains("\"recovery_window\":"), "scanned again")
         assertTrue(daemon.hasOpened(setup.wallet.statement), "and now it knows")
+    }
+
+    @Test
+    fun `looking for more coins reopens the daemon with a scan, and only where it runs`() = runBlocking<Unit> {
+        // The first mainnet wallet's daemon never took in a claimed payment, and only a scan found it.
+        val setup = opened()
+        elect(setup)
+        setup.pumped { setup.runner.refresh() }
+        assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+        val scans = { setup.runtime.fake.requests.count { it.second.contains("manifest") && it.second.contains("\"recovery_window\":") } }
+        assertEquals(1, scans())
+
+        assertFalse(runnerFor(setup.all[1], Runtime(), Slot(), mutableListOf()).rescan(fixture.roomId, fixture.chain, 0), "a device that doesn't run it can't")
+        setup.pumped {
+            assertTrue(setup.runner.rescan(fixture.roomId, fixture.chain, 0))
+            withTimeoutOrNull(20.seconds) { while (scans() < 2 || setup.status() !is GroupWavelengthDaemonStatus.Running) delay(20) }
+        }
+        assertEquals(2, scans(), "it opened again, scanning")
+        assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+    }
+
+    @Test
+    fun `a request for an address wakes it, rather than waiting for its next look`() = runBlocking<Unit> {
+        // Medium's invoice waited 46 seconds for the runner's once-a-minute look, and took three to make.
+        val setup = opened()
+        elect(setup)
+        val operator = setup.all[0]
+        val member = setup.all[1]
+        val asked = { setup.runtime.fake.requests.count { it.first == FacadeVerb.DEPOSIT.wireName } }
+        setup.pumped {
+            setup.runner.start()
+            withTimeoutOrNull(20.seconds) { while (setup.status() !is GroupWavelengthDaemonStatus.Running) delay(20) }
+        }
+        try {
+            assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+            val before = asked()
+            val requestId = GroupWavelengthDeposits.request(member.db, member.room, member.publicKey, setup.wallet)
+            // Filed as the inbound path files a depositor's request: the depositor statement isn't what's being tested.
+            val key = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)
+            operator.db.groupArkDao().insertDepositAddress(GroupArkDepositAddress(key, requestId, member.publicKey.lowercase(), Clock.System.now()))
+            withTimeoutOrNull(10.seconds) { while (asked() == before) delay(20) }
+            assertTrue(asked() > before, "the daemon was asked for an address well inside the minute between looks")
+        } finally {
+            setup.runner.stop()
+        }
     }
 
     @Test

@@ -56,6 +56,9 @@ object GroupWavelengthProcess : GroupWavelengthDaemonSource {
         runner.value?.forceExit(chatRoomId, chain, wallet)
     }
 
+    override suspend fun rescan(chatRoomId: String, chain: Chain, wallet: Long): Boolean =
+        runner.value?.rescan(chatRoomId, chain, wallet) ?: false
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observe(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthDaemonStatus> =
         runner.flatMapLatest { it?.observe(chatRoomId, chain, wallet) ?: flowOf(GroupWavelengthDaemonStatus.NotOnThisDevice) }

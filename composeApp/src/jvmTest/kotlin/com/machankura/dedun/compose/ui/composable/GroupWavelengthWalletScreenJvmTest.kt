@@ -222,6 +222,17 @@ class GroupWavelengthWalletScreenJvmTest {
     }
 
     @Test
+    fun `the device that runs the wallet can look for its coins again, and no other`() = runDesktopComposeUiTest(phone, 1800) {
+        var looked = 0
+        var isOperator by androidx.compose.runtime.mutableStateOf(true)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthAdvancedContent(Modifier, opened(isOperator = isOperator, operator = ME), onLookForMoreCoins = { looked++ }) } } }
+        onNodeWithText("Look for more coins").performClick()
+        assertEquals(1, looked)
+        isOperator = false
+        onNodeWithText("Look for more coins").assertDoesNotExist()
+    }
+
+    @Test
     fun `an address says it was checked, what it takes and what it costs`() = runDesktopComposeUiTest(phone, 1400) {
         setContent {
             DedunTheme {

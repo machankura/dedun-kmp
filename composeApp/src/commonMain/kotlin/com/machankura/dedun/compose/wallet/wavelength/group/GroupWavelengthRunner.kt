@@ -20,6 +20,8 @@ import com.machankura.dedun.compose.managers.GroupWavelengthPayouts
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthStopped
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
@@ -36,13 +38,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -141,6 +147,8 @@ class GroupWavelengthRunner(
     fun start() {
         job?.cancel()
         job = scope.launch {
+            val asked = Channel<Unit>(Channel.CONFLATED)
+            launch { askedOf().collect { asked.trySend(Unit) } }
             while (isActive) {
                 try {
                     refresh()
@@ -149,11 +157,21 @@ class GroupWavelengthRunner(
                 } catch (e: Exception) {
                     logger.e("Could not look after the group's wallets", e)
                 }
-                // Sooner if the person opens or leaves their own wallet: they're waiting on it.
-                withTimeoutOrNull(CHECK) { slot.personalWanted.drop(1).first() }
+                // Sooner if the person opens or leaves their own wallet, or someone asks the operator something: both are waiting on it.
+                withTimeoutOrNull(CHECK) { merge(slot.personalWanted.drop(1).map { }, asked.receiveAsFlow()).first() }
             }
         }
     }
+
+    /**
+     * Each time the room asks whoever runs a wallet for something: an address or an invoice, or a payment or leave the group approved.
+     * A member waited up to a minute for an invoice the daemon made in three seconds (`docs/group-wavelength-ui.md`). From the database
+     * rather than the inbound path, which files a request inside a transaction this would otherwise look before the end of.
+     */
+    private fun askedOf(): Flow<Unit> = merge(
+        database.groupArkDao().observeUnansweredDeposits().distinctUntilChanged().drop(1).filter { it > 0 },
+        database.groupSignedEventDao().observeCountOfKinds(listOf(GroupWavelengthPaymentEvent.KIND, GroupWavelengthExitEvent.KIND)).distinctUntilChanged().drop(1),
+    ).map { }
 
     /** Stops the loop and any daemon: the profile is going away. */
     suspend fun stop() {
@@ -359,6 +377,25 @@ class GroupWavelengthRunner(
         val coins = daemon.liveCoins()
         val plan = daemon.exitPlan(coins)
         GroupWavelengthExitPlan(coins, plan.canStart, plan.totalFundingShortfallSat, daemon.exitSummary().exits.map { GroupWavelengthExitPlan.Stage(it.outpoint, it.status?.wire.orEmpty(), it.vtxoAmountSat, it.estTotalFeeSat, it.estNetRecoveredSat) })
+    }
+
+    /**
+     * Has the daemon scan for the wallet's coins again, which only a first open does. What it found the first time stays in its directory,
+     * and a coin it never took in -- one whose arrival it couldn't resolve, as the first mainnet wallet's claimed Lightning payment -- is
+     * found by the scan. The daemon stops for it, and the open runs in this runner's scope, so leaving the screen doesn't cut it short.
+     */
+    override suspend fun rescan(chatRoomId: String, chain: Chain, wallet: Long): Boolean {
+        val found = mutex.withLock {
+            val elected = elected().firstOrNull { it.room.chatRoom.id == chatRoomId && it.chain == chain && it.number == wallet } ?: return@withLock false
+            daemon.forgetOpened(elected.wallet.statement)
+            if (running?.let { it.chatRoomId == chatRoomId && it.chain == chain && it.wallet.statement.wallet == wallet } == true) halt()
+            true
+        }
+        if (found) {
+            logger.i { "Looking for the coins of ${chatRoomId.take(8)}'s wallet again" }
+            scope.launch { runCatching { refresh() }.onFailure { logger.e("Could not reopen the wallet to look for its coins", it) } }
+        }
+        return found
     }
 
     /** Starts leaving without the Ark operator, for every coin. */

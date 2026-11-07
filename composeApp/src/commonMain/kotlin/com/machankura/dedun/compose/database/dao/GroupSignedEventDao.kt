@@ -35,6 +35,9 @@ abstract class GroupSignedEventDao {
     @Query("SELECT COUNT(*) FROM GroupSignedEvent WHERE chatRoomId = :chatRoomId AND kind = :kind")
     abstract fun observeCountByChatRoomIdAndKind(chatRoomId: String, kind: Kind): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM GroupSignedEvent WHERE kind IN (:kinds)")
+    abstract fun observeCountOfKinds(kinds: List<Kind>): Flow<Int>
+
     /**
      * Every signed event of one kind, whatever room it was signed in.
      *
