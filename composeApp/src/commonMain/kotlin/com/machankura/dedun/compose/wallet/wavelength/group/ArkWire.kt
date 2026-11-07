@@ -15,9 +15,24 @@ object ArkWire {
     @Serializable
     data class TreeProvision(val child: Long, val publicShare: String, val nonces: List<String>)
 
-    /** Round one, ahead of time: a window of labels, and a window of tree keys. */
+    /**
+     * Round one, ahead of time: a window of labels, and a window of tree keys. And what of others' never reached this device: a message
+     * lost to MLS's skipped keys is gone for good (`docs/mls-skipped-keys.md`), and only its author can say it again.
+     */
     @Serializable
-    data class Provision(val wallet: String, val plainFrom: Long, val plain: List<String>, val trees: List<TreeProvision>)
+    data class Provision(
+        val wallet: String,
+        val plainFrom: Long,
+        val plain: List<String>,
+        val trees: List<TreeProvision>,
+        val wanted: List<Wanted> = emptyList(),
+        /** The ask this says again for. Otherwise it's the first publication word for word, and one in the same second is lost as a repeat. */
+        val answers: String? = null,
+    )
+
+    /** [participant]'s round one, again: labels from [plainFrom], tree keys from [childFrom]. */
+    @Serializable
+    data class Wanted(val participant: String, val plainFrom: Long? = null, val childFrom: Long? = null)
 
     /** One signature wanted. [contributions] are the group's own round one, and [cosignerNonce] everyone else's aggregate. */
     @Serializable

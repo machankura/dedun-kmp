@@ -604,6 +604,38 @@ class GroupArkCoSigningJvmTest {
     }
 
     @Test
+    fun `round one that never reached two members is asked for and said again, and the group still signs`() = runBlocking<Unit> {
+        // As MLS loses a message that arrives behind one of the receiver's own (docs/mls-skipped-keys.md), which is what happened to
+        // the first mainnet wallet: two of four never had the operator's round one, so only two could echo, and a signature needs three.
+        val operatorKey = fixture.members[0]
+        val inherited = fixture.dispatch
+        val lost = mutableSetOf<Int>()
+        fixture.dispatch = { to, event ->
+            if (event.kind == GroupWavelengthEvents.PROVISION && event.pubKey == operatorKey && to.index in setOf(1, 2) && lost.add(to.index)) Unit
+            else inherited(to, event)
+        }
+        val group = group()
+        group.all.subList(1, 3).forEach { d ->
+            assertTrue(d.db.icebergCoSigningDao().noncesFor(group.key, 0).none { it.participant == operatorKey }, "device ${d.index} never had the operator's round one")
+            assertTrue(d.db.groupArkDao().treeShares(group.key).none { it.participant == operatorKey }, "nor its tree keys")
+        }
+        // As the runner does before its first signature, or a device learning the floor mid-request would find label 0 behind it.
+        group.transport.askFloors()
+        pump(group.all)
+
+        val (request, funding, leaf) = sweep(group, 3)
+        val response = answered(group, request).getOrThrow()
+        val message = Transaction.read(request.tx!!).hashForSigningTaprootScriptPath(0, listOf(funding.txOut[0]), SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
+        assertTrue(Crypto.verifySignatureSchnorr(message, ByteVector64(response.signature!!), group.keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, 3).xOnly()))
+
+        val operator = group.operator.db
+        group.all.subList(1, 3).forEach { d ->
+            assertEquals(operator.icebergCoSigningDao().noncesOf(group.key, operatorKey, 0, 12), d.db.icebergCoSigningDao().noncesOf(group.key, operatorKey, 0, 12), "device ${d.index} has every label's, as first published")
+            assertEquals(operator.groupArkDao().treeShares(group.key).filter { it.participant == operatorKey }.toSet(), d.db.groupArkDao().treeShares(group.key).filter { it.participant == operatorKey }.toSet(), "and every tree key's")
+        }
+    }
+
+    @Test
     fun `a member lying about how far the group has got can skip it ahead a little, and not out of reach`() {
         assertEquals(6L, GroupArkCoSigner.floorFrom(listOf(5, 1L shl 40), 2, 4_096))
         assertEquals(6L, GroupArkCoSigner.floorFrom(listOf(5, 5, 1L shl 40), 2, 4_096))

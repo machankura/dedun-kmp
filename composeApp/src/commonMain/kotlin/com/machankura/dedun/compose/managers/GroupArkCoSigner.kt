@@ -73,6 +73,9 @@ object GroupArkCoSigner {
     private val logger = Logger.withTag("GroupArkCoSigner")
     private val answering = Mutex()
 
+    /** When a device last asked for each participant's round one, and last said its own again, by its own key first: under [answering]. */
+    private val roundOneAsked = HashMap<String, Instant>()
+
     private const val LABEL_TAG = "dedun/group-wavelength/label/v1"
 
     /** How many signatures one tree key has labels for: one per transaction on its path, and a path is short. */
@@ -201,8 +204,64 @@ object GroupArkCoSigner {
             database.groupArkDao().insertTreeShare(GroupArkTreeShare(batch.wallet, tree.child, participant, tree.publicShare))
             tree.nonces.forEachIndexed { i, c -> dao.insertNonce(IcebergNonceRow(treeKey(batch.wallet, tree.child), i.toLong(), participant, c)) }
         }
+        batch.wanted.filter { it.participant == userPublicKey.lowercase() }.forEach { sayAgain(database, localChatRoom, userPublicKey, batch.wallet, it, event.id) }
         // Relays don't keep order, so a request can get here before what it's built from. Only lately's: the daemon has given up on anything older.
         catchUp(database, localChatRoom, wallet, batch.wallet, userPublicKey, since = Clock.System.now() - ROUND_ONE_WAIT)
+    }
+
+    /** Participants this device has nothing from, itself aside: whose round one, if they published it, never got here. */
+    private fun unheard(wallet: GroupWavelengthWalletManager.Wallet, heard: Collection<String>, userPublicKey: HexKey): List<HexKey> =
+        wallet.statement.participants.filter { it != userPublicKey.lowercase() && it !in heard }
+
+    /**
+     * Asks for the round one this device is waiting on, from whoever it never heard from. Waiting is right when it's on its way, and
+     * forever when MLS lost it, which it does to a message that arrives out of order behind one of this device's own: the author
+     * has to say it again, and only the device that's missing it can say so. Each participant once in [ROUND_ONE_WAIT], since an ask
+     * can be lost too. A tree key they're missing and someone else isn't is asked for with it: it was likely in the same message.
+     */
+    private suspend fun askForRoundOne(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, key: String, wanted: List<ArkWire.Wanted>) {
+        if (wanted.isEmpty()) return
+        val now = Clock.System.now()
+        val shares = database.groupArkDao().treeShares(key).groupBy { it.child }
+        val asking = wanted.groupBy { it.participant }.mapNotNull { (participant, wants) ->
+            val tag = "${userPublicKey.lowercase()}:$key:asked:$participant"
+            if (roundOneAsked[tag]?.let { now - it < ROUND_ONE_WAIT } == true) return@mapNotNull null
+            roundOneAsked[tag] = now
+            val lostTree = shares.filterValues { rows -> rows.none { it.participant == participant } }.keys.minOrNull()
+            ArkWire.Wanted(participant, wants.mapNotNull { it.plainFrom }.minOrNull(), (wants.mapNotNull { it.childFrom } + listOfNotNull(lostTree)).minOrNull())
+        }
+        if (asking.isEmpty()) return
+        logger.i("Asking ${asking.joinToString { it.participant.take(8) }} for round one that never arrived")
+        queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.PROVISION, CommonJson.encodeToString(ArkWire.Provision.serializer(), ArkWire.Provision(key, 0, emptyList(), emptyList(), asking)))
+    }
+
+    /**
+     * This device's round one again, as [wanted] asks: what it filed when it first published, read back, so nothing new is said and a
+     * device that has it already ignores it. A new message is at a generation the asker can read, which is the whole of the fix. Once
+     * in [ROUND_ONE_WAIT] for each window, however many ask.
+     */
+    private suspend fun sayAgain(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, key: String, wanted: ArkWire.Wanted, asked: String) = answering.withLock {
+        val now = Clock.System.now()
+        val me = userPublicKey.lowercase()
+        val tag = "$me:$key:again:${wanted.plainFrom}:${wanted.childFrom}"
+        if (roundOneAsked[tag]?.let { now - it < ROUND_ONE_WAIT } == true) return@withLock
+        roundOneAsked[tag] = now
+        val dao = database.icebergCoSigningDao()
+
+        // From the first this device has at or past what was asked, and only as far as there's no gap, since a provision is a run.
+        val rows = wanted.plainFrom?.let { dao.noncesOf(key, me, it, it + MAX_PLAIN_BATCH - 1) }.orEmpty()
+        val plainFrom = rows.firstOrNull()?.counter ?: 0
+        val plain = rows.withIndex().takeWhile { (i, row) -> row.counter == plainFrom + i }.map { it.value.contribution }
+
+        val trees = wanted.childFrom?.let { from ->
+            database.groupArkDao().treeShares(key).filter { it.participant == me && it.child >= from }.sortedBy { it.child }.take(MAX_TREE_BATCH.toInt()).mapNotNull { share ->
+                val nonces = dao.noncesOf(treeKey(key, share.child), me, 0, TREE_LABELS - 1L).map { it.contribution }
+                if (nonces.size == TREE_LABELS) ArkWire.TreeProvision(share.child, share.share, nonces) else null
+            }
+        }.orEmpty()
+        if (plain.isEmpty() && trees.isEmpty()) return@withLock
+        logger.i("Saying round one again: ${plain.size} labels from $plainFrom, ${trees.size} tree keys")
+        queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.PROVISION, CommonJson.encodeToString(ArkWire.Provision.serializer(), ArkWire.Provision(key, plainFrom, plain, trees, answers = asked)))
     }
 
     private suspend fun fileShares(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
@@ -395,13 +454,15 @@ object GroupArkCoSigner {
     ) = answering.withLock {
         val roomId = localChatRoom.chatRoom.id
         val echoes = mutableListOf<ArkWire.EchoItem>()
+        val wanted = mutableListOf<ArkWire.Wanted>()
         for (item in items) {
-            val refusal = answer(database, roomId, wallet, key, term, item, floor, userPublicKey, operator, echoes)
+            val refusal = answer(database, roomId, wallet, key, term, item, floor, userPublicKey, operator, echoes, wanted)
             if (refusal != null && sayRefused) sayRefused(database, roomId, item.requestId, userPublicKey, refusal)
         }
         if (echoes.isNotEmpty()) {
             queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.ECHO, CommonJson.encodeToString(ArkWire.EchoBatch.serializer(), ArkWire.EchoBatch(key, echoes)))
         }
+        askForRoundOne(database, localChatRoom, userPublicKey, key, wanted)
         maybeSign(database, localChatRoom, wallet, key, items.map { label(wallet.statement, it.domain, it.counter).toHex() }, userPublicKey)
     }
 
@@ -453,7 +514,10 @@ object GroupArkCoSigner {
 
     private const val BINDING_TAG = "dedun/group-wavelength/echo/v1"
 
-    /** Checks one item, commits to it under its label for good, and notes an echo to send. Null when it may go on. */
+    /**
+     * Checks one item, commits to it under its label for good, and notes an echo to send. Null when it may go on. What it's waiting on
+     * goes in [wanted], to be asked for.
+     */
     private suspend fun answer(
         database: DedunDatabase,
         roomId: String,
@@ -465,6 +529,7 @@ object GroupArkCoSigner {
         userPublicKey: HexKey,
         operator: HexKey,
         echoes: MutableList<ArkWire.EchoItem>,
+        wanted: MutableList<ArkWire.Wanted>,
     ): String? {
         val label = label(wallet.statement, item.domain, item.counter).toHex()
         val child = item.domain.child
@@ -473,7 +538,13 @@ object GroupArkCoSigner {
         if (child != null && item.counter !in 0 until TREE_LABELS) return "a label a tree key doesn't have"
 
         // Not yet isn't no. The members' shares of a tree key are on their way, and nothing has been said or signed in the meantime.
-        val sessionKey = child?.let { treeKeys(database, wallet, key)[it] ?: return null }
+        val sessionKey = child?.let {
+            treeKeys(database, wallet, key)[it] ?: run {
+                val heard = database.groupArkDao().treeShares(key).filter { share -> share.child == it }.map { share -> share.participant }
+                unheard(wallet, heard, userPublicKey).forEach { participant -> wanted += ArkWire.Wanted(participant, childFrom = it) }
+                return null
+            }
+        }
         val verdict = ArkPolicy.check(contextOf(database, roomId, wallet, key, term), item.request, sessionKey)
         val allowed = when (verdict) {
             is ArkPolicy.Verdict.Refuse -> return verdict.reason
@@ -483,11 +554,18 @@ object GroupArkCoSigner {
         if ((child != null) != (allowed.what == ArkPolicy.What.TREE)) return "a label for another kind of signature"
 
         // The nonces the challenge is built from are what members themselves published, not what the operator says they published.
-        val seen = database.icebergCoSigningDao().noncesFor(child?.let { treeKey(key, it) } ?: key, item.counter).map { it.contribution }.toSet()
+        val round = database.icebergCoSigningDao().noncesFor(child?.let { treeKey(key, it) } ?: key, item.counter)
+        val seen = round.map { it.contribution }.toSet()
         val enough = item.contributions.size >= 2 * wallet.statement.threshold - 1 && item.contributions.toSet().size == item.contributions.size
         if (!enough) return "too little of round one to sign from"
-        // Waits rather than refuses, and [fileProvision] comes back to it. An operator naming nonces nobody published only ever gets this silence.
-        if (!seen.containsAll(item.contributions)) return null
+        // Waits rather than refuses, and [fileProvision] comes back to it. An operator naming nonces nobody published only ever gets this
+        // silence, and asks nobody: a device that has heard from everyone has nobody to ask.
+        if (!seen.containsAll(item.contributions)) {
+            unheard(wallet, round.map { it.participant }, userPublicKey).forEach { participant ->
+                wanted += if (child == null) ArkWire.Wanted(participant, plainFrom = item.counter) else ArkWire.Wanted(participant, childFrom = child)
+            }
+            return null
+        }
 
         val message = allowed.message.toHex()
         val binding = bindingOf(item, label, message)
@@ -682,15 +760,17 @@ object GroupArkCoSigner {
         val roomId = localChatRoom.chatRoom.id
         val operator = GroupWavelengthOperatorManager.current(database, roomId, wallet.statement.chain, wallet.statement.wallet) ?: return
         val echoes = mutableListOf<ArkWire.EchoItem>()
+        val wanted = mutableListOf<ArkWire.Wanted>()
         val publicKey = operator.publicKey ?: return
         val pending = requestsOf(database, roomId, key, publicKey, operator.term)
         pending.forEach { item ->
-            val refusal = answer(database, roomId, wallet, key, operator.term, item, floor, userPublicKey, publicKey, echoes)
+            val refusal = answer(database, roomId, wallet, key, operator.term, item, floor, userPublicKey, publicKey, echoes, wanted)
             if (refusal != null) sayRefused(database, roomId, item.requestId, userPublicKey, refusal)
         }
         if (echoes.isNotEmpty()) {
             queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.ECHO, CommonJson.encodeToString(ArkWire.EchoBatch.serializer(), ArkWire.EchoBatch(key, echoes)))
         }
+        answering.withLock { askForRoundOne(database, localChatRoom, userPublicKey, key, wanted) }
         maybeSign(database, localChatRoom, wallet, key, pending.map { label(wallet.statement, it.domain, it.counter).toHex() }, userPublicKey)
     }
 }

@@ -24,6 +24,9 @@ interface IcebergCoSigningDao {
     @Query("SELECT MAX(counter) FROM IcebergNonceRow WHERE wallet = :wallet AND participant = :participant")
     suspend fun highestNonce(wallet: String, participant: String): Long?
 
+    @Query("SELECT * FROM IcebergNonceRow WHERE wallet = :wallet AND participant = :participant AND counter BETWEEN :from AND :to ORDER BY counter")
+    suspend fun noncesOf(wallet: String, participant: String, from: Long, to: Long): List<IcebergNonceRow>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAssignment(row: IcebergLabelAssignment)
 
