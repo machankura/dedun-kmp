@@ -389,7 +389,7 @@ against real servers.
 | a Lightning payee is still the proposer's word | a lying proposer can take one member's balance | `lnurl` narrows it; the transcript names the proposer; the cap bounds it |
 | older devices in the room | payouts fail to gather a quorum, with nothing saying why | W10's line on the approval screen |
 | a payment that fails before anything is signed | the member's balance is held for the approval's 24 hours, with nothing to wait for (seen on mainnet, 7 November) | `wentNowhere`: once the operator reports it failed and this device signed no transfer for it, the balance is free and the approval dead on this device |
-| a payout leaving change under the operator's minimum | the daemon refuses it before any signing: on mainnet, 12 sats of change against a 1,000-sat minimum, with another member's 4 sats still in the wallet | open: the SDK doesn't say the minimum, and paying the whole balance out to the last members leaves dust nobody can take |
+| a payout leaving change under the operator's minimum | the daemon refuses it before any signing: on mainnet, 12 sats of change against a 1,000-sat minimum, with another member's 4 sats still in the wallet | refused and explained, by decision: the payouts screen doesn't offer a payout that leaves change under `MIN_CHANGE_SAT` (1,000 sats, a stand-in as the SDK doesn't say it) and says what deposit lets it go. Nothing can take the last of it: the SDK wants a vHTLC of exactly the invoice plus a fee quoted when it's paid, never turns change into credit, and only an onchain sweep empties the wallet, which a round's 1,000-sat fee makes worthless at these sizes |
 
 ## Questions, for the owner
 

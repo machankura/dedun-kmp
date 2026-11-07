@@ -101,6 +101,9 @@ class GroupPayoutsViewModel(
             val wavelengthPaysOnchain = GroupWavelengthRollout.paysOnchain(chain)
             val wavelengthWallet = wavelengthRepository.wallets(chatRoomId, chain).lastOrNull()
                 ?.takeIf { (wavelengthPaysLightning || wavelengthPaysOnchain) && wavelengthRepository.operator(chatRoomId, chain, it.statement.wallet)?.publicKey != null }
+            val wavelengthInWallet = wavelengthWallet?.let { wallet ->
+                wavelengthRepository.observeCoins(chatRoomId, chain, wallet.statement.wallet).first().filter { it.settled && !it.spent }.sumOf { it.amountSat }
+            } ?: 0
             val loaded = GroupPayoutsUIState.Loaded(
                 localChatRoom = localChatRoom,
                 balances = payoutRepository.balances(chatRoomId, chain, null),
@@ -115,6 +118,7 @@ class GroupPayoutsViewModel(
                 wavelengthWallet = wavelengthWallet,
                 wavelengthPaysLightning = wavelengthPaysLightning,
                 wavelengthPaysOnchain = wavelengthPaysOnchain,
+                wavelengthInWalletSat = wavelengthInWallet,
             )
             uiState = loaded
 
@@ -234,6 +238,16 @@ class GroupPayoutsViewModel(
     fun wavelengthPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? = LightningBalance.payable(balance.wavelength.availableSat * 1000)
 
     /**
+     * How many sats short the Wavelength wallet is of paying [balance] out over Lightning, or 0 when it isn't: the change it would leave
+     * is under what the operator accepts, so the daemon would refuse it after a quorum had approved it (`GroupWavelengthRollout.MIN_CHANGE_SAT`).
+     */
+    fun wavelengthChangeShortSat(balance: MemberBalances.MemberBalance): Long {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return 0
+        val (amountMsat, maxFeeMsat) = wavelengthPayable(balance) ?: return 0
+        return GroupWavelengthRollout.changeShortSat(state.wavelengthInWalletSat, (amountMsat + maxFeeMsat + 999) / 1000)
+    }
+
+    /**
      * Asks the group to pay [member] from their Wavelength balance, whole: as [payOutLightning] does, their address is resolved again on
      * this device and asked for an invoice of the amount, and a device signs only if it fits what it can see of that balance.
      */
@@ -278,6 +292,8 @@ class GroupPayoutsViewModel(
         val maxFeeSat = wallet.statement.policy.maxRoundFeeSat
         val amountSat = wavelength.availableSat - maxFeeSat
         if (amountSat < GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) return WavelengthOnchainOffer.TooLittle(GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT - amountSat)
+        val short = GroupWavelengthRollout.changeShortSat(state.wavelengthInWalletSat, amountSat + maxFeeSat)
+        if (short > 0) return WavelengthOnchainOffer.LeavesTooLittle(short)
         return WavelengthOnchainOffer.Offer(amountSat, maxFeeSat, address)
     }
 
@@ -287,6 +303,8 @@ class GroupPayoutsViewModel(
         /** Another payout of theirs, on either rail, is being signed or waiting to be paid (W9). */
         data object Waiting : WavelengthOnchainOffer
         data class TooLittle(val shortSat: Long) : WavelengthOnchainOffer
+        /** What it leaves in the wallet is under the operator's least change, and a deposit of [shortSat] lets it go. */
+        data class LeavesTooLittle(val shortSat: Long) : WavelengthOnchainOffer
     }
 
     /** Why [member]'s onchain address can't be paid yet by what was found of its use, or null when it can (`docs/payouts-only.md`, D7). */

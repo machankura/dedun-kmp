@@ -45,6 +45,8 @@ import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.secp256k1.Hex
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -74,7 +76,7 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         wavelength = GroupWavelengthPayouts.Balance(depositedSat = availableSat + openSat, openSat = openSat, availableSat = availableSat),
     )
 
-    private fun loaded(balance: MemberBalances.MemberBalance, paysOnchain: Boolean = true) = GroupPayoutsUIState.Loaded(
+    private fun loaded(balance: MemberBalances.MemberBalance, paysOnchain: Boolean = true, inWalletSat: Long = 0, paysLightning: Boolean = false) = GroupPayoutsUIState.Loaded(
         localChatRoom = room,
         balances = MemberBalances.Balances(mapOf(aliceKey to balance), emptyList()),
         walletState = null,
@@ -85,6 +87,8 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         self = ME,
         wavelengthWallet = wallet,
         wavelengthPaysOnchain = paysOnchain,
+        wavelengthPaysLightning = paysLightning,
+        wavelengthInWalletSat = inWalletSat,
     )
 
     private class Proposing : GroupWavelengthRepository by GroupWavelengthRepository.NO_OP {
@@ -115,6 +119,29 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.TooLittle(500), viewModel(loaded(little)).wavelengthOnchainOffer(little))
         val waiting = balance(0, openSat = 5_000)
         assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.Waiting, viewModel(loaded(waiting)).wavelengthOnchainOffer(waiting))
+    }
+
+    @Test
+    fun `a payout that would leave less change than the operator accepts says how much a deposit would let it go`() {
+        // What failed on mainnet: Bob's 1,214 sats out of a wallet of 1,218, which would have left 12 sats of change.
+        assertEquals(996L, GroupWavelengthRollout.changeShortSat(inWalletSat = 1_218, spendSat = 1_214))
+        assertEquals(0L, GroupWavelengthRollout.changeShortSat(inWalletSat = 1_214, spendSat = 1_214), "no change at all is fine")
+        assertEquals(0L, GroupWavelengthRollout.changeShortSat(inWalletSat = 2_214, spendSat = 1_214), "and change of the operator's least")
+        assertEquals(0L, GroupWavelengthRollout.changeShortSat(inWalletSat = 1_000, spendSat = 1_214), "a wallet too small is the balance's to refuse")
+
+        val balance = balance(10_000)
+        assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.LeavesTooLittle(500), viewModel(loaded(balance, inWalletSat = 10_500)).wavelengthOnchainOffer(balance))
+        assertIs<GroupPayoutsViewModel.WavelengthOnchainOffer.Offer>(viewModel(loaded(balance, inWalletSat = 11_000)).wavelengthOnchainOffer(balance))
+
+        val bob = balance(1_214)
+        assertTrue(viewModel(loaded(bob, inWalletSat = 1_218, paysLightning = true)).wavelengthChangeShortSat(bob) > 0)
+        assertEquals(0L, viewModel(loaded(bob, inWalletSat = 3_000, paysLightning = true)).wavelengthChangeShortSat(bob))
+    }
+
+    @Test
+    fun `the Lightning payout that would leave too little change isn't offered, and the row says why`() = render(balance(1_214), UnusedAddressCheck.Usage.Unused, inWalletSat = 1_218, paysLightning = true) {
+        onNodeWithText("Paying @Alice out over Lightning", substring = true).assertIsDisplayed()
+        onNodeWithText("Pay out from the Wavelength wallet").assertDoesNotExist()
     }
 
     @Test
@@ -154,12 +181,12 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         onNodeWithText("@Alice hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.").assertIsDisplayed()
     }
 
-    private fun render(balance: MemberBalances.MemberBalance, usage: UnusedAddressCheck.Usage, assertions: ComposeUiTest.() -> Unit) =
+    private fun render(balance: MemberBalances.MemberBalance, usage: UnusedAddressCheck.Usage, inWalletSat: Long = 0, paysLightning: Boolean = false, assertions: ComposeUiTest.() -> Unit) =
         runDesktopComposeUiTest(width = 400, height = 2000) {
             val destinations = object : PayoutDestinationRepository by PayoutDestinationRepository.NO_OP {
                 override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector) = usage
             }
-            val state = loaded(balance).copy(context = PayoutRule.Context(CoinOwnership.Records.NONE, balance.destination?.onchainAddress?.let { mapOf(aliceKey to ByteVector("0014" + "11".repeat(20))) }.orEmpty()))
+            val state = loaded(balance, inWalletSat = inWalletSat, paysLightning = paysLightning).copy(context = PayoutRule.Context(CoinOwnership.Records.NONE, balance.destination?.onchainAddress?.let { mapOf(aliceKey to ByteVector("0014" + "11".repeat(20))) }.orEmpty()))
             setContent {
                 DedunTheme {
                     ProvideSnackbarHost {

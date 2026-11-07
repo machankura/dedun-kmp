@@ -61,6 +61,24 @@ object GroupWavelengthRollout {
     const val MIN_ONCHAIN_PAYOUT_SAT: Long = 1_000
 
     /**
+     * The least change the operator lets a spend leave in the wallet, short of none. The daemon refuses a payment whose every choice of
+     * coins would leave less, before anything is signed: mainnet's operator said 1,000 sats on 7 November 2026, when a payout to the last
+     * members out failed on 12. The SDK doesn't say it, so this stands in for it, as [MIN_ONCHAIN_PAYOUT_SAT] does for its own.
+     */
+    const val MIN_CHANGE_SAT: Long = 1_000
+
+    /**
+     * How many sats more the wallet needs before spending [spendSat] of [inWalletSat] leaves change the operator accepts, or 0 when it
+     * already does. The daemon takes coins largest first until the change is none or enough, so the whole wallet is its last try: a spend
+     * fails exactly when that leaves some change and too little. No change at all would do, but a payment can't be sized to the sat, as its
+     * fee is quoted when it's paid. A wallet that can't cover the spend at all is for the balance to refuse, not this.
+     */
+    fun changeShortSat(inWalletSat: Long, spendSat: Long): Long {
+        val change = inWalletSat - spendSat
+        return if (change <= 0 || change >= MIN_CHANGE_SAT) 0 else MIN_CHANGE_SAT - change
+    }
+
+    /**
      * Whether the wallet offers to leave without the Ark operator's help on [chain]. A unilateral exit has never run on any network, so
      * not on mainnet until one has, on signet, where this is what lets someone run it.
      */
