@@ -14,9 +14,9 @@ surfaces and across to Lightning. [member-deposits.md](./member-deposits.md) say
 why each of these requests belongs to one member, which is what makes "paid"
 answerable per request rather than per wallet.
 
-**Built, phases 0-5**, one commit per phase. Written against the code as it stood
-at `a17dbd26`. Phase 7, expiry, is not built and was never in scope; Phase 6 is
-this note.
+**Built, phases 0-7**, one commit per phase. Written against the code as it stood
+at `a17dbd26`, and merged with `dedun` after Phase 6. Phase 6 is this note; Phase 7,
+expiry, was out of scope as first asked and was built when it was.
 
 The plan was written with `experimental/wavelength-kmp` uninitialised in this
 worktree, which is why Phase 2 opened with a spike. Initialising it answered both
@@ -36,6 +36,9 @@ written, and the table below says where the build chose differently.
 | the cap is recomputed on every emission | the limits are; the `AtTheCap` gate is left one-shot, so a member whose deposit filled the cap sees the payment rather than the cap |
 | each of the three rotating view models grows a `justPaid` | one `PaidAddressWatch`, because all three turned out to have the same shape -- a current address and a list with a `USED` status -- with `GroupWalletState` serving two of them |
 | `DepositCard` takes the just-paid address | it takes the amount. `GroupWalletDerivation.Derived` needs real keys and a tweak cache, which is an expensive fixture for a card that only prints a figure |
+| expiry is a separate state beside paid | a separate *panel*, not a separate state. Expiry is a pure function of the invoice and the clock, so no UI state carries it and the three screens work it out as they draw; the phase's only view-model change is `askAgain` accepting `Invoice` so the panel's button can return the form |
+| `LightningInvoiceCard` already decodes `isExpired()`, so the predicate exists | it exists for a chat bubble, which is drawn once and never again. A receive screen is open *while* the window closes, so a predicate was not enough: it had to become a moment and a timer, or an invoice would expire with its QR code still up until something unrelated recomposed |
+| (not foreseen) | lightning-kmp has no signet prefix, so `lntbs` matches testnet's `lntb` and then fails on the amount. An invoice that will not read has no expiry and keeps its QR code -- the safe way round -- and the wallets this is wired into are on mainnet by decision |
 | the per-phase tests are enough to say a phase is done | they are not. Every phase passed its own tests and the full suite still broke, two classes away: these screens now collect flows that never end -- the operator's payments, the engine's snapshot, six combined device-local flows -- and a `viewModelScope` cannot be cancelled from outside, so each test leaked a coroutine onto the test dispatcher and the next class to call `Dispatchers.setMain` failed with *Main is used concurrently with setting it*. A `ViewModelStore` per test class, cleared before `resetMain`, is the fix. Run the whole suite before believing a phase |
 | Phase 5 is a source scan over `QRCodeView` call sites | a Compose UI test. `runDesktopComposeUiTest` is already in this tree, which the plan missed, and `QRCodeView` gives its image the request as a content description -- so *is this scannable?* is a question the semantics tree answers. A new rail that forgets the rule fails on what it draws rather than passing a scan of its imports |
 
@@ -394,15 +397,31 @@ Add the *what the plan said / what it turned out to be* table, as
 [README.md](./README.md)'s table. Phase 2's spike answers go in the body, not the
 table: the next person reading this needs them before the phases, not after.
 
-### Phase 7 — Expiry, if it is wanted
+### Phase 7 — Expiry
 
-Out of scope as asked, in scope as a bug: a bolt11 that expired unpaid is as
-unscannable as one that was paid, and all three one-shot screens show it anyway.
-`LightningInvoiceCard` already decodes `Bolt11Invoice.isExpired()` for the chat
-bubble, so the predicate exists. It is a separate state from paid -- *this invoice
-expired*, with *ask for another* -- and a separate commit, and it is listed here
-only so that the next person does not have to rediscover that the two states share
-every line of plumbing Phases 0 through 3 lay down.
+A bolt11 that expired unpaid is as unscannable as one that was paid, for the same
+reason -- nobody can pay it now -- and all three one-shot screens showed it anyway.
+
+- `InvoiceExpiry.expiresAt(bolt11)` reads the moment off the invoice: its timestamp
+  plus its expiry tag, or BOLT 11's own hour where it carries none. Null for
+  anything that will not read, which keeps the QR code: the cost of being wrong
+  that way is an invoice shown a little too long, and the cost of being wrong the
+  other way is hiding a code somebody was about to pay.
+- `rememberInvoiceExpired(bolt11)` turns the moment into state with one timer per
+  invoice rather than a poll.
+- `PaymentReceived` and a new `InvoiceExpired` share a private `RequestPanel`, the
+  way `ErrorState` and `EmptyState` share `StateMessage`. `PaymentReceived.kt`
+  becomes `RequestState.kt` for the pair; the symbols are unchanged, so no call
+  site moved.
+- Expired is neutral, not the error pair: an invoice lapsing is what invoices do,
+  the member has lost nothing, and the alarm the error colour carries belongs to a
+  payment that failed.
+- Every call site checks paid before expired, because a payment that landed in the
+  last second is still a payment.
+
+**No UI state carries expiry.** It is a pure function of the invoice and the clock,
+so it is worked out in the composable; the phase's only view-model change is
+`askAgain` accepting `Invoice`, so the expired panel's button can return the form.
 
 ---
 

@@ -37,8 +37,10 @@ import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.InvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
+import com.machankura.dedun.compose.ui.composable.widgets.rememberInvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
@@ -49,6 +51,7 @@ import com.machankura.dedun.compose.wallet.wavelength.IdentityWavelength
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthWalletRollout
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.amount_in_sats
+import dedun.composeapp.generated.resources.an_expired_invoice_cannot_be_paid_ask_for_another
 import dedun.composeapp.generated.resources.ask_for_another_address
 import dedun.composeapp.generated.resources.ask_for_another_invoice
 import dedun.composeapp.generated.resources.copied
@@ -151,19 +154,29 @@ private fun LightningTab(state: WavelengthReceiveUIState, onAmountChange: (Strin
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
+    val expired = rememberInvoiceExpired(state.invoice)
+    val finished = state.invoicePaid != null || expired
     Button(onClick = onMakeInvoice, enabled = !state.working) {
-        Text(stringResource(if (state.invoicePaid != null) Res.string.ask_for_another_invoice else Res.string.wavelength_receive_make_invoice))
+        Text(stringResource(if (finished) Res.string.ask_for_another_invoice else Res.string.wavelength_receive_make_invoice))
     }
     state.invoice?.let { invoice ->
         val paid = state.invoicePaid
-        if (paid != null) {
-            // The button above is the way to another invoice, so the panel needs no action of its own.
-            PaymentReceived(amount = paid, note = stringResource(Res.string.this_invoice_was_paid_and_should_not_be_paid_again))
-            RequestText(invoice)
-        } else {
-            RequestCode(invoice)
-            if (state.invoiceIsCredit) Text(stringResource(Res.string.wavelength_receive_credit), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(Res.string.wavelength_receive_keep_open), style = MaterialTheme.typography.bodyMedium)
+        // The button above is the way to another invoice, so neither panel needs an action.
+        when {
+            // A payment that landed in the last second is still a payment: paid outranks expired.
+            paid != null -> {
+                PaymentReceived(amount = paid, note = stringResource(Res.string.this_invoice_was_paid_and_should_not_be_paid_again))
+                RequestText(invoice)
+            }
+            expired -> {
+                InvoiceExpired(note = stringResource(Res.string.an_expired_invoice_cannot_be_paid_ask_for_another))
+                RequestText(invoice)
+            }
+            else -> {
+                RequestCode(invoice)
+                if (state.invoiceIsCredit) Text(stringResource(Res.string.wavelength_receive_credit), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(Res.string.wavelength_receive_keep_open), style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }
