@@ -127,7 +127,6 @@ import dedun.composeapp.generated.resources.group_wavelength_payout_in_flight
 import dedun.composeapp.generated.resources.group_wavelength_payout_paid
 import dedun.composeapp.generated.resources.group_wavelength_payout_s_s
 import dedun.composeapp.generated.resources.group_wavelength_payouts
-import dedun.composeapp.generated.resources.group_wavelength_payouts_off_on_mainnet
 import dedun.composeapp.generated.resources.group_wavelength_pending_s
 import dedun.composeapp.generated.resources.pay_out
 import dedun.composeapp.generated.resources.group_wavelength_report_cannot_confirm
@@ -597,9 +596,6 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                             Text(stringResource(Res.string.pay_out))
                         }
                     }
-                }
-                if (!GroupWavelengthRollout.paysOverLightning(chain) && !GroupWavelengthRollout.paysOnchain(chain)) {
-                    Text(stringResource(Res.string.group_wavelength_payouts_off_on_mainnet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (state.isParticipant && !state.leaveAsked && !state.ledger.isEmpty) {
                     TextButton(onClick = { isConfirmingLeave = true }, enabled = !isPending) { Text(stringResource(Res.string.group_wavelength_leave)) }

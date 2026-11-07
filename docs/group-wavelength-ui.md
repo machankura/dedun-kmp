@@ -14,10 +14,10 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 | 4 | **not run, by decision:** it waits until everything is merged and pushed. It needs fresh signet coins |
 | 5 | done, in `jvmTest` only: snapshot, comparison, deadlines, who's been seen, two panes, Advanced, transcript lines |
 | 6 | done, for boarding and, by decision on 7 November 2026, over Lightning. An invoice is the operator's word for where it pays, and the screen says so first |
-| 7 | done, with payouts-only now enforced on this wallet. Off on mainnet. Nobody has read the new rule but a reviewer that isn't a person (below) |
+| 7 | done, with payouts-only now enforced on this wallet. **On on mainnet, onchain and over Lightning, by decision on 7 November 2026** ([group-wavelength-payouts.md](./group-wavelength-payouts.md)). Nobody has read the new rule but a reviewer that isn't a person (below) |
 | 8 | done except the part that matters most: **a unilateral exit still hasn't run.** Its screen is there, signet only |
 | 9 | done, by leaving through the onchain wallet (below) |
-| 10 | the final pass is done for `jvmTest` and the audit. **The gate was lifted by the owner's decision, with the wallet note's condition unmet.** What bounds a loss is the 100,000-sat cap and every device's checks. Lightning payouts and the unilateral exit stay off on mainnet |
+| 10 | the final pass is done for `jvmTest` and the audit. **The gate was lifted by the owner's decision, with the wallet note's condition unmet.** What bounds a loss is the 100,000-sat cap and every device's checks. The unilateral exit stays off on mainnet. Payouts, onchain and over Lightning, were turned on there by a later decision the same day |
 
 **An adversarial reading of the signing code, by a reviewer that isn't a person, before anything was pushed.** It found these, and all are fixed, each with a test:
 
@@ -115,7 +115,7 @@ Each row is a known gap from the wallet note, and what the UI does about it unti
 
 | gap | what the UI does |
 |---|---|
-| **a funded vHTLC has no way back but the cooperative refund, which has only met fixtures** | *Pay out* over Lightning stays off on mainnet. The wallet note says this path *"isn't ready for anything but signet"* |
+| **a funded vHTLC has no way back but the cooperative refund, which has only met fixtures** | *Pay out* over Lightning was held back on mainnet, and is now on there by the owner's decision on 7 November 2026, with this gap open. The wallet note says this path *"isn't ready for anything but signet"* |
 | **a unilateral exit has never run on any network** | no emergency-exit button until one has run on signet (Phase 8). The Advanced screen says it hasn't been tested |
 | **an invoice can't be proven to pay the group** (spike 6) | built anyway, by the owner's decision (question 3): the receive screen says first that whoever runs the wallet makes the invoice and a device can't confirm where it pays. A device checks everything else: the chain, the amount, and that the hash is nobody else's |
 | **the operator can hand out or report anything** | every figure from a snapshot is labelled as the operator's, and compared with the device's ledger |

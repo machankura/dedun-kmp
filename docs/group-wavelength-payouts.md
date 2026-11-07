@@ -8,7 +8,9 @@ destination, approved by a quorum and checked by every co-signer.
 **Built on 7 November 2026, in `jvmTest` only, except what needs coins or the owner.** Written the same day against
 `30a9f5e3`, with `wavelength-kmp` at `80569131`, read in the main checkout because a fresh worktree doesn't have the
 submodule. Files and lines named in the plan below are as they stood then. **No payout of either kind has met a real
-daemon, a real round or a coin,** and both rails stay off on mainnet.
+daemon, a real round or a coin.** **Both rails were turned on for mainnet by the owner's decision the same day, with Phases 0
+and 7 not run:** any build from `dedun` offers to pay a member out of a mainnet wallet, onchain or over Lightning, with real
+money. What bounds a loss is one member's balance, the 100,000-sat cap and every device's checks.
 
 ### Where the build stands
 
@@ -22,7 +24,7 @@ daemon, a real round or a coin,** and both rails stay off on mainnet.
 | 5 | done, `1bff41c9`: `lnurl`, charging what the vHTLC held, a settled refund given back. Schema 43 |
 | 6 | **half.** The vHTLC's unilateral refund without the receiver is signed when it pays the group's onchain wallet, which is the daemon's own on-chain recovery. The cooperative refund without the receiver turned out to be allowed already. **Forfeiting a funded vHTLC into a round has no daemon path,** so it stays refused |
 | 7 | **not run:** signet coins and phones |
-| 8 | **not done: the owner's decision.** `paysOnchain` and `paysOverLightning` are both off on mainnet |
+| 8 | **done by the owner's decision on 7 November 2026, with W13's conditions unmet.** `paysOnchain` and `paysOverLightning` are both on for every chain. The unilateral exit stays signet only. Nothing in this table's "not run" rows has run |
 
 **Where the build chose differently from the plan:**
 
@@ -181,7 +183,8 @@ metadata naming the member's Lightning address. It doesn't prove the invoice pay
 **W13. The gates are per rail.** `GroupWavelengthRollout.paysOnchain(chain)` beside `paysOverLightning(chain)`. Onchain
 can open on mainnet after the signet run (Phase 7) by the owner's decision. Lightning stays shut on mainnet until a
 refund has run for real and a funded vHTLC has a way home that doesn't need the swap server (Phase 6), or until the
-owner decides otherwise.
+owner decides otherwise. **Decided on 7 November 2026: both open on mainnet now, ahead of either condition.** So a
+payout leave's first real round, and a Lightning payout's first real refund, may happen on mainnet with a member's money.
 
 ## Phases
 
@@ -390,12 +393,12 @@ against real servers.
 
 1. **Does the payee pay the whole fee of the round their payout is in** (W6), or should a device refuse a round that
    both pays and renews?
-2. **Can onchain payouts open on mainnet before the UI plan's Phase 4,** the real round on phones? Leaving to the
-   onchain wallet already moves real money on mainnet with that unanswered; a payout is the same round with a
-   different leave.
+2. ~~Can onchain payouts open on mainnet before the UI plan's Phase 4,~~ **Decided: yes,** along with Lightning (question 4).
 3. **Whole balance only, or an amount?** Whole is what the Lightning rail does and what `payouts-only.md` D6 calls a
    payout. An amount needs a floor on what stays behind too.
-4. **What opens Lightning on mainnet:** S4's refund having run once, or Phase 6 as well?
+4. ~~What opens Lightning on mainnet?~~ **Decided: the owner's word, on 7 November 2026,** with neither S4's refund nor Phase 6's
+   recovery having run. A payment whose swap the server abandons now depends on the daemon's on-chain recovery, which has never run,
+   and lands in the onchain wallet as a coin nobody owns.
 5. **Signet coins for Phases 0 and 7,** by hand, into fresh wallets.
 
 ## What this plan does not do
