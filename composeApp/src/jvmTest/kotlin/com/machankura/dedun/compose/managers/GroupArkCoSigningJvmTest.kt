@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
+import com.machankura.dedun.compose.database.model.IcebergLabelAssignment
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
@@ -587,7 +588,7 @@ class GroupArkCoSigningJvmTest {
     }
 
     @Test
-    fun `nonces nobody published, or too few of them, are refused`() = runBlocking<Unit> {
+    fun `nonces nobody published get silence, and too few of them, or one twice, are refused`() = runBlocking<Unit> {
         val group = group()
         floorsKnown(group)
         val device = group.all[1]
@@ -597,7 +598,8 @@ class GroupArkCoSigningJvmTest {
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("forged", ArkWire.Domain(), 1, sweep(group, 4).first, forged))))
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("few", ArkWire.Domain(), 2, sweep(group, 4).first, contributionsAt(group, 2).take(2)))))
         sendTo(group, listOf(device), ArkWire.SigningBatch(group.key, term, listOf(ArkWire.SigningItem("twice", ArkWire.Domain(), 3, sweep(group, 4).first, contributionsAt(group, 3).let { it + it.first() }))))
-        assertEquals(3, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).count { it.content.contains("hasn't seen published") })
+        // Nonces nobody published look like ones still on their way, so that's a wait and nothing's said. It still gets no answer, below.
+        assertEquals(2, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_REFUSED).count { it.content.contains("too little of round one") })
         (1L..3L).forEach { assertEquals(null, device.db.groupArkDao().checked(group.key, labelAt(group, it))) }
     }
 
@@ -698,5 +700,27 @@ class GroupArkCoSigningJvmTest {
         val nobody = statement.copy(operator = null)
         assertEquals(nobody, GroupWavelengthOperatorStatementEvent.read(GroupWavelengthOperatorStatementEvent.template(nobody).tags))
         assertFalse(GroupWavelengthEvents.CO_SIGNING.contains(GroupWavelengthOperatorStatementEvent.KIND))
+    }
+
+    @Test
+    fun `a request that gets here before what it's built from waits for it, and is answered, with nothing said`() = runBlocking<Unit> {
+        val group = group()
+        val late = group.all[3]
+        val others = group.all.dropLast(1)
+        // New labels, which the last device hasn't heard about, signed by the other three.
+        group.transport.provision(plainTo = 40, treeTo = 4)
+        pump(others)
+        group.operator.db.icebergCoSigningDao().insertAssignment(IcebergLabelAssignment(group.key, 20, "", "skip"))
+        assertTrue(answered(group, sweep(group, 3).first, on = others).isSuccess)
+        val label = GroupArkCoSigner.label(group.wallet.statement, ArkWire.Domain(), 21).let { Hex.encode(it.toByteArray()) }
+
+        // The request reaches it first, as a relay is free to do.
+        fixture.pump(group.all, allKinds - GroupWavelengthEvents.PROVISION)
+        assertEquals(null, late.db.icebergCoSigningDao().ledgerFor(group.key, label), "it can't answer yet")
+        assertEquals(emptyList(), fixture.lines(late, ChatMessage.TYPE_WAVELENGTH_REFUSED), "and it isn't a refusal")
+
+        pump(group.all)
+        assertNotNull(late.db.icebergCoSigningDao().ledgerFor(group.key, label), "answered once round one arrived")
+        assertEquals(emptyList(), fixture.lines(late, ChatMessage.TYPE_WAVELENGTH_REFUSED))
     }
 }

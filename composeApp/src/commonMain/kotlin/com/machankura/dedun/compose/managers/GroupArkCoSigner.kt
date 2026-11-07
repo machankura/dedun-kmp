@@ -52,6 +52,8 @@ import fr.acinq.bitcoin.utils.Either
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * A member's device answering for a group's Wavelength wallet -- `docs/group-wavelength-wallet.md`, Phase 6.
@@ -76,6 +78,9 @@ object GroupArkCoSigner {
     const val TREE_LABELS = 12
 
     private const val MAX_PLAIN_BATCH = 128L
+
+    /** How long ago a request can have been for what arrives now to still be worth answering: past the daemon's own 55 seconds, with room for clocks. */
+    private val ROUND_ONE_WAIT = 2.minutes
     private const val MAX_TREE_BATCH = 32L
 
     /** How long the group's fee budget looks back. */
@@ -170,7 +175,7 @@ object GroupArkCoSigner {
     suspend fun process(database: DedunDatabase, localChatRoom: LocalChatRoom, innerEvent: Event, userPublicKey: HexKey) {
         try {
             when (innerEvent.kind) {
-                GroupWavelengthEvents.PROVISION -> fileProvision(database, localChatRoom, innerEvent)
+                GroupWavelengthEvents.PROVISION -> fileProvision(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.SIGNING_REQUEST -> handleBatch(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.ECHO -> fileEchoes(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.SIGNATURE_SHARES -> fileShares(database, localChatRoom, innerEvent, userPublicKey)
@@ -182,7 +187,7 @@ object GroupArkCoSigner {
         }
     }
 
-    private suspend fun fileProvision(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event) {
+    private suspend fun fileProvision(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
         val batch = CommonJson.decodeFromString(ArkWire.Provision.serializer(), event.content)
         val wallet = walletOf(database, localChatRoom.chatRoom.id, batch.wallet) ?: return
         if (indexOf(wallet, event.pubKey) == null) return
@@ -195,6 +200,8 @@ object GroupArkCoSigner {
             database.groupArkDao().insertTreeShare(GroupArkTreeShare(batch.wallet, tree.child, participant, tree.publicShare))
             tree.nonces.forEachIndexed { i, c -> dao.insertNonce(IcebergNonceRow(treeKey(batch.wallet, tree.child), i.toLong(), participant, c)) }
         }
+        // Relays don't keep order, so a request can get here before what it's built from. Only lately's: the daemon has given up on anything older.
+        catchUp(database, localChatRoom, wallet, batch.wallet, userPublicKey, since = Clock.System.now() - ROUND_ONE_WAIT)
     }
 
     private suspend fun fileShares(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
@@ -359,12 +366,12 @@ object GroupArkCoSigner {
      * and go on refusing everything after. Every check is made again, so the worst this does is agree to a request late. It says nothing
      * about what it still refuses, having said so the first time.
      */
-    private suspend fun catchUp(database: DedunDatabase, localChatRoom: LocalChatRoom, wallet: GroupWavelengthWalletManager.Wallet, key: String, userPublicKey: HexKey) {
+    private suspend fun catchUp(database: DedunDatabase, localChatRoom: LocalChatRoom, wallet: GroupWavelengthWalletManager.Wallet, key: String, userPublicKey: HexKey, since: Instant? = null) {
         if (userPublicKey.lowercase() !in wallet.statement.participants) return
         val roomId = localChatRoom.chatRoom.id
         val operator = GroupWavelengthOperatorManager.current(database, roomId, wallet.statement.chain, wallet.statement.wallet) ?: return
         val publicKey = operator.publicKey ?: return
-        val unanswered = requestsOf(database, roomId, key, publicKey, operator.term)
+        val unanswered = requestsOf(database, roomId, key, publicKey, operator.term, since)
             .filter { database.icebergCoSigningDao().ledgerFor(key, label(wallet.statement, it.domain, it.counter).toHex()) == null }
         if (unanswered.isEmpty()) return
         val floor = floorOf(database, localChatRoom, key, userPublicKey, wallet) ?: return
@@ -463,7 +470,8 @@ object GroupArkCoSigner {
         if (child != null && child < (floor.treeFloor ?: 0)) return "a tree key from before this device last knew how far the group had answered"
         if (child != null && item.counter !in 0 until TREE_LABELS) return "a label a tree key doesn't have"
 
-        val sessionKey = child?.let { treeKeys(database, wallet, key)[it] ?: return "a tree key the group hasn't finished making" }
+        // Not yet isn't no. The members' shares of a tree key are on their way, and nothing has been said or signed in the meantime.
+        val sessionKey = child?.let { treeKeys(database, wallet, key)[it] ?: return null }
         val verdict = ArkPolicy.check(contextOf(database, roomId, wallet, key, term), item.request, sessionKey)
         val allowed = when (verdict) {
             is ArkPolicy.Verdict.Refuse -> return verdict.reason
@@ -475,7 +483,9 @@ object GroupArkCoSigner {
         // The nonces the challenge is built from are what members themselves published, not what the operator says they published.
         val seen = database.icebergCoSigningDao().noncesFor(child?.let { treeKey(key, it) } ?: key, item.counter).map { it.contribution }.toSet()
         val enough = item.contributions.size >= 2 * wallet.statement.threshold - 1 && item.contributions.toSet().size == item.contributions.size
-        if (!enough || !seen.containsAll(item.contributions)) return "round one this device hasn't seen published"
+        if (!enough) return "too little of round one to sign from"
+        // Waits rather than refuses, and [fileProvision] comes back to it. An operator naming nonces nobody published only ever gets this silence.
+        if (!seen.containsAll(item.contributions)) return null
 
         val message = allowed.message.toHex()
         val binding = bindingOf(item, label, message)
@@ -535,9 +545,9 @@ object GroupArkCoSigner {
         )
 
     /** What the current operator has asked this wallet for in its term: a request from anyone else, or from before, is nothing now. */
-    private suspend fun requestsOf(database: DedunDatabase, chatRoomId: String, key: String, operator: HexKey, term: Long): List<ArkWire.SigningItem> =
+    private suspend fun requestsOf(database: DedunDatabase, chatRoomId: String, key: String, operator: HexKey, term: Long, since: Instant? = null): List<ArkWire.SigningItem> =
         database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupWavelengthEvents.SIGNING_REQUEST))
-            .filter { it.publicKey.lowercase() == operator }
+            .filter { it.publicKey.lowercase() == operator && (since == null || it.createdAt >= since) }
             .mapNotNull { runCatching { CommonJson.decodeFromString(ArkWire.SigningBatch.serializer(), it.content) }.getOrNull() }
             .filter { it.wallet == key && it.term == term }
             .flatMap { it.items }

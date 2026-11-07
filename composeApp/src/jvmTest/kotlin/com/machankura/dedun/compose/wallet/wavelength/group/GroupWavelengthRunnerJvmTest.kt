@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.managers.GroupWavelengthPayments
 import com.machankura.dedun.compose.managers.GroupWavelengthPayouts
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.database.model.IcebergLabelAssignment
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import engineering.lightning.wavelength.FacadeBindings
 import engineering.lightning.wavelength.FacadeVerb
@@ -77,12 +78,17 @@ class GroupWavelengthRunnerJvmTest {
         var manifest = ""
         var identity = ""
         var coinsSaid: String? = null
+        var failNextStart = false
         override fun call(verb: FacadeVerb, request: ByteArray): ByteArray =
             if (verb == FacadeVerb.LIST && coinsSaid != null && request.decodeToString().contains("vtxos")) {
                 coinsSaid!!.encodeToByteArray().also { fake.call(verb, request) }
             } else fake.call(verb, request)
 
         override fun startHostedWatchOnlyWallet(request: ByteArray, host: SignerHost): ByteArray {
+            if (failNextStart) {
+                failNextStart = false
+                throw IllegalStateException("recover wallet state: the group didn't answer")
+            }
             val heard = request.decodeToString().replace(identity, fake.identityPubKey).encodeToByteArray()
             val body = fake.startHostedWatchOnlyWallet(heard, host).decodeToString()
             return body.replace(fake.identityPubKey, identity).replace(Regex("\"ManifestHash\":\"[^\"]*\""), "\"ManifestHash\":\"$manifest\"").encodeToByteArray()
@@ -374,5 +380,40 @@ class GroupWavelengthRunnerJvmTest {
         runnerFor(setup.all[0], setup.runtime, slot, mutableListOf(), poolWait = 100.milliseconds).refresh()
         assertEquals(0, slot.held.size, "it never asked for the daemon")
         assertEquals(0, slot.released)
+    }
+
+    @Test
+    fun `an open that fails partway leaves its directory, and the retry still scans`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        val daemon = GroupWavelengthDaemon(FacadeWavelengthClient(setup.runtime, Dispatchers.Unconfined), root.path)
+        setup.runtime.failNextStart = true
+        setup.pumped { setup.runner.refresh() }
+        assertEquals(GroupWavelengthDaemonStatus.Failed, setup.status())
+        assertFalse(daemon.hasOpened(setup.wallet.statement), "a scan that failed found nothing")
+        // What the daemon leaves behind when it fails inside its recovery scan.
+        val leftBehind = root.resolve("group/${GroupWalletStatementEvent.chainName(fixture.chain)}/${setup.wallet.statement.identity.take(32)}/0")
+        leftBehind.mkdirs()
+        assertEquals(1, setup.slot.released, "and the person's wallet gets the daemon back")
+
+        setup.pumped { setup.runner.refresh() }
+        assertEquals(GroupWavelengthDaemonStatus.Running(1), setup.status())
+        assertTrue(setup.runtime.fake.requests.last { it.second.contains("manifest") }.second.contains("\"recovery_window\":"), "scanned again")
+        assertTrue(daemon.hasOpened(setup.wallet.statement), "and now it knows")
+    }
+
+    @Test
+    fun `once an open has finished, the next doesn't scan`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.pumped { setup.runner.refresh() }
+        setup.slot.personalWanted.value = true
+        setup.runner.refresh()
+        setup.slot.personalWanted.value = false
+        setup.pumped { setup.runner.refresh() }
+        assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+        val opens = setup.runtime.fake.requests.filter { it.second.contains("manifest") }
+        assertTrue(opens.size >= 2)
+        assertFalse(opens.last().second.contains("\"recovery_window\":"), opens.last().second)
     }
 }

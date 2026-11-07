@@ -38,6 +38,13 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 - **A coin from a Lightning claim has no deadline a device can work out.** It shows no deadline rather than a wrong one. Nothing here receives over Lightning yet.
 - **While a device runs a group's wallet, the person's own wallet doesn't renew in the background.** The nomination says so, and to open it every few days.
 
+**What the first real run found.** On 7 November 2026, four emulators opened a real wallet on mainnet from the screens, with no coins in it, and got as far as an elected operator. The first request failed, and a test couldn't have shown either reason, since the fixtures deliver messages in order:
+
+| found | what it was | now |
+|---|---|---|
+| **a device refused a request that arrived before round one did** | the operator only knows what it has seen itself, and relays don't keep order. Two devices wrote "round one this device hasn't seen published" within a second of each other and never came back to it, so the daemon's first recovery signature failed after 50 s. In a real round that uses up the 60-second window, and costs everyone in the round | a device waits, says nothing, and answers when round one arrives. Nonces nobody published now get silence where they got a refusal line: still no share, and the daemon sees the same timeout |
+| **a failed open looked like a finished one** | "has this wallet opened before" meant "does its directory exist", and a scan that fails partway leaves one. So the retry skipped the scan. An empty wallet doesn't care. A new operator taking over a funded one would have opened without finding its coins | a marker written only once an open has finished. Reopening an existing directory with a scan is what the personal wallet's *look for more coins* does, and a hosted wallet hasn't been seen doing it |
+
 **What the plan said, and what it turned out to be:**
 
 | the plan said | what happened |

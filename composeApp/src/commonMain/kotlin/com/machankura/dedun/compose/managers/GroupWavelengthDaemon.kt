@@ -37,7 +37,7 @@ import kotlin.time.Instant
  * A daemon that opened with anything but the manifest the group signed is stopped at once. Nothing here deletes a wallet
  * directory, which rebuilds from the chain and the indexer anyway, at five group signatures per key index scanned (D14).
  */
-class GroupWavelengthDaemon(private val client: HostedWalletClient, private val dataRoot: String) {
+class GroupWavelengthDaemon(private val client: HostedWalletClient, private val dataRoot: String, private val fileSystem: FileSystem = FileSystem.SYSTEM) {
     private val logger = Logger.withTag("GroupWavelengthDaemon")
 
     sealed class Outcome {
@@ -120,12 +120,22 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
             client.stop()
             return Outcome.Refused(Refusal.OPENED_AS_ANOTHER)
         }
+        // Only now: a scan that failed partway leaves the directory behind, and has found nothing.
+        runCatching { markOpened(statement) }.onFailure { logger.w(it) { "Couldn't note that this wallet opened, so it'll scan again next time" } }
         return Outcome.Running(transport, config)
     }
 
-    /** Whether this device has opened this wallet before: a wallet's directory rebuilds from the chain, at a cost in group signatures (D14). */
-    fun hasOpened(statement: GroupWavelengthWalletStatementEvent.Statement, fileSystem: FileSystem = FileSystem.SYSTEM): Boolean =
-        fileSystem.exists(dataDirOf(statement).toPath())
+    /** Whether this device has finished opening this wallet before: a wallet's directory rebuilds from the chain, at a cost in group signatures (D14). */
+    fun hasOpened(statement: GroupWavelengthWalletStatementEvent.Statement): Boolean = fileSystem.exists(openedMarkerOf(statement))
+
+    private fun markOpened(statement: GroupWavelengthWalletStatementEvent.Statement) {
+        val marker = openedMarkerOf(statement)
+        marker.parent?.let { fileSystem.createDirectories(it) }
+        fileSystem.write(marker) {}
+    }
+
+    /** Beside the daemon's directory and not in it, which is the daemon's own. */
+    private fun openedMarkerOf(statement: GroupWavelengthWalletStatementEvent.Statement) = "${dataDirOf(statement)}.opened".toPath()
 
     fun isRunning(): Boolean = client.isRunning()
 
