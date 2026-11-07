@@ -373,4 +373,70 @@ class GroupWavelengthPayoutsJvmTest {
         dao.insertPayment(GroupArkPayment(key, approved.paymentHash!!.toString(), "ark", amountSat = 4_012, vhtlcScript = "51"))
         assertEquals(0, paid())
     }
+
+    // ---- what the review found ----
+
+    @Test
+    fun `a device that saw a member paid won't pay a second approval of the same money, whoever approved it`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        val first = onchain(payout, 6_000)
+        fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(first).tags, "", createdAt = first.askedAt)
+        val dao = all[0].db.groupArkDao()
+        dao.upsertLeave(GroupArkLeave(key, first.id, "round", "00", 6_000, 400))
+        dao.confirmLeaves(key, "round")
+        // A device that missed that round would approve this, and with the member's own device that's a quorum of two.
+        val second = onchain(payout, 3_000, at = now + 1)
+        fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(second).tags, "", createdAt = second.askedAt)
+        assertTrue(GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet).isEmpty(), "3,600 is left, and 4,000 is asked")
+        val fits = onchain(payout, 2_000, at = now + 2)
+        fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(fits).tags, "", createdAt = fits.askedAt)
+        assertTrue(GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet).isEmpty(), "nor what fits beside it, while both stand")
+        // Once the one that doesn't fit has run out, the one that does is paid.
+        assertEquals(listOf(fits.id), GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet, now = second.expiresAt).values.map { it.id })
+    }
+
+    @Test
+    fun `nor a Lightning approval the member's balance can't bear on this device`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val sent = payment(6_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(sent).tags, "", createdAt = now)
+        all[0].db.groupArkDao().insertPayment(GroupArkPayment(key, sent.paymentHash!!.toString(), "ark", amountSat = 6_010))
+        val again = payment(5_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(again).tags, "", createdAt = now + 1)
+        assertNull(GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet)[again.paymentHash])
+    }
+
+    @Test
+    fun `a paid payout doesn't stand in for a later one to the same address, and one still being paid holds the next back`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 20_000, onchainAddress = aliceAddress)
+        val first = onchain(payout, 6_000)
+        fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(first).tags, "", createdAt = first.askedAt)
+        val dao = all[0].db.groupArkDao()
+        dao.upsertLeave(GroupArkLeave(key, first.id, "round", "00", 6_000, 400))
+        assertEquals("pays an address another payout is still being paid to", refused(all[0], onchain(payout, 1_000, at = now + 1)))
+        dao.confirmLeaves(key, "round")
+        val later = onchain(payout, 9_000, at = now + 2)
+        assertNull(refused(all[0], later))
+        fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(later).tags, "", createdAt = later.askedAt)
+        assertEquals(listOf(later.id), GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet).values.map { it.id })
+    }
+
+    @Test
+    fun `a refund that never happened gives way to the one that did`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val approved = payment(4_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(approved).tags, "", createdAt = now)
+        val dao = all[0].db.groupArkDao()
+        dao.insertPayment(GroupArkPayment(key, approved.paymentHash!!.toString(), "ark", amountSat = 4_012, vhtlcScript = "51"))
+        dao.refundPayment(key, "51", "stalled")
+        dao.refundPayment(key, "51", "real")
+        dao.upsertVtxo(GroupArkVtxo(key, "real:0", 4_012, origin = "real", settled = true))
+        assertEquals(0, GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(all[1].publicKey.lowercase()).paidSat)
+        dao.refundPayment(key, "51", "later")
+        assertEquals("real", dao.payments(key).single().refundedIn, "and one that settled isn't written over")
+    }
 }

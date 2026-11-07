@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.wallet.PayoutFees
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -633,7 +634,9 @@ object GroupArkCoSigner {
             dao.insertPayment(GroupArkPayment(key, hash.toHex(), effect.towards, funded?.amountSat, funded?.script?.toHex()))
         }
         effect.refunded?.let { dao.refundPayment(key, it.toHex(), effect.towards) }
-        effect.leaves.forEach { dao.upsertLeave(GroupArkLeave(key, it.authorisation, effect.towards, it.script.toHex(), it.amountSat, effect.feeSat)) }
+        // A round's fee once, shared by the payouts in it in proportion, as the onchain wallet's payouts share theirs (payouts-only D5).
+        val feeShares = if (effect.leaves.isEmpty()) emptyMap() else PayoutFees.split(effect.leaves.associate { it.authorisation to it.amountSat }, effect.feeSat)
+        effect.leaves.forEach { dao.upsertLeave(GroupArkLeave(key, it.authorisation, effect.towards, it.script.toHex(), it.amountSat, feeShares[it.authorisation] ?: 0)) }
         if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, Clock.System.now().epochSeconds))
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }

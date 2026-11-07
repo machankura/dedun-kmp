@@ -346,7 +346,9 @@ object ArkPolicy {
         }
         val fee = prevOuts.sumOf { it.amount.sat } - tx.txOut.sumOf { it.amount.sat }
         if (fee !in 0..context.maxOnchainFeeSat) refuse("a vHTLC's recovery paying $fee sats in fees")
-        return Verdict.Allow(What.VHTLC_RECOVERY, message)
+        val id = tx.txid.toString()
+        checkFeeBudget(context, id, fee)
+        return Verdict.Allow(What.VHTLC_RECOVERY, message, Effect(id, emptyMap(), emptyList(), feeSat = fee))
     }
 
     /**

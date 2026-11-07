@@ -886,6 +886,9 @@ class ArkPolicyJvmTest {
         refused(recovery(thief), "a vHTLC's recovery that pays somewhere other than the group's onchain wallet")
         refused(recovery(anchor, 0).let { r -> r.copy(tx = Hex.encode(Transaction.write(Transaction.read(r.tx!!).let { it.copy(txOut = it.txOut + TxOut(Satoshi(9_000), thief)) }))) }, "somewhere other than the group's onchain wallet")
         refused(recovery(onchain, 1_000), "in fees")
+        val allowed = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), recovery(onchain)))
+        assertEquals(1_000, allowed.effect!!.feeSat, "its fee is filed against the group's budget")
+        refused(recovery(onchain), "more in fees than the group lets this wallet spend", context(recentFeesSat = mapOf("other" to 49_500), maxRecentFeesSat = 50_000))
     }
 
     @Test

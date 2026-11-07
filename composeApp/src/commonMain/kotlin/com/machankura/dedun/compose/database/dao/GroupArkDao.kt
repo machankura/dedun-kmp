@@ -145,7 +145,14 @@ interface GroupArkDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPayment(row: GroupArkPayment)
 
-    @Query("UPDATE GroupArkPayment SET refundedIn = :ark WHERE wallet = :wallet AND vhtlcScript = :script AND refundedIn IS NULL")
+    /**
+     * The refund [ark] of the payment whose vHTLC is [script], unless one already recorded has settled. One that was signed and never
+     * happened gives way to the next, or a member would stay charged for money that came home by another transfer.
+     */
+    @Query(
+        "UPDATE GroupArkPayment SET refundedIn = :ark WHERE wallet = :wallet AND vhtlcScript = :script AND (refundedIn IS NULL OR " +
+            "refundedIn NOT IN (SELECT origin FROM GroupArkVtxo WHERE wallet = :wallet AND settled = 1 AND origin IS NOT NULL))"
+    )
     suspend fun refundPayment(wallet: String, script: String, ark: String)
 
     @Upsert

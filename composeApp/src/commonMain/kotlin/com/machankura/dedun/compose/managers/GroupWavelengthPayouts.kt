@@ -29,7 +29,17 @@ import kotlin.time.Clock
  * sees nothing to pay, which is the safe way round: it won't sign a payout it can't check.
  */
 object GroupWavelengthPayouts {
-    data class Balance(val depositedSat: Long = 0, val paidSat: Long = 0, val openSat: Long = 0, val availableSat: Long = 0) {
+    data class Balance(
+        val depositedSat: Long = 0,
+        val paidSat: Long = 0,
+        val openSat: Long = 0,
+        val availableSat: Long = 0,
+        /** Their share of what's in the wallet before anything approved and unpaid is taken off: what every open payout of theirs has to fit. */
+        val heldSat: Long = 0,
+    ) {
+        /** Whether everything approved for them and not yet paid fits what they hold, by this device's own count. */
+        val bearsWhatsOpen: Boolean get() = heldSat >= openSat
+
         companion object {
             val NONE = Balance()
         }
@@ -129,20 +139,25 @@ object GroupWavelengthPayouts {
         }
         return net.mapValues { (member, sat) ->
             val share = if (totalNet == 0L || inTheWallet >= totalNet) sat else sat * inTheWallet / totalNet
-            Balance(deposited[member] ?: 0, paid[member] ?: 0, open[member] ?: 0, (share - (open[member] ?: 0)).coerceAtLeast(0))
+            Balance(deposited[member] ?: 0, paid[member] ?: 0, open[member] ?: 0, (share - (open[member] ?: 0)).coerceAtLeast(0), share)
         }
     }
 
     /**
-     * The onchain payouts a co-signer pays as a round's leave in [wallet], by the script each pays: those approved and still standing, and
-     * any this device has already given a round, so that round can still finish (`docs/group-wavelength-payouts.md`, W4). Where two name
-     * one script, which approving refuses, the first is the only one.
+     * The onchain payouts a co-signer pays as a round's leave in [wallet], by the script each pays (`docs/group-wavelength-payouts.md`, W4):
+     * one this device has given a round that hasn't confirmed, so that round can still finish, and otherwise one approved, standing, and
+     * fitting the member's balance by this device's own count. A quorum's approval isn't enough alone: a device that missed the round that
+     * paid the member before would have approved a second payout of the same money, and every device that saw it pay refuses that one here.
+     * Where two name one script, which approving refuses while either is live, the one already given a round comes first.
      */
     suspend fun approvedLeaves(database: DedunDatabase, chatRoomId: String, wallet: GroupWavelengthWalletManager.Wallet, now: Long = Clock.System.now().epochSeconds): Map<ByteVector, ArkPolicy.AuthorisedLeave> {
         val key = GroupArkCoSigner.walletKey(chatRoomId, wallet.statement.chain, wallet.statement.wallet)
-        val given = database.groupArkDao().leaves(key).map { it.authorisation }.toSet()
-        return signedOnchain(database, chatRoomId, wallet.statement.chain)
-            .filter { it.wallet == wallet.statement.wallet && (it.expiresAt > now || it.id in given) }
+        val leaves = database.groupArkDao().leaves(key).associateBy { it.authorisation }
+        val candidates = signedOnchain(database, chatRoomId, wallet.statement.chain).filter { it.wallet == wallet.statement.wallet }
+        val inFlight = candidates.filter { leaves[it.id]?.confirmed == false }
+        val unpaid = candidates.filter { it.id !in leaves && it.expiresAt > now }
+        val balances = if (unpaid.isEmpty()) emptyMap() else balancesIn(database, chatRoomId, wallet.statement.chain, now)
+        return (inFlight + unpaid.filter { balances[it.member.lowercase()]?.bearsWhatsOpen == true })
             .mapNotNull { payout -> payout.script?.let { it to ArkPolicy.AuthorisedLeave(payout.id, payout.amountSat, payout.maxFeeSat) } }
             .distinctBy { it.first }
             .toMap()
@@ -183,7 +198,14 @@ object GroupWavelengthPayouts {
         }
         if (payout.amountSat < MIN_LEAVE_SAT) return "pays ${payout.amountSat} sats, less than an output can carry"
         if (payout.expiresAt > nowSeconds + MAX_APPROVAL_SECONDS) return "stands for longer than the group lets anything stand"
-        if (signedOnchain(database, chatRoomId, payout.chain).any { it.id == payout.id }) return "is a payout the group has already approved"
+        val approved = signedOnchain(database, chatRoomId, payout.chain)
+        if (approved.any { it.id == payout.id }) return "is a payout the group has already approved"
+        // One payout to an address at a time: a co-signer pays a script's leave for one approval, and a second standing beside it is a
+        // second claim on the member's balance while the first's round may still confirm.
+        val leaves = database.groupArkDao().leaves(GroupArkCoSigner.walletKey(chatRoomId, payout.chain, payout.wallet)).associateBy { it.authorisation }
+        val live = approved.filter { it.wallet == payout.wallet && it.address == payout.address }
+            .any { other -> leaves[other.id]?.let { !it.confirmed } ?: (other.expiresAt > nowSeconds) }
+        if (live) return "pays an address another payout is still being paid to"
         return refuseAgainstBalance(database, chatRoomId, payout.chain, payout.member, payout.maxSat, payout.id, nowSeconds)
     }
 
