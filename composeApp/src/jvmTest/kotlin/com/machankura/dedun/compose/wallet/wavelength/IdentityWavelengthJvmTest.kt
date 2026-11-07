@@ -299,4 +299,57 @@ class IdentityWavelengthJvmTest {
     fun `the words never reach a toString`() {
         assertFalse(profile().toString().contains("abandon"))
     }
+
+    @Test
+    fun `a group's wallet takes the daemon from the person's, and nothing of theirs touches it until it's given back`() = runWallet {
+        val bindings = FakeFacadeBindings()
+        files.recordConsent(alice)
+        val holder = holder(bindings)
+        holder.activate(profile())
+        runCurrent()
+        assertIs<WalletState.Open>(holder.state.value)
+
+        assertTrue(holder.acquire("Treasury"))
+        assertEquals(WalletState.RunByGroup("Treasury"), holder.state.value)
+        assertFalse(bindings.isRunning(), "the person's daemon was stopped for it")
+
+        // What follows would each stop or open a daemon, which is now the group's.
+        bindings.startWalletAsIfTheGroupsHadOpened()
+        holder.activate(profile())
+        holder.retry()
+        holder.enteredForeground()
+        holder.lookForMoreCoins()
+        runCurrent()
+        holder.enteredBackground()
+        advanceTimeBy(2.minutes)
+        runCurrent()
+        assertEquals(WalletState.RunByGroup("Treasury"), holder.state.value)
+        assertTrue(bindings.isRunning(), "still the group's")
+        assertFalse(holder.maintainInBackground(profile(), 1.minutes), "the renewal leaves it alone")
+        assertTrue(bindings.isRunning())
+        holder.enteredForeground()
+        runCurrent()
+
+        bindings.stop()
+        holder.release()
+        runCurrent()
+        assertIs<WalletState.Open>(holder.state.value, "and the person's comes back")
+    }
+
+    @Test
+    fun `while the person is in their own wallet the group can't take it, and can once they've left`() = runWallet {
+        files.recordConsent(alice)
+        val holder = holder()
+        holder.activate(profile())
+        runCurrent()
+        holder.wantPersonal(true)
+        assertFalse(holder.acquire("Treasury"))
+        assertIs<WalletState.Open>(holder.state.value)
+        holder.wantPersonal(false)
+        assertTrue(holder.acquire("Treasury"))
+    }
+
+    private fun FakeFacadeBindings.startWalletAsIfTheGroupsHadOpened() {
+        start("""{"network":"signet"}""")
+    }
 }

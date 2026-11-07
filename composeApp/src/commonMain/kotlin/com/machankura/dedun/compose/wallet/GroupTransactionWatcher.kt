@@ -125,7 +125,7 @@ class GroupTransactionWatcher(
 
         // Null while disconnected, or while Electrum has not heard of it -- which
         // is also what a spend whose coins somebody else took looks like.
-        val confirmations = electrum.getConfirmations(signed) ?: run {
+        val confirmations = electrum.confirmationsOf(signed) ?: run {
             conflictOf(row, signed)?.let { FrostSigningManager.recordReplaced(database, row.frostSigningSessionId, it.toString()) }
             return
         }

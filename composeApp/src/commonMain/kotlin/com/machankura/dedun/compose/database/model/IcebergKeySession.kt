@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
@@ -51,6 +52,13 @@ data class IcebergKeySession(
      * answer to a different quorum.
      */
     val onchainDkgSessionId: String,
+    /**
+     * Which wallet this key is for: [PURPOSE_LIGHTNING] or [PURPOSE_WAVELENGTH]. A shared key would share a label space
+     * and a removal, and a wallet opens under the newest key none of its kind uses, so without this a Lightning statement
+     * could claim a key made for the other. Rows from before there was a second wallet were all for the first.
+     */
+    @ColumnInfo(defaultValue = PURPOSE_LIGHTNING)
+    val purpose: String = PURPOSE_LIGHTNING,
     val stage: IcebergRitualStage = IcebergRitualStage.COLLECTING_COMMITMENTS,
     /** 32 random bytes, hex, that this device's contributions are derived from. Dropped once [share] exists. */
     val root: HexKey? = null,
@@ -72,6 +80,9 @@ data class IcebergKeySession(
     val createdAt: Instant = Clock.System.now(),
     val updatedAt: Instant = createdAt,
 ) {
+    /** How a chat line names the wallet this key is for. */
+    val walletName: String get() = if (purpose == PURPOSE_WAVELENGTH) "Wavelength wallet" else "Lightning wallet"
+
     fun participants(): List<HexKey> = participantPublicKeys.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
     fun isCoordinator(): Boolean = coordinatorPublicKey == userPublicKey
@@ -81,6 +92,9 @@ data class IcebergKeySession(
     override fun toString(): String = "IcebergKeySession(id=$id, chatRoomId=$chatRoomId, $threshold-of-$participantCount, stage=$stage)"
 
     companion object {
+        const val PURPOSE_LIGHTNING = "lightning"
+        const val PURPOSE_WAVELENGTH = "wavelength"
+
         fun formatParticipants(publicKeys: Collection<HexKey>): String = publicKeys.map { it.lowercase() }.distinct().sorted().joinToString(",")
     }
 }

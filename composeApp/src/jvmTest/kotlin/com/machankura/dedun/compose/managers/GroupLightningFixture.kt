@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import kotlin.time.Clock
 import kotlin.test.assertTrue
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
@@ -30,6 +32,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -124,6 +127,7 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
             GroupLightningEvents.NODE_SEED -> GroupLightningWalletManager.receiveSeed(to.db, to.room, event, to.publicKey, to.privateKey)
             GroupLightningEvents.SNAPSHOT, GroupLightningEvents.INVOICE, GroupLightningEvents.INVOICE_REQUEST -> GroupLightningReports.process(to.db, to.room, event)
             GroupLightningEvents.STOPPED -> GroupLightningOperatorManager.receiveStopped(to.db, to.room, event)
+            GroupWavelengthEvents.AUTH_SEED -> GroupWavelengthWalletManager.receiveSeed(to.db, to.room, event, to.publicKey, to.privateKey)
         }
     }
 
@@ -155,9 +159,9 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
     }
 
     suspend fun signSession(all: List<Device>, proposer: Device, sessionId: String) {
-        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC)
+        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC + GroupWavelengthEvents.WALLET_TRAFFIC)
         all.filter { it !== proposer }.forEach { FrostSigningManager.approve(it.db, it.room, sessionId) }
-        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC)
+        pump(all, FrostSigningEvents.ALL + GroupLightningEvents.WALLET_TRAFFIC + GroupWavelengthEvents.WALLET_TRAFFIC)
     }
 
     suspend fun openOnchainWallet(all: List<Device>) {
@@ -228,8 +232,8 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
     suspend fun group(): List<Device> = (0 until n).map { device(it) }.also { openOnchainWallet(it) }
 
     /** Runs a Lightning wallet key ceremony from [proposer], every other device approving every step. */
-    suspend fun runCeremony(all: List<Device>, proposer: Device = all[0], threshold: Int = 2): IcebergKeySession {
-        val proposed = IcebergRitualManager.proposeCeremony(proposer.db, proposer.room, proposer.publicKey, proposer.privateKey, threshold, chain)
+    suspend fun runCeremony(all: List<Device>, proposer: Device = all[0], threshold: Int = 2, purpose: String = IcebergKeySession.PURPOSE_LIGHTNING): IcebergKeySession {
+        val proposed = IcebergRitualManager.proposeCeremony(proposer.db, proposer.room, proposer.publicKey, proposer.privateKey, threshold, chain, purpose)
         repeat(6) {
             pump(all, GroupLightningEvents.CEREMONY)
             all.forEach { d ->
@@ -239,5 +243,24 @@ class GroupLightningFixture(val n: Int = 4, val frostThreshold: Int = 3, val cha
         }
         pump(all, GroupLightningEvents.CEREMONY)
         return proposed
+    }
+
+    /**
+     * Gives [member] somewhere to be paid and [sat] of deposits in [wallet] on every device, as if it had boarded and settled, so a payout to
+     * them can be signed: what a Wavelength payment has to name.
+     */
+    suspend fun payable(all: List<Device>, member: Device, wallet: GroupWavelengthWalletManager.Wallet, sat: Long): GroupWavelengthPaymentEvent.Payout {
+        val destination = GroupPayoutDestinationEvent.build(PrivateKey(ByteVector32(member.privateKey)), roomId, chain, LightningAddress("member${member.index}", "example.com"), createdAt = 1_700_000_000)
+        val tags = arrayOf(arrayOf("h", roomId))
+        val id = EventHasher.hashId(member.publicKey, destination.createdAt, GroupPayoutDestinationEvent.KIND, tags, destination.toJson())
+        val key = GroupArkCoSigner.walletKey(roomId, chain, wallet.statement.wallet)
+        all.forEach { device ->
+            device.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(id = id, publicKey = member.publicKey, kind = GroupPayoutDestinationEvent.KIND, createdAt = Instant.fromEpochSeconds(destination.createdAt), tags = tags, content = destination.toJson(), chatRoomId = roomId)
+            )
+            device.db.depositDao().upsert(DepositRow(chatRoomId = roomId, chain = GroupWalletStatementEvent.chainName(chain), depositKey = "${"ab".repeat(32)}:${member.index}", source = DepositRow.WAVELENGTH, amountMsat = sat * 1000, member = member.publicKey.lowercase(), attributedBy = DepositRow.BY_BOARDING_ADDRESS))
+            device.db.groupArkDao().upsertVtxo(GroupArkVtxo(key, "coin${member.index}:0", sat, settled = true))
+        }
+        return GroupWavelengthPaymentEvent.Payout(member.publicKey.lowercase(), assertNotNull(GroupPayoutDestinations.payoutDestinationOf(member.db, roomId, chain, member.publicKey)).event.id)
     }
 }

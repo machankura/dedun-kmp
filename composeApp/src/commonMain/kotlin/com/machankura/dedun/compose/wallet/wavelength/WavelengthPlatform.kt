@@ -17,4 +17,10 @@ expect object WavelengthPlatform {
 
     /** Schedules the background renewal, where there is such a thing (D10). */
     fun scheduleRenewal(context: PlatformContext)
+
+    /**
+     * Keeps this process alive for [group]'s wallet while this device runs it, where the platform would otherwise stop it in the
+     * background, and lets go on null: `docs/group-wavelength-ui.md`, Phase 3.
+     */
+    fun holdForGroup(context: PlatformContext, group: String?)
 }

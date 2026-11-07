@@ -41,7 +41,7 @@ interface GroupLightningRepository {
     /** Whether [chatRoomId] has opened the onchain wallet a Lightning wallet on [chain] would close to. */
     suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean
 
-    suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain): IcebergKeySession
+    suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain, purpose: String = IcebergKeySession.PURPOSE_LIGHTNING): IcebergKeySession
 
     suspend fun approveCeremony(localChatRoom: LocalChatRoom, sessionId: String, step: IcebergApprovalStep, nostrPrivateKey: ByteArray)
 
@@ -126,7 +126,7 @@ interface GroupLightningRepository {
             override suspend fun ceremonyThresholds(chatRoomId: String): List<Int> = emptyList()
             override suspend fun keyHolderCount(chatRoomId: String): Int = 0
             override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean = false
-            override suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain): IcebergKeySession = error("No room to propose in")
+            override suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain, purpose: String): IcebergKeySession = error("No room to propose in")
             override suspend fun approveCeremony(localChatRoom: LocalChatRoom, sessionId: String, step: IcebergApprovalStep, nostrPrivateKey: ByteArray) = Unit
             override suspend fun resumeCeremony(localChatRoom: LocalChatRoom, sessionId: String, nostrPrivateKey: ByteArray) = Unit
             override suspend fun abandonCeremony(localChatRoom: LocalChatRoom, sessionId: String): Boolean = false

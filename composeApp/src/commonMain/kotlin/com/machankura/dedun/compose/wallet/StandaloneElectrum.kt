@@ -203,5 +203,7 @@ fun randomElectrumServer(chain: Chain, isTorEnabled: Boolean): ServerAddress? = 
     Chain.Mainnet -> if (isTorEnabled) mainnetElectrumServersOnion.random() else mainnetElectrumServers.random()
     Chain.Testnet3 -> if (isTorEnabled) testnetElectrumServersOnion.random() else testnetElectrumServers.random()
     Chain.Regtest -> platformElectrumRegtestConf()
+    // The one public server known, and a group's Wavelength wallet is what asks: `docs/group-wavelength-wallet.md`.
+    Chain.Signet -> ServerAddress("mempool.space", 60602, TcpSocket.TLS.TRUSTED_CERTIFICATES())
     else -> null
 }

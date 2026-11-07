@@ -1,6 +1,10 @@
 <resources>a
     <string name="app_name">Dedun</string>
 
+    <string name="group_wavelength_notification_channel">Running a group wallet</string>
+    <string name="group_wavelength_notification_title">Running %1$s\'s wallet</string>
+    <string name="group_wavelength_notification_text">This device is keeping the group\'s coins renewed. It can\'t move them by itself.</string>
+
     <string name="notification_channels_watcher_title">Channels watcher</string>
     <string name="notification_channels_watcher_desc">Shows up when you need to start Phoenix.</string>
 

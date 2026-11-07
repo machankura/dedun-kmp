@@ -37,6 +37,8 @@ object MemberBalances {
         val isFormerMember: Boolean,
         val coins: List<OwnedCoin>,
         val lightning: LightningBalance.Balance,
+        /** What they hold in the group's Wavelength wallet, the third rail. */
+        val wavelength: GroupWavelengthPayouts.Balance = GroupWavelengthPayouts.Balance.NONE,
     ) {
         val onchainConfirmedSat: Long get() = coins.filter { it.isConfirmed }.sumOf { it.sat }
         val onchainPendingSat: Long get() = coins.filterNot { it.isConfirmed }.sumOf { it.sat }
@@ -113,7 +115,8 @@ object MemberBalances {
 
         val destinations = GroupPayoutDestinations.payoutDestinationsIn(database, chatRoomId, chain)
         val current = database.participantDao().findParticipantsByChatRoomId(chatRoomId).map { it.participantPublicKey.lowercase() }.toSet()
-        val everybody = coins.keys + lightningDeposits.keys + records.branches.values + destinations.keys
+        val wavelength = GroupWavelengthPayouts.balancesIn(database, chatRoomId, chain, nowSeconds)
+        val everybody = coins.keys + lightningDeposits.keys + records.branches.values + destinations.keys + wavelength.keys
         val members = everybody.associateWith { member ->
             MemberBalance(
                 member = member,
@@ -121,6 +124,7 @@ object MemberBalances {
                 isFormerMember = member !in current,
                 coins = coins[member].orEmpty(),
                 lightning = LightningBalance.of(member, lightningDeposits[member] ?: 0, payouts, sentFees, nowSeconds),
+                wavelength = wavelength[member] ?: GroupWavelengthPayouts.Balance.NONE,
             )
         }
         return Balances(members, unowned)

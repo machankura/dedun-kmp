@@ -4,7 +4,12 @@ import com.machankura.dedun.compose.managers.GroupLightningOperatorManager
 import com.machankura.dedun.compose.managers.GroupLightningCoSigner
 import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
+import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
+import com.machankura.dedun.compose.managers.GroupWavelengthReports
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.managers.IcebergRitualManager
 import androidx.room3.Dao
 import androidx.room3.Transaction
@@ -1623,6 +1628,42 @@ abstract class NostrDao(
                                 innerEvent = innerEvent,
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // The Wavelength wallet's co-signing, as the Lightning wallet's above.
+                        innerEvent.kind in GroupWavelengthEvents.CO_SIGNING ->
+                            GroupArkCoSigner.process(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex()
+                            )
+
+                        // A member handing out the Wavelength wallet's authentication seed,
+                        // encrypted to each participant inside the room.
+                        innerEvent.kind == GroupWavelengthEvents.AUTH_SEED ->
+                            GroupWavelengthWalletManager.receiveSeed(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // A member asking for a boarding address, and the operator's answer.
+                        innerEvent.kind == GroupWavelengthEvents.DEPOSIT_REQUEST || innerEvent.kind == GroupWavelengthEvents.DEPOSIT_ANSWER ->
+                            GroupWavelengthDeposits.process(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                            )
+
+                        // What the operator says about the Wavelength wallet.
+                        innerEvent.kind == GroupWavelengthEvents.SNAPSHOT || innerEvent.kind == GroupWavelengthEvents.STOPPED ->
+                            GroupWavelengthReports.process(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
                             )
 
                         // What the operator says about the Lightning wallet, and the

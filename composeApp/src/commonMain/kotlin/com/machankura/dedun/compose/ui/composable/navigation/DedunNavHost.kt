@@ -47,6 +47,15 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightni
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.IcebergCeremonyScreen
 import com.machankura.dedun.compose.database.repository.DatabaseGroupLightningRepository
+import com.machankura.dedun.compose.database.repository.DatabaseGroupWavelengthRepository
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthAdvancedScreen
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthExitScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthExitRoute
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.ui.composable.MemberWalletPolicyScreen
@@ -213,6 +222,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupSwapInR
 import com.machankura.dedun.compose.ui.composable.GroupSwapInScreen
 import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkWatcher
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthProcess
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposalListRoute
@@ -275,6 +286,11 @@ fun DedunNavHost(
 
     val databaseGroupLightningRepository = remember {
         DatabaseGroupLightningRepository(database = auxDatabaseManager.auxDatabase)
+    }
+
+    val currentChainClients = remember { mutableStateOf<GroupChainClients?>(null) }
+    val databaseGroupWavelengthRepository = remember {
+        DatabaseGroupWavelengthRepository(database = auxDatabaseManager.auxDatabase, clients = { currentChainClients.value })
     }
 
     val databaseFrostSigningRepository = remember {
@@ -472,6 +488,25 @@ fun DedunNavHost(
     }
     DisposableEffect(groupTransactionWatcher) {
         onDispose { groupTransactionWatcher?.stop() }
+    }
+
+    LaunchedEffect(groupChainClients) { currentChainClients.value = groupChainClients }
+
+    // Sees for itself which of the rounds this device signed for have happened, on the
+    // same lifetime: without it, a device never spends a group's Wavelength coin.
+    val groupArkWatcher = remember(groupChainClients) {
+        groupChainClients?.let {
+            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope).also { watcher -> watcher.start() }
+        }
+    }
+    DisposableEffect(groupArkWatcher) {
+        onDispose { groupArkWatcher?.stop() }
+    }
+
+    // Whatever group Wavelength wallets this profile is elected to run. The process's rather than this
+    // composition's, since a rotation would otherwise stop a daemon in the middle of a round.
+    LaunchedEffect(activeIdentityForWallets?.nostrPublicKey) {
+        GroupWavelengthProcess.activate(phoenixGlobal.ctx, auxDatabaseManager.auxDatabase, activeIdentityForWallets?.nostrPublicKey)
     }
 
     val navigationViewModel: NavigationViewModel =  viewModel (
@@ -933,10 +968,82 @@ fun DedunNavHost(
                     activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
                     chatRepository = databaseChatRepository,
                     lightningRepository = databaseGroupLightningRepository,
+                    purpose = route.purpose,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: GroupLightningRollout.NETWORK,
                     onNavigateBack = {
                         navController.popBackStack()
                     }
                 )
+            }
+            composable<GroupWavelengthWalletRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthWalletRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthWalletScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    daemonSource = GroupWavelengthProcess,
+                    onNavigateToRoute = { actionRoute ->
+                        navController.navigate(route = actionRoute)
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthReceiveRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthReceiveRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthReceiveScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthAdvancedRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthAdvancedRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthAdvancedScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    daemonSource = GroupWavelengthProcess,
+                    onOpenExit = { navController.navigate(route = GroupWavelengthExitRoute(activeUserPublicKey = route.activeUserPublicKey, chatRoomId = route.chatRoomId, chain = route.chain)) },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthExitRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthExitRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+                var number by remember { mutableStateOf<Long?>(null) }
+                LaunchedEffect(route) { number = databaseGroupWavelengthRepository.wallets(route.chatRoomId, chain).lastOrNull()?.statement?.wallet ?: -1 }
+                number?.let { wallet ->
+                    GroupWavelengthExitScreen(
+                        chatRoomId = route.chatRoomId,
+                        chain = chain,
+                        wallet = wallet,
+                        daemonSource = GroupWavelengthProcess,
+                        onNavigateBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable<CreateSharedKeyRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<CreateSharedKeyRoute>()
@@ -1580,6 +1687,7 @@ fun DedunNavHost(
                     payoutDestinationRepository = databasePayoutDestinationRepository,
                     wallets = groupOnchainWallets,
                     lightningRepository = databaseGroupLightningRepository,
+                    wavelengthRepository = databaseGroupWavelengthRepository,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()

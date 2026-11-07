@@ -15,7 +15,25 @@ import com.machankura.dedun.compose.database.model.IcebergChannelLedger
 import com.machankura.dedun.compose.database.model.IcebergBudgetSpend
 import com.machankura.dedun.compose.database.dao.IcebergCoSigningDao
 import com.machankura.dedun.compose.database.dao.GroupLightningSeedDao
+import com.machankura.dedun.compose.database.dao.GroupArkDao
+import com.machankura.dedun.compose.database.dao.GroupWavelengthSeedDao
 import com.machankura.dedun.compose.database.model.GroupLightningSeed
+import com.machankura.dedun.compose.database.model.GroupArkChecked
+import com.machankura.dedun.compose.database.model.GroupArkFee
+import com.machankura.dedun.compose.database.model.GroupArkFloor
+import com.machankura.dedun.compose.database.model.GroupArkMark
+import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
+import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkPendingRound
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
+import com.machankura.dedun.compose.database.model.GroupArkSnapshotRow
+import com.machankura.dedun.compose.database.model.GroupArkRound
+import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
+import com.machankura.dedun.compose.database.model.GroupArkTreeShare
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.dao.IcebergKeySessionDao
 import com.machankura.dedun.compose.database.model.IcebergParticipantMessage
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -149,6 +167,22 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         DepositRow::class,
         GroupLightningPaymentRow::class,
         GroupLightningSeed::class,
+        GroupWavelengthSeed::class,
+        GroupArkTreeShare::class,
+        GroupArkVtxo::class,
+        GroupArkFloor::class,
+        GroupArkMark::class,
+        GroupArkFee::class,
+        GroupArkCheckpoint::class,
+        GroupArkPayment::class,
+        GroupArkBoarded::class,
+        GroupArkClaim::class,
+        GroupArkDepositAddress::class,
+        GroupArkPendingRound::class,
+        GroupArkSnapshotRow::class,
+        GroupArkRound::class,
+        GroupArkTreeBinding::class,
+        GroupArkChecked::class,
         GroupLightningSnapshotRow::class,
         GroupSignedEvent::class,
         GroupTransaction::class,
@@ -191,7 +225,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 37,
+    version = 41,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -430,6 +464,23 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // v37 adds DepositRow: every deposit into a group as this device learned it, kept so a deposit
         // the group has spent since still counts in its member's tally (docs/member-deposits.md, Phase 8).
         AutoMigration(from = 36, to = 37),
+        // v38 adds IcebergKeySession.purpose, which wallet a key is for, "lightning" on every row before it, and
+        // the tables of a group's Wavelength wallet: its authentication seed, its tree keys' public shares, what a
+        // co-signer knows the wallet holds, and how far the group has answered (docs/group-wavelength-wallet.md,
+        // Phases 4 and 6). None of this has been on an installed database, so it is one version.
+        AutoMigration(from = 37, to = 38),
+        // v39 adds what a co-signer waits on before it believes a Wavelength coin: rounds it hasn't seen confirm, and
+        // the checkpoints of transfers it hasn't seen signed (docs/group-wavelength-wallet.md). v38 had reached `dedun`,
+        // so this is a version of its own. New tables are a shape Room migrates itself, and nothing can be pending yet.
+        AutoMigration(from = 38, to = 39),
+        // v40 adds when a group's Wavelength coin can be swept, by the device's own count, so that a member's deadline
+        // isn't the operator's word, what the operator last said it holds, and who each boarding address is for
+        // (docs/group-wavelength-ui.md, Phases 1, 5 and 6).
+        // Nullable columns and a new table, which Room migrates itself.
+        AutoMigration(from = 39, to = 40),
+        // v41 adds Lightning deposits to a group's Wavelength wallet: an invoice beside each address, and the claims a device
+        // has signed and not seen settle (docs/group-wavelength-ui.md, Phase 6). v40 had reached `dedun`, so a version of its own.
+        AutoMigration(from = 40, to = 41),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -482,6 +533,10 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun icebergKeySessionDao(): IcebergKeySessionDao
 
     abstract fun groupLightningSeedDao(): GroupLightningSeedDao
+
+    abstract fun groupWavelengthSeedDao(): GroupWavelengthSeedDao
+
+    abstract fun groupArkDao(): GroupArkDao
 
     abstract fun icebergCoSigningDao(): IcebergCoSigningDao
 

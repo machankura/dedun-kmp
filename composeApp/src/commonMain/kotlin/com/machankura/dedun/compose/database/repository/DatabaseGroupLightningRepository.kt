@@ -116,8 +116,8 @@ class DatabaseGroupLightningRepository(private val database: DedunDatabase) : Gr
     override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean =
         GroupWalletManager.walletFor(database, chatRoomId, chain) != null
 
-    override suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain): IcebergKeySession =
-        IcebergRitualManager.proposeCeremony(database, localChatRoom, userPublicKey, nostrPrivateKey, threshold, chain)
+    override suspend fun proposeCeremony(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, threshold: Int, chain: Chain, purpose: String): IcebergKeySession =
+        IcebergRitualManager.proposeCeremony(database, localChatRoom, userPublicKey, nostrPrivateKey, threshold, chain, purpose)
 
     override suspend fun approveCeremony(localChatRoom: LocalChatRoom, sessionId: String, step: IcebergApprovalStep, nostrPrivateKey: ByteArray) =
         IcebergRitualManager.approve(database, localChatRoom, sessionId, step, nostrPrivateKey)

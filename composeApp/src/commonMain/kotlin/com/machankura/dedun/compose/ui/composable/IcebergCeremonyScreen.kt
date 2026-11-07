@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,6 +43,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.a_lightning_wallet_needs_four_signers
+import dedun.composeapp.generated.resources.a_wavelength_wallet_needs_four_signers
+import dedun.composeapp.generated.resources.the_group_has_a_wavelength_wallet_key
+import dedun.composeapp.generated.resources.the_wavelength_wallet_key_is_made_by_everyone
+import dedun.composeapp.generated.resources.this_group_has_no_wavelength_wallet_key_yet
+import dedun.composeapp.generated.resources.wavelength_wallet_key
 import dedun.composeapp.generated.resources.abandon
 import dedun.composeapp.generated.resources.abandon_ceremony
 import dedun.composeapp.generated.resources.abandon_this_key_ceremony_question
@@ -72,6 +78,7 @@ import dedun.composeapp.generated.resources.waiting_for_contributions
 import dedun.composeapp.generated.resources.waiting_for_everyone_to_confirm
 import dedun.composeapp.generated.resources.waiting_for_everyone_to_join
 import dedun.composeapp.generated.resources.your_share_of_this_key_is_stored_unencrypted
+import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.types.IcebergApprovalStep
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.identity.Identity
@@ -93,11 +100,12 @@ import com.machankura.dedun.compose.ui.view.model.IcebergCeremonyViewModel
 import com.machankura.dedun.compose.ui.view.state.IcebergCeremonyUIState
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * A group's Lightning wallet key ceremony: who has done which of its three rounds, whether this device
+ * A group's wallet key ceremony: who has done which of its three rounds, whether this device
  * has been asked to join, the way to abandon it, and -- for a group without one -- the way to start it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -109,6 +117,8 @@ fun IcebergCeremonyScreen(
     activeIdentityStateFlow: StateFlow<Identity?>,
     chatRepository: ChatRepository,
     lightningRepository: GroupLightningRepository,
+    purpose: String = IcebergKeySession.PURPOSE_LIGHTNING,
+    chain: Chain = GroupLightningRollout.NETWORK,
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: IcebergCeremonyViewModel = viewModel(
@@ -116,10 +126,11 @@ fun IcebergCeremonyScreen(
             activeUserPublicKey = activeUserPublicKey,
             chatRoomId = chatRoomId,
             sessionId = sessionId,
-            chain = GroupLightningRollout.NETWORK,
+            chain = chain,
             activeIdentityStateFlow = activeIdentityStateFlow,
             chatRepository = chatRepository,
             lightningRepository = lightningRepository,
+            purpose = purpose,
         )
     )
     LaunchedEffect(true) { viewModel.initiate() }
@@ -128,12 +139,14 @@ fun IcebergCeremonyScreen(
     val couldNotStart = stringResource(Res.string.couldn_t_start_the_key_ceremony)
     val couldNotApprove = stringResource(Res.string.couldn_t_approve_this_step)
     val couldNotAbandon = stringResource(Res.string.couldn_t_abandon_the_ceremony)
+    // A ceremony reached from a transcript line says which wallet it's for; one being started, what the screen was asked for.
+    val isWavelength = ((viewModel.uiState as? IcebergCeremonyUIState.Loaded)?.session?.purpose ?: purpose) == IcebergKeySession.PURPOSE_WAVELENGTH
 
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(Res.string.lightning_wallet_key), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(stringResource(if (isWavelength) Res.string.wavelength_wallet_key else Res.string.lightning_wallet_key), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { NavigateBackButton(onNavigateBack) }
             )
         }
@@ -149,13 +162,14 @@ fun IcebergCeremonyScreen(
                         modifier = Modifier.padding(padding).readableContent(),
                         message = when {
                             !state.hasOnchainWallet -> stringResource(Res.string.open_the_group_s_onchain_wallet_first)
-                            state.thresholds.isEmpty() -> stringResource(Res.string.a_lightning_wallet_needs_four_signers)
-                            else -> stringResource(Res.string.this_group_has_no_lightning_wallet_key_yet)
+                            state.thresholds.isEmpty() -> stringResource(if (isWavelength) Res.string.a_wavelength_wallet_needs_four_signers else Res.string.a_lightning_wallet_needs_four_signers)
+                            else -> stringResource(if (isWavelength) Res.string.this_group_has_no_wavelength_wallet_key_yet else Res.string.this_group_has_no_lightning_wallet_key_yet)
                         },
-                        icon = Icons.Default.Bolt,
+                        icon = if (isWavelength) Icons.Default.Waves else Icons.Default.Bolt,
                         action = if (viewModel.canPropose()) {
                             {
                                 StartCeremony(
+                                    isWavelength = isWavelength,
                                     thresholds = state.thresholds,
                                     participants = state.holderCount,
                                     chosen = viewModel.threshold.value,
@@ -182,9 +196,9 @@ fun IcebergCeremonyScreen(
 }
 
 @Composable
-private fun StartCeremony(thresholds: List<Int>, participants: Int, chosen: Int?, onChoose: (Int) -> Unit, isPending: Boolean, onStart: () -> Unit) {
+private fun StartCeremony(isWavelength: Boolean, thresholds: List<Int>, participants: Int, chosen: Int?, onChoose: (Int) -> Unit, isPending: Boolean, onStart: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-        Text(stringResource(Res.string.the_lightning_wallet_key_is_made_by_everyone, (2 * (chosen ?: 2) - 1).toString()), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(if (isWavelength) Res.string.the_wavelength_wallet_key_is_made_by_everyone else Res.string.the_lightning_wallet_key_is_made_by_everyone, (2 * (chosen ?: 2) - 1).toString()), style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             thresholds.forEach { t ->
                 FilterChip(
@@ -225,7 +239,7 @@ private fun Ceremony(
                     IcebergRitualStage.COLLECTING_COMMITMENTS -> stringResource(Res.string.waiting_for_everyone_to_join)
                     IcebergRitualStage.COLLECTING_REVEALS -> stringResource(Res.string.waiting_for_contributions)
                     IcebergRitualStage.COLLECTING_CONFIRMATIONS -> stringResource(Res.string.waiting_for_everyone_to_confirm)
-                    IcebergRitualStage.COMPLETE -> stringResource(Res.string.the_group_has_a_lightning_wallet_key)
+                    IcebergRitualStage.COMPLETE -> stringResource(if (session.purpose == IcebergKeySession.PURPOSE_WAVELENGTH) Res.string.the_group_has_a_wavelength_wallet_key else Res.string.the_group_has_a_lightning_wallet_key)
                     IcebergRitualStage.FAILED -> stringResource(Res.string.the_ceremony_was_abandoned)
                 },
                 style = MaterialTheme.typography.titleMedium,
