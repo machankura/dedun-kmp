@@ -97,8 +97,10 @@ class GroupPayoutsViewModel(
                 lightningRepository.observeReport(chatRoomId, chain, wallet.statement.wallet).first()
                     ?.snapshot?.channels?.filter { it.state.equals("Normal", ignoreCase = true) }?.sumOf { it.oursMsat }
             }
+            val wavelengthPaysLightning = GroupWavelengthRollout.paysOverLightning(chain)
+            val wavelengthPaysOnchain = GroupWavelengthRollout.paysOnchain(chain)
             val wavelengthWallet = wavelengthRepository.wallets(chatRoomId, chain).lastOrNull()
-                ?.takeIf { GroupWavelengthRollout.paysOverLightning(chain) && wavelengthRepository.operator(chatRoomId, chain, it.statement.wallet)?.publicKey != null }
+                ?.takeIf { (wavelengthPaysLightning || wavelengthPaysOnchain) && wavelengthRepository.operator(chatRoomId, chain, it.statement.wallet)?.publicKey != null }
             val loaded = GroupPayoutsUIState.Loaded(
                 localChatRoom = localChatRoom,
                 balances = payoutRepository.balances(chatRoomId, chain, null),
@@ -111,6 +113,8 @@ class GroupPayoutsViewModel(
                 lightningWallet = lightningWallet,
                 lightningSpendableMsat = lightningSpendable,
                 wavelengthWallet = wavelengthWallet,
+                wavelengthPaysLightning = wavelengthPaysLightning,
+                wavelengthPaysOnchain = wavelengthPaysOnchain,
             )
             uiState = loaded
 
@@ -255,6 +259,63 @@ class GroupPayoutsViewModel(
             withContext(Dispatchers.Main) {
                 isActionPending.value = false
                 problem?.let(onProblem)
+            }
+        }
+    }
+
+    /**
+     * What an onchain payout from the Wavelength wallet would be for [balance], or why there is none: the whole balance less the most a
+     * round may cost, arriving exactly at the address the member gave (`docs/group-wavelength-payouts.md`, W7 and W8). Null where the
+     * member has nothing in that wallet, or onchain payouts are off.
+     */
+    fun wavelengthOnchainOffer(balance: MemberBalances.MemberBalance): WavelengthOnchainOffer? {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return null
+        val wallet = state.wavelengthWallet?.takeIf { state.wavelengthPaysOnchain } ?: return null
+        val wavelength = balance.wavelength
+        if (wavelength.availableSat <= 0 && wavelength.openSat <= 0) return null
+        if (wavelength.openSat > 0) return WavelengthOnchainOffer.Waiting
+        val address = balance.destination?.onchainAddress ?: return WavelengthOnchainOffer.NoAddress
+        val maxFeeSat = wallet.statement.policy.maxRoundFeeSat
+        val amountSat = wavelength.availableSat - maxFeeSat
+        if (amountSat < GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) return WavelengthOnchainOffer.TooLittle(GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT - amountSat)
+        return WavelengthOnchainOffer.Offer(amountSat, maxFeeSat, address)
+    }
+
+    sealed interface WavelengthOnchainOffer {
+        data class Offer(val amountSat: Long, val maxFeeSat: Long, val address: String) : WavelengthOnchainOffer
+        data object NoAddress : WavelengthOnchainOffer
+        /** Another payout of theirs, on either rail, is being signed or waiting to be paid (W9). */
+        data object Waiting : WavelengthOnchainOffer
+        data class TooLittle(val shortSat: Long) : WavelengthOnchainOffer
+    }
+
+    /** Why [member]'s onchain address can't be paid yet by what was found of its use, or null when it can (`docs/payouts-only.md`, D7). */
+    fun usageProblemOf(member: HexKey): UsageProblem? {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return null
+        val former = state.balances.members[member]?.isFormerMember == true
+        return when (usage[member]) {
+            null -> UsageProblem.Checking(member)
+            UnusedAddressCheck.Usage.Unknown -> UsageProblem.CouldNotCheck(member)
+            UnusedAddressCheck.Usage.Used -> if (former) null else UsageProblem.PaidBefore(member)
+            else -> null
+        }
+    }
+
+    /** Asks the group to pay [member] their whole Wavelength balance onchain, as [wavelengthOnchainOffer] says it would. */
+    fun payOutWavelengthOnchain(member: HexKey, onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return
+        val wallet = state.wavelengthWallet ?: return
+        val balance = state.balances.members[member] ?: return
+        val destination = balance.destination ?: return
+        val offer = wavelengthOnchainOffer(balance) as? WavelengthOnchainOffer.Offer ?: return
+        if (usageProblemOf(member) != null || isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { wavelengthRepository.proposeOnchainPayout(state.localChatRoom, activeUserPublicKey, wallet, destination, offer.amountSat, offer.maxFeeSat) }
+                .onFailure { logger.e("Failed to propose an onchain Wavelength payout from $chatRoomId", it) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
             }
         }
     }

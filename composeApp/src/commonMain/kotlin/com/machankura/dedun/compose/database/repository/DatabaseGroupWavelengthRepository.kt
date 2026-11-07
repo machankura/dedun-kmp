@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -98,6 +101,22 @@ class DatabaseGroupWavelengthRepository(
         val tip = requireNotNull(tipHeight(chain)) { "No chain connection to set a refund limit from" }
         val expiresAt = Clock.System.now().epochSeconds + APPROVAL_LASTS_SECONDS
         return GroupWavelengthPayments.propose(database, localChatRoom, userPublicKey, wallet, invoice, maxFeeSat, tip + GroupWavelengthRollout.MAX_REFUND_BLOCKS, expiresAt, payout)
+    }
+
+    override suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout> {
+        val leaves = database.groupArkDao().leaves(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).associateBy { it.authorisation }
+        return GroupWavelengthPayouts.signedOnchain(database, chatRoomId, chain).filter { it.wallet == wallet }.map { payout ->
+            val leave = leaves[payout.id]
+            GroupWavelengthOnchainPayout(payout, leave?.let { it.amountSat + it.feeSat }, leave?.confirmed == true)
+        }
+    }
+
+    override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession {
+        val chain = wallet.statement.chain
+        require(GroupWavelengthRollout.paysOnchain(chain)) { "Onchain payouts are off on ${chain.name}" }
+        val address = requireNotNull(destination.onchainAddress) { "The member has given no onchain address" }
+        val payout = GroupWavelengthOnchainPayoutEvent.paying(chain, wallet.statement.wallet, destination.member, destination.event.id, address, amountSat, maxFeeSat)
+        return GroupWavelengthPayouts.proposeOnchain(database, localChatRoom, userPublicKey, payout)
     }
 
     override suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession =

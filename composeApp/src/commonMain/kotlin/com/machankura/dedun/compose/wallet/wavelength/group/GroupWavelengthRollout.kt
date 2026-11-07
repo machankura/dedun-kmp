@@ -46,6 +46,19 @@ object GroupWavelengthRollout {
     fun paysOverLightning(chain: Chain): Boolean = !chain.isMainnet()
 
     /**
+     * Whether a payout goes out onchain, as a leave in a round, from a wallet on [chain]. Not on mainnet until one has run on signet and
+     * the owner has decided (`docs/group-wavelength-payouts.md`, W13). A device co-signs one whatever this says.
+     */
+    fun paysOnchain(chain: Chain): Boolean = !chain.isMainnet()
+
+    /**
+     * The least an onchain payout offers to send. A stand-in until the operator's own onchain terms are read (Phase 0 of
+     * `docs/group-wavelength-payouts.md`): mainnet's operator asked a minimum fee of 1,000 sats for a round, and less than that arriving
+     * would lose most of itself to it.
+     */
+    const val MIN_ONCHAIN_PAYOUT_SAT: Long = 1_000
+
+    /**
      * Whether the wallet offers to leave without the Ark operator's help on [chain]. A unilateral exit has never run on any network, so
      * not on mainnet until one has, on signet, where this is what lets someone run it.
      */

@@ -261,7 +261,7 @@ class GroupWavelengthWalletScreenJvmTest {
     @Test
     fun `on mainnet there's no payout over Lightning, and it says why and what to do instead`() = runDesktopComposeUiTest(phone, 1400) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(chain = Chain.Mainnet), Chain.Mainnet) } } }
-        onNodeWithText("Payouts over Lightning stay off on mainnet until a failed payment's refund has been shown to work. Leaving moves the money to the onchain wallet, which pays out.").assertIsDisplayed()
+        onNodeWithText("Payouts stay off on mainnet: over Lightning until a failed payment's refund has been shown to work, and onchain until one has been paid on a test network. Leaving moves the money to the onchain wallet, which pays out.").assertIsDisplayed()
         assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Pay out")).fetchSemanticsNodes().size)
     }
 

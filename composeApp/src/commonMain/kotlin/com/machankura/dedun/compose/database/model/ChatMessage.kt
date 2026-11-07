@@ -688,6 +688,9 @@ data class ChatMessage(
         const val TYPE_WAVELENGTH_DEADLINE = "wavelengthDeadline"
         const val TYPE_WAVELENGTH_OPERATOR_STOPPED = "wavelengthOperatorStopped"
 
+        /** An onchain payout this device saw leave in a round that confirmed, keyed on the approval's id (docs/group-wavelength-payouts.md). */
+        const val TYPE_WAVELENGTH_PAID_OUT = "wavelengthPaidOut"
+
         /** What a group's Wavelength wallet writes in its room. Reports, so they stay quiet: the wallet's screen is where they lead, and it's per network. */
         val WAVELENGTH_TYPES = setOf(
             TYPE_WAVELENGTH_REFUSED,
@@ -695,6 +698,7 @@ data class ChatMessage(
             TYPE_WAVELENGTH_ROUND_DIED,
             TYPE_WAVELENGTH_DEADLINE,
             TYPE_WAVELENGTH_OPERATOR_STOPPED,
+            TYPE_WAVELENGTH_PAID_OUT,
         )
 
         /** The ones a member should see on the wallet's screen as well. */

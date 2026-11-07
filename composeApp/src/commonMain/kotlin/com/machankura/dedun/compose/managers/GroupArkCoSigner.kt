@@ -383,7 +383,7 @@ object GroupArkCoSigner {
     suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound, height: Long? = null) {
         height?.let { database.groupArkDao().expireFrom(row.wallet, row.commitment, it) }
         settled(database, row.wallet, row.commitment)
-        database.groupArkDao().confirmLeaves(row.wallet, row.commitment)
+        paidOut(database, row)
         GroupWavelengthDeposits.roundHappened(database, row.chatRoomId, row.chain, row.wallet, row.commitment)
         database.groupArkDao().deletePendingRound(row.wallet, row.commitment)
         val localChatRoom = database.chatRoomDao().findChatRoomById(row.chatRoomId) ?: return
@@ -391,6 +391,25 @@ object GroupArkCoSigner {
         val userPublicKey = localChatRoom.chatRoom.userPublicKey ?: return
         catchUp(database, localChatRoom, wallet, row.wallet, userPublicKey)
         settleTransfers(database, localChatRoom, wallet, row.wallet, userPublicKey)
+    }
+
+    /** The onchain payouts [row]'s round made, confirmed with it, and said once in the room by each device that saw it. */
+    private suspend fun paidOut(database: DedunDatabase, row: GroupArkPendingRound) {
+        val dao = database.groupArkDao()
+        val paid = dao.leaves(row.wallet).filter { it.commitment == row.commitment && !it.confirmed }
+        if (paid.isEmpty()) return
+        dao.confirmLeaves(row.wallet, row.commitment)
+        val reader = database.chatRoomDao().findChatRoomById(row.chatRoomId)?.chatRoom?.userPublicKey ?: return
+        val chain = GroupWalletStatementEvent.chainNamed(row.chain) ?: return
+        val payouts = GroupWavelengthPayouts.signedOnchain(database, row.chatRoomId, chain).associateBy { it.id }
+        paid.forEach { leave ->
+            val member = payouts[leave.authorisation]?.member ?: return@forEach
+            GroupLightningLines.writeFact(
+                database, row.chatRoomId, ChatMessage.TYPE_WAVELENGTH_PAID_OUT, leave.authorisation, reader,
+                "The Wavelength wallet paid @${ChatMessage.memberName(database, member)} ${leave.amountSat} sats onchain, with ${leave.feeSat} sats in fees from their balance.",
+                Clock.System.now(),
+            )
+        }
     }
 
     /**

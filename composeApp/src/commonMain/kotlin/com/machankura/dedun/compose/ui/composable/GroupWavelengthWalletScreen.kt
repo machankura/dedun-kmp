@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_expired
+import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_in_a_round
+import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_paid_s
+import dedun.composeapp.generated.resources.group_wavelength_onchain_payout_s_s
+import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -456,9 +461,10 @@ private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened,
             }
         }
     }
-    if (state.payouts.isNotEmpty()) {
+    if (state.payouts.isNotEmpty() || state.onchainPayouts.isNotEmpty()) {
         item { Text(stringResource(Res.string.group_wavelength_payouts), style = MaterialTheme.typography.titleSmall) }
         items(state.payouts, key = { "payout:${it.paymentHash}" }) { PayoutRow(it, state) }
+        items(state.onchainPayouts, key = { "onchain:${it.payout.id}" }) { OnchainPayoutRow(it, state) }
     }
     item { Text(stringResource(Res.string.group_wavelength_activity), style = MaterialTheme.typography.titleSmall) }
     val activity = state.snapshot?.activity.orEmpty()
@@ -584,7 +590,7 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                         Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
                         Text(stringResource(Res.string.receive))
                     }
-                    if (GroupWavelengthRollout.paysOverLightning(chain)) {
+                    if (GroupWavelengthRollout.paysOverLightning(chain) || GroupWavelengthRollout.paysOnchain(chain)) {
                         OutlinedButton(onClick = onPayOut) {
                             Icon(Icons.AutoMirrored.Filled.CallMade, contentDescription = Decorative)
                             Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
@@ -592,7 +598,7 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                         }
                     }
                 }
-                if (!GroupWavelengthRollout.paysOverLightning(chain)) {
+                if (!GroupWavelengthRollout.paysOverLightning(chain) && !GroupWavelengthRollout.paysOnchain(chain)) {
                     Text(stringResource(Res.string.group_wavelength_payouts_off_on_mainnet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (state.isParticipant && !state.leaveAsked && !state.ledger.isEmpty) {
@@ -648,6 +654,30 @@ private fun PayoutRow(payment: GroupWavelengthPaymentEvent.Payment, state: Group
                     else -> stringResource(Res.string.group_wavelength_payout_approved)
                 },
                 color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
+}
+
+/**
+ * An onchain payout the group approved, by this device's own record and never the operator's: approved, in a round once this device
+ * signed one paying it, paid once that round confirmed, or run out with nothing left.
+ */
+@Composable
+private fun OnchainPayoutRow(row: GroupWavelengthOnchainPayout, state: GroupWavelengthWalletUIState.Opened) {
+    val member = row.payout.member.lowercase()
+    val name = state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == member }?.profile?.humanReadableNameOrPubkey() ?: member.take(16)
+    ListItem(
+        headlineContent = { Text(stringResource(Res.string.group_wavelength_onchain_payout_s_s, Satoshi(row.payout.amountSat).grouped(), name)) },
+        supportingContent = {
+            Text(
+                when {
+                    row.confirmed -> stringResource(Res.string.group_wavelength_onchain_payout_paid_s, Satoshi((row.leftSat ?: 0) - row.payout.amountSat).grouped())
+                    row.leftSat != null -> stringResource(Res.string.group_wavelength_onchain_payout_in_a_round)
+                    row.isExpired(Clock.System.now().epochSeconds) -> stringResource(Res.string.group_wavelength_onchain_payout_expired)
+                    else -> stringResource(Res.string.group_wavelength_payout_approved)
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
     )
