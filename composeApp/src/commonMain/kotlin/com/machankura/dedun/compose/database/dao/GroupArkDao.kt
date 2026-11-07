@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
+import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
@@ -139,6 +140,21 @@ interface GroupArkDao {
 
     @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
     suspend fun payments(wallet: String): List<GroupArkPayment>
+
+    @Upsert
+    suspend fun upsertLeave(row: GroupArkLeave)
+
+    @Query("SELECT * FROM GroupArkLeave WHERE wallet = :wallet")
+    suspend fun leaves(wallet: String): List<GroupArkLeave>
+
+    @Query("SELECT * FROM GroupArkLeave WHERE wallet = :wallet")
+    fun observeLeaves(wallet: String): Flow<List<GroupArkLeave>>
+
+    @Query("UPDATE GroupArkLeave SET confirmed = 1 WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun confirmLeaves(wallet: String, commitment: String)
+
+    @Query("DELETE FROM GroupArkLeave WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun forgetLeaves(wallet: String, commitment: String)
 
     @Upsert
     suspend fun upsertFee(row: GroupArkFee)

@@ -21,6 +21,7 @@ import com.machankura.dedun.compose.database.model.GroupLightningSeed
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
+import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkPayment
@@ -175,6 +176,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkFee::class,
         GroupArkCheckpoint::class,
         GroupArkPayment::class,
+        GroupArkLeave::class,
         GroupArkBoarded::class,
         GroupArkClaim::class,
         GroupArkDepositAddress::class,
@@ -225,7 +227,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 41,
+    version = 42,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -481,6 +483,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // v41 adds Lightning deposits to a group's Wavelength wallet: an invoice beside each address, and the claims a device
         // has signed and not seen settle (docs/group-wavelength-ui.md, Phase 6). v40 had reached `dedun`, so a version of its own.
         AutoMigration(from = 40, to = 41),
+        // v42 adds the onchain payouts a device has signed a round paying, so a member is charged for what left and an
+        // approval pays once (docs/group-wavelength-payouts.md, Phase 2). A new table, which Room migrates itself.
+        AutoMigration(from = 41, to = 42),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

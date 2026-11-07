@@ -16,6 +16,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
@@ -141,7 +142,13 @@ object ProposedEvent {
         // A payment from the Wavelength wallet: as with the Lightning wallet's, the amount and the most the fee can be come first.
         GroupWavelengthPaymentEvent.KIND -> if (GroupWavelengthExitEvent.read(event.tags) != null) {
             Summary(label = "Leave the Wavelength wallet", detail = "Everything in it goes to the group's onchain wallet, in the next round enough devices answer")
-        } else GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
+        } else GroupWavelengthOnchainPayoutEvent.read(event.tags)?.let { payout ->
+            // Unlike a Lightning payout, the payee is exactly the address the member gave, which every device checks.
+            Summary(
+                label = "Pay out @${nameOf(payout.member) ?: payout.member.take(8)}: ${Satoshi(payout.amountSat).grouped()} sats from the Wavelength wallet",
+                detail = "To the onchain address they gave, ${payout.address}, in the next round, with at most ${Satoshi(payout.maxFeeSat).grouped()} sats in fees from their balance",
+            )
+        } ?: GroupWavelengthPaymentEvent.read(event.tags)?.let { pay ->
             val invoice = runCatching { Bolt11Invoice.read(pay.invoice).get() }.getOrNull()
             Summary(
                 label = "Pay ${Satoshi(pay.amountSat ?: 0).grouped()} sats from the Wavelength wallet",

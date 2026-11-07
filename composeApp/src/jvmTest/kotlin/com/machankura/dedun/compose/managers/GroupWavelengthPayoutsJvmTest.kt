@@ -1,9 +1,11 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.text.ProposedEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -191,7 +193,125 @@ class GroupWavelengthPayoutsJvmTest {
         val first = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000), 50, 500, now + 3600, payout)
         fixture.pump(all, com.machankura.dedun.compose.nostr.frost.FrostSigningEvents.ALL)
         assertNotNull(all[2].db.frostSigningSessionDao().getSessionById(first.id), "the first is in")
-        assertTrue("more being signed" in refused(all[2], payment(6_000, payout)).orEmpty())
+        assertEquals("pays a member who already has a payout waiting", refused(all[2], payment(6_000, payout)))
         assertTrue(runCatching { GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000), 50, 500, now + 3600, payout) }.isFailure, "nor on the proposer's own device")
+    }
+
+    // ---- onchain, as a leave in a round: docs/group-wavelength-payouts.md, W2 to W11 ----
+
+    private val aliceAddress = "bcrt1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3lgth6c"
+    private val bobAddress = "bcrt1qyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zs4w3j0"
+
+    private fun onchain(payout: GroupWavelengthPaymentEvent.Payout, amountSat: Long, address: String = aliceAddress, maxFeeSat: Long = 1_000, at: Long = now) =
+        GroupWavelengthOnchainPayoutEvent.paying(fixture.chain, 0, payout.member, payout.destinationEventId, address, amountSat, maxFeeSat, at)
+
+    private fun proposed(payout: GroupWavelengthOnchainPayoutEvent.Payout): Event {
+        val template = GroupWavelengthOnchainPayoutEvent.template(payout)
+        return Event("00".repeat(32), "00".repeat(32), 0, template.kind, template.tags, template.content, "")
+    }
+
+    private suspend fun refused(device: GroupLightningFixture.Device, payout: GroupWavelengthOnchainPayoutEvent.Payout) =
+        GroupWavelengthPayouts.refuse(device.db, fixture.roomId, proposed(payout))
+
+    @Test
+    fun `an onchain payout reads back as itself, and as nothing older devices know`() {
+        val payout = GroupWavelengthOnchainPayoutEvent.paying(fixture.chain, 3, "AB".repeat(32), "d", aliceAddress, 9_000, 1_000, 1_700_000_000)
+        val tags = GroupWavelengthOnchainPayoutEvent.template(payout).tags
+        assertEquals(payout.copy(member = payout.member.lowercase()), GroupWavelengthOnchainPayoutEvent.read(tags))
+        assertNull(GroupWavelengthPaymentEvent.read(tags), "a device that knows only Lightning payments refuses it")
+        assertNull(GroupWavelengthExitEvent.read(tags), "and doesn't take it for leaving")
+        assertNull(GroupWavelengthOnchainPayoutEvent.read(GroupWavelengthOnchainPayoutEvent.template(payout.copy(address = "nonsense")).tags), "an address that isn't one")
+        assertNull(GroupWavelengthOnchainPayoutEvent.read(GroupWavelengthOnchainPayoutEvent.template(payout.copy(address = "bc1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3h8ffkz")).tags), "nor one on another chain")
+        assertNull(GroupWavelengthOnchainPayoutEvent.read(GroupWavelengthOnchainPayoutEvent.template(payout.copy(amountSat = Long.MAX_VALUE)).tags), "nor more than there is")
+        val other = tags.map { if (it[0] == "payout") arrayOf("payout", "cd".repeat(32), "d") else it }.toTypedArray()
+        assertNull(GroupWavelengthOnchainPayoutEvent.read(other), "nor a label naming someone else than the payout does")
+        assertTrue("Pay out @" in ProposedEvent.summarize(proposed(payout)).label)
+        assertTrue(aliceAddress in ProposedEvent.summarize(proposed(payout)).detail)
+    }
+
+    @Test
+    fun `a member is paid onchain what they put in, fee limit included, and no more`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        assertNull(refused(all[0], onchain(payout, 9_000)))
+        assertTrue("more than the 10000 sats" in refused(all[0], onchain(payout, 9_001)).orEmpty())
+    }
+
+    @Test
+    fun `only to the address the member gave, and only one they alone gave`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val noAddress = fixture.payable(all, all[2], wallet, 10_000)
+        assertEquals("pays a member who has given no onchain address", refused(all[0], onchain(noAddress, 5_000)))
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        assertEquals("pays an address other than the one the member gave", refused(all[0], onchain(payout, 5_000, address = bobAddress)))
+        assertEquals("pays a destination the member has since replaced", refused(all[0], onchain(payout.copy(destinationEventId = "old"), 5_000)))
+        // Somebody else signs Alice's address as theirs: nobody can tell whose it is, so it's nobody's to be paid.
+        fixture.payable(all, all[3], wallet, 1_000, onchainAddress = aliceAddress)
+        assertEquals("pays an address more than one member gave", refused(all[0], onchain(payout, 5_000)))
+    }
+
+    @Test
+    fun `an onchain payout carries at least what an output can, and stands no longer than anything else`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        assertTrue("less than an output can carry" in refused(all[0], onchain(payout, 545)).orEmpty())
+        assertTrue("longer than" in refused(all[0], onchain(payout, 5_000).copy(expiresAt = 4_000_000_000)).orEmpty())
+    }
+
+    @Test
+    fun `one payout at a time, whichever rail it's on`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        val lightning = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(1_000), 50, 500, now + 3600, payout)
+        fixture.pump(all, com.machankura.dedun.compose.nostr.frost.FrostSigningEvents.ALL)
+        assertNotNull(all[2].db.frostSigningSessionDao().getSessionById(lightning.id))
+        assertEquals("pays a member who already has a payout waiting", refused(all[2], onchain(payout, 1_000)))
+
+        val (others, otherWallet) = all to wallet
+        val bob = fixture.payable(others, others[2], otherWallet, 10_000, onchainAddress = bobAddress)
+        val first = GroupWavelengthPayouts.proposeOnchain(others[2].db, others[2].room, others[2].publicKey, onchain(bob, 1_000, address = bobAddress))
+        fixture.pump(others, com.machankura.dedun.compose.nostr.frost.FrostSigningEvents.ALL)
+        assertNotNull(others[3].db.frostSigningSessionDao().getSessionById(first.id))
+        assertEquals("pays a member who already has a payout waiting", refused(others[3], payment(1_000, bob)))
+    }
+
+    @Test
+    fun `an onchain payout is charged while it stands, for what left once a round pays it, and not at all once it's gone unpaid`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        val member = all[1].publicKey.lowercase()
+        val approved = onchain(payout, 6_000, maxFeeSat = 1_000).copy(expiresAt = now + 100)
+        fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(approved).tags, "", createdAt = now)
+        fun balance(at: Long) = runBlocking { GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain, at).getValue(member) }
+        assertEquals(7_000, balance(now).openSat)
+        assertEquals(3_000, balance(now).availableSat)
+        assertEquals(10_000, balance(now + 200).availableSat, "an expired one is released")
+
+        // This device signs a round paying it, for a fee of 400: from then on that's what Alice has been paid.
+        all[0].db.groupArkDao().upsertLeave(GroupArkLeave(key, approved.id, "commitment", "00", 6_000, 400))
+        assertEquals(6_400, balance(now + 200).paidSat)
+        assertEquals(0, balance(now).openSat)
+
+        // The round is seen to die: nothing left, and the approval stands again while it lasts.
+        GroupArkCoSigner.abandoned(all[0].db, key, "commitment")
+        assertEquals(0, balance(now).paidSat)
+        assertEquals(7_000, balance(now).openSat)
+    }
+
+    @Test
+    fun `a co-signer is told what the group approved leaving, by script, and the round it already gave each to`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
+        val session = GroupWavelengthPayouts.proposeOnchain(all[1].db, all[1].room, all[1].publicKey, onchain(payout, 6_000))
+        fixture.signSession(all, all[1], session.id)
+        val approved = assertNotNull(GroupWavelengthPayouts.signedOnchain(all[0].db, fixture.roomId, fixture.chain).singleOrNull())
+        all.forEach { device ->
+            val leaves = GroupWavelengthPayouts.approvedLeaves(device.db, fixture.roomId, wallet)
+            assertEquals(com.machankura.dedun.compose.wallet.wavelength.group.ArkPolicy.AuthorisedLeave(approved.id, 6_000, 1_000), leaves[approved.script], "device ${device.index}")
+        }
+        assertTrue(GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet, now = approved.expiresAt + 1).isEmpty(), "an expired one leaves nothing")
+        all[0].db.groupArkDao().upsertLeave(GroupArkLeave(key, approved.id, "commitment", "00", 6_000, 400))
+        assertEquals(1, GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet, now = approved.expiresAt + 1).size, "unless a round already has it, which may still need signing")
+        assertEquals(mapOf(approved.id to "commitment"), GroupArkCoSigner.contextOf(all[0].db, fixture.roomId, wallet, key, 0).leftIn)
     }
 }

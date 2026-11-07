@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
@@ -1491,6 +1492,19 @@ data class ChatMessage(
                             chatRoomId = groupId,
                             createdAt = createdAt,
                             content = "The group asked the Wavelength wallet to leave for its onchain wallet.",
+                        )
+                    }
+                    GroupWavelengthOnchainPayoutEvent.read(event.tags)?.let { payout ->
+                        return ChatMessage(
+                            giftWrapPayloadId = null,
+                            messageType = TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED,
+                            marmotGroupEventId = marmotGroupEventId,
+                            marmotInnerEventId = marmotInnerEventId,
+                            senderPublicKey = senderPublicKey,
+                            isUserMessage = isUserMessage,
+                            chatRoomId = groupId,
+                            createdAt = createdAt,
+                            content = "The group approved paying @${memberName(database, payout.member)} ${payout.amountSat} sats from the Wavelength wallet, onchain.",
                         )
                     }
                     val payment = GroupWavelengthPaymentEvent.read(event.tags) ?: return null

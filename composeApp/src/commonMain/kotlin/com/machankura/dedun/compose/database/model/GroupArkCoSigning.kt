@@ -62,6 +62,22 @@ data class GroupArkCheckpoint(val wallet: String, val ark: String, val checkpoin
 @Entity(primaryKeys = ["wallet", "paymentHash"])
 data class GroupArkPayment(val wallet: String, val paymentHash: HexKey, val tx: String)
 
+/**
+ * An approved onchain payout this device signed a round paying (`docs/group-wavelength-payouts.md`, W11). From then on it can't be
+ * assumed not to have left, so the member is charged [amountSat] and the round's [feeSat]; it is [confirmed] once the round is, and
+ * forgotten if the round is seen to die, which leaves the approval to be paid in another.
+ */
+@Entity(primaryKeys = ["wallet", "authorisation"])
+data class GroupArkLeave(
+    val wallet: String,
+    val authorisation: String,
+    val commitment: String,
+    val script: HexKey,
+    val amountSat: Long,
+    val feeSat: Long,
+    val confirmed: Boolean = false,
+)
+
 /** A fee this device has agreed to, on what, when and in which term, against the group's budget for them. */
 @Entity(primaryKeys = ["wallet", "tx"])
 data class GroupArkFee(val wallet: String, val tx: String, val feeSat: Long, val term: Long, val atEpochSeconds: Long)
