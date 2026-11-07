@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthWalletRollout
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkAuth
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkManifest
@@ -17,6 +18,8 @@ import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.PublicKey
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -33,8 +36,19 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
     sealed class Outcome {
         data class Running(val transport: GroupArkTransport, val config: RuntimeConfig) : Outcome()
 
-        /** Why not, in words for the wallet's screen. Nothing was started, or what was has been stopped. */
-        data class Refused(val reason: String) : Outcome()
+        /** Why not, for the wallet's screen to say. Nothing was started, or what was has been stopped. */
+        data class Refused(val reason: Refusal) : Outcome()
+    }
+
+    enum class Refusal {
+        CHAIN_REFUSED,
+        NOT_OPERATOR_OR_BEHIND,
+        NOBODY_RUNS_IT,
+        NO_SEED,
+        KEYS_DISAGREE,
+        /** The group's devices didn't publish what a signature needs in time. */
+        SIGNERS_NOT_READY,
+        OPENED_AS_ANOTHER,
     }
 
     private fun networkOf(chain: Chain): Network? = when (chain) {
@@ -56,29 +70,31 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
         recoveryWindow: Long?,
         lastSyncedAt: Instant?,
         now: Instant,
+        /** What has to happen before the daemon is started, on its transport: round one has to be there before anything can ask for it. */
+        prepare: suspend (GroupArkTransport) -> Boolean = { true },
     ): Outcome {
         val statement = wallet.statement
         val roomId = localChatRoom.chatRoom.id
-        if (!GroupWavelengthRollout.allows(statement.chain)) return Outcome.Refused("This wallet isn't offered on ${statement.chain.name}.")
-        val network = networkOf(statement.chain) ?: return Outcome.Refused("This wallet has no daemon for ${statement.chain.name}.")
+        if (!GroupWavelengthRollout.allows(statement.chain)) return Outcome.Refused(Refusal.CHAIN_REFUSED)
+        val network = networkOf(statement.chain) ?: return Outcome.Refused(Refusal.CHAIN_REFUSED)
         if (!GroupWavelengthOperatorManager.mayRunDaemon(database, roomId, statement.chain, userPublicKey, lastSyncedAt, now, statement.wallet)) {
-            return Outcome.Refused("This device isn't the wallet's operator, or hasn't caught up with the group yet.")
+            return Outcome.Refused(Refusal.NOT_OPERATOR_OR_BEHIND)
         }
         val term = GroupWavelengthOperatorManager.current(database, roomId, statement.chain, statement.wallet)?.term
-            ?: return Outcome.Refused("Nobody runs this wallet.")
+            ?: return Outcome.Refused(Refusal.NOBODY_RUNS_IT)
         val seed = database.groupWavelengthSeedDao().get(roomId, statement.identity)
-            ?: return Outcome.Refused("This device doesn't hold the wallet's authentication seed.")
+            ?: return Outcome.Refused(Refusal.NO_SEED)
 
         val auth = GroupArkAuth.of(ByteVector32(seed.seed), statement.chain)
         val manifest = GroupArkManifest.of(PublicKey.fromHex(statement.icebergKey), auth, statement.chain, statement.wallet)
-        if (manifest.hash != statement.manifestHash) return Outcome.Refused("This device's keys don't make the wallet the group signed.")
+        if (manifest.hash != statement.manifestHash) return Outcome.Refused(Refusal.KEYS_DISAGREE)
 
-        val chainName = GroupWalletStatementEvent.chainName(statement.chain)
-        val dataDir = "$dataRoot/group/$chainName/${statement.identity.take(32)}/${statement.wallet}"
+        val dataDir = dataDirOf(statement)
         // Regtest has no public hosts to name: whoever runs a local operator names them.
         val base = if (network == Network.REGTEST) RuntimeConfig(network = network, dataDir = dataDir) else WavelengthWalletRollout.configFor(network, dataDir)
         val config = base.copy(hostedSignerRequestTimeoutSeconds = REQUEST_TIMEOUT.inWholeSeconds)
         val transport = GroupArkTransport(database, localChatRoom, userPublicKey, wallet, term, auth, timeout = TRANSPORT_TIMEOUT)
+        if (!prepare(transport)) return Outcome.Refused(Refusal.SIGNERS_NOT_READY)
 
         val opened = client.startHostedWatchOnlyWallet(
             config,
@@ -95,10 +111,22 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
         if (opened.manifestHash != statement.manifestHash || opened.identityPubKey != statement.identity) {
             logger.e("The daemon opened as ${opened.identityPubKey.take(16)} with manifest ${opened.manifestHash.take(16)}, which isn't what the group signed")
             client.stop()
-            return Outcome.Refused("The daemon opened a wallet other than the one the group signed, so it has been stopped.")
+            return Outcome.Refused(Refusal.OPENED_AS_ANOTHER)
         }
         return Outcome.Running(transport, config)
     }
+
+    /** Whether this device has opened this wallet before: a wallet's directory rebuilds from the chain, at a cost in group signatures (D14). */
+    fun hasOpened(statement: GroupWavelengthWalletStatementEvent.Statement, fileSystem: FileSystem = FileSystem.SYSTEM): Boolean =
+        fileSystem.exists(dataDirOf(statement).toPath())
+
+    fun isRunning(): Boolean = client.isRunning()
+
+    /** Stops whatever daemon this client holds, which is safe to ask twice. */
+    suspend fun stop() = client.stop()
+
+    private fun dataDirOf(statement: GroupWavelengthWalletStatementEvent.Statement): String =
+        "$dataRoot/group/${GroupWalletStatementEvent.chainName(statement.chain)}/${statement.identity.take(32)}/${statement.wallet}"
 
     companion object {
         /**

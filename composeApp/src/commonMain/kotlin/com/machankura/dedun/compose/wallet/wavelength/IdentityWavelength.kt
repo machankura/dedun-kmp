@@ -16,6 +16,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupDaemonSlot
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -69,6 +70,9 @@ sealed interface WalletState {
     /** It could not open, for a reason a retry might fix: no connection, or the operator. */
     data class Failed(val error: WavelengthException) : WalletState
 
+    /** This device is running [group]'s wallet, which has the one daemon: `docs/group-wavelength-wallet.md`, D13. */
+    data class RunByGroup(val group: String) : WalletState
+
     /**
      * The directory belongs to another identity than these words give. Never a retry and never
      * a wipe: it means something is badly wrong, and its files may hold someone's money.
@@ -102,7 +106,7 @@ class IdentityWavelength(
     /** Makes and stores words for a profile with none: `WalletSeedStore.create` (D13). */
     private val createSeed: (WalletId) -> List<String> = { error("no seed store") },
     private val configFor: (Network, String) -> RuntimeConfig = WavelengthWalletRollout::configFor,
-) {
+) : GroupDaemonSlot {
     private val logger = Logger.withTag("IdentityWavelength")
     private val mutex = Mutex()
 
@@ -115,8 +119,42 @@ class IdentityWavelength(
     private var foreground = true
     private var leaving: Job? = null
 
+    /** The group whose wallet has the daemon, or null when it's the profile's own: nothing here touches the daemon while it's set. */
+    private var heldBy: String? = null
+
+    private val _personalWanted = MutableStateFlow(false)
+    override val personalWanted: StateFlow<Boolean> = _personalWanted.asStateFlow()
+
     /** Bumped by anything the app asks for, so the background renewal gives way at once. */
     private val asked = MutableStateFlow(0)
+
+    override suspend fun acquire(group: String): Boolean = mutex.withLock {
+        if (_personalWanted.value) return@withLock false
+        if (heldBy == null) stopDaemon()
+        heldBy = group
+        _state.value = WalletState.RunByGroup(group)
+        true
+    }
+
+    override suspend fun release() = mutex.withLock {
+        if (heldBy == null) return@withLock
+        heldBy = null
+        val current = profile
+        when {
+            current == null -> _state.value = WalletState.None
+            foreground -> switchTo(current, force = true)
+            else -> _state.value = WalletState.Opening
+        }
+    }
+
+    /**
+     * The person is in their own wallet's screen, or has left it: while they are, the group's gives way (D13). The group's runner sees
+     * this and hands the daemon back, and takes it again once they're done.
+     */
+    fun wantPersonal(wanted: Boolean) {
+        asked.value++
+        _personalWanted.value = wanted
+    }
 
     /** Makes [next] the active profile: stops the last one's daemon, then opens this one's, if it can. */
     fun activate(next: WalletProfile?) {
@@ -155,7 +193,7 @@ class IdentityWavelength(
         scope.launch {
             mutex.withLock {
                 val current = profile ?: return@withLock
-                if (setupFor(current) !is WalletSetup.Ready) return@withLock
+                if (heldBy != null || setupFor(current) !is WalletSetup.Ready) return@withLock
                 stopDaemon()
                 open(current, recoveryWindow = WavelengthWalletRollout.FULL_RECOVERY_WINDOW)
             }
@@ -183,6 +221,7 @@ class IdentityWavelength(
             delay(backgroundGrace)
             mutex.withLock {
                 foreground = false
+                if (heldBy != null) return@withLock
                 stopDaemon()
                 if (profile != null) _state.value = WalletState.Opening
             }
@@ -191,8 +230,9 @@ class IdentityWavelength(
 
     /** Stops whatever is running, and forgets the profile. */
     suspend fun stop() = mutex.withLock {
-        stopDaemon()
         profile = null
+        if (heldBy != null) return@withLock
+        stopDaemon()
         _state.value = WalletState.None
     }
 
@@ -205,7 +245,7 @@ class IdentityWavelength(
      */
     suspend fun maintainInBackground(background: WalletProfile, stayOpenFor: Duration): Boolean = mutex.withLock {
         if (foreground && profile != null) return@withLock false
-        if (engine != null) return@withLock false
+        if (engine != null || heldBy != null) return@withLock false
         val previous = profile
         val previousState = _state.value
         profile = background
@@ -255,6 +295,11 @@ class IdentityWavelength(
     private suspend fun switchTo(next: WalletProfile?, force: Boolean = false) {
         val unchanged = next?.id == profile?.id && next?.torEnabled == profile?.torEnabled
         if (!force && unchanged && engine != null) return
+        heldBy?.let { group ->
+            profile = next
+            _state.value = WalletState.RunByGroup(group)
+            return
+        }
         stopDaemon()
         profile = next
         if (next == null) {

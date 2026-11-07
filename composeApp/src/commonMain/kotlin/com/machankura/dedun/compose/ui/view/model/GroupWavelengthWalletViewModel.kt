@@ -16,6 +16,7 @@ import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
@@ -41,6 +42,7 @@ class GroupWavelengthWalletViewModel(
     private val chatRepository: ChatRepository,
     private val repository: GroupWavelengthRepository,
     private val canRunHere: Boolean,
+    private val daemonSource: GroupWavelengthDaemonSource = GroupWavelengthDaemonSource.None,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -106,8 +108,15 @@ class GroupWavelengthWalletViewModel(
     private fun watch(opened: GroupWavelengthWalletUIState.Opened) {
         watching?.cancel()
         watching = viewModelScope.launch(Dispatchers.IO) {
-            repository.observeCoins(chatRoomId, chain, opened.wallet.statement.wallet).collect { coins ->
-                (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(ledger = GroupWavelengthLedger.of(coins)) }
+            launch {
+                repository.observeCoins(chatRoomId, chain, opened.wallet.statement.wallet).collect { coins ->
+                    (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(ledger = GroupWavelengthLedger.of(coins)) }
+                }
+            }
+            if (opened.isOperator) launch {
+                daemonSource.observe(chatRoomId, chain, opened.wallet.statement.wallet).collect { status ->
+                    (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(daemon = status) }
+                }
             }
         }
     }
@@ -152,9 +161,10 @@ class GroupWavelengthWalletViewModel(
             chatRepository: ChatRepository,
             repository: GroupWavelengthRepository,
             canRunHere: Boolean,
+            daemonSource: GroupWavelengthDaemonSource,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                GroupWavelengthWalletViewModel(activeUserPublicKey, chatRoomId, chain, GroupWavelengthWalletUIState.Loading, activeIdentityStateFlow, chatRepository, repository, canRunHere)
+                GroupWavelengthWalletViewModel(activeUserPublicKey, chatRoomId, chain, GroupWavelengthWalletUIState.Loading, activeIdentityStateFlow, chatRepository, repository, canRunHere, daemonSource)
             }
         }
     }

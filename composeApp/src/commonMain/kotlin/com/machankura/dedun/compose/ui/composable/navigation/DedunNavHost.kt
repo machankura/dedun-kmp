@@ -217,6 +217,7 @@ import com.machankura.dedun.compose.ui.composable.GroupSwapInScreen
 import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkWatcher
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthProcess
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposalListRoute
@@ -491,6 +492,12 @@ fun DedunNavHost(
     }
     DisposableEffect(groupArkWatcher) {
         onDispose { groupArkWatcher?.stop() }
+    }
+
+    // Whatever group Wavelength wallets this profile is elected to run. The process's rather than this
+    // composition's, since a rotation would otherwise stop a daemon in the middle of a round.
+    LaunchedEffect(activeIdentityForWallets?.nostrPublicKey) {
+        GroupWavelengthProcess.activate(phoenixGlobal.ctx, auxDatabaseManager.auxDatabase, activeIdentityForWallets?.nostrPublicKey)
     }
 
     val navigationViewModel: NavigationViewModel =  viewModel (
@@ -970,6 +977,7 @@ fun DedunNavHost(
                     activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
                     chatRepository = databaseChatRepository,
                     repository = databaseGroupWavelengthRepository,
+                    daemonSource = GroupWavelengthProcess,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },

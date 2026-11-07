@@ -38,6 +38,8 @@ object ArkWire {
         val items: List<SigningItem> = emptyList(),
         val provisionPlainTo: Long? = null,
         val provisionTreeTo: Long? = null,
+        /** Asks a device that doesn't know how far the group has answered to find out now. */
+        val askFloor: Boolean = false,
     )
 
     @Serializable

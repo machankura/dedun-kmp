@@ -99,7 +99,9 @@ import dedun.composeapp.generated.resources.wavelength_entry_to
 import dedun.composeapp.generated.resources.wavelength_entry_waiting_for_payment
 import dedun.composeapp.generated.resources.wavelength_mainnet_cap_s_sats
 import dedun.composeapp.generated.resources.wavelength_no_payments_yet
+import dedun.composeapp.generated.resources.wavelength_open_mine_instead
 import dedun.composeapp.generated.resources.wavelength_opening
+import dedun.composeapp.generated.resources.wavelength_run_by_group_s
 import dedun.composeapp.generated.resources.wavelength_pending_s_sats
 import dedun.composeapp.generated.resources.wavelength_preimage
 import dedun.composeapp.generated.resources.wavelength_recovered_s_coins
@@ -152,6 +154,7 @@ fun WavelengthWalletScreen(
             modifier = Modifier.padding(padding),
             onOpenEntry = onOpenEntry,
             onRetry = viewModel::retry,
+            onOpenMineInstead = viewModel::openMineInstead,
             onTurnOn = { consenting = true },
             actions = { state ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
@@ -172,6 +175,7 @@ fun WavelengthWalletContent(
     onOpenEntry: (String) -> Unit,
     onRetry: () -> Unit,
     onTurnOn: () -> Unit,
+    onOpenMineInstead: () -> Unit = {},
     actions: @Composable (WavelengthWalletUIState.Loaded) -> Unit = {},
 ) {
     ScreenStateTransition(state) { uiState ->
@@ -196,6 +200,12 @@ fun WavelengthWalletContent(
                 action = if (current.reason == WalletUnavailability.NotConsented) {
                     { Button(onClick = onTurnOn) { Text(stringResource(Res.string.wavelength_turn_on)) } }
                 } else null,
+            )
+            is WavelengthWalletUIState.RunByGroup -> EmptyState(
+                modifier = modifier.readableContent(),
+                message = stringResource(Res.string.wavelength_run_by_group_s, current.group),
+                icon = Icons.Default.AccountBalanceWallet,
+                action = { Button(onClick = onOpenMineInstead) { Text(stringResource(Res.string.wavelength_open_mine_instead)) } },
             )
             is WavelengthWalletUIState.Loaded -> WavelengthWalletLoaded(current, modifier, onOpenEntry, actions)
         }

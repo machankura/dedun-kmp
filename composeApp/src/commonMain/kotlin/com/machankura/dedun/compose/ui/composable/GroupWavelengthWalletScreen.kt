@@ -33,9 +33,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.identity.Identity
+import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
+import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
@@ -67,6 +70,19 @@ import dedun.composeapp.generated.resources.group_wavelength_commitment_devices
 import dedun.composeapp.generated.resources.group_wavelength_commitment_fees
 import dedun.composeapp.generated.resources.group_wavelength_commitment_operator
 import dedun.composeapp.generated.resources.group_wavelength_commitment_unreviewed
+import dedun.composeapp.generated.resources.group_wavelength_daemon_busy_s
+import dedun.composeapp.generated.resources.group_wavelength_daemon_catching_up
+import dedun.composeapp.generated.resources.group_wavelength_daemon_failed
+import dedun.composeapp.generated.resources.group_wavelength_daemon_keys_disagree
+import dedun.composeapp.generated.resources.group_wavelength_daemon_no_seed
+import dedun.composeapp.generated.resources.group_wavelength_daemon_not_on_device
+import dedun.composeapp.generated.resources.group_wavelength_daemon_opened_as_another
+import dedun.composeapp.generated.resources.group_wavelength_daemon_opening
+import dedun.composeapp.generated.resources.group_wavelength_daemon_paused
+import dedun.composeapp.generated.resources.group_wavelength_daemon_recovering
+import dedun.composeapp.generated.resources.group_wavelength_daemon_running
+import dedun.composeapp.generated.resources.group_wavelength_daemon_signers_not_ready
+import dedun.composeapp.generated.resources.group_wavelength_daemon_waiting_for_signers
 import dedun.composeapp.generated.resources.group_wavelength_leave_this_open
 import dedun.composeapp.generated.resources.group_wavelength_no_operator_known
 import dedun.composeapp.generated.resources.group_wavelength_no_runtime
@@ -113,6 +129,7 @@ fun GroupWavelengthWalletScreen(
     activeIdentityStateFlow: StateFlow<Identity?>,
     chatRepository: ChatRepository,
     repository: GroupWavelengthRepository,
+    daemonSource: GroupWavelengthDaemonSource,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
@@ -126,6 +143,7 @@ fun GroupWavelengthWalletScreen(
             chatRepository = chatRepository,
             repository = repository,
             canRunHere = WavelengthPlatform.client != null,
+            daemonSource = daemonSource,
         )
     )
     LaunchedEffect(true) { viewModel.initiate() }
@@ -346,6 +364,7 @@ private fun OperatorCard(state: GroupWavelengthWalletUIState.Opened, isPending: 
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(stringResource(Res.string.group_wavelength_operator_explainer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.isOperator) DaemonStatusLine(state.daemon)
             when {
                 !state.isParticipant -> Unit
                 state.isOperator -> OutlinedButton(onClick = onStepDown, enabled = !isPending) { Text(stringResource(Res.string.step_down)) }
@@ -360,4 +379,35 @@ private fun OperatorCard(state: GroupWavelengthWalletUIState.Opened, isPending: 
             }
         }
     }
+}
+
+/** What this device's own daemon is doing, on the device that runs it. */
+@Composable
+private fun DaemonStatusLine(status: GroupWavelengthDaemonStatus) {
+    val isTrouble = status is GroupWavelengthDaemonStatus.Refused || status == GroupWavelengthDaemonStatus.Failed
+    Text(
+        text = when (status) {
+            GroupWavelengthDaemonStatus.NotOnThisDevice -> stringResource(Res.string.group_wavelength_daemon_not_on_device)
+            GroupWavelengthDaemonStatus.CatchingUp -> stringResource(Res.string.group_wavelength_daemon_catching_up)
+            GroupWavelengthDaemonStatus.WaitingForSigners -> stringResource(Res.string.group_wavelength_daemon_waiting_for_signers)
+            GroupWavelengthDaemonStatus.Opening -> stringResource(Res.string.group_wavelength_daemon_opening)
+            GroupWavelengthDaemonStatus.Recovering -> stringResource(Res.string.group_wavelength_daemon_recovering)
+            is GroupWavelengthDaemonStatus.Running -> stringResource(Res.string.group_wavelength_daemon_running)
+            GroupWavelengthDaemonStatus.PausedForPersonal -> stringResource(Res.string.group_wavelength_daemon_paused)
+            is GroupWavelengthDaemonStatus.BusyWithAnother -> stringResource(Res.string.group_wavelength_daemon_busy_s, status.group)
+            GroupWavelengthDaemonStatus.Failed -> stringResource(Res.string.group_wavelength_daemon_failed)
+            is GroupWavelengthDaemonStatus.Refused -> stringResource(
+                when (status.reason) {
+                    GroupWavelengthDaemon.Refusal.NO_SEED -> Res.string.group_wavelength_daemon_no_seed
+                    GroupWavelengthDaemon.Refusal.KEYS_DISAGREE -> Res.string.group_wavelength_daemon_keys_disagree
+                    GroupWavelengthDaemon.Refusal.SIGNERS_NOT_READY -> Res.string.group_wavelength_daemon_signers_not_ready
+                    GroupWavelengthDaemon.Refusal.OPENED_AS_ANOTHER -> Res.string.group_wavelength_daemon_opened_as_another
+                    GroupWavelengthDaemon.Refusal.NOT_OPERATOR_OR_BEHIND, GroupWavelengthDaemon.Refusal.NOBODY_RUNS_IT -> Res.string.group_wavelength_daemon_catching_up
+                    GroupWavelengthDaemon.Refusal.CHAIN_REFUSED -> Res.string.group_wavelength_refused_chain
+                }
+            )
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (isTrouble) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+    )
 }

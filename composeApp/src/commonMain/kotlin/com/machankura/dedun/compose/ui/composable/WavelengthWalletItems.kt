@@ -60,6 +60,7 @@ import dedun.composeapp.generated.resources.wavelength_turn_on_question
 import dedun.composeapp.generated.resources.wavelength_unavailable_on_this_device
 import dedun.composeapp.generated.resources.wavelength_unavailable_with_tor
 import dedun.composeapp.generated.resources.wavelength_unavailable_without_a_phrase
+import dedun.composeapp.generated.resources.wavelength_run_by_group_s
 import dedun.composeapp.generated.resources.wavelength_wrong_identity
 import engineering.lightning.wavelength.Network
 import fr.acinq.bitcoin.Satoshi
@@ -128,6 +129,7 @@ internal fun wavelengthWalletSupportingLine(state: WavelengthWalletUIState): Str
     WavelengthWalletUIState.Restoring -> stringResource(Res.string.wavelength_restoring)
     WavelengthWalletUIState.Failed -> stringResource(Res.string.wavelength_could_not_open)
     WavelengthWalletUIState.WrongIdentity -> stringResource(Res.string.wavelength_wrong_identity)
+    is WavelengthWalletUIState.RunByGroup -> stringResource(Res.string.wavelength_run_by_group_s, state.group)
     is WavelengthWalletUIState.Loaded -> when {
         state.pendingSat > 0 -> stringResource(Res.string.wavelength_pending_s_sats, Satoshi(state.pendingSat).grouped())
         state.syncing -> stringResource(Res.string.wavelength_syncing)

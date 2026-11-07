@@ -393,6 +393,8 @@ object GroupArkCoSigner {
         if (batch.provisionPlainTo != null || batch.provisionTreeTo != null) {
             provision(database, localChatRoom, userPublicKey, wallet, batch.provisionPlainTo ?: -1, batch.provisionTreeTo ?: -1)
         }
+        // Asked ahead of the first signature, which is inside a round's deadline.
+        if (batch.askFloor) floorOf(database, localChatRoom, batch.wallet, userPublicKey, wallet)
         if (batch.items.isEmpty()) return
 
         // A device that doesn't yet know how far the group has answered asks, and answers nothing until it knows.

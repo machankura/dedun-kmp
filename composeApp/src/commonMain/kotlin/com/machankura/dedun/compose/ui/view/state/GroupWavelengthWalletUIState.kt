@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.view.state
 
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
@@ -57,5 +58,7 @@ sealed class GroupWavelengthWalletUIState {
         /** This device's own record of the wallet. */
         val ledger: GroupWavelengthLedger = GroupWavelengthLedger.of(emptyList()),
         val userPublicKey: HexKey = "",
+        /** This device's daemon for the wallet, which only says anything on the operator's device. */
+        val daemon: GroupWavelengthDaemonStatus = GroupWavelengthDaemonStatus.NotOnThisDevice,
     ) : GroupWavelengthWalletUIState()
 }

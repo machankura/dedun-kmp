@@ -12,4 +12,6 @@ actual object WavelengthPlatform {
     actual fun dataRoot(context: PlatformContext): String? = context.applicationContext.noBackupFilesDir.absolutePath
 
     actual fun scheduleRenewal(context: PlatformContext) = WavelengthMaintenanceWorker.schedule(context.applicationContext)
+
+    actual fun holdForGroup(context: PlatformContext, group: String?) = GroupWavelengthService.hold(context.applicationContext, group)
 }

@@ -43,6 +43,9 @@ sealed interface WavelengthWalletUIState {
     /** The directory holds another identity's wallet. Nothing here can fix it, and a retry won't. */
     data object WrongIdentity : WavelengthWalletUIState
 
+    /** This device runs [group]'s wallet, which has the daemon until the person asks for their own. */
+    data class RunByGroup(val group: String) : WavelengthWalletUIState
+
     data class Loaded(
         val network: Network,
         val balance: Balance,
@@ -80,6 +83,7 @@ class WavelengthWalletViewModel(
     private val walletState: StateFlow<WalletState>,
     private val onConsent: () -> Unit,
     private val onRetry: () -> Unit,
+    private val onWantPersonal: (Boolean) -> Unit = {},
 ) : ViewModel() {
     var uiState: WavelengthWalletUIState by mutableStateOf(WavelengthWalletUIState.Loading)
         private set
@@ -99,6 +103,7 @@ class WavelengthWalletViewModel(
                     WalletState.Recovering -> uiState = WavelengthWalletUIState.Restoring
                     is WalletState.Failed -> uiState = WavelengthWalletUIState.Failed
                     WalletState.WrongIdentity -> uiState = WavelengthWalletUIState.WrongIdentity
+                    is WalletState.RunByGroup -> uiState = WavelengthWalletUIState.RunByGroup(state.group)
                     is WalletState.Open -> state.engine.snapshot.collect { snapshot ->
                         val balance = snapshot.balance
                         if (balance != readAt) {
@@ -128,6 +133,18 @@ class WavelengthWalletViewModel(
 
     fun retry() = onRetry()
 
+    /** Pauses the group's wallet for as long as this screen is up, as the person was told it would. */
+    fun openMineInstead() {
+        pausedTheGroup = true
+        onWantPersonal(true)
+    }
+
+    private var pausedTheGroup = false
+
+    override fun onCleared() {
+        if (pausedTheGroup) onWantPersonal(false)
+    }
+
     /** Reads everything again, as a screen is shown. */
     fun refresh() {
         val engine = engine ?: return
@@ -147,6 +164,7 @@ class WavelengthWalletViewModel(
                     walletState = identityWavelength.state,
                     onConsent = identityWavelength::consent,
                     onRetry = identityWavelength::retry,
+                    onWantPersonal = identityWavelength::wantPersonal,
                 )
             }
         }
