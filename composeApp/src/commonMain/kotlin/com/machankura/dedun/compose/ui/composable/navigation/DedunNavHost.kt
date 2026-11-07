@@ -49,6 +49,8 @@ import com.machankura.dedun.compose.ui.composable.IcebergCeremonyScreen
 import com.machankura.dedun.compose.database.repository.DatabaseGroupLightningRepository
 import com.machankura.dedun.compose.database.repository.DatabaseGroupWavelengthRepository
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthAdvancedScreen
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthEntryScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthEntryRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthExitScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthExitRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthReceiveScreen
@@ -992,7 +994,35 @@ fun DedunNavHost(
                     },
                     onNavigateBack = {
                         navController.popBackStack()
-                    }
+                    },
+                    onOpenEntry = { entryId ->
+                        navController.navigate(
+                            route = GroupWavelengthEntryRoute(
+                                activeUserPublicKey = route.activeUserPublicKey,
+                                chatRoomId = route.chatRoomId,
+                                chain = route.chain,
+                                entryId = entryId,
+                            )
+                        )
+                    },
+                )
+            }
+            composable<GroupWavelengthEntryRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthEntryRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthEntryScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    entryId = route.entryId,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    daemonSource = GroupWavelengthProcess,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
                 )
             }
             composable<GroupWavelengthReceiveRoute> { backStackEntry ->

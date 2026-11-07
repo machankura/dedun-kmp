@@ -380,18 +380,31 @@ line.
 ### Phase 4: the detail screen
 
 - `GroupWavelengthEntryRoute(activeUserPublicKey, chatRoomId, chain, entryId)` and its `composable<…>`
-  in `DedunNavHost.kt`, beside the other three Wavelength routes (`:978` to `:1045`).
+  in `DedunNavHost.kt`, beside the other three Wavelength routes.
 - `GroupWavelengthEntryScreen`: `Scaffold`, `TopAppBar` with `NavigateBackButton`,
   `ScreenStateTransition`, and the four states — `LoadingDataIndicator`, `ErrorState(onRetry = null)`,
   `EmptyState` for an id the history doesn't hold, and the detail.
-- `GroupWavelengthEntryDetail(entry, modifier)`: T5's summary, `readableContent()`, built from the
-  shared `DetailLine` and the shared member-name helper of T8 — which means lifting both out in this
-  phase, with the personal wallet's screen switched over and its tests still passing.
-- The one line naming where the figures come from, per `Source`, and the per-kind warning of T5.
-- **Tests,** `GroupWavelengthEntryScreenJvmTest`: each kind's summary; a member's name where the profile
-  is known and a truncated key where it isn't; an operator-only entry's line about that; an unknown id
-  shows the empty state rather than an error; a detail at phone width and in a wide window; the back
-  button is there (`ReadOnlyEntrancesJvmTest` and `NavigateBackButtonJvmTest` are the existing shape).
+- `GroupWavelengthEntryDetail(entry, localChatRoom, reader)`: T5's summary, `readableContent()`, built
+  from the shared `DetailLine` and `memberName`.
+- **`DetailLine` comes out of the profile wallet's screen with a `copyable` flag** rather than an
+  `onCopy` callback: it does the clipboard and the snackbar itself, which is three identical lambdas
+  fewer there, and makes the value selectable as well — a hash read off a screen is no use to anybody.
+- **`entryHeadline`, `entryStatus` and `entryIcon` come out of the wallet screen too**, into
+  `widgets/wallet/GroupWavelengthEntryText.kt`, so the row in the history and the screen about one entry
+  can never say it differently. That was not in the plan; written twice, they would have drifted.
+- The one line naming where the figures come from, per `Source`, and the per-kind warning of T5 — which
+  is the spike-6 invoice note for a Lightning deposit and the untested-refund note for a Lightning
+  payout, both taken from the strings the receive and Advanced screens already use.
+- **A round's figure is what it cost**, not its amount, and its detail has no *Amount* line: nothing
+  moved in or out of the wallet, so an amount would have been *0 sats* said twice on one screen. A test
+  caught that, which is what T10's claim — that the group is charged and nobody told them — asks for.
+- An onchain payout is the one kind whose destination a device can name exactly (W2), so it is the one
+  kind whose detail shows the address. A boarding deposit says only that the address was checked, because
+  the address itself is gone once the round has happened (Phase 1's first finding).
+- **Tests,** `GroupWavelengthEntryScreenJvmTest`: each kind's summary; a deposit nobody attributed; an
+  onchain payout's address; the two warnings; an operator-only entry's line about whose word it is; a row
+  with no time saying so; an id the history doesn't hold showing the empty state rather than an error;
+  and the same detail in a wide window, since it is pushed rather than a pane (T7).
 
 **Done when** every kind the history can build has a summary, and no kind falls through to a blank
 screen.
