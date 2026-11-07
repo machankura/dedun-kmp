@@ -20,6 +20,8 @@ import com.machankura.dedun.compose.managers.GroupWavelengthPayouts
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthStopped
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
@@ -36,13 +38,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -141,6 +147,8 @@ class GroupWavelengthRunner(
     fun start() {
         job?.cancel()
         job = scope.launch {
+            val asked = Channel<Unit>(Channel.CONFLATED)
+            launch { askedOf().collect { asked.trySend(Unit) } }
             while (isActive) {
                 try {
                     refresh()
@@ -149,11 +157,21 @@ class GroupWavelengthRunner(
                 } catch (e: Exception) {
                     logger.e("Could not look after the group's wallets", e)
                 }
-                // Sooner if the person opens or leaves their own wallet: they're waiting on it.
-                withTimeoutOrNull(CHECK) { slot.personalWanted.drop(1).first() }
+                // Sooner if the person opens or leaves their own wallet, or someone asks the operator something: both are waiting on it.
+                withTimeoutOrNull(CHECK) { merge(slot.personalWanted.drop(1).map { }, asked.receiveAsFlow()).first() }
             }
         }
     }
+
+    /**
+     * Each time the room asks whoever runs a wallet for something: an address or an invoice, or a payment or leave the group approved.
+     * A member waited up to a minute for an invoice the daemon made in three seconds (`docs/group-wavelength-ui.md`). From the database
+     * rather than the inbound path, which files a request inside a transaction this would otherwise look before the end of.
+     */
+    private fun askedOf(): Flow<Unit> = merge(
+        database.groupArkDao().observeUnansweredDeposits().distinctUntilChanged().drop(1).filter { it > 0 },
+        database.groupSignedEventDao().observeCountOfKinds(listOf(GroupWavelengthPaymentEvent.KIND, GroupWavelengthExitEvent.KIND)).distinctUntilChanged().drop(1),
+    ).map { }
 
     /** Stops the loop and any daemon: the profile is going away. */
     suspend fun stop() {

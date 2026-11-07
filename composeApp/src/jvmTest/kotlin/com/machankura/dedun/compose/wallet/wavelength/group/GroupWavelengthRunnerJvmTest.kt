@@ -1,9 +1,11 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
 import com.machankura.dedun.compose.managers.GroupLightningFixture
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
@@ -462,6 +464,32 @@ class GroupWavelengthRunnerJvmTest {
         }
         assertEquals(2, scans(), "it opened again, scanning")
         assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+    }
+
+    @Test
+    fun `a request for an address wakes it, rather than waiting for its next look`() = runBlocking<Unit> {
+        // Medium's invoice waited 46 seconds for the runner's once-a-minute look, and took three to make.
+        val setup = opened()
+        elect(setup)
+        val operator = setup.all[0]
+        val member = setup.all[1]
+        val asked = { setup.runtime.fake.requests.count { it.first == FacadeVerb.DEPOSIT.wireName } }
+        setup.pumped {
+            setup.runner.start()
+            withTimeoutOrNull(20.seconds) { while (setup.status() !is GroupWavelengthDaemonStatus.Running) delay(20) }
+        }
+        try {
+            assertIs<GroupWavelengthDaemonStatus.Running>(setup.status())
+            val before = asked()
+            val requestId = GroupWavelengthDeposits.request(member.db, member.room, member.publicKey, setup.wallet)
+            // Filed as the inbound path files a depositor's request: the depositor statement isn't what's being tested.
+            val key = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)
+            operator.db.groupArkDao().insertDepositAddress(GroupArkDepositAddress(key, requestId, member.publicKey.lowercase(), Clock.System.now()))
+            withTimeoutOrNull(10.seconds) { while (asked() == before) delay(20) }
+            assertTrue(asked() > before, "the daemon was asked for an address well inside the minute between looks")
+        } finally {
+            setup.runner.stop()
+        }
     }
 
     @Test

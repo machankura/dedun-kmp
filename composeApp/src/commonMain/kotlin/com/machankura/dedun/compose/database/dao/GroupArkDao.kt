@@ -36,6 +36,9 @@ interface GroupArkDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDepositAddress(row: GroupArkDepositAddress)
 
+    @Query("SELECT COUNT(*) FROM GroupArkDepositAddress WHERE address IS NULL AND invoice IS NULL")
+    fun observeUnansweredDeposits(): Flow<Int>
+
     @Query("UPDATE GroupArkDepositAddress SET address = :address, script = :script WHERE wallet = :wallet AND requestId = :requestId AND address IS NULL")
     suspend fun answerDepositAddress(wallet: String, requestId: String, address: String, script: String)
 
