@@ -378,6 +378,95 @@ class GroupWavelengthHistoryJvmTest {
     }
 
     @Test
+    fun `a boarding coin in flight takes the time this device signed it`() {
+        val rows = GroupWavelengthHistory.Rows(
+            boarded = listOf(GroupArkBoarded(wallet, "$txid:0", "commitment", 7_000, "0014aa", atEpochSeconds = now - 300))
+        )
+        assertEquals(now - 300, of(rows).single().at)
+    }
+
+    @Test
+    fun `a claim takes the time it was signed over the time its invoice was asked for`() {
+        val hash = "c".repeat(64)
+        val request = GroupArkDepositAddress(wallet, "r1", alice, at(now - 900), invoiceAmountSat = 9_000, invoice = "lnbcrt90u1x", paymentHash = hash)
+        val rows = GroupWavelengthHistory.Rows(
+            addresses = listOf(request),
+            claims = listOf(GroupArkClaim(wallet, "ark", hash, 8_900, atEpochSeconds = now - 100)),
+        )
+        assertEquals(now - 100, of(rows).single().at)
+    }
+
+    @Test
+    fun `a payout waiting on the operator has the time the group approved it`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        // An approval carries no time of its own, unlike an onchain payout's askedAt, so without the signed
+        // event's own createdAt this row would sort last among everything that has one.
+        val rows = GroupWavelengthHistory.Rows(payouts = listOf(approval), payoutsAskedAt = mapOf(hash.lowercase() to now - 400))
+        assertEquals(now - 400, of(rows).single().at)
+    }
+
+    @Test
+    fun `a payout this device signed takes that time over the approval's`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        val rows = GroupWavelengthHistory.Rows(
+            payments = listOf(GroupArkPayment(wallet, hash, "ark", amountSat = 12_010, atEpochSeconds = now - 200)),
+            payouts = listOf(approval),
+            payoutsAskedAt = mapOf(hash.lowercase() to now - 400),
+        )
+        assertEquals(now - 200, of(rows).single().at)
+    }
+
+    @Test
+    fun `and the operator's time over both, since that is when it says it was paid`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        val rows = GroupWavelengthHistory.Rows(
+            payments = listOf(GroupArkPayment(wallet, hash, "ark", amountSat = 12_010, atEpochSeconds = now - 200)),
+            payouts = listOf(approval),
+            payoutsAskedAt = mapOf(hash.lowercase() to now - 400),
+        )
+        val entries = of(rows, snapshot(line("l1", status = GroupWavelengthHistory.LINE_COMPLETE, amountSat = 12_010, at = now - 50, paymentHash = hash)))
+        assertEquals(now - 50, entries.single().at)
+    }
+
+    @Test
+    fun `an onchain payout's time walks from approved to signed to confirmed`() {
+        val approval = onchainPayout(askedAt = now - 600)
+        assertEquals(now - 600, of(GroupWavelengthHistory.Rows(onchainPayouts = listOf(approval))).single().at)
+
+        val leave = GroupArkLeave(wallet, approval.id, "commitment", "0014bb", 3_000, 180, atEpochSeconds = now - 400)
+        assertEquals(now - 400, of(GroupWavelengthHistory.Rows(onchainPayouts = listOf(approval), leaves = listOf(leave))).single().at)
+
+        val confirmed = leave.copy(confirmed = true, confirmedAtEpochSeconds = now - 300)
+        assertEquals(now - 300, of(GroupWavelengthHistory.Rows(onchainPayouts = listOf(approval), leaves = listOf(confirmed))).single().at)
+    }
+
+    @Test
+    fun `a round the free refresh window cost nothing still has a time`() {
+        val rows = GroupWavelengthHistory.Rows(
+            coins = listOf(GroupArkVtxo(wallet, "$other:0", 49_000, origin = "commitment", settled = true)),
+            rounds = listOf(GroupArkRound(wallet, "commitment", "note", atEpochSeconds = now - 700)),
+        )
+        val entry = of(rows).single()
+        assertEquals(Kind.ROUND, entry.kind)
+        assertEquals(0, entry.feeSat, "the free window is free")
+        assertEquals(now - 700, entry.at)
+    }
+
+    @Test
+    fun `a row from before the times were kept still shows, with no time`() {
+        val rows = GroupWavelengthHistory.Rows(
+            boarded = listOf(GroupArkBoarded(wallet, "$txid:0", "commitment", 7_000, "0014aa")),
+            rounds = listOf(GroupArkRound(wallet, "other", "note")),
+        )
+        val entries = of(rows)
+        assertEquals(2, entries.size)
+        assertTrue(entries.all { it.at == null })
+    }
+
+    @Test
     fun `a line this device can join to nothing is still shown, and marked as the operator's word alone`() {
         val entries = of(
             GroupWavelengthHistory.Rows(),

@@ -52,6 +52,22 @@ object GroupWavelengthPayouts {
             .filter { it.chain == chain && it.payout != null }
             .distinctBy { it.paymentHash }
 
+    /**
+     * When the group signed each Lightning payout on [chain], by payment hash. An approval carries no time of its own,
+     * unlike an onchain payout's `askedAt`, so this is the one moment a Lightning payout has that isn't the operator's
+     * (`docs/group-wavelength-transaction-details.md`, Phase 2). The first statement for a hash, as [signed] takes it.
+     */
+    suspend fun signedAt(database: DedunDatabase, chatRoomId: String, chain: Chain): Map<HexKey, Long> =
+        signedEvents(database, chatRoomId)
+            .mapNotNull { event ->
+                GroupWavelengthPaymentEvent.read(event.tags)
+                    ?.takeIf { it.chain == chain }
+                    ?.paymentHash
+                    ?.let { it.toString().lowercase() to event.createdAt.epochSeconds }
+            }
+            .distinctBy { it.first }
+            .toMap()
+
     /** Every onchain payout the group has signed on [chain] for any wallet, the first statement of each. */
     suspend fun signedOnchain(database: DedunDatabase, chatRoomId: String, chain: Chain): List<GroupWavelengthOnchainPayoutEvent.Payout> =
         signedEvents(database, chatRoomId)

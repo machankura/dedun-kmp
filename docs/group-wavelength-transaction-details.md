@@ -312,25 +312,41 @@ No UI, no database change, nothing on a screen. `GroupWavelengthHistory.kt`, bes
 
 ### Phase 2: when each thing happened, and the reads to find it
 
-Schema 44 and the plumbing. Still nothing on a screen.
+Schema 44 and the plumbing. Still nothing on a screen. **Smaller than planned, because Phase 1 found
+that the deposit ledger already carries times** (see above): six nullable columns across five tables,
+not one per table of six.
 
-- `atEpochSeconds: Long? = null` on the six tables of T3, set at every write site (in
-  `GroupArkCoSigner`, `GroupWavelengthDeposits`, `GroupWavelengthPayments`, `GroupWavelengthPayouts` and
-  the runner). Setting it is the only change to those files; nothing reads it there.
-- `AutoMigration(from = 43, to = 44)` in `DedunDatabase.kt:231`, with a comment in the house form, and
-  the exported `composeApp/schemas/…/44.json`. No manual migration and so no migration test: nullable
-  columns are a shape Room migrates itself, and an older row's null is *this device doesn't know when*.
-- `GroupArkDao`: `observeBoarded(wallet)`, `observeClaims(wallet)`, `observePayments(wallet)`,
-  `observeFees(wallet)` and `observeRounds(wallet)` beside the suspend reads already there.
-- `GroupWavelengthRepository`: one `observeHistoryRows(chatRoomId, chain, wallet)` returning a single
-  record of everything `of` takes rather than nine flows — so the view model combines two flows, not
-  eleven. In the interface, in `DatabaseGroupWavelengthRepository`, and in `NO_OP`
-  (`GroupWavelengthRepository.kt:110`), which every screen test leans on.
-- **Tests:** a DAO test per new read, in `composeApp/src/jvmTest/.../database/dao/`; a repository test
-  that a row written with no time comes back with none; `DedunDatabaseJvmTest` still opens the schema.
+- `atEpochSeconds: Long? = null` on `GroupArkBoarded`, `GroupArkClaim`, `GroupArkPayment`,
+  `GroupArkLeave` and `GroupArkRound`, each meaning *when this device filed this row*, and
+  `confirmedAtEpochSeconds` beside it on `GroupArkLeave` — the one moment a payout finished that nobody
+  has to be believed about. All set in `GroupArkCoSigner.remember`, from **one** `Clock` read, so
+  everything a single signature files reads in the order it happened; `confirmLeaves` takes the time as
+  an argument. Nothing in the co-signer reads any of them.
+  `GroupArkVtxo` gets none: a coin's settle time is not the `at` of any entry, since a deposit's comes
+  from the deposit ledger and a round's from its fee row.
+- `AutoMigration(from = 43, to = 44)` in `DedunDatabase.kt`, with a comment in the house form, and the
+  exported `composeApp/schemas/…/44.json`. No manual migration and so no migration test: nullable
+  columns are a shape Room migrates itself, and an older row's null is *this device doesn't know when*,
+  which the history shows rather than guessing at.
+- `GroupArkDao`: `boarded(wallet)`, `claims(wallet)` and `allFees(wallet)`. The reads already there are
+  each shaped for the co-signer's own question — one commitment's boarding coins, one term's fees — and
+  a history asks a different one.
+- `GroupWavelengthPayouts.signedAt`: when the group signed each Lightning payout, by payment hash, from
+  the signed event's own `createdAt`. An approval carries no time of its own, unlike an onchain payout's
+  `askedAt`, so **this is the one time a Lightning payout has that isn't the operator's** — and it needs
+  no wire change, which is why the alternative of adding `asked_at` to kind 30379 was dropped.
+- `GroupWavelengthRepository.historyRows(chatRoomId, chain, wallet)`: one suspend read returning
+  everything `of` takes. **Read, not observed** — the plan called for `observeHistoryRows`, but the view
+  model already re-reads its facts whenever the coins or the operator's report change and on a timer
+  (`refreshFacts`), and every one of these tables is written in the same transaction as one of those. A
+  second combine of nine flows would be machinery for nothing. In the interface, in
+  `DatabaseGroupWavelengthRepository`, and in `NO_OP`, which every screen test leans on.
+- **Tests:** `GroupArkHistoryDaoJvmTest` for each new read and each new column, including that
+  confirming one commitment's leaves doesn't touch another's; and in `GroupWavelengthHistoryJvmTest`,
+  that each kind takes the soonest time it can know and that a row from before the columns existed still
+  shows, with none.
 
-**Done when** `jvmTest` passes on a database file as well as in memory, and the exported schema is in the
-commit.
+**Done when** `jvmTest` passes and the exported schema is in the commit.
 
 ### Phase 3: one history on the wallet screen
 

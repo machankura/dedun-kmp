@@ -11,6 +11,7 @@ import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
@@ -107,6 +108,12 @@ interface GroupWavelengthRepository {
     /** What this device has itself signed for the wallet: its own ledger, never the operator's word. */
     fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>>
 
+    /**
+     * Every row a history is built from (`docs/group-wavelength-transaction-details.md`, Phase 2). Read rather than
+     * observed: it is re-read whenever the coins or the operator's report change, which is when any of this does.
+     */
+    suspend fun historyRows(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthHistory.Rows
+
     companion object {
         val NO_OP: GroupWavelengthRepository = object : GroupWavelengthRepository {
             override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean = false
@@ -140,6 +147,7 @@ interface GroupWavelengthRepository {
             override suspend fun feesSince(chatRoomId: String, chain: Chain, wallet: Long, term: Long, since: Long): Long = 0
             override suspend fun labelsLeft(chatRoomId: String, chain: Chain, wallet: Long, userPublicKey: HexKey): Long = 0
             override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(emptyList())
+            override suspend fun historyRows(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthHistory.Rows = GroupWavelengthHistory.Rows()
         }
     }
 }

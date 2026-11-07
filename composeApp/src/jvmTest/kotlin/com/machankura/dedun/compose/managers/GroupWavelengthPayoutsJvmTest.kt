@@ -384,7 +384,7 @@ class GroupWavelengthPayoutsJvmTest {
         fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(first).tags, "", createdAt = first.askedAt)
         val dao = all[0].db.groupArkDao()
         dao.upsertLeave(GroupArkLeave(key, first.id, "round", "00", 6_000, 400))
-        dao.confirmLeaves(key, "round")
+        dao.confirmLeaves(key, "round", now)
         // A device that missed that round would approve this, and with the member's own device that's a quorum of two.
         val second = onchain(payout, 3_000, at = now + 1)
         fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(second).tags, "", createdAt = second.askedAt)
@@ -417,7 +417,7 @@ class GroupWavelengthPayoutsJvmTest {
         val dao = all[0].db.groupArkDao()
         dao.upsertLeave(GroupArkLeave(key, first.id, "round", "00", 6_000, 400))
         assertEquals("pays an address another payout is still being paid to", refused(all[0], onchain(payout, 1_000, at = now + 1)))
-        dao.confirmLeaves(key, "round")
+        dao.confirmLeaves(key, "round", now)
         val later = onchain(payout, 9_000, at = now + 2)
         assertNull(refused(all[0], later))
         fixture.fileSignedAsRoom(all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(later).tags, "", createdAt = later.askedAt)

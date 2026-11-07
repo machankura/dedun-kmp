@@ -227,7 +227,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 43,
+    version = 44,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -490,6 +490,11 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // charged what left and gets a refund back (docs/group-wavelength-payouts.md, Phase 5). Nullable columns: an older row
         // charges its approval's limit, as it did.
         AutoMigration(from = 42, to = 43),
+        // v44 keeps when this device signed each thing a group's Wavelength wallet did -- a boarding coin, a Lightning claim, a
+        // payout, a leave, a round -- and when it saw a leave's round confirm, so a history reads in the order things happened
+        // rather than in the order the operator says they did (docs/group-wavelength-transaction-details.md, T3). Nullable
+        // columns: null is this device not knowing when, which a history shows rather than guessing.
+        AutoMigration(from = 43, to = 44),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

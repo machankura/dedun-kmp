@@ -180,6 +180,11 @@ object GroupWavelengthHistory {
         /** Deposits this device has seen land, which outlive the rows above (`docs/member-deposits.md`). */
         val deposits: List<DepositRow> = emptyList(),
         val payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
+        /**
+         * When the group signed each Lightning payout, by payment hash. An approval carries no time of its own, so
+         * without this a payout waiting on the operator has none either.
+         */
+        val payoutsAskedAt: Map<HexKey, Long> = emptyMap(),
         val onchainPayouts: List<GroupWavelengthOnchainPayoutEvent.Payout> = emptyList(),
         val exits: List<GroupWavelengthExitEvent.Exit> = emptyList(),
     )
@@ -263,7 +268,7 @@ object GroupWavelengthHistory {
                 source = GroupWavelengthEntry.Source.THIS_DEVICE,
                 amountSat = coin.amountSat,
                 feeSat = 0,
-                at = null,
+                at = coin.atEpochSeconds,
                 member = rows.addresses.firstOrNull { it.script?.lowercase() == coin.script.lowercase() }?.requester,
                 direction = GroupWavelengthEntry.Direction.IN,
                 detail = GroupWavelengthEntry.Detail.OnchainDeposit(boarded = coin),
@@ -283,7 +288,7 @@ object GroupWavelengthHistory {
                 source = GroupWavelengthEntry.Source.THIS_DEVICE,
                 amountSat = claim.amountSat,
                 feeSat = 0,
-                at = request?.requestedAt?.epochSeconds,
+                at = claim.atEpochSeconds ?: request?.requestedAt?.epochSeconds,
                 member = request?.requester,
                 direction = GroupWavelengthEntry.Direction.IN,
                 detail = GroupWavelengthEntry.Detail.LightningDeposit(request = request, claim = claim),
@@ -360,7 +365,7 @@ object GroupWavelengthHistory {
             },
             amountSat = amountSat,
             feeSat = line?.feeSat ?: 0,
-            at = line?.at?.takeIf { it > 0 },
+            at = line?.at?.takeIf { it > 0 } ?: signed?.atEpochSeconds ?: hash?.let { rows.payoutsAskedAt[it] },
             member = approval.payout?.member,
             direction = GroupWavelengthEntry.Direction.OUT,
             detail = GroupWavelengthEntry.Detail.LightningPayout(approval, signed, line),
@@ -382,7 +387,7 @@ object GroupWavelengthHistory {
             source = GroupWavelengthEntry.Source.THIS_DEVICE,
             amountSat = leave?.amountSat ?: approval.amountSat,
             feeSat = leave?.feeSat ?: 0,
-            at = approval.askedAt,
+            at = leave?.confirmedAtEpochSeconds ?: leave?.atEpochSeconds ?: approval.askedAt,
             member = approval.member,
             direction = GroupWavelengthEntry.Direction.OUT,
             detail = GroupWavelengthEntry.Detail.OnchainPayout(approval, leave),
@@ -414,7 +419,7 @@ object GroupWavelengthHistory {
                 source = GroupWavelengthEntry.Source.THIS_DEVICE,
                 amountSat = 0,
                 feeSat = fees[key]?.feeSat ?: 0,
-                at = fees[key]?.atEpochSeconds,
+                at = fees[key]?.atEpochSeconds ?: rounds[key]?.atEpochSeconds,
                 direction = GroupWavelengthEntry.Direction.NONE,
                 detail = GroupWavelengthEntry.Detail.Round(rounds[key], fees[key], made),
             )
