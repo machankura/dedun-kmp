@@ -320,6 +320,7 @@ class GroupWavelengthRunner(
         runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term, live.answered, newInvoice = { daemon.newInvoice(it) }) { daemon.newBoardingAddress() } }
             .onFailure { logger.w(it) { "Couldn't answer a request for a deposit address" } }
         runCatching { payApproved(live) }.onFailure { logger.w(it) { "Couldn't look at what the group approved" } }
+        runCatching { payApprovedOnchain(live) }.onFailure { logger.w(it) { "Couldn't look at the onchain payouts the group approved" } }
         runCatching { leaveIfAsked(live) }.onFailure { logger.w(it) { "Couldn't look at whether to leave" } }
     }
 
@@ -387,6 +388,27 @@ class GroupWavelengthRunner(
                         .onFailure { logger.w(it) { "The payment for ${hash.take(12)} didn't go" } }
                 }
             }
+    }
+
+    /**
+     * Pays each onchain payout a quorum approved, once, as a leave in the next round (`docs/group-wavelength-payouts.md`, Phase 3). Never
+     * one that isn't approved, for the reason [payApproved] gives, and never one this device already signed a round paying or the daemon
+     * already has in hand: two of one approval in a round are refused by every device, which costs the whole round.
+     */
+    private suspend fun payApprovedOnchain(live: Running) {
+        val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, live.wallet.statement.wallet)
+        val nowSeconds = now().epochSeconds
+        val left = database.groupArkDao().leaves(walletKey).map { it.authorisation }.toSet()
+        val waiting = GroupWavelengthPayouts.signedOnchain(database, live.chatRoomId, live.chain)
+            .filter { it.wallet == live.wallet.statement.wallet && it.expiresAt > nowSeconds && it.id !in left && it.id !in live.attempted }
+        if (waiting.isEmpty()) return
+        val inHand = daemon.notedActivity()
+        waiting.filter { it.id !in inHand && live.attempted.add(it.id) }.forEach { payout ->
+            live.jobs += scope.launch {
+                runCatching { daemon.sendOnchain(payout.address, payout.amountSat, payout.maxFeeSat, payout.id) }
+                    .onFailure { logger.w(it) { "The onchain payout ${payout.id.takeLast(12)} didn't go" } }
+            }
+        }
     }
 
     /** Each coin this device knows of came from a key the wallet has used, so a scan that wide finds them, and some margin finds the rest. */

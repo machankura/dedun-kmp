@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
+import com.machankura.dedun.compose.database.model.GroupArkLeave
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -352,6 +354,38 @@ class GroupWavelengthRunnerJvmTest {
         assertEquals(1, setup.runtime.fake.requests.count { invoice in it.second }, "once")
         val sent = setup.runtime.fake.requests.first { invoice in it.second }.second
         assertFalse(sent.contains("MaxCredit"), "credit stays closed, which on the wire is saying nothing of it: $sent")
+    }
+
+    @Test
+    fun `it pays an onchain payout a quorum approved, once, to the member's address, and nothing it already paid`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.pumped { setup.runner.refresh() }
+        val address = "bcrt1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3lgth6c"
+        val payout = fixture.payable(setup.all, setup.all[1], setup.wallet, 100_000, onchainAddress = address)
+        fun sends() = setup.runtime.fake.requests.filter { address in it.second }
+
+        setup.runner.refresh()
+        assertTrue(sends().isEmpty(), "nothing approved, nothing tried")
+
+        val approved = GroupWavelengthOnchainPayoutEvent.paying(fixture.chain, 0, payout.member, payout.destinationEventId, address, 50_000, 1_000)
+        val session = GroupWavelengthPayouts.proposeOnchain(setup.all[1].db, setup.all[1].room, setup.all[1].publicKey, approved)
+        fixture.signSession(setup.all, setup.all[1], session.id)
+        setup.runner.refresh()
+        setup.runner.refresh()
+        withTimeoutOrNull(5.seconds) { while (sends().isEmpty()) delay(20) }
+        delay(100)
+        assertEquals(1, sends().size, "once")
+        val sent = sends().single().second
+        assertTrue("50000" in sent && approved.id in sent && "\"SweepAll\":true" !in sent, "the amount approved, noted with the approval, and never everything: $sent")
+
+        // Another approval this device already signed a round paying isn't sent again, whoever runs the wallet next.
+        val again = GroupWavelengthOnchainPayoutEvent.paying(fixture.chain, 0, payout.member, payout.destinationEventId, address, 1_000, 1_000, Clock.System.now().epochSeconds + 5)
+        fixture.fileSignedAsRoom(setup.all, GroupWavelengthOnchainPayoutEvent.KIND, GroupWavelengthOnchainPayoutEvent.template(again).tags)
+        setup.all[0].db.groupArkDao().upsertLeave(GroupArkLeave(GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0), again.id, "commitment", "00", 1_000, 300))
+        setup.runner.refresh()
+        delay(100)
+        assertTrue(sends().none { again.id in it.second })
     }
 
     /** The runner reads the coins it leaves with from the daemon. */
