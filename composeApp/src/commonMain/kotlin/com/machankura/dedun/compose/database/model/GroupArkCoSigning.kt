@@ -58,9 +58,21 @@ data class GroupArkPendingRound(val wallet: String, val commitment: String, val 
 @Entity(primaryKeys = ["wallet", "ark", "checkpoint"])
 data class GroupArkCheckpoint(val wallet: String, val ark: String, val checkpoint: String, val label: HexKey? = null)
 
-/** The transfer this device signed a Lightning payment into. A payment goes once, whatever the daemon asks. */
+/**
+ * The transfer this device signed a Lightning payment into. A payment goes once, whatever the daemon asks. [amountSat] is what its vHTLC
+ * held, which is what the member it paid is charged, and [vhtlcScript] how its refund is known; [refundedIn] is the transfer that brought
+ * it home, which gives the member it back once it settles (`docs/group-wavelength-payouts.md`, Phase 5). The first two are null on a
+ * row from before they were kept.
+ */
 @Entity(primaryKeys = ["wallet", "paymentHash"])
-data class GroupArkPayment(val wallet: String, val paymentHash: HexKey, val tx: String)
+data class GroupArkPayment(
+    val wallet: String,
+    val paymentHash: HexKey,
+    val tx: String,
+    val amountSat: Long? = null,
+    val vhtlcScript: HexKey? = null,
+    val refundedIn: String? = null,
+)
 
 /**
  * An approved onchain payout this device signed a round paying (`docs/group-wavelength-payouts.md`, W11). From then on it can't be

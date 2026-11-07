@@ -52,6 +52,10 @@ object ArkPolicy {
         val feeSat: Long = 0,
         /** The Lightning payments it makes. */
         val payments: List<ByteVector32> = emptyList(),
+        /** What each of those funds, and the vHTLC's script, which is how its refund is known: a refund's leaf names no hash. */
+        val funded: List<Funded> = emptyList(),
+        /** The vHTLC a refund brings home, by its script: one of the group's own payments that failed. */
+        val refunded: ByteVector? = null,
         /** A round's commitment, whose confirmation is what makes the round so. */
         val commitmentTx: ByteVector? = null,
         /** A transfer's checkpoints, whose signatures being complete are what make the transfer so: it never reaches the chain. */
@@ -123,6 +127,9 @@ object ArkPolicy {
      * costing at most [maxFeeSat], since the member it pays is charged that round's fee.
      */
     data class AuthorisedLeave(val id: String, val amountSat: Long, val maxFeeSat: Long)
+
+    /** A Lightning payment's vHTLC as a transfer funds it: its hash, its script and what it holds, which is what the payment cost. */
+    data class Funded(val paymentHash: ByteVector32, val script: ByteVector, val amountSat: Long)
 
     /** An approved leave a round pays: the approval, the script and what it gets. */
     data class Leave(val authorisation: String, val script: ByteVector, val amountSat: Long)
@@ -642,6 +649,7 @@ object ArkPolicy {
 
         val credits = HashMap<String, Long>()
         val payments = ArrayList<ByteVector32>()
+        val funded = ArrayList<Funded>()
         var out = 0L
         ark.txOut.forEachIndexed { i, output ->
             val script = output.publicKeyScript
@@ -652,6 +660,7 @@ object ArkPolicy {
                     checkPayment(context, vhtlc, output.amount.sat, arkId)
                     if (vhtlc.paymentHash in payments) refuse("one Lightning payment paid twice in a transfer")
                     payments += vhtlc.paymentHash
+                    funded += Funded(vhtlc.paymentHash, script, output.amount.sat)
                 }
                 context.keys.vtxoOwnerOf(script, context.operator, context.exitDelay) != null -> credits["$arkId:$i"] = output.amount.sat
                 // Never an approved leave's script: a VTXO at a member's onchain key is a coin their wallet can't see (W4).
@@ -660,7 +669,7 @@ object ArkPolicy {
             out += output.amount.sat
         }
         if (out != into) refuse("a transfer that doesn't move exactly what it spends")
-        val effect = Effect(arkId, credits, spent.toList(), payments = payments, checkpoints = checkpoints.map { (c, _) -> c.txid.toString() })
+        val effect = Effect(arkId, credits, spent.toList(), payments = payments, funded = funded, checkpoints = checkpoints.map { (c, _) -> c.txid.toString() })
 
         return when {
             tx.txid == ark.txid -> {
@@ -740,7 +749,10 @@ object ArkPolicy {
         if (out != input.amount.sat) refuse("a claim that doesn't keep what it claims")
         context.capSat?.let { cap -> if (context.unspentSat - (context.pendingFromSat[arkId] ?: 0) + out > cap) refuse("a claim taking the wallet over its cap") }
         // A refund's hash is null, since that's the group's own money coming back. The leaf is what the checkpoint pays and the Ark server co-signs.
-        val effect = Effect(arkId, credits, emptyList(), checkpoints = listOf(checkpoint.txid.toString()), claimedHash = claimedHash, claimedSat = out)
+        val effect = Effect(
+            arkId, credits, emptyList(), checkpoints = listOf(checkpoint.txid.toString()), claimedHash = claimedHash, claimedSat = out,
+            refunded = input.publicKeyScript.takeIf { claimedHash == null },
+        )
 
         return when {
             tx.txid == ark.txid -> {

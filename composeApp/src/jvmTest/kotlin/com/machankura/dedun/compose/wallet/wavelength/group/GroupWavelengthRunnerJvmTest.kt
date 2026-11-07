@@ -329,8 +329,8 @@ class GroupWavelengthRunnerJvmTest {
         assertTrue(sent.contains("\"recovery_window\":${12 + GroupWavelengthRunner.RECOVERY_WINDOW}"), sent)
     }
 
-    private fun invoiceFor(sat: Long): String = Bolt11Invoice.create(
-        fixture.chain, (sat * 1000).msat, randomBytes32(), PrivateKey(ByteVector32("11".repeat(32))), Either.Left("pay"), CltvExpiryDelta(18),
+    private fun invoiceFor(sat: Long, metadata: String): String = Bolt11Invoice.create(
+        fixture.chain, (sat * 1000).msat, randomBytes32(), PrivateKey(ByteVector32("11".repeat(32))), Either.Right(ByteVector32(fr.acinq.bitcoin.Crypto.sha256(metadata.encodeToByteArray()))), CltvExpiryDelta(18),
         Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory), randomBytes32(),
     ).write()
 
@@ -339,14 +339,14 @@ class GroupWavelengthRunnerJvmTest {
         val setup = opened()
         elect(setup)
         setup.pumped { setup.runner.refresh() }
-        val invoice = invoiceFor(1_000)
+        val invoice = invoiceFor(1_000, fixture.metadataOf(setup.all[1]))
         val payout = fixture.payable(setup.all, setup.all[1], setup.wallet, 100_000)
 
         // Nothing approved yet, so nothing is tried: an unapproved attempt holds the coin while every device refuses it.
         setup.runner.refresh()
         assertFalse(setup.runtime.fake.requests.any { invoice in it.second })
 
-        val session = GroupWavelengthPayments.propose(setup.all[1].db, setup.all[1].room, setup.all[1].publicKey, setup.wallet, invoice, 50, 500, Clock.System.now().epochSeconds + 3600, payout)
+        val session = GroupWavelengthPayments.propose(setup.all[1].db, setup.all[1].room, setup.all[1].publicKey, setup.wallet, invoice, 50, 500, Clock.System.now().epochSeconds + 3600, payout, fixture.metadataOf(setup.all[1]))
         fixture.signSession(setup.all, setup.all[1], session.id)
         setup.runner.refresh()
         setup.runner.refresh()

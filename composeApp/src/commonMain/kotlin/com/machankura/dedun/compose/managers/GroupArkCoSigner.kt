@@ -628,7 +628,11 @@ object GroupArkCoSigner {
         effect.checkpoints.forEach { dao.insertCheckpoint(GroupArkCheckpoint(key, effect.towards, it)) }
         effect.signing?.let { dao.signedCheckpoint(key, effect.towards, it, label) }
         effect.noteHash?.let { dao.upsertRound(GroupArkRound(key, effect.towards, it)) }
-        effect.payments.forEach { dao.upsertPayment(GroupArkPayment(key, it.toHex(), effect.towards)) }
+        effect.payments.forEach { hash ->
+            val funded = effect.funded.firstOrNull { it.paymentHash == hash }
+            dao.insertPayment(GroupArkPayment(key, hash.toHex(), effect.towards, funded?.amountSat, funded?.script?.toHex()))
+        }
+        effect.refunded?.let { dao.refundPayment(key, it.toHex(), effect.towards) }
         effect.leaves.forEach { dao.upsertLeave(GroupArkLeave(key, it.authorisation, effect.towards, it.script.toHex(), it.amountSat, effect.feeSat)) }
         if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, Clock.System.now().epochSeconds))
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }

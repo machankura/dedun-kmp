@@ -227,7 +227,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 42,
+    version = 43,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -486,6 +486,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // v42 adds the onchain payouts a device has signed a round paying, so a member is charged for what left and an
         // approval pays once (docs/group-wavelength-payouts.md, Phase 2). A new table, which Room migrates itself.
         AutoMigration(from = 41, to = 42),
+        // v43 keeps what each Lightning payout's vHTLC held and its script, and the refund that brought one home, so a member is
+        // charged what left and gets a refund back (docs/group-wavelength-payouts.md, Phase 5). Nullable columns: an older row
+        // charges its approval's limit, as it did.
+        AutoMigration(from = 42, to = 43),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

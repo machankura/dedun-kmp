@@ -16,8 +16,8 @@ import kotlin.time.Clock
  */
 object GroupWavelengthPayments {
     /** Asks the group to approve a payment. [maxRefundHeight] is the longest it may tie the money up if the payment fails. */
-    suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, maxRefundHeight: Long, expiresAt: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession {
-        val payment = GroupWavelengthPaymentEvent.Payment(wallet.statement.chain, wallet.statement.wallet, invoice, maxFeeSat, maxRefundHeight, expiresAt, payout)
+    suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, maxRefundHeight: Long, expiresAt: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession {
+        val payment = GroupWavelengthPaymentEvent.Payment(wallet.statement.chain, wallet.statement.wallet, invoice, maxFeeSat, maxRefundHeight, expiresAt, payout, lnurl)
         requireNotNull(payment.amountSat) { "That invoice names no amount, so there is nothing to approve" }
         val template = GroupWavelengthPaymentEvent.template(payment)
         // The proposer's device takes it in as anyone else's would.

@@ -901,6 +901,8 @@ class ArkPolicyJvmTest {
         assertEquals(ArkPolicy.What.TRANSFER, ark.what)
         assertEquals(fixtures.sendArk.digest, ark.message.toHex(), "the digest this device computed is the daemon's")
         assertEquals(listOf(sendHash), ark.effect!!.payments, "and the payment is remembered")
+        val vhtlc = Transaction.read(notedSend.ark.tx).txOut[0]
+        assertEquals(listOf(ArkPolicy.Funded(sendHash, vhtlc.publicKeyScript, vhtlc.amount.sat)), ark.effect!!.funded, "with what it holds and where, for its refund")
         assertEquals(notedSend.checkpoints.map { Transaction.read(it.tx).txid.toString() }, ark.effect!!.checkpoints, "and what would make it so")
         assertEquals(null, ark.effect!!.signing, "which the Ark transaction's signature isn't")
         assertEquals(listOf(25_000L), ark.effect!!.credits.values.toList(), "and only the change is the group's")
@@ -960,6 +962,12 @@ class ArkPolicyJvmTest {
     @Test
     fun `a failed payment's refund comes home, and goes nowhere else`() {
         allowed(fixtures.refundArk, ArkPolicy.What.TRANSFER, context(known = emptyMap()))
+        // It says which vHTLC came home, which is how the payment it was is known: a refund's leaf names no hash.
+        val home = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(known = emptyMap()), fixtures.refundArk))
+        val checkpointPrevout = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.refundArk.note!!.material).checkpoints.single().prevOuts.single()
+        assertEquals(ByteVector(Hex.decode(checkpointPrevout.pkScript)), home.effect!!.refunded)
+        assertEquals(null, home.effect!!.claimedHash, "and it's nobody's deposit")
+        assertEquals(null, assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(known = emptyMap()), fixtures.claimArk)).effect!!.refunded, "a claim is no refund")
         val refund = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.refundArk.note!!.material)
         val ark = Transaction.read(refund.ark.tx)
         fun paying(script: ByteVector) = fixtures.refundArk.withTransfer { t ->

@@ -15,6 +15,8 @@ import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import kotlinx.coroutines.flow.first
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Chain
+import fr.acinq.bitcoin.Crypto
+import fr.acinq.bitcoin.byteVector32
 import kotlin.time.Clock
 
 /**
@@ -74,11 +76,19 @@ object GroupWavelengthPayouts {
         return FrostSigningManager.proposeSigning(database, localChatRoom, userPublicKey, template.kind, template.tags, template.content)
     }
 
-    /** Whether this device signed the transfer that makes [payment], which from then on can't be assumed not to have left. */
-    private suspend fun wentOut(database: DedunDatabase, chatRoomId: String, payment: GroupWavelengthPaymentEvent.Payment): Boolean {
+    /**
+     * What [payment] cost, once this device signed the transfer that makes it, which from then on can't be assumed not to have left: what
+     * its vHTLC held, or the approval's limit on a row from before that was kept. Nothing once a refund of it has settled, since the money
+     * came home (`docs/group-wavelength-payouts.md`, W11). Null while this device hasn't signed it.
+     */
+    private suspend fun sentFor(database: DedunDatabase, chatRoomId: String, payment: GroupWavelengthPaymentEvent.Payment): Long? {
         val key = GroupArkCoSigner.walletKey(chatRoomId, payment.chain, payment.wallet)
-        val hash = payment.paymentHash?.toString() ?: return false
-        return database.groupArkDao().payments(key).any { it.paymentHash.equals(hash, ignoreCase = true) }
+        val hash = payment.paymentHash?.toString() ?: return null
+        val dao = database.groupArkDao()
+        val row = dao.payments(key).firstOrNull { it.paymentHash.equals(hash, ignoreCase = true) } ?: return null
+        val refund = row.refundedIn
+        if (refund != null && dao.vtxos(key).any { it.origin == refund && it.settled }) return 0
+        return row.amountSat ?: payment.maxSat
     }
 
     /** What this device has signed a round paying [payout] with, the leave and the round's fee, or null when it hasn't. */
@@ -98,8 +108,9 @@ object GroupWavelengthPayouts {
         signed(database, chatRoomId, chain).forEach { payment ->
             val member = payment.payout!!.member.lowercase()
             val cost = payment.maxSat ?: return@forEach
+            val sent = sentFor(database, chatRoomId, payment)
             when {
-                wentOut(database, chatRoomId, payment) -> paid[member] = (paid[member] ?: 0) + cost
+                sent != null -> paid[member] = (paid[member] ?: 0) + sent
                 payment.expiresAt > nowSeconds -> open[member] = (open[member] ?: 0) + cost
             }
         }
@@ -150,6 +161,11 @@ object GroupWavelengthPayouts {
             ?: return "pays a member who has given nowhere to be paid"
         if (!destination.event.id.equals(payout.destinationEventId, ignoreCase = true)) return "pays a destination the member has since replaced"
         val cost = payment.maxSat ?: return "names no amount"
+        // The invoice commits to metadata naming the member's address, as the Lightning wallet's payouts do (`docs/payouts-only.md`, D8). It
+        // doesn't prove the invoice pays them, which nothing can, but a proposer can no longer hand over any invoice at all.
+        val metadata = payment.lnurl ?: return "carries no metadata to check the member's Lightning address against"
+        if (payment.descriptionHash != Crypto.sha256(metadata.encodeToByteArray()).byteVector32()) return "carries an invoice that does not commit to the metadata beside it"
+        if (!GroupLightningPayouts.names(metadata, destination.lightningAddress.toString())) return "carries metadata that does not name the member's Lightning address"
         if (payment.expiresAt > nowSeconds + MAX_APPROVAL_SECONDS) return "stands for longer than the group lets anything stand"
         if (signed(database, chatRoomId, payment.chain).any { it.paymentHash == payment.paymentHash }) return "pays a hash the group has already approved"
         return refuseAgainstBalance(database, chatRoomId, payment.chain, payout.member, cost, payment.paymentHash.toString(), nowSeconds)

@@ -250,7 +250,7 @@ class GroupPayoutsViewModel(
                 val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountMsat), wallet.statement.chain)
                 val ready = invoice as? LightningAddressResolver.PayoutInvoice.Ready ?: return@run LightningProblem.NoInvoice(invoice)
                 val payout = GroupWavelengthPaymentEvent.Payout(member, destination.event.id)
-                val session = runCatching { wavelengthRepository.proposePayout(state.localChatRoom, activeUserPublicKey, wallet, ready.bolt11, (maxFeeMsat + 999) / 1000, payout) }
+                val session = runCatching { wavelengthRepository.proposePayout(state.localChatRoom, activeUserPublicKey, wallet, ready.bolt11, (maxFeeMsat + 999) / 1000, payout, ready.metadata) }
                     .onFailure { logger.e("Failed to propose a Wavelength payout from $chatRoomId", it) }.getOrNull()
                     ?: return@run LightningProblem.CouldNotPropose
                 withContext(Dispatchers.Main) { onSuccess(session.id) }

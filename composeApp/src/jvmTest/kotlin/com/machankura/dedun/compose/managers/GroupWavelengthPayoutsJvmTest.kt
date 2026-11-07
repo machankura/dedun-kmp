@@ -40,14 +40,21 @@ class GroupWavelengthPayoutsJvmTest {
 
     private suspend fun opened(): Pair<List<GroupLightningFixture.Device>, GroupWavelengthWalletManager.Wallet> {
         val all = fixture.group()
+        devices = all
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
         val session = GroupWavelengthWalletManager.proposeWallet(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, fixture.chain, "02" + "ab".repeat(32))
         fixture.signSession(all, all[0], session.id)
         return all to assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
     }
 
-    private fun invoice(sat: Long): String = Bolt11Invoice.create(
-        fixture.chain, (sat * 1000).msat, randomBytes32(), PrivateKey(ByteVector32("11".repeat(32))), Either.Left("pay"), CltvExpiryDelta(18),
+    /** Every device of the group in the test under way, whose Lightning addresses an invoice's metadata names. */
+    private var devices: List<GroupLightningFixture.Device> = emptyList()
+
+    private fun metadataOf(member: String?): String? = member?.let { fixture.metadataOf(devices, it) }
+
+    private fun invoice(sat: Long, metadata: String? = null): String = Bolt11Invoice.create(
+        fixture.chain, (sat * 1000).msat, randomBytes32(), PrivateKey(ByteVector32("11".repeat(32))),
+        metadata?.let { Either.Right(ByteVector32(fr.acinq.bitcoin.Crypto.sha256(it.encodeToByteArray()))) } ?: Either.Left("pay"), CltvExpiryDelta(18),
         Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory), randomBytes32(),
     ).write()
 
@@ -56,8 +63,8 @@ class GroupWavelengthPayoutsJvmTest {
         return Event("00".repeat(32), "00".repeat(32), 0, template.kind, template.tags, template.content, "")
     }
 
-    private fun payment(sat: Long, payout: GroupWavelengthPaymentEvent.Payout?, expiresAt: Long = now + 3600) =
-        GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(sat), 50, 500, expiresAt, payout)
+    private fun payment(sat: Long, payout: GroupWavelengthPaymentEvent.Payout?, expiresAt: Long = now + 3600, lnurl: String? = metadataOf(payout?.member)) =
+        GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(sat, lnurl), 50, 500, expiresAt, payout, lnurl)
 
     private suspend fun refused(device: GroupLightningFixture.Device, payment: GroupWavelengthPaymentEvent.Payment) =
         GroupWavelengthPayouts.refuse(device.db, fixture.roomId, proposed(payment))
@@ -190,11 +197,11 @@ class GroupWavelengthPayoutsJvmTest {
     fun `two proposals being signed at once can't each pass against one balance, and approving looks again`() = runBlocking<Unit> {
         val (all, wallet) = opened()
         val payout = fixture.payable(all, all[1], wallet, 10_000)
-        val first = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000), 50, 500, now + 3600, payout)
+        val first = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000, metadataOf(payout.member)), 50, 500, now + 3600, payout, metadataOf(payout.member))
         fixture.pump(all, com.machankura.dedun.compose.nostr.frost.FrostSigningEvents.ALL)
         assertNotNull(all[2].db.frostSigningSessionDao().getSessionById(first.id), "the first is in")
         assertEquals("pays a member who already has a payout waiting", refused(all[2], payment(6_000, payout)))
-        assertTrue(runCatching { GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000), 50, 500, now + 3600, payout) }.isFailure, "nor on the proposer's own device")
+        assertTrue(runCatching { GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000, metadataOf(payout.member)), 50, 500, now + 3600, payout, metadataOf(payout.member)) }.isFailure, "nor on the proposer's own device")
     }
 
     // ---- onchain, as a leave in a round: docs/group-wavelength-payouts.md, W2 to W11 ----
@@ -262,7 +269,7 @@ class GroupWavelengthPayoutsJvmTest {
     fun `one payout at a time, whichever rail it's on`() = runBlocking<Unit> {
         val (all, wallet) = opened()
         val payout = fixture.payable(all, all[1], wallet, 10_000, onchainAddress = aliceAddress)
-        val lightning = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(1_000), 50, 500, now + 3600, payout)
+        val lightning = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(1_000, metadataOf(payout.member)), 50, 500, now + 3600, payout, metadataOf(payout.member))
         fixture.pump(all, com.machankura.dedun.compose.nostr.frost.FrostSigningEvents.ALL)
         assertNotNull(all[2].db.frostSigningSessionDao().getSessionById(lightning.id))
         assertEquals("pays a member who already has a payout waiting", refused(all[2], onchain(payout, 1_000)))
@@ -313,5 +320,57 @@ class GroupWavelengthPayoutsJvmTest {
         all[0].db.groupArkDao().upsertLeave(GroupArkLeave(key, approved.id, "commitment", "00", 6_000, 400))
         assertEquals(1, GroupWavelengthPayouts.approvedLeaves(all[0].db, fixture.roomId, wallet, now = approved.expiresAt + 1).size, "unless a round already has it, which may still need signing")
         assertEquals(mapOf(approved.id to "commitment"), GroupArkCoSigner.contextOf(all[0].db, fixture.roomId, wallet, key, 0).leftIn)
+    }
+
+    // ---- Lightning, level with the Lightning wallet's: docs/group-wavelength-payouts.md, Phase 5 ----
+
+    @Test
+    fun `a Lightning payout's invoice has to commit to metadata naming the member's address`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        assertNull(refused(all[0], payment(1_000, payout)))
+        assertEquals("carries no metadata to check the member's Lightning address against", refused(all[0], payment(1_000, payout, lnurl = null)))
+        // Metadata naming somebody else, in an invoice that commits to it.
+        assertEquals("carries metadata that does not name the member's Lightning address", refused(all[0], payment(1_000, payout, lnurl = fixture.metadataOf(all[2]))))
+        // The member's metadata beside an invoice that commits to something else.
+        val other = GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(1_000, fixture.metadataOf(all[2])), 50, 500, now + 3600, payout, fixture.metadataOf(all[1]))
+        assertEquals("carries an invoice that does not commit to the metadata beside it", refused(all[0], other))
+    }
+
+    @Test
+    fun `a payout sent is charged what its vHTLC held, not its limit`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val approved = payment(4_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(approved).tags, "", createdAt = now)
+        all[0].db.groupArkDao().insertPayment(GroupArkPayment(key, approved.paymentHash!!.toString(), "ark", amountSat = 4_012, vhtlcScript = "51"))
+        val balance = GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(all[1].publicKey.lowercase())
+        assertEquals(4_012, balance.paidSat)
+        assertEquals(5_988, balance.availableSat)
+    }
+
+    @Test
+    fun `a refund gives the member their balance back once it has settled, and not before`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val member = all[1].publicKey.lowercase()
+        val approved = payment(4_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(approved).tags, "", createdAt = now)
+        val dao = all[0].db.groupArkDao()
+        dao.insertPayment(GroupArkPayment(key, approved.paymentHash!!.toString(), "ark", amountSat = 4_012, vhtlcScript = "51"))
+        suspend fun paid() = GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(member).paidSat
+
+        // A refund of some other vHTLC is nothing to do with it.
+        dao.refundPayment(key, "52", "elsewhere")
+        assertEquals(4_012, paid())
+        // Its own, signed and not yet settled, changes nothing either: a transfer can be signed and never happen.
+        dao.refundPayment(key, "51", "refund")
+        dao.upsertVtxo(GroupArkVtxo(key, "refund:0", 4_012, origin = "refund"))
+        assertEquals(4_012, paid())
+        dao.settle(key, "refund")
+        assertEquals(0, paid(), "the money came home")
+        // A record of the payment again, as a repeated signature would make, doesn't undo it.
+        dao.insertPayment(GroupArkPayment(key, approved.paymentHash!!.toString(), "ark", amountSat = 4_012, vhtlcScript = "51"))
+        assertEquals(0, paid())
     }
 }

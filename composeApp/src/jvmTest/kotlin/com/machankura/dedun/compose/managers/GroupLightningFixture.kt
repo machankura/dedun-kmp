@@ -258,6 +258,11 @@ class GroupLightningFixture(
      * Gives [member] somewhere to be paid and [sat] of deposits in [wallet] on every device, as if it had boarded and settled, so a payout to
      * them can be signed: what a Wavelength payment has to name.
      */
+    /** The LNURL metadata [payable]'s Lightning address for [member] gives, which an invoice paying them out commits to. */
+    fun metadataOf(member: Device): String = """[["text/plain","Pay member${member.index}"],["text/identifier","member${member.index}@example.com"]]"""
+
+    fun metadataOf(all: List<Device>, member: String): String = metadataOf(all.first { it.publicKey.equals(member, ignoreCase = true) })
+
     suspend fun payable(all: List<Device>, member: Device, wallet: GroupWavelengthWalletManager.Wallet, sat: Long, onchainAddress: String? = null, createdAt: Long = 1_700_000_000): GroupWavelengthPaymentEvent.Payout {
         val destination = GroupPayoutDestinationEvent.build(PrivateKey(ByteVector32(member.privateKey)), roomId, chain, LightningAddress("member${member.index}", "example.com"), onchainAddress = onchainAddress, createdAt = createdAt)
         val tags = arrayOf(arrayOf("h", roomId))

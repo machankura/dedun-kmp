@@ -95,12 +95,12 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> =
         GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet }
 
-    override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession {
+    override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession {
         val chain = wallet.statement.chain
         require(GroupWavelengthRollout.paysOverLightning(chain)) { "Payouts over Lightning are off on ${chain.name}" }
         val tip = requireNotNull(tipHeight(chain)) { "No chain connection to set a refund limit from" }
         val expiresAt = Clock.System.now().epochSeconds + APPROVAL_LASTS_SECONDS
-        return GroupWavelengthPayments.propose(database, localChatRoom, userPublicKey, wallet, invoice, maxFeeSat, tip + GroupWavelengthRollout.MAX_REFUND_BLOCKS, expiresAt, payout)
+        return GroupWavelengthPayments.propose(database, localChatRoom, userPublicKey, wallet, invoice, maxFeeSat, tip + GroupWavelengthRollout.MAX_REFUND_BLOCKS, expiresAt, payout, lnurl)
     }
 
     override suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout> {

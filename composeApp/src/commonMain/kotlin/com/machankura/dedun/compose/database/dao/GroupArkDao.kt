@@ -141,6 +141,13 @@ interface GroupArkDao {
     @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
     suspend fun payments(wallet: String): List<GroupArkPayment>
 
+    /** The first record of a payment stands: a payment goes once, and its refund is never written over. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPayment(row: GroupArkPayment)
+
+    @Query("UPDATE GroupArkPayment SET refundedIn = :ark WHERE wallet = :wallet AND vhtlcScript = :script AND refundedIn IS NULL")
+    suspend fun refundPayment(wallet: String, script: String, ark: String)
+
     @Upsert
     suspend fun upsertLeave(row: GroupArkLeave)
 
