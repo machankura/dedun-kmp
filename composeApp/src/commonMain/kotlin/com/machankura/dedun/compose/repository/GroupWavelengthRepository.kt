@@ -72,6 +72,9 @@ interface GroupWavelengthRepository {
     /** Asks the operator for a boarding address for this device's member. */
     suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String
 
+    /** Asks the operator for a Lightning invoice for this device's member. */
+    suspend fun requestDepositInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, amountSat: Long): String
+
     /** [member]'s requests for addresses, and what's been answered and checked. */
     fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>>
 
@@ -118,6 +121,7 @@ interface GroupWavelengthRepository {
             override suspend fun leaveAsked(chatRoomId: String, chain: Chain, wallet: Long): Boolean = false
             override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false
             override suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String = error("No room to ask in")
+            override suspend fun requestDepositInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, amountSat: Long): String = error("No room to ask in")
             override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> = flowOf(emptyList())
             override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> = flowOf(null)
             override suspend fun tipHeight(chain: Chain): Long? = null

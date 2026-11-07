@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.managers
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.extensions.toHex
@@ -12,6 +13,17 @@ import com.machankura.dedun.compose.wallet.wavelength.group.ArkScripts
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkDerivation
 import fr.acinq.bitcoin.Bitcoin
 import fr.acinq.bitcoin.ByteVector
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.Chain
+import fr.acinq.bitcoin.PrivateKey
+import fr.acinq.bitcoin.utils.Either
+import fr.acinq.lightning.CltvExpiryDelta
+import fr.acinq.lightning.Feature
+import fr.acinq.lightning.FeatureSupport
+import fr.acinq.lightning.Features
+import fr.acinq.lightning.Lightning.randomBytes32
+import fr.acinq.lightning.payment.Bolt11Invoice
+import fr.acinq.lightning.utils.msat
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.Script
 import kotlinx.coroutines.runBlocking
@@ -138,5 +150,105 @@ class GroupWavelengthDepositsJvmTest {
         assertEquals(20_000_000, tallies.members.getValue(all[1].publicKey.lowercase()).wavelengthMsat)
         assertEquals(7_000_000, tallies.unattributedMsat)
         assertTrue(dao.boardedIn(key, "commitment").isEmpty())
+    }
+
+    private fun invoice(sat: Long, hash: ByteVector32 = randomBytes32()): String = Bolt11Invoice.create(
+        fixture.chain, (sat * 1000).msat, hash, PrivateKey(ByteVector32("11".repeat(32))), Either.Left("deposit"), CltvExpiryDelta(18),
+        Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory), randomBytes32(),
+    ).write()
+
+    private suspend fun askedForInvoice(device: GroupLightningFixture.Device, all: List<GroupLightningFixture.Device>, wallet: GroupWavelengthWalletManager.Wallet, sat: Long): String {
+        val requestId = GroupWavelengthDeposits.request(device.db, device.room, device.publicKey, wallet, sat)
+        all.filter { it !== device }.forEach { it.db.groupArkDao().insertDepositAddress(GroupArkDepositAddress(key, requestId, device.publicKey.lowercase(), Clock.System.now(), invoiceAmountSat = sat)) }
+        return requestId
+    }
+
+    private suspend fun answered(all: List<GroupLightningFixture.Device>, wallet: GroupWavelengthWalletManager.Wallet, invoice: String) {
+        GroupWavelengthDeposits.answerOutstanding(all[0].db, all[0].room, all[0].publicKey, wallet, 1, newInvoice = { invoice }) { error("no address was asked for") }
+        fixture.pump(all, setOf(GroupWavelengthEvents.DEPOSIT_ANSWER))
+    }
+
+    @Test
+    fun `an invoice for what was asked is believed on every device, as that member's`() = runBlocking<Unit> {
+        val (all, wallet) = elected()
+        val requestId = askedForInvoice(all[1], all, wallet, 2_500)
+        val made = invoice(2_500)
+        answered(all, wallet, made)
+        all.forEach { d ->
+            val row = d.db.groupArkDao().depositAddresses(key).single { it.requestId == requestId }
+            assertEquals(made, row.invoice, "device ${d.index}")
+            assertNotNull(row.paymentHash)
+        }
+    }
+
+    @Test
+    fun `an invoice for another amount isn't, and every device says so`() = runBlocking<Unit> {
+        val (all, wallet) = elected()
+        val requestId = askedForInvoice(all[1], all, wallet, 2_500)
+        answered(all, wallet, invoice(2_600))
+        all.forEach { d ->
+            assertNull(d.db.groupArkDao().depositAddresses(key).single { it.requestId == requestId }.invoice, "device ${d.index}")
+            assertTrue(fixture.lines(d, ChatMessage.TYPE_WAVELENGTH_REFUSED).any { "isn't what was asked for" in it.content })
+        }
+    }
+
+    @Test
+    fun `an invoice for another chain isn't, nor an address for an invoice`() = runBlocking<Unit> {
+        val (all, wallet) = elected()
+        val requestId = askedForInvoice(all[1], all, wallet, 2_500)
+        val mainnet = Bolt11Invoice.create(Chain.Mainnet, 2_500_000.msat, randomBytes32(), PrivateKey(ByteVector32("11".repeat(32))), Either.Left("x"), CltvExpiryDelta(18), Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory), randomBytes32()).write()
+        answered(all, wallet, mainnet)
+        assertNull(all[2].db.groupArkDao().depositAddresses(key).single { it.requestId == requestId }.invoice)
+    }
+
+    @Test
+    fun `one hash can't be two members', since that's whose a payment is`() = runBlocking<Unit> {
+        val (all, wallet) = elected()
+        val hash = randomBytes32()
+        val first = askedForInvoice(all[1], all, wallet, 2_500)
+        answered(all, wallet, invoice(2_500, hash))
+        val second = askedForInvoice(all[2], all, wallet, 2_500)
+        answered(all, wallet, invoice(2_500, hash))
+        val rows = all[3].db.groupArkDao().depositAddresses(key)
+        assertNotNull(rows.single { it.requestId == first }.invoice)
+        assertNull(rows.single { it.requestId == second }.invoice)
+    }
+
+    @Test
+    fun `an invoice that can't be made yet is tried again, once there are signatures to make it with`() = runBlocking<Unit> {
+        val (all, wallet) = elected()
+        val requestId = askedForInvoice(all[1], all, wallet, 2_500)
+        val asked = HashSet<String>()
+        GroupWavelengthDeposits.answerOutstanding(all[0].db, all[0].room, all[0].publicKey, wallet, 1, asked, newInvoice = { error("the group didn't answer") }) { error("no address") }
+        assertTrue(requestId !in asked)
+        val made = invoice(2_500)
+        GroupWavelengthDeposits.answerOutstanding(all[0].db, all[0].room, all[0].publicKey, wallet, 1, asked, newInvoice = { made }) { error("no address") }
+        assertEquals(made, all[0].db.groupArkDao().depositAddresses(key).single { it.requestId == requestId }.invoice)
+    }
+
+    @Test
+    fun `a settled claim is the deposit of whoever was given its hash, and any other is nobody's yet`() = runBlocking<Unit> {
+        val (all, wallet) = elected()
+        val device = all[0]
+        val dao = device.db.groupArkDao()
+        val requestId = askedForInvoice(all[1], all, wallet, 2_500)
+        answered(all, wallet, invoice(2_500))
+        val hash = dao.depositAddresses(key).single { it.requestId == requestId }.paymentHash!!
+        dao.upsertClaim(GroupArkClaim(key, "ark1", hash, 2_400))
+        dao.upsertClaim(GroupArkClaim(key, "ark2", "cd".repeat(32), 700))
+        val chain = GroupWalletStatementEvent.chainName(fixture.chain)
+        assertTrue(device.db.depositDao().inRoom(fixture.roomId, chain).isEmpty(), "not before it has settled")
+
+        GroupArkCoSigner.settled(device.db, key, "ark1")
+        GroupArkCoSigner.settled(device.db, key, "ark2")
+        GroupArkCoSigner.settled(device.db, key, "something else")
+        val rows = device.db.depositDao().inRoom(fixture.roomId, chain)
+        val mine = rows.single { it.member != null }
+        assertEquals(all[1].publicKey.lowercase(), mine.member)
+        assertEquals(DepositRow.WAVELENGTH, mine.source)
+        assertEquals(2_400_000, mine.amountMsat, "what the claim kept, not what the invoice said")
+        assertEquals(2, rows.size)
+        assertEquals(2_400_000, DepositLedger.tallies(device.db, fixture.roomId, fixture.chain).members.getValue(all[1].publicKey.lowercase()).wavelengthMsat)
+        assertNull(dao.claim(key, "ark1"))
     }
 }

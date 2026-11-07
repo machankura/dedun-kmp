@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollo
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import engineering.lightning.wavelength.HostedWalletClient
 import engineering.lightning.wavelength.Network
+import engineering.lightning.wavelength.ReceiveRequest
 import engineering.lightning.wavelength.RuntimeConfig
 import engineering.lightning.wavelength.SendRequest
 import engineering.lightning.wavelength.WatchOnlyWalletRequest
@@ -166,6 +167,10 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
     /** A new address for the group's boarding key, from the running daemon, which every device checks before believing. */
     suspend fun newBoardingAddress(): String = client.deposit().address
 
+    /** An invoice for [amountSat], made by the running daemon. It takes the group's signatures, so it gets longer than a personal wallet's. */
+    suspend fun newInvoice(amountSat: Long): String =
+        client.receive(ReceiveRequest(amountSat, timeoutSeconds = INVOICE_TIMEOUT.inWholeSeconds)).invoice
+
     /** Pays an invoice the group approved. Every signature this needs is still the group's to give, and credit stays closed (D10). */
     suspend fun pay(invoice: String, maxFeeSat: Long) {
         client.send(SendRequest.Invoice(invoice, maxFeeSat = maxFeeSat, maxCreditSat = 0, maxCreditTopupSat = 0))
@@ -207,6 +212,9 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
 
         /** Shorter, so that silence from the group reaches the daemon as a refusal rather than as a lost connection. */
         val TRANSPORT_TIMEOUT = 50.seconds
+
+        /** Two group signatures on signet, each up to [TRANSPORT_TIMEOUT]. */
+        val INVOICE_TIMEOUT = 120.seconds
 
         private const val PASSWORD_TAG = "dedun/group-wavelength/wallet-password/v1"
 

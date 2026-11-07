@@ -54,6 +54,7 @@ class GroupWavelengthTermsReader(base: HttpClient = HttpClient(platformHttpClien
                 boardingDelay = info.getValue("boarding_exit_delay").jsonPrimitive.long,
                 boardingConfirmations = number("min_confirmations").toInt(),
                 minBoardingSat = number("min_boarding_amount"),
+                minVtxoSat = number("min_vtxo_amount_sat"),
                 minOperatorFeeSat = number("min_operator_fee"),
                 maxVtxoSat = number("max_vtxo_amount"),
                 maxWalletSat = number("max_user_balance"),

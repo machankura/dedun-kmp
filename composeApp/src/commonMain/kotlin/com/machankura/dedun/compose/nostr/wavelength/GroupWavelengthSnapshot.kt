@@ -41,10 +41,10 @@ data class GroupWavelengthSnapshot(
 @Serializable
 data class GroupWavelengthStopped(val wallet: String, val term: Long, val exitsUnderWay: Int = 0, val paymentsInFlight: Int = 0)
 
-/** A member asking for an address to pay the wallet at, kind 30380. Who's asking is who sent it. */
+/** A member asking for an address to pay the wallet at, kind 30380, or an invoice for [invoiceAmountSat]. Who's asking is who sent it. */
 @Serializable
-data class GroupWavelengthDepositRequest(val requestId: String, val wallet: String)
+data class GroupWavelengthDepositRequest(val requestId: String, val wallet: String, val invoiceAmountSat: Long? = null)
 
 /** The operator's answer, kind 30381, which every device checks is an address of the group's before believing it's the requester's. */
 @Serializable
-data class GroupWavelengthDepositAnswer(val requestId: String, val wallet: String, val term: Long, val address: String)
+data class GroupWavelengthDepositAnswer(val requestId: String, val wallet: String, val term: Long, val address: String = "", val invoice: String? = null)

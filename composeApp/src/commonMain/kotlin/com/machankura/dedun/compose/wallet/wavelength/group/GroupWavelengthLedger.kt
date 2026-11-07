@@ -21,6 +21,14 @@ data class GroupWavelengthLedger(
     val isEmpty: Boolean get() = coins == 0
 
     companion object {
+        /**
+         * The soonest [rows] run out, by this device's own count where it has one, and otherwise by [saidExpiry], what the operator's daemon
+         * says of a coin by its outpoint. A claimed Lightning payment has no batch this device saw confirm, so for those that's all there is, and
+         * an operator lying later than the truth about them only gets the warning late.
+         */
+        fun earliestExpiry(rows: List<GroupArkVtxo>, saidExpiry: Map<String, Long>): Long? =
+            rows.filter { it.settled && !it.spent }.mapNotNull { it.expiresAtHeight ?: saidExpiry[it.outpoint] }.minOrNull()
+
         fun of(rows: List<GroupArkVtxo>): GroupWavelengthLedger {
             val live = rows.filter { !it.spent }
             val settled = live.filter { it.settled }

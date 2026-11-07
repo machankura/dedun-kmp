@@ -742,6 +742,8 @@ class ArkPolicyJvmTest {
         allowed(fixtures.claimCheckpoint, ArkPolicy.What.TRANSFER, context(known = emptyMap()))
         assertEquals(30_000L, ark.effect!!.credits.values.single(), "and the new VTXO is pending")
         assertEquals(emptyList(), ark.effect!!.reserves, "and no coin of the group's is given up")
+        assertNotNull(ark.effect!!.claimedHash, "and it's a Lightning payment, by its hash, which is whose deposit it is")
+        assertEquals(30_000L, ark.effect!!.claimedSat, "for what it keeps")
     }
 
     /** A claim whose transfer is changed, with its digest no longer claimed. */

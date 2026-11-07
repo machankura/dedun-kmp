@@ -388,8 +388,8 @@ class GroupWavelengthWalletJvmTest {
 
     @Test
     fun `the terms this build proposes under are the ones a real operator sent`() {
-        val mainnet = """{"pubkey":"Axm1Ki1Wc+WPk7rT1bpZ2FVl8li8PakIe3ZZ5n3MIpsX","boarding_exit_delay":512,"vtxo_exit_delay":144,"min_boarding_amount":"1000","max_vtxo_amount":"50000","min_confirmations":6,"min_operator_fee":"1000","max_user_balance":"300000","free_refresh_window_blocks":648}"""
-        val signet = """{"pubkey":"A302LPU/X+OrdSl04rgAgwI1nPeuQqXzFscvkERQjzC5","boarding_exit_delay":512,"vtxo_exit_delay":144,"min_boarding_amount":"1000","max_vtxo_amount":"200000","min_confirmations":1,"min_operator_fee":"1000","max_user_balance":"100000000","free_refresh_window_blocks":504}"""
+        val mainnet = """{"pubkey":"Axm1Ki1Wc+WPk7rT1bpZ2FVl8li8PakIe3ZZ5n3MIpsX","boarding_exit_delay":512,"vtxo_exit_delay":144,"min_boarding_amount":"1000","min_vtxo_amount_sat":"1000","max_vtxo_amount":"50000","min_confirmations":6,"min_operator_fee":"1000","max_user_balance":"300000","free_refresh_window_blocks":648}"""
+        val signet = """{"pubkey":"A302LPU/X+OrdSl04rgAgwI1nPeuQqXzFscvkERQjzC5","boarding_exit_delay":512,"vtxo_exit_delay":144,"min_boarding_amount":"1000","min_vtxo_amount_sat":"1000","max_vtxo_amount":"200000","min_confirmations":1,"min_operator_fee":"1000","max_user_balance":"100000000","free_refresh_window_blocks":504}"""
         assertEquals(GroupWavelengthTerms.of(Chain.Mainnet), GroupWavelengthTermsReader.parse(mainnet))
         assertEquals(GroupWavelengthTerms.of(Chain.Signet), GroupWavelengthTermsReader.parse(signet))
         assertNull(GroupWavelengthTermsReader.parse("not an answer"))

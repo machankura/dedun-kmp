@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
@@ -279,6 +280,7 @@ object GroupArkCoSigner {
     suspend fun settled(database: DedunDatabase, key: String, origin: String) {
         database.groupArkDao().settle(key, origin)
         database.groupArkDao().spendReservedBy(key, origin)
+        GroupWavelengthDeposits.claimSettled(database, key, origin)
     }
 
     /**
@@ -517,6 +519,7 @@ object GroupArkCoSigner {
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }
         effect.reserves.forEach { outpoint -> known[outpoint]?.let { dao.upsertVtxo(it.copy(reservedBy = effect.towards, term = term)) } }
+        effect.claimedHash?.let { dao.upsertClaim(GroupArkClaim(key, effect.towards, it.toHex(), effect.claimedSat)) }
         effect.boarded.forEach { dao.upsertBoarded(GroupArkBoarded(key, it.outpoint, effect.towards, it.amountSat, it.script.toHex())) }
         // A credit never overwrites: what this device has already seen settle isn't for a note to change.
         // A transfer makes coins in the batches it spent from, so they go no later than the soonest of those.

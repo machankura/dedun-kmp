@@ -6,6 +6,7 @@ import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -225,7 +226,7 @@ class GroupWavelengthWalletScreenJvmTest {
         setContent {
             DedunTheme {
                 ProvideSnackbarHost {
-                    GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Ready("bc1paddress", GroupWavelengthTerms.of(Chain.Mainnet), 2_000, 60_000), Chain.Mainnet)
+                    GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(address = "bc1paddress", terms = GroupWavelengthTerms.of(Chain.Mainnet), maxRoundFeeSat = 2_000, roomLeftSat = 60_000), Chain.Mainnet)
                 }
             }
         }
@@ -250,7 +251,7 @@ class GroupWavelengthWalletScreenJvmTest {
     @Test
     fun `asking gets an address, from the wallet's screen too`() = runDesktopComposeUiTest(phone, 1400) {
         var asked = 0
-        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.CanAsk, Chain.Mainnet, onAsk = { asked++ }) } } }
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(), Chain.Mainnet, onAsk = { asked++ }) } } }
         onNodeWithText("Get an address").performClick()
         assertEquals(1, asked)
     }
@@ -347,5 +348,37 @@ class GroupWavelengthWalletScreenJvmTest {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(departed = listOf("f".repeat(64)), canOpenNew = true), Chain.Signet, onOpenWallet = { opened++ }) } } }
         onNodeWithText("Open a new Wavelength wallet").performClick()
         assertEquals(1, opened)
+    }
+
+    private val lightningTerms = GroupWavelengthTerms.of(Chain.Mainnet)
+
+    @Test
+    fun `Lightning says first that the operator makes the invoice, and asks for an amount`() = runDesktopComposeUiTest(phone, 1400) {
+        var asked: Long? = null
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(terms = lightningTerms, roomLeftSat = 30_000), Chain.Mainnet, onAskInvoice = { asked = it }) } } }
+        onNodeWithText("Lightning").performClick()
+        onNodeWithText("Whoever runs the wallet makes this invoice, and your device can't confirm where it pays. Only use it if you trust them with this amount.").assertIsDisplayed()
+        onNodeWithText("At least 1,000 sats, and no more than 30,000.").assertIsDisplayed()
+        onNodeWithText("Amount in sats").performTextInput("2500")
+        onNodeWithText("Get an invoice").performClick()
+        assertEquals(2_500L, asked)
+    }
+
+    @Test
+    fun `an invoice is shown with what was checked of it, and too few devices is said`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(invoice = "lnbc1theinvoice", invoiceAmountSat = 2_500, terms = lightningTerms, enoughSeen = false), Chain.Mainnet) } } }
+        onNodeWithText("Lightning").performClick()
+        onNodeWithText("lnbc1theinvoice").assertIsDisplayed()
+        onNodeWithText("Your device checked that this invoice is for 2,500 sats. What's paid counts as yours once the group has claimed it.").assertIsDisplayed()
+        onNodeWithText("Enough of the group's devices have to be online to claim a payment", substring = true).assertIsDisplayed()
+        onNodeWithText("Get another invoice").assertIsDisplayed()
+    }
+
+    @Test
+    fun `asking for an invoice says it's waiting on whoever runs the wallet`() = runDesktopComposeUiTest(phone, 1200) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(invoiceAsked = true, terms = lightningTerms), Chain.Mainnet) } } }
+        onNodeWithText("Lightning").performClick()
+        onNodeWithText("Asked. The invoice comes from whoever runs the wallet", substring = true).assertIsDisplayed()
+        assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Get an invoice")).fetchSemanticsNodes().size)
     }
 }

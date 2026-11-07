@@ -296,7 +296,7 @@ class GroupWavelengthRunner(
 
     /** What the group has asked of whoever runs the wallet. Each failure is its own, and none reaches the daemon. */
     private suspend fun act(live: Running) {
-        runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term, live.answered) { daemon.newBoardingAddress() } }
+        runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term, live.answered, newInvoice = { daemon.newInvoice(it) }) { daemon.newBoardingAddress() } }
             .onFailure { logger.w(it) { "Couldn't answer a request for a deposit address" } }
         runCatching { payApproved(live) }.onFailure { logger.w(it) { "Couldn't look at what the group approved" } }
         runCatching { leaveIfAsked(live) }.onFailure { logger.w(it) { "Couldn't look at whether to leave" } }
@@ -314,8 +314,10 @@ class GroupWavelengthRunner(
         val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, number)
         val tip = live.lastReport?.tip
         // Only the coins that are this close, and which the daemon still has: one old coin is no reason to send a new deposit straight out.
+        // Its own daemon's word for a coin this device has no count for, which here is the word of the device that's about to act on it.
+        val said = live.lastReport?.coins.orEmpty().filter { it.batchExpiry > 0 }.associate { it.outpoint to it.batchExpiry }
         val urgent = if (tip == null) emptySet() else database.groupArkDao().vtxos(walletKey)
-            .filter { coin -> coin.settled && !coin.spent && coin.expiresAtHeight?.let { it - tip <= WalletExpiry.URGENT_BLOCKS } == true }
+            .filter { coin -> coin.settled && !coin.spent && (coin.expiresAtHeight ?: said[coin.outpoint])?.let { it - tip <= WalletExpiry.URGENT_BLOCKS } == true }
             .map { it.outpoint }.toSet()
         if (!asked && urgent.isEmpty()) return
         val account = GroupWalletManager.walletFor(database, live.chatRoomId, live.chain, live.wallet.statement.onchainAccount)?.account ?: return

@@ -17,11 +17,23 @@ sealed interface GroupWavelengthReceiveUIState {
     /** On mainnet, at the cap every member's device holds it to. Asking would only lead to coins nobody signs for. */
     data object AtTheCap : GroupWavelengthReceiveUIState
 
-    data object CanAsk : GroupWavelengthReceiveUIState
-
-    /** Asked: the operator's device answers while it's running. */
-    data object Waiting : GroupWavelengthReceiveUIState
-
-    /** An address this device recomputed and believes is the group's. */
-    data class Ready(val address: String, val terms: GroupWavelengthTerms.Terms?, val maxRoundFeeSat: Long, val roomLeftSat: Long?) : GroupWavelengthReceiveUIState
+    /** What this member has asked for and been given, on each rail. Both come back only once this device has checked them. */
+    data class Loaded(
+        /** An address this device recomputed and believes is the group's, or null. */
+        val address: String? = null,
+        /** Asked for an address, and the operator's device hasn't answered. */
+        val addressAsked: Boolean = false,
+        /** The newest invoice it's been given, which it can't prove pays the group, and what it's for. */
+        val invoice: String? = null,
+        val invoiceAmountSat: Long? = null,
+        val invoiceAsked: Boolean = false,
+        val terms: GroupWavelengthTerms.Terms? = null,
+        val maxRoundFeeSat: Long = 0,
+        val roomLeftSat: Long? = null,
+        /** Whether enough of the group's devices have answered lately. A payment fails on the payer's side if they can't claim it in time. */
+        val enoughSeen: Boolean = true,
+    ) : GroupWavelengthReceiveUIState {
+        /** The most an invoice can be for: a coin's most, and what's left under the cap. */
+        val maxInvoiceSat: Long? get() = listOfNotNull(terms?.maxVtxoSat, roomLeftSat).minOrNull()
+    }
 }

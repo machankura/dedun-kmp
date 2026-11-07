@@ -9,6 +9,7 @@ import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkChecked
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
@@ -37,6 +38,18 @@ interface GroupArkDao {
 
     @Query("UPDATE GroupArkDepositAddress SET address = :address, script = :script WHERE wallet = :wallet AND requestId = :requestId AND address IS NULL")
     suspend fun answerDepositAddress(wallet: String, requestId: String, address: String, script: String)
+
+    @Query("UPDATE GroupArkDepositAddress SET invoice = :invoice, paymentHash = :paymentHash WHERE wallet = :wallet AND requestId = :requestId AND invoice IS NULL")
+    suspend fun answerDepositInvoice(wallet: String, requestId: String, invoice: String, paymentHash: String)
+
+    @Upsert
+    suspend fun upsertClaim(row: GroupArkClaim)
+
+    @Query("SELECT * FROM GroupArkClaim WHERE wallet = :wallet AND ark = :ark")
+    suspend fun claim(wallet: String, ark: String): GroupArkClaim?
+
+    @Query("DELETE FROM GroupArkClaim WHERE wallet = :wallet AND ark = :ark")
+    suspend fun forgetClaim(wallet: String, ark: String)
 
     @Query("SELECT * FROM GroupArkDepositAddress WHERE wallet = :wallet")
     suspend fun depositAddresses(wallet: String): List<GroupArkDepositAddress>

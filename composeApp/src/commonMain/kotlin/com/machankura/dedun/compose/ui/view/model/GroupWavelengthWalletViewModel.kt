@@ -172,7 +172,7 @@ class GroupWavelengthWalletViewModel(
         val leaveAsked = repository.leaveAsked(chatRoomId, chain, number)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
             uiState = it.copy(
-                expiry = if (tip != null) WalletExpiry.ofHeight(it.ledger.earliestExpiryHeight, tip, free) else it.expiry,
+                expiry = if (tip != null) WalletExpiry.ofHeight(GroupWavelengthLedger.earliestExpiry(it.coins, it.snapshot?.coins.orEmpty().filter { c -> c.batchExpiry > 0 }.associate { c -> c.outpoint to c.batchExpiry }), tip, free) else it.expiry,
                 seen = seen,
                 alarms = alarms,
                 feesSat = fees,

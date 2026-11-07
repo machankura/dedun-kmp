@@ -20,6 +20,8 @@ object GroupWavelengthTerms {
         /** Confirmations a boarding output needs before it can join a round. */
         val boardingConfirmations: Int,
         val minBoardingSat: Long,
+        /** The least a coin can hold. Below this a receive would land as credit, which no threshold guards (D10). */
+        val minVtxoSat: Long,
         val minOperatorFeeSat: Long,
         val maxVtxoSat: Long,
         val maxWalletSat: Long,
@@ -41,6 +43,7 @@ object GroupWavelengthTerms {
         boardingDelay = 512,
         boardingConfirmations = 6,
         minBoardingSat = 1_000,
+        minVtxoSat = 1_000,
         minOperatorFeeSat = 1_000,
         maxVtxoSat = 50_000,
         maxWalletSat = 300_000,
@@ -53,6 +56,7 @@ object GroupWavelengthTerms {
         boardingDelay = 512,
         boardingConfirmations = 1,
         minBoardingSat = 1_000,
+        minVtxoSat = 1_000,
         minOperatorFeeSat = 1_000,
         maxVtxoSat = 200_000,
         maxWalletSat = 100_000_000,

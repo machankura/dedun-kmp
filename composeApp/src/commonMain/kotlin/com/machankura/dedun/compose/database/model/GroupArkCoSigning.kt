@@ -105,11 +105,20 @@ data class GroupArkDepositAddress(
     val requestedAt: Instant,
     val address: String? = null,
     val script: HexKey? = null,
+    /** What a Lightning request asks for, or null for a boarding address. */
+    val invoiceAmountSat: Long? = null,
+    /** The operator's answer to a Lightning request, whose amount this device has read. Nothing can prove where it pays: spike 6. */
+    val invoice: String? = null,
+    val paymentHash: HexKey? = null,
 )
 
 /** A boarding coin this device signed into a round it hasn't seen happen: it becomes a deposit when the round does. */
 @Entity(primaryKeys = ["wallet", "commitment", "outpoint"])
 data class GroupArkBoarded(val wallet: String, val outpoint: String, val commitment: String, val amountSat: Long, val script: HexKey)
+
+/** A Lightning payment this device has signed the claim of and not seen settle. [amountSat] is what the claim itself keeps. */
+@Entity(primaryKeys = ["wallet", "ark"])
+data class GroupArkClaim(val wallet: String, val ark: String, val paymentHash: HexKey, val amountSat: Long)
 
 /** How far one participant says it has answered. */
 @Entity(primaryKeys = ["wallet", "participant"])

@@ -13,7 +13,7 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 | 3 | done, in `jvmTest` only, over the SDK's fake: `GroupWavelengthRunner`, `GroupWavelengthProcess`, the holder in `IdentityWavelength`, `GroupWavelengthService`. **The service has never started on a device.** The type is `specialUse`, from memory of Android 15's limits, and still needs checking |
 | 4 | **not run, by decision:** it waits until everything is merged and pushed. It needs fresh signet coins |
 | 5 | done, in `jvmTest` only: snapshot, comparison, deadlines, who's been seen, two panes, Advanced, transcript lines |
-| 6 | done, for boarding. Lightning receive isn't built (question 3) |
+| 6 | done, for boarding and, by decision on 7 November 2026, over Lightning. An invoice is the operator's word for where it pays, and the screen says so first |
 | 7 | done, with payouts-only now enforced on this wallet. Off on mainnet. Nobody has read the new rule but a reviewer that isn't a person (below) |
 | 8 | done except the part that matters most: **a unilateral exit still hasn't run.** Its screen is there, signet only |
 | 9 | done, by leaving through the onchain wallet (below) |
@@ -35,7 +35,7 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 
 **Still open from that reading, and not fixed here:**
 - **A hostile operator can still get a forfeit signed for a made-up round, up to the 2,000 sats of the fee cap, using any confirmed transaction as its commitment.** It also marks that coin spent on the ledger. A device has no way to tell a real commitment from any other confirmed transaction with the right outputs. That predates this work and needs the outside review the wallet note asks for.
-- **A coin from a Lightning claim has no deadline a device can work out.** It shows no deadline rather than a wrong one. Nothing here receives over Lightning yet.
+- **A coin from a Lightning claim has no deadline a device can work out,** so for those coins the screen and the automatic leave go by what the operator's daemon says, and no transcript line warns about them. An operator lying about them gets the warning late.
 - **While a device runs a group's wallet, the person's own wallet doesn't renew in the background.** The nomination says so, and to open it every few days.
 
 **What the first real run found.** On 7 November 2026, four emulators opened a real wallet on mainnet from the screens, with no coins in it, and got as far as an elected operator. The first request failed, and a test couldn't have shown either reason, since the fixtures deliver messages in order:
@@ -44,6 +44,8 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 |---|---|---|
 | **a device refused a request that arrived before round one did** | the operator only knows what it has seen itself, and relays don't keep order. Two devices wrote "round one this device hasn't seen published" within a second of each other and never came back to it, so the daemon's first recovery signature failed after 50 s. In a real round that uses up the 60-second window, and costs everyone in the round | a device waits, says nothing, and answers when round one arrives. Nonces nobody published now get silence where they got a refusal line: still no share, and the daemon sees the same timeout |
 | **a failed open looked like a finished one** | "has this wallet opened before" meant "does its directory exist", and a scan that fails partway leaves one. So the retry skipped the scan. An empty wallet doesn't care. A new operator taking over a funded one would have opened without finding its coins | a marker written only once an open has finished. Reopening an existing directory with a scan is what the personal wallet's *look for more coins* does, and a hosted wallet hasn't been seen doing it |
+
+**Lightning receive, by decision.** A member asks for an amount, the operator's daemon makes the invoice, and every device checks the chain, the amount and that the hash is nobody else's. A payment becomes a deposit when a device has signed its claim and seen it settle, for what the claim actually kept. A claim needs the Ark server's co-signature to settle, so a hostile operator can't invent one as it could a boarding coin. An amount below a coin's least is refused, since it would land as credit (D10). **It has only ever run on signet, through the harness, and never through this code:** the invoice the mainnet server issued on 6 November was never paid.
 
 **What the plan said, and what it turned out to be:**
 
@@ -111,7 +113,7 @@ Each row is a known gap from the wallet note, and what the UI does about it unti
 |---|---|
 | **a funded vHTLC has no way back but the cooperative refund, which has only met fixtures** | *Pay out* over Lightning stays off on mainnet. The wallet note says this path *"isn't ready for anything but signet"* |
 | **a unilateral exit has never run on any network** | no emergency-exit button until one has run on signet (Phase 8). The Advanced screen says it hasn't been tested |
-| **an invoice can't be proven to pay the group** (spike 6) | the first receive option is boarding, whose address each member recomputes. Lightning receive is an owner decision (question 3) |
+| **an invoice can't be proven to pay the group** (spike 6) | built anyway, by the owner's decision (question 3): the receive screen says first that whoever runs the wallet makes the invoice and a device can't confirm where it pays. A device checks everything else: the chain, the amount, and that the hash is nobody else's |
 | **the operator can hand out or report anything** | every figure from a snapshot is labelled as the operator's, and compared with the device's ledger |
 | **the ledger misses things.** A restored device starts empty, and coins sent by anyone else aren't in it | the balance says *what your device has signed*. An empty ledger beside a non-empty report says this device can't confirm the figure, not that the wallet is empty |
 | **a transfer aborted after the Ark signature stays reserved until the term ends** | shown as *held until the next operator*, with a way to nominate |
@@ -352,7 +354,7 @@ As `GroupLightningWalletScreen` does it, once the wallet note's Phase 13 exists:
 
 1. ~~Which network does the first build offer?~~ **Decided: mainnet and signet.** A unilateral exit still hasn't run and a payment's refund still hasn't been tested, so Lightning payouts stay off on mainnet until the refund has run (see "What the screens may not promise"). Money can still leave a mainnet wallet by leaving to the onchain wallet. Rolling back gets hard with the first mainnet coin (`group-wavelength-wallet.md`, Phase 14).
 2. **Who pays renewal and exit costs under payouts-only?** The wallet note's open question 3, and Phase 6 can't finish without it. Pro rata by balance is the likely answer.
-3. **Is Lightning receive allowed with no way to prove an invoice pays the group?** A hostile operator can hand a depositor one that pays itself. **Recommended: boarding only, with Lightning receive on signet for testing,** until spike 6 has an answer. Payout over Lightning doesn't have this problem, since a quorum approves it.
+3. ~~Is Lightning receive allowed with no way to prove an invoice pays the group?~~ **Decided: yes, with a warning.** A hostile operator can hand a depositor an invoice that pays itself, with no group signature ever asked for, and spike 6 still has no answer. That's bounded by what a depositor sends it, and by the cap. Payout over Lightning doesn't have this problem, since a quorum approves it.
 4. **What bar does Phase 4 have to clear?** I suggested 30 seconds in 19 of 20 rounds. A miss costs other people in that round too, so the number is partly about them.
 5. **Does a group really want both Lightning and Ark?** The wallet note's question 4. If this replaces one, the entry row and Phase 9 change. It's cheapest to answer before Phase 2.
 6. **Can Phase 4 use your signet coins again?** They come by hand, since signet has no faucet API. The last run's seed should be treated as exposed, so these need a fresh wallet.

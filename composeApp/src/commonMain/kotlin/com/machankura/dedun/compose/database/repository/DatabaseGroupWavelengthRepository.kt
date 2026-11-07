@@ -112,6 +112,9 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String =
         GroupWavelengthDeposits.request(database, localChatRoom, userPublicKey, wallet)
 
+    override suspend fun requestDepositInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, amountSat: Long): String =
+        GroupWavelengthDeposits.request(database, localChatRoom, userPublicKey, wallet, amountSat)
+
     override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> =
         database.groupArkDao().observeDepositAddresses(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { rows -> rows.filter { it.requester == member.lowercase() } }
 

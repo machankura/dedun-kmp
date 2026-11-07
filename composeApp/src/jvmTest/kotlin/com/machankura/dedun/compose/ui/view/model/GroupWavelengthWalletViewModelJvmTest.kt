@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.OTHER
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.key
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.wallet
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.Dispatchers
@@ -160,5 +161,15 @@ class GroupWavelengthWalletViewModelJvmTest {
         assertEquals(listOf("f".repeat(64)), state.departed)
         assertEquals(5_000, state.earlier.single().settledSat)
         assertTrue(!state.canOpenNew, "no way to propose from a device with no key")
+    }
+
+    @Test
+    fun `a coin with no count of this device's goes by what the daemon says, and one with a count never does`() {
+        val counted = GroupArkVtxo("w", "a:0", 1, settled = true, expiresAtHeight = 500)
+        val claimed = GroupArkVtxo("w", "b:0", 1, settled = true)
+        assertEquals(500, GroupWavelengthLedger.earliestExpiry(listOf(counted), mapOf("a:0" to 1L)), "the operator can't talk this device out of its own count")
+        assertEquals(300, GroupWavelengthLedger.earliestExpiry(listOf(counted, claimed), mapOf("b:0" to 300L)))
+        assertEquals(500, GroupWavelengthLedger.earliestExpiry(listOf(counted, claimed), emptyMap()))
+        assertEquals(null, GroupWavelengthLedger.earliestExpiry(listOf(claimed), emptyMap()))
     }
 }
