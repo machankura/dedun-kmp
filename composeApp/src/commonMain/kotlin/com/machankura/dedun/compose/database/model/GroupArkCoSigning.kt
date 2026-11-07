@@ -108,7 +108,7 @@ data class GroupArkDepositAddress(
 )
 
 /** A boarding coin this device signed into a round it hasn't seen happen: it becomes a deposit when the round does. */
-@Entity(primaryKeys = ["wallet", "outpoint"])
+@Entity(primaryKeys = ["wallet", "commitment", "outpoint"])
 data class GroupArkBoarded(val wallet: String, val outpoint: String, val commitment: String, val amountSat: Long, val script: HexKey)
 
 /** How far one participant says it has answered. */

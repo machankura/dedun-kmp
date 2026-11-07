@@ -13,7 +13,10 @@ import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.GroupChainClients
+import com.machankura.dedun.compose.extensions.toHex
 import fr.acinq.bitcoin.ByteVector
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.Transaction
 import fr.acinq.bitcoin.byteVector32
@@ -149,8 +152,33 @@ class GroupArkWatcher(
                 logger.i { "Round ${round.commitment} lost to a conflict: its coins are free again" }
                 GroupArkCoSigner.abandoned(database, round.wallet, round.commitment)
             }
-            standing.confirmations >= depth -> GroupArkCoSigner.roundSettled(database, round, standing.height)
+            standing.confirmations >= depth -> if (boardingHoldsUp(electrum, round)) GroupArkCoSigner.roundSettled(database, round, standing.height)
         }
+    }
+
+    /**
+     * Drops any boarding coin of [round] the chain doesn't bear out, and says whether this device can tell yet. A txid commits to what a
+     * transaction spends and not to what that held, so what a round's note says of a boarding coin is the operator's word until the
+     * coin's own parent is read: without this, a note about any confirmed transaction would make a deposit for whoever the operator liked.
+     */
+    private suspend fun boardingHoldsUp(electrum: IElectrumClient, round: GroupArkPendingRound): Boolean {
+        val dao = database.groupArkDao()
+        dao.boardedIn(round.wallet, round.commitment).forEach { coin ->
+            val parts = coin.outpoint.split(":")
+            val vout = parts.getOrNull(1)?.toIntOrNull() ?: return@forEach dao.forgetBoardedCoin(round.wallet, round.commitment, coin.outpoint)
+            val parent = electrum.getTx(TxId(ByteVector32(parts[0]))) ?: return false
+            val output = parent.txOut.getOrNull(vout)
+            if (output == null || output.amount.sat != coin.amountSat || output.publicKeyScript.toHex() != coin.script) {
+                dao.forgetBoardedCoin(round.wallet, round.commitment, coin.outpoint)
+                val reader = database.chatRoomDao().findChatRoomById(round.chatRoomId)?.chatRoom?.userPublicKey ?: return@forEach
+                GroupLightningLines.writeFact(
+                    database, round.chatRoomId, ChatMessage.TYPE_WAVELENGTH_REFUSED, "boarded:${coin.outpoint}", reader,
+                    "The Wavelength wallet's operator described a coin going into a round as something the chain says it isn't. Your device won't count it as anyone's deposit.",
+                    Clock.System.now(),
+                )
+            }
+        }
+        return true
     }
 
     /** Whether something other than [commitment] spent one of its inputs, at least [depth] deep. A conflict in the mempool settles nothing. */

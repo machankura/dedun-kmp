@@ -34,6 +34,8 @@ import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -114,6 +116,13 @@ class GroupWavelengthRunner(
         internal var lastReport: GroupWavelengthSnapshot? = null
         internal val attempted = HashSet<String>()
         internal val leaving = HashSet<String>()
+        internal val answered = HashSet<String>()
+
+        /**
+         * What's been sent to this daemon to do on its own time. The client is the process's one: anything left over once the daemon has been
+         * handed back would be asked of the person's own wallet, and would spend from it.
+         */
+        internal val jobs = ArrayList<Job>()
     }
 
     private var running: Running? = null
@@ -212,10 +221,6 @@ class GroupWavelengthRunner(
             say(elected, GroupWavelengthDaemonStatus.CatchingUp)
             return
         }
-        if (!slot.acquire(elected.name)) {
-            say(elected, GroupWavelengthDaemonStatus.PausedForPersonal)
-            return
-        }
         val statement = elected.wallet.statement
         val walletKey = GroupArkCoSigner.walletKey(roomId, elected.chain, elected.number)
         val coSigning = database.icebergCoSigningDao()
@@ -227,20 +232,36 @@ class GroupWavelengthRunner(
         val recovering = !daemon.hasOpened(statement)
 
         say(elected, GroupWavelengthDaemonStatus.WaitingForSigners)
+        // Only once the group's devices are ready: taking it sooner would stop and reopen the person's own wallet every few minutes while they aren't.
+        var acquired = false
+        var paused = false
         val outcome = try {
             daemon.open(database, elected.room, userPublicKey, elected.wallet, if (recovering) recoveryWindowFor(walletKey) else null, heard, now()) { transport ->
                 transport.provision(plainTo, treeTo)
                 transport.askFloors()
                 val ready = transport.awaitPool(plainFrom, treeFrom, poolWait)
-                if (ready) say(elected, if (recovering) GroupWavelengthDaemonStatus.Recovering else GroupWavelengthDaemonStatus.Opening)
-                ready
+                if (ready) {
+                    acquired = slot.acquire(elected.name)
+                    paused = !acquired
+                }
+                if (acquired) say(elected, if (recovering) GroupWavelengthDaemonStatus.Recovering else GroupWavelengthDaemonStatus.Opening)
+                acquired
             }
         } catch (e: CancellationException) {
+            // The profile's going away mid-open: nothing else will ever hand the daemon back.
+            withContext(NonCancellable) {
+                if (acquired) {
+                    runCatching { daemon.stop() }
+                    slot.release()
+                }
+            }
             throw e
         } catch (e: Exception) {
             logger.e("Could not open ${elected.name}'s wallet", e)
-            runCatching { daemon.stop() }
-            slot.release()
+            if (acquired) {
+                runCatching { daemon.stop() }
+                slot.release()
+            }
             say(elected, GroupWavelengthDaemonStatus.Failed)
             return
         }
@@ -253,8 +274,8 @@ class GroupWavelengthRunner(
                 running?.let { report(it) }
             }
             is GroupWavelengthDaemon.Outcome.Refused -> {
-                slot.release()
-                say(elected, GroupWavelengthDaemonStatus.Refused(outcome.reason))
+                if (acquired) slot.release()
+                say(elected, if (paused) GroupWavelengthDaemonStatus.PausedForPersonal else GroupWavelengthDaemonStatus.Refused(outcome.reason))
             }
         }
     }
@@ -275,7 +296,7 @@ class GroupWavelengthRunner(
 
     /** What the group has asked of whoever runs the wallet. Each failure is its own, and none reaches the daemon. */
     private suspend fun act(live: Running) {
-        runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term) { daemon.newBoardingAddress() } }
+        runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term, live.answered) { daemon.newBoardingAddress() } }
             .onFailure { logger.w(it) { "Couldn't answer a request for a deposit address" } }
         runCatching { payApproved(live) }.onFailure { logger.w(it) { "Couldn't look at what the group approved" } }
         runCatching { leaveIfAsked(live) }.onFailure { logger.w(it) { "Couldn't look at whether to leave" } }
@@ -292,18 +313,19 @@ class GroupWavelengthRunner(
         val asked = GroupWavelengthPayouts.signedExits(database, live.chatRoomId, live.chain, number).any { it.expiresAt > nowSeconds }
         val walletKey = GroupArkCoSigner.walletKey(live.chatRoomId, live.chain, number)
         val tip = live.lastReport?.tip
-        val earliest = GroupWavelengthLedger.of(database.groupArkDao().vtxos(walletKey)).earliestExpiryHeight
-        val free = GroupWavelengthTerms.of(live.chain)?.freeRefreshWindowBlocks ?: 0
-        val urgent = tip != null && WalletExpiry.ofHeight(earliest, tip, free).let { it is WalletExpiry.Urgent || it == WalletExpiry.Expired }
-        if (!asked && !urgent) return
+        // Only the coins that are this close, and which the daemon still has: one old coin is no reason to send a new deposit straight out.
+        val urgent = if (tip == null) emptySet() else database.groupArkDao().vtxos(walletKey)
+            .filter { coin -> coin.settled && !coin.spent && coin.expiresAtHeight?.let { it - tip <= WalletExpiry.URGENT_BLOCKS } == true }
+            .map { it.outpoint }.toSet()
+        if (!asked && urgent.isEmpty()) return
         val account = GroupWalletManager.walletFor(database, live.chatRoomId, live.chain, live.wallet.statement.onchainAccount)?.account ?: return
         val script = GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, 0).pubkeyScript
         val destination = Bitcoin.addressFromPublicKeyScript(live.chain.chainHash, Script.parse(script)).right ?: return
-        val coins = daemon.liveCoins().filter { live.leaving.add(it) }
+        val coins = daemon.liveCoins().filter { (asked || it in urgent) && live.leaving.add(it) }
         if (coins.isEmpty()) return
         logger.i { "Leaving ${live.chatRoomId.take(8)}'s wallet: ${if (asked) "the group asked" else "its coins are close to their deadline"}" }
         coins.forEach { outpoint ->
-            scope.launch { runCatching { daemon.leave(outpoint, destination) }.onFailure { logger.w(it) { "Leaving with ${outpoint.take(12)} didn't go" } } }
+            live.jobs += scope.launch { runCatching { daemon.leave(outpoint, destination) }.onFailure { logger.w(it) { "Leaving with ${outpoint.take(12)} didn't go" } } }
         }
     }
 
@@ -337,7 +359,7 @@ class GroupWavelengthRunner(
             .forEach { payment ->
                 val hash = payment.paymentHash?.toString()?.lowercase() ?: return@forEach
                 if (hash in alreadyGone || hash in reported || !live.attempted.add(hash)) return@forEach
-                scope.launch {
+                live.jobs += scope.launch {
                     runCatching { daemon.pay(payment.invoice, payment.maxFeeSat) }
                         .onFailure { logger.w(it) { "The payment for ${hash.take(12)} didn't go" } }
                 }
@@ -372,11 +394,15 @@ class GroupWavelengthRunner(
             val stopped = GroupWavelengthStopped(walletKey, live.term, runCatching { daemon.exitsUnderWay() }.getOrDefault(0), inFlight)
             runCatching {
                 val queued = GroupLightningWalletManager.queue(database, live.room, userPublicKey, GroupWavelengthEvents.STOPPED, CommonJson.encodeToString(GroupWavelengthStopped.serializer(), stopped))
-                GroupLightningLines.write(database, live.chatRoomId, queued.id, ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED, userPublicKey, GroupWavelengthReports.linesOfStopped(stopped), queued.createdAt)
+                GroupLightningLines.writeFact(database, live.chatRoomId, ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED, "$walletKey:${live.term}", userPublicKey, GroupWavelengthReports.linesOfStopped(stopped), queued.createdAt)
             }.onFailure { logger.w(it) { "Couldn't tell the room this device stopped" } }
         }
-        runCatching { daemon.stop() }.onFailure { logger.w(it) { "Stopping the group's daemon" } }
-        slot.release()
+        live.jobs.forEach { it.cancel() }
+        withContext(NonCancellable) {
+            runCatching { daemon.stop() }.onFailure { logger.w(it) { "Stopping the group's daemon" } }
+            live.jobs.forEach { it.join() }
+            slot.release()
+        }
         onHolding(null)
     }
 

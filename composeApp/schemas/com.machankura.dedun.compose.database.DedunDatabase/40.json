@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 40,
-    "identityHash": "a8cd60958205819891e49c16ea3b62c9",
+    "identityHash": "fd4b6dcd261ec32b18da75457e4f5cb2",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -2400,7 +2400,7 @@
       },
       {
         "tableName": "GroupArkBoarded",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `outpoint` TEXT NOT NULL, `commitment` TEXT NOT NULL, `amountSat` INTEGER NOT NULL, `script` TEXT NOT NULL, PRIMARY KEY(`wallet`, `outpoint`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wallet` TEXT NOT NULL, `outpoint` TEXT NOT NULL, `commitment` TEXT NOT NULL, `amountSat` INTEGER NOT NULL, `script` TEXT NOT NULL, PRIMARY KEY(`wallet`, `commitment`, `outpoint`))",
         "fields": [
           {
             "fieldPath": "wallet",
@@ -2437,6 +2437,7 @@
           "autoGenerate": false,
           "columnNames": [
             "wallet",
+            "commitment",
             "outpoint"
           ]
         }
@@ -6244,7 +6245,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a8cd60958205819891e49c16ea3b62c9')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fd4b6dcd261ec32b18da75457e4f5cb2')"
     ]
   }
 }

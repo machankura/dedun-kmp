@@ -32,6 +32,9 @@ import kotlin.time.Instant
 object GroupWavelengthDeposits {
     private val logger = Logger.withTag("GroupWavelengthDeposits")
 
+    /** Well inside the 512 keys a device checks an address against, shared among a group. */
+    private const val MAX_ADDRESSES_A_MEMBER = 16
+
     /** Asks for an address for [userPublicKey]. Whichever device hears the answer checks it. */
     suspend fun request(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String {
         val key = GroupArkCoSigner.walletKey(localChatRoom.chatRoom.id, wallet.statement.chain, wallet.statement.wallet)
@@ -59,14 +62,17 @@ object GroupWavelengthDeposits {
     private suspend fun fileRequest(database: DedunDatabase, chatRoomId: String, from: HexKey, request: GroupWavelengthDepositRequest, at: Instant) {
         val (chain, _) = GroupArkCoSigner.parseWalletKey(chatRoomId, request.wallet) ?: return
         if (from.lowercase() !in Depositors.statementsIn(database, chatRoomId, chain).keys.map { it.lowercase() }) return logger.w("A request for an address from someone who hasn't started depositing")
+        // A member can ask without limit, and each address is one more key the group's window has to cover.
+        if (database.groupArkDao().depositAddresses(request.wallet).count { it.requester == from.lowercase() } >= MAX_ADDRESSES_A_MEMBER) return logger.w("Too many addresses asked for by one member")
         database.groupArkDao().insertDepositAddress(GroupArkDepositAddress(request.wallet, request.requestId, from.lowercase(), at))
     }
 
     /** What the operator's device does with each request that's waiting. */
-    suspend fun answerOutstanding(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, term: Long, newAddress: suspend () -> String) {
+    suspend fun answerOutstanding(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, term: Long, asked: MutableSet<String> = HashSet(), newAddress: suspend () -> String) {
         val roomId = localChatRoom.chatRoom.id
         val key = GroupArkCoSigner.walletKey(roomId, wallet.statement.chain, wallet.statement.wallet)
-        database.groupArkDao().depositAddresses(key).filter { it.address == null }.forEach { row ->
+        // Each once a run, or one a device refuses would use up another address every time.
+        database.groupArkDao().depositAddresses(key).filter { it.address == null && asked.add(it.requestId) }.forEach { row ->
             val answer = GroupWavelengthDepositAnswer(row.requestId, key, term, newAddress())
             GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.DEPOSIT_ANSWER, CommonJson.encodeToString(GroupWavelengthDepositAnswer.serializer(), answer))
             receiveAnswer(database, roomId, userPublicKey, answer)

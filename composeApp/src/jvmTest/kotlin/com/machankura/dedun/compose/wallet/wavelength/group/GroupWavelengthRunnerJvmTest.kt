@@ -209,7 +209,7 @@ class GroupWavelengthRunnerJvmTest {
         runner.refresh()
         assertEquals(GroupWavelengthDaemonStatus.Refused(GroupWavelengthDaemon.Refusal.SIGNERS_NOT_READY), runner.observe(fixture.roomId, fixture.chain, 0).first())
         assertFalse(setup.runtime.isRunning())
-        assertEquals(1, slot.released, "and the person's wallet gets the daemon back meanwhile")
+        assertEquals(0, slot.held.size, "and the person's wallet was never asked for the daemon")
     }
 
     @Test
@@ -348,5 +348,31 @@ class GroupWavelengthRunnerJvmTest {
         setup.runner.refresh()
         withTimeoutOrNull(5.seconds) { while (exitRequests(setup).isEmpty()) delay(20) }
         assertEquals(1, exitRequests(setup).size, "nobody asked: its deadline did")
+    }
+
+    @Test
+    fun `an old coin near its deadline doesn't take a new one with it`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        setup.runtime.coinsSaid = """{"View":"vtxos","VTXOs":{"VTXOs":[{"Outpoint":"old:0","AmountSat":1000,"Status":"live"},{"Outpoint":"new:0","AmountSat":1000,"Status":"live"}],"Total":2}}"""
+        val key = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)
+        setup.all[0].db.groupArkDao().upsertVtxo(GroupArkVtxo(key, "old:0", 1_000, settled = true, expiresAtHeight = 100))
+        setup.all[0].db.groupArkDao().upsertVtxo(GroupArkVtxo(key, "new:0", 1_000, settled = true, expiresAtHeight = 100_000_000))
+        setup.pumped { setup.runner.refresh() }
+        setup.runner.refresh()
+        withTimeoutOrNull(5.seconds) { while (exitRequests(setup).isEmpty()) delay(20) }
+        delay(100)
+        assertEquals(1, exitRequests(setup).size)
+        assertTrue("old:0" in exitRequests(setup).single().second)
+    }
+
+    @Test
+    fun `devices that aren't ready leave the person's own wallet alone`() = runBlocking<Unit> {
+        val setup = opened()
+        elect(setup)
+        val slot = Slot()
+        runnerFor(setup.all[0], setup.runtime, slot, mutableListOf(), poolWait = 100.milliseconds).refresh()
+        assertEquals(0, slot.held.size, "it never asked for the daemon")
+        assertEquals(0, slot.released)
     }
 }

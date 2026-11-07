@@ -125,7 +125,7 @@ class GroupWavelengthWalletScreenJvmTest {
     fun `a signer who could run it is offered that, with what it does to their own wallet`() = runDesktopComposeUiTest(phone, 1200) {
         var nominated = 0
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(), Chain.Signet, onNominate = { nominated++ }) } } }
-        onNodeWithText("Your own Wavelength wallet can't be open while this device runs the group's. Opening yours pauses the group's for as long as you're in it.").assertIsDisplayed()
+        onNodeWithText("Your own Wavelength wallet can't be open while this device runs the group's. Opening yours pauses the group's for as long as you're in it, and yours only renews while it's open, so open it every few days.").assertIsDisplayed()
         onNodeWithText("Run this wallet on my device").performClick()
         assertEquals(1, nominated)
     }

@@ -54,7 +54,7 @@ class GroupWavelengthPayoutsJvmTest {
         return Event("00".repeat(32), "00".repeat(32), 0, template.kind, template.tags, template.content, "")
     }
 
-    private fun payment(sat: Long, payout: GroupWavelengthPaymentEvent.Payout?, expiresAt: Long = 4_000_000_000) =
+    private fun payment(sat: Long, payout: GroupWavelengthPaymentEvent.Payout?, expiresAt: Long = now + 3600) =
         GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(sat), 50, 500, expiresAt, payout)
 
     private suspend fun refused(device: GroupLightningFixture.Device, payment: GroupWavelengthPaymentEvent.Payment) =
@@ -148,5 +148,50 @@ class GroupWavelengthPayoutsJvmTest {
         all.forEach { assertEquals(1, GroupWavelengthPayouts.signedExits(it.db, fixture.roomId, fixture.chain, 0).size, "device ${it.index}") }
         assertTrue(GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).isEmpty())
         assertEquals("Leave the Wavelength wallet", ProposedEvent.summarize(event).label)
+    }
+
+    @Test
+    fun `an amount past all the bitcoin there is isn't a payment, and can't come out negative`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val hugeFee = GroupWavelengthPaymentEvent.template(GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(1_000), Long.MAX_VALUE, 500, now + 100, payout))
+        assertNull(GroupWavelengthPaymentEvent.read(hugeFee.tags), "a fee limit that would overflow")
+        assertEquals("isn't a payment this device can read", GroupWavelengthPayouts.refuse(all[0].db, fixture.roomId, Event("00".repeat(32), "00".repeat(32), 0, hugeFee.kind, hugeFee.tags, "", "")))
+        // 100,000,000 whole bitcoin, as an invoice can say and a Long multiplied by it can't hold.
+        val decoded = GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(1_000).replace("10u", "100000000"), 0, 0, 0)
+        assertNull(decoded.amountSat)
+    }
+
+    @Test
+    fun `a second approval for a hash isn't signed, and whichever was first is what's paid and charged`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val first = payment(1_000, payout)
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(first).tags, "", createdAt = now)
+        val again = first.copy(maxFeeSat = 5_000)
+        assertEquals("pays a hash the group has already approved", refused(all[0], again))
+        fixture.fileSignedAsRoom(all, GroupWavelengthPaymentEvent.KIND, GroupWavelengthPaymentEvent.template(again).tags, "", createdAt = now + 1)
+        assertEquals(first.maxSat, GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet)[first.paymentHash!!]?.maxSat)
+        assertEquals(first.maxSat, GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(all[1].publicKey.lowercase()).openSat)
+    }
+
+    @Test
+    fun `an approval can't stand for ever, and nor can a request to leave`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        assertTrue("longer than" in refused(all[0], payment(1_000, payout, expiresAt = 4_000_000_000)).orEmpty())
+        val forever = GroupWavelengthExitEvent.template(GroupWavelengthExitEvent.Exit(fixture.chain, 0, 4_000_000_000, now))
+        assertTrue("longer than" in GroupWavelengthPayouts.refuse(all[0].db, fixture.roomId, Event("00".repeat(32), "00".repeat(32), 0, forever.kind, forever.tags, "", "")).orEmpty())
+    }
+
+    @Test
+    fun `two proposals being signed at once can't each pass against one balance, and approving looks again`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val payout = fixture.payable(all, all[1], wallet, 10_000)
+        val first = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000), 50, 500, now + 3600, payout)
+        fixture.pump(all, com.machankura.dedun.compose.nostr.frost.FrostSigningEvents.ALL)
+        assertNotNull(all[2].db.frostSigningSessionDao().getSessionById(first.id), "the first is in")
+        assertTrue("more being signed" in refused(all[2], payment(6_000, payout)).orEmpty())
+        assertTrue(runCatching { GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, invoice(6_000), 50, 500, now + 3600, payout) }.isFailure, "nor on the proposer's own device")
     }
 }

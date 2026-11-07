@@ -2960,6 +2960,15 @@ object FrostSigningManager {
             }
         }
 
+        // And a Wavelength payment again at approval: what a balance could bear may have changed since it arrived.
+        items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }.filter { it.kind == GroupWavelengthPaymentEvent.KIND }.forEach { payment ->
+            GroupWavelengthPayouts.refuse(database, session.chatRoomId, payment)?.let { reason ->
+                logger.w("Session $sessionId carries a Wavelength payment that $reason; declining instead of signing")
+                decline(database, localChatRoom, sessionId)
+                return
+            }
+        }
+
         update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
 
         logger.i("Session $sessionId: signing approved")

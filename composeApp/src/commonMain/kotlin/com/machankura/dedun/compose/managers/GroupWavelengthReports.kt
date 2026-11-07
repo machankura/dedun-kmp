@@ -83,7 +83,8 @@ object GroupWavelengthReports {
         val stopped = CommonJson.decodeFromString(GroupWavelengthStopped.serializer(), event.content)
         val (chain, number) = GroupArkCoSigner.parseWalletKey(chatRoomId, stopped.wallet) ?: return
         if (GroupWavelengthOperatorManager.ofTerm(database, chatRoomId, chain, number, stopped.term)?.publicKey != event.pubKey.lowercase()) return
-        GroupLightningLines.write(database, chatRoomId, event.id, ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED, event.pubKey, linesOfStopped(stopped), Instant.fromEpochSeconds(event.createdAt))
+        // Once a term, however many times it's said.
+        GroupLightningLines.writeFact(database, chatRoomId, ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED, "${stopped.wallet}:${stopped.term}", event.pubKey, linesOfStopped(stopped), Instant.fromEpochSeconds(event.createdAt))
     }
 
     /** What a stopped operator's line says, on the device that sent it and the ones that heard it. */

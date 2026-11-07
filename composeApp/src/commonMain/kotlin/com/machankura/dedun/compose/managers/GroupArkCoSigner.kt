@@ -121,9 +121,8 @@ object GroupArkCoSigner {
         database.icebergKeySessionDao().getSessionById(wallet.statement.ceremonyId)?.let(IcebergRitualManager::shareOf)
 
     private suspend fun walletOf(database: DedunDatabase, chatRoomId: String, key: String): GroupWavelengthWalletManager.Wallet? {
-        val parts = key.removePrefix("wavelength:").split(":").takeIf { it.size >= 3 } ?: return null
-        val chain = GroupWalletStatementEvent.chainNamed(parts[parts.size - 2]) ?: return null
-        val number = parts.last().toLongOrNull() ?: return null
+        // This room's and no other's: an operator here says nothing about a wallet in another room this device is also in.
+        val (chain, number) = parseWalletKey(chatRoomId, key) ?: return null
         return GroupWavelengthWalletManager.wallets(database, chatRoomId, chain).firstOrNull { it.statement.wallet == number }
     }
 
@@ -511,7 +510,8 @@ object GroupArkCoSigner {
         effect.boarded.forEach { dao.upsertBoarded(GroupArkBoarded(key, it.outpoint, effect.towards, it.amountSat, it.script.toHex())) }
         // A credit never overwrites: what this device has already seen settle isn't for a note to change.
         // A transfer makes coins in the batches it spent from, so they go no later than the soonest of those.
-        val inherited = effect.reserves.mapNotNull { known[it]?.expiresAtHeight }.minOrNull()
+        // And if this device can't say for one of them, it can't say.
+        val inherited = effect.reserves.map { known[it]?.expiresAtHeight }.takeIf { it.isNotEmpty() && null !in it }?.filterNotNull()?.min()
         effect.credits.forEach { (outpoint, amount) ->
             if (outpoint !in known) dao.upsertVtxo(GroupArkVtxo(key, outpoint, amount, origin = effect.towards, term = term, sweepDelay = effect.sweepDelay, expiresAtHeight = inherited))
         }

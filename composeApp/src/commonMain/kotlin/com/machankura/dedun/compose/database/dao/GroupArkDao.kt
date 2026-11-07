@@ -53,6 +53,9 @@ interface GroupArkDao {
     @Query("DELETE FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment")
     suspend fun forgetBoarded(wallet: String, commitment: String)
 
+    @Query("DELETE FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment AND outpoint = :outpoint")
+    suspend fun forgetBoardedCoin(wallet: String, commitment: String, outpoint: String)
+
     @Upsert
     suspend fun upsertSnapshot(row: GroupArkSnapshotRow)
 

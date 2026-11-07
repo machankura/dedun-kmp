@@ -7,6 +7,9 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.model.GroupSignedEvent
+import com.machankura.dedun.compose.database.model.types.FrostSigningStage
+import kotlinx.coroutines.flow.first
 import fr.acinq.bitcoin.Chain
 import kotlin.time.Clock
 
@@ -29,6 +32,8 @@ object GroupWavelengthPayouts {
     suspend fun signed(database: DedunDatabase, chatRoomId: String, chain: Chain): List<GroupWavelengthPaymentEvent.Payment> =
         database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupWavelengthPaymentEvent.KIND)
             .filter { it.verifies() }
+            // The first for a hash, on every device and for every purpose: a second approval changes nothing it could be charged with.
+            .sortedWith(compareBy<GroupSignedEvent> { it.createdAt }.thenBy { it.id })
             .mapNotNull { GroupWavelengthPaymentEvent.read(it.tags) }
             .filter { it.chain == chain && it.payout != null }
             .distinctBy { it.paymentHash }
@@ -83,15 +88,34 @@ object GroupWavelengthPayouts {
     /** Why a signer won't sign [proposed], a Wavelength payment for [chatRoomId], or null when it will. */
     suspend fun refuse(database: DedunDatabase, chatRoomId: String, proposed: Event, nowSeconds: Long = Clock.System.now().epochSeconds): String? {
         // Leaving pays only the group's own onchain wallet, which the policy checks when it's signed (D9).
-        if (GroupWavelengthExitEvent.read(proposed.tags) != null) return null
+        GroupWavelengthExitEvent.read(proposed.tags)?.let { exit ->
+            return if (exit.expiresAt > nowSeconds + MAX_APPROVAL_SECONDS) "stands for longer than the group lets anything stand" else null
+        }
         val payment = GroupWavelengthPaymentEvent.read(proposed.tags) ?: return "isn't a payment this device can read"
         val payout = payment.payout ?: return "pays somebody it does not name as a member"
         val destination = GroupPayoutDestinations.payoutDestinationOf(database, chatRoomId, payment.chain, payout.member)
             ?: return "pays a member who has given nowhere to be paid"
         if (!destination.event.id.equals(payout.destinationEventId, ignoreCase = true)) return "pays a destination the member has since replaced"
         val cost = payment.maxSat ?: return "names no amount"
+        if (payment.expiresAt > nowSeconds + MAX_APPROVAL_SECONDS) return "stands for longer than the group lets anything stand"
+        if (signed(database, chatRoomId, payment.chain).any { it.paymentHash == payment.paymentHash }) return "pays a hash the group has already approved"
         val available = balancesIn(database, chatRoomId, payment.chain, nowSeconds)[payout.member.lowercase()]?.availableSat ?: 0
-        if (cost > available) return "pays $cost sats with its fee limit, more than the $available sats of the member's balance in this wallet"
+        // What other proposals still being signed would take, or several could each pass against one balance.
+        val pending = proposedFor(database, chatRoomId, payment).sumOf { it.maxSat ?: 0 }
+        if (cost + pending > available) return "pays $cost sats with its fee limit, and $pending more being signed, more than the $available sats of the member's balance in this wallet"
         return null
     }
+
+    /** The member's other payments being signed in the room just now. */
+    private suspend fun proposedFor(database: DedunDatabase, chatRoomId: String, payment: GroupWavelengthPaymentEvent.Payment): List<GroupWavelengthPaymentEvent.Payment> =
+        database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId).first()
+            .filter { it.session.stage != FrostSigningStage.FAILED && it.session.stage != FrostSigningStage.COMPLETE }
+            .flatMap { it.items }
+            .mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
+            .filter { it.kind == GroupWavelengthPaymentEvent.KIND }
+            .mapNotNull { GroupWavelengthPaymentEvent.read(it.tags) }
+            .filter { it.chain == payment.chain && it.paymentHash != payment.paymentHash && it.payout?.member.equals(payment.payout?.member, ignoreCase = true) }
+
+    /** The longest a device signs an approval to stand for. A far-off one could still be acted on long after anyone remembers it. */
+    private const val MAX_APPROVAL_SECONDS = 7L * 24 * 60 * 60
 }

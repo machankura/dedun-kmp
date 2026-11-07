@@ -2,7 +2,61 @@
 
 How a group gets from nothing to a Wavelength wallet it can see, fund, pay from and leave, using screens rather than a test harness.
 
-**Plan, not built.** Written on 7 November 2026 against `3648764f`. Files and lines named below are as they stood at that commit. It takes over the screen work in Phases 4, 5 and 9 to 13 of [group-wavelength-wallet.md](./group-wavelength-wallet.md), and that note's decisions (D1 to D16) still apply.
+**Built, on 7 November 2026, and not yet on a phone or behind an open gate.** Written against `3648764f`, and files and lines named in the plan below are as they stood at that commit. It takes over the screen work in Phases 4, 5 and 9 to 13 of [group-wavelength-wallet.md](./group-wavelength-wallet.md), and that note's decisions (D1 to D16) still apply. **`GroupWavelengthRollout.ENABLED` is still off, so nobody sees any of this.** Phase 4, the real round on phones, hasn't run.
+
+### Where the build stands
+
+| phase | state |
+|---|---|
+| 1 | done. Three purpose-blind key lookups fixed, 30371 summarised, `verify` says why, expiry on the ledger, schema 40 |
+| 2 | done, in `jvmTest` only: rows, ceremony by purpose, every state before a wallet exists, transcript lines |
+| 3 | done, in `jvmTest` only, over the SDK's fake: `GroupWavelengthRunner`, `GroupWavelengthProcess`, the holder in `IdentityWavelength`, `GroupWavelengthService`. **The service has never started on a device.** The type is `specialUse`, from memory of Android 15's limits, and still needs checking |
+| 4 | **not run, by decision:** it waits until everything is merged and pushed. It needs fresh signet coins |
+| 5 | done, in `jvmTest` only: snapshot, comparison, deadlines, who's been seen, two panes, Advanced, transcript lines |
+| 6 | done, for boarding. Lightning receive isn't built (question 3) |
+| 7 | done, with payouts-only now enforced on this wallet. Off on mainnet. Nobody has read the new rule but a reviewer that isn't a person (below) |
+| 8 | done except the part that matters most: **a unilateral exit still hasn't run.** Its screen is there, signet only |
+| 9 | done, by leaving through the onchain wallet (below) |
+| 10 | the final pass is done for `jvmTest` and the audit. **The gate is left for the owner** |
+
+**An adversarial reading of the signing code, by a reviewer that isn't a person, before anything was pushed.** It found these, and all are fixed, each with a test:
+
+| found | what it would have let happen | now |
+|---|---|---|
+| **a txid doesn't commit to what its inputs held** | whoever runs the wallet could describe any confirmed transaction as a round that boarded coins, and make a deposit for anyone, which a payout would then pass against | a device reads each boarding coin's parent from its own Electrum before counting it |
+| **a payment job could outlive the daemon it was for** | the client is the process's one, so a job still queued after a handover would have been asked of the person's own wallet, and spent from it | a handover cancels and waits for them before giving the daemon back |
+| an amount or fee limit could overflow to negative | a negative cost passes any balance check, and frees the member's balance for as long as it stands | amounts are bounded when read, and a far-off expiry is refused |
+| two approvals for one hash read differently | one charged the balance and the other set what the device would pay | the first, everywhere, and a second isn't signed |
+| several proposals could each pass against one balance | they were only checked as they arrived | proposals being signed count, and approving checks again, on the proposer's device too |
+| cancelling mid-open stranded the person's wallet | it would have stayed marked as the group's | handed back, whatever happens |
+| one coin at its deadline took every coin with it | a new deposit would have left at once, as nobody's | only the coins that close |
+| an operator in one room could write to another room's ledger on a device in both | wrong records, and a share question for the outside review | a key is read against the room it arrived in |
+| others | a member asking for addresses without limit, stopped lines without limit, stopping the person's wallet every few minutes while the group's devices are offline | bounded, once a term, and only once the group is ready |
+
+**Still open from that reading, and not fixed here:**
+- **A hostile operator can still get a forfeit signed for a made-up round, up to the 2,000 sats of the fee cap, using any confirmed transaction as its commitment.** It also marks that coin spent on the ledger. A device has no way to tell a real commitment from any other confirmed transaction with the right outputs. That predates this work and needs the outside review the wallet note asks for.
+- **A coin from a Lightning claim has no deadline a device can work out.** It shows no deadline rather than a wrong one. Nothing here receives over Lightning yet.
+- **While a device runs a group's wallet, the person's own wallet doesn't renew in the background.** The nomination says so, and to open it every few days.
+
+**What the plan said, and what it turned out to be:**
+
+| the plan said | what happened |
+|---|---|
+| the Phase 3 runner replaces the harness's driving code, and the harness runs it | not done. The harness runs its daemon in another process, because the bindings are Android's, and the runner needs one in-process. So the two share the pool numbers and nothing else, and **a signet pass no longer exercises the runner.** Phase 4 is the first thing that will |
+| Phase 8: a `GroupWavelengthLeaveRoute` | a dialog on the wallet screen. There was nothing for a second screen to say |
+| Phase 9: re-key through a round, once the wallet note's Phase 13 exists | the policy has no such rule, so the old wallet leaves to the onchain wallet instead. It costs a fee more and works now. **A group of four that loses a member can't make a new key at all:** Iceberg needs four holders, so leaving is all that's left to it |
+| question 2: who pays renewal and exit costs | answered here by default, not by the owner: a member's balance shrinks in proportion to what's left in the wallet. So nobody pays alone, and nobody can be paid more than there is. A balance is then a device's own sum, so two devices can differ slightly, and one that hasn't seen a settle refuses a payout it would otherwise sign. That fails the safe way |
+| U10: `walletName` becomes a string resource | not done. It only ever goes into transcript lines, which are stored English like every other line here |
+| Phase 5: count what a snapshot costs before choosing a schedule | can't be done without a funded wallet. The runner reports on change, and at least every 30 minutes. **If it turns out each read costs group signatures, this needs changing** |
+
+**What building it found:**
+
+| found | what it was |
+|---|---|
+| **two answers to "how far has the group got?" were one message** | they'd be identical within a second, so a member who asked a moment after another heard nothing and sat with no floor. On a real group that would have held up a first round past its deadline. A runner test found it. Each answer now names its question |
+| the first signature was where a device found out its floor | inside the round's deadline. The runner now asks ahead of the daemon starting (`askFloor`) |
+| round one wasn't there before the daemon started | a daemon's first signature would have failed. The harness had always provisioned first, by hand. `GroupWavelengthDaemon.open` now takes a `prepare`, and the runner waits for the pool |
+| `Refused` carried English | now a type, so a screen says it |
 
 Read these first:
 
@@ -272,7 +326,7 @@ As `GroupLightningWalletScreen` does it, once the wallet note's Phase 13 exists:
 | **4 phone round** | **everything merged and pushed, signet coins, phones** | **signet** | **1 week, and the decision** |
 | 10 gate | 4 | app | owner's call |
 
-**About three months for one engineer, and a guess:** my last time estimate in this work was wrong, and most of what took the time so far was found by running against real servers. The first thing a person can see is the end of Phase 2. The first thing that can change what was built is Phase 4. Phases 7 and 8 can run side by side after 6.
+**The estimate below was for a person, and turned out to be nothing to go by: it was built in one session, and what that session couldn't do is listed at the top.** About three months for one engineer, and a guess: my last time estimate in this work was wrong, and most of what took the time so far was found by running against real servers. The first thing a person can see is the end of Phase 2. The first thing that can change what was built is Phase 4. Phases 7 and 8 can run side by side after 6.
 
 ## Risks
 
