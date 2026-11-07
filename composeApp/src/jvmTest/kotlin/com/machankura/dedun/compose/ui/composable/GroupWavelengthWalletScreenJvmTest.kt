@@ -45,7 +45,7 @@ class GroupWavelengthWalletScreenJvmTest {
     @Test
     fun `the row for each network says which it is, and a test network that its coins have no value`() = runDesktopComposeUiTest(phone, 800) {
         var opened = 0
-        setContent { DedunTheme { WavelengthWalletRow(Chain.Signet) { opened++ } } }
+        setContent { DedunTheme { WavelengthWalletRow(Chain.Signet, hasOnchainWallet = true) { opened++ } } }
         onNodeWithText("A test wallet on signet: its coins have no value").assertIsDisplayed()
         onNodeWithText("Wavelength wallet").performClick()
         assertEquals(1, opened)
@@ -53,7 +53,7 @@ class GroupWavelengthWalletScreenJvmTest {
 
     @Test
     fun `on mainnet the row just names it`() = runDesktopComposeUiTest(phone, 800) {
-        setContent { DedunTheme { WavelengthWalletRow(Chain.Mainnet) {} } }
+        setContent { DedunTheme { WavelengthWalletRow(Chain.Mainnet, hasOnchainWallet = true) {} } }
         onNodeWithText("On mainnet").assertIsDisplayed()
     }
 

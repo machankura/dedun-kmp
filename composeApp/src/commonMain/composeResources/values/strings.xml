@@ -1329,6 +1329,7 @@
     <string name="group_wavelength_wallet">Wavelength wallet</string>
     <string name="group_wavelength_on_s">On %1$s</string>
     <string name="group_wavelength_test_network_s">A test wallet on %1$s: its coins have no value</string>
+    <string name="group_wavelength_needs_an_onchain_wallet">A Wavelength wallet is only available once the group has an onchain wallet.</string>
     <string name="wavelength_wallet_key">Wavelength wallet key</string>
     <string name="the_group_has_a_wavelength_wallet_key">The group has a key for a Wavelength wallet.</string>
     <string name="the_wavelength_wallet_key_is_made_by_everyone">The key is made by everyone who holds the onchain wallet's key. Keeping the wallet's coins renewed will need %1$s of their devices online every few days.</string>
