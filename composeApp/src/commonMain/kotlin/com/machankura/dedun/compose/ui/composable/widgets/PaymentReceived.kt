@@ -112,7 +112,10 @@ fun PaymentReceived(
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
                 )
-                amount?.let {
+                // A zero is as uninformative as no figure at all, and a deposit's amount is
+                // zero until the chain says otherwise -- the same rule the activity list's
+                // `signedAmount` already follows.
+                amount?.takeIf { it.sat > 0 }?.let {
                     Text(
                         text = stringResource(Res.string.s_sats, it.grouped()),
                         style = MaterialTheme.typography.displaySmall,
