@@ -3,11 +3,14 @@ package com.machankura.dedun.compose.database.repository
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.managers.GroupWalletManager
+import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.managers.IcebergRitualManager
@@ -77,6 +80,15 @@ class DatabaseGroupWavelengthRepository(
 
     override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession =
         GroupWavelengthOperatorManager.stepDown(database, localChatRoom, userPublicKey, chain, wallet)
+
+    override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean =
+        member.lowercase() in Depositors.statementsIn(database, chatRoomId, chain).keys.map { it.lowercase() }
+
+    override suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String =
+        GroupWavelengthDeposits.request(database, localChatRoom, userPublicKey, wallet)
+
+    override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> =
+        database.groupArkDao().observeDepositAddresses(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { rows -> rows.filter { it.requester == member.lowercase() } }
 
     override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> =
         database.groupArkDao().observeSnapshot(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { row ->

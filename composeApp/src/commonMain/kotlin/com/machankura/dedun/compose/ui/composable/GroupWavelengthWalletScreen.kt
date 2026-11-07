@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
@@ -53,6 +54,7 @@ import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
@@ -143,6 +145,7 @@ import dedun.composeapp.generated.resources.make_a_key
 import dedun.composeapp.generated.resources.nobody_runs_this_wallet
 import dedun.composeapp.generated.resources.open_a_wavelength_wallet
 import dedun.composeapp.generated.resources.open_the_group_s_onchain_wallet_first
+import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.run_by_s_term_s
 import dedun.composeapp.generated.resources.run_this_wallet_on_my_device
 import dedun.composeapp.generated.resources.see_the_key_ceremony
@@ -217,6 +220,7 @@ fun GroupWavelengthWalletScreen(
                 onNominate = { viewModel.nominateSelf(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                 onStepDown = { viewModel.stepDown(onSession = toSession, onFailure = { notify(couldNotPropose) }) },
                 onOpenAdvanced = { onNavigateToRoute(GroupWavelengthAdvancedRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
+                onReceive = { onNavigateToRoute(GroupWavelengthReceiveRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
             )
         }
     }
@@ -236,6 +240,7 @@ internal fun GroupWavelengthWalletContent(
     onNominate: () -> Unit = {},
     onStepDown: () -> Unit = {},
     onOpenAdvanced: () -> Unit = {},
+    onReceive: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
@@ -289,7 +294,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive)
     }
 }
 
@@ -368,13 +373,14 @@ private fun OpenedWallet(
     onNominate: () -> Unit,
     onStepDown: () -> Unit,
     onOpenAdvanced: () -> Unit,
+    onReceive: () -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain)
+                moneyItems(state, chain, onReceive)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
@@ -385,16 +391,16 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain)
+            moneyItems(state, chain, onReceive)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
-    item { BalanceCard(state) }
+    item { BalanceCard(state, onReceive) }
     item { DeadlineLine(state.expiry) }
     item { Text(stringResource(Res.string.group_wavelength_activity), style = MaterialTheme.typography.titleSmall) }
     val activity = state.snapshot?.activity.orEmpty()
@@ -443,7 +449,7 @@ private fun AlarmCard(alarms: List<String>) {
 
 /** This device's own figure first, and the operator's beside it, since only one of them has been checked (U2). */
 @Composable
-private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened) {
+private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, onReceive: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.group_wavelength_balance_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -472,6 +478,16 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened) {
                 }
                 if (snapshot.creditSat > 0) {
                     Text(stringResource(Res.string.group_wavelength_credit_s, Satoshi(snapshot.creditSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+            // Whoever runs the wallet makes the address, so there's nothing to ask while nobody does.
+            if (state.operator?.publicKey != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+                    OutlinedButton(onClick = onReceive) {
+                        Icon(Icons.AutoMirrored.Filled.CallReceived, contentDescription = Decorative)
+                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                        Text(stringResource(Res.string.receive))
+                    }
                 }
             }
         }

@@ -60,6 +60,8 @@ object ArkPolicy {
         val signing: String? = null,
         /** A round's batch life in blocks, which with the commitment's height says when its coins can be swept. */
         val sweepDelay: Long? = null,
+        /** The boarding coins a round brings in, which are somebody's deposits once it happens. */
+        val boarded: List<BoardedCoin> = emptyList(),
     )
 
     sealed class Verdict {
@@ -105,6 +107,9 @@ object ArkPolicy {
         /** The Ark transaction this device has already paid each hash in. A payment goes once. */
         val paidIn: Map<ByteVector32, String> = emptyMap(),
     )
+
+    /** A boarding coin going into a round: its outpoint, its script and what it holds. */
+    data class BoardedCoin(val outpoint: String, val script: ByteVector, val amountSat: Long)
 
     /** What the group approved: at most [maxSat], and no vHTLC locked for the group past [maxRefundHeight]. */
     data class ApprovedPayment(val maxSat: Long, val maxRefundHeight: Long)
@@ -540,8 +545,12 @@ object ArkPolicy {
             forfeited += known
         }
         var into = forfeited
-        outputsOf(round.prevOuts).forEach { prev ->
-            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.boardingDelay)) into += prev.amount.sat
+        val boarded = ArrayList<BoardedCoin>()
+        outputsOf(round.prevOuts).forEachIndexed { index, prev ->
+            if (context.keys.isBoardingScript(prev.publicKeyScript, context.operator, context.boardingDelay)) {
+                into += prev.amount.sat
+                commitment.txIn.getOrNull(index)?.outPoint?.let { boarded += BoardedCoin("${it.txid}:${it.index}", prev.publicKeyScript, prev.amount.sat) }
+            }
             if (into > MAX_MONEY) refuse("a note with an impossible value")
         }
         val out = ownOut + leavesOut
@@ -553,7 +562,7 @@ object ArkPolicy {
             if (context.unspentSat - (context.pendingFromSat[id] ?: 0) - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
         }
         checkFeeBudget(context, id, fee)
-        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment)), sweepDelay = round.sweepDelay))
+        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment)), sweepDelay = round.sweepDelay, boarded = boarded))
     }
 
     /** That a forfeit's connector comes from this commitment: the chain of transactions that makes the forfeit conditional. */

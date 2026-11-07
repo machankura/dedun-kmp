@@ -25,6 +25,8 @@ import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkSnapshotRow
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
@@ -172,6 +174,8 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkFee::class,
         GroupArkCheckpoint::class,
         GroupArkPayment::class,
+        GroupArkBoarded::class,
+        GroupArkDepositAddress::class,
         GroupArkPendingRound::class,
         GroupArkSnapshotRow::class,
         GroupArkRound::class,
@@ -468,7 +472,8 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // so this is a version of its own. New tables are a shape Room migrates itself, and nothing can be pending yet.
         AutoMigration(from = 38, to = 39),
         // v40 adds when a group's Wavelength coin can be swept, by the device's own count, so that a member's deadline
-        // isn't the operator's word, and what the operator last said it holds (docs/group-wavelength-ui.md, Phases 1 and 5).
+        // isn't the operator's word, what the operator last said it holds, and who each boarding address is for
+        // (docs/group-wavelength-ui.md, Phases 1, 5 and 6).
         // Nullable columns and a new table, which Room migrates itself.
         AutoMigration(from = 39, to = 40),
     ]

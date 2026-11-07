@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.managers
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
@@ -113,7 +114,7 @@ object GroupArkCoSigner {
     private fun shareOf(wallet: GroupWavelengthWalletManager.Wallet, domain: ArkWire.Domain, base: Share): Share =
         domain.child?.let { IcebergChildKeys.share(base, it) } ?: base
 
-    private fun keysOf(wallet: GroupWavelengthWalletManager.Wallet) =
+    internal fun keysOf(wallet: GroupWavelengthWalletManager.Wallet) =
         GroupArkKeys(PublicKey.fromHex(wallet.statement.icebergKey), wallet.statement.chain, wallet.statement.wallet)
 
     private suspend fun baseShare(database: DedunDatabase, wallet: GroupWavelengthWalletManager.Wallet): Share? =
@@ -284,6 +285,7 @@ object GroupArkCoSigner {
         dao.releaseReservedBy(key, commitment)
         dao.forgetPendingFrom(key, commitment)
         dao.forgetFee(key, commitment)
+        dao.forgetBoarded(key, commitment)
         dao.deletePendingRound(key, commitment)
         val roomId = key.split(":").getOrNull(1) ?: return
         val reader = database.chatRoomDao().findChatRoomById(roomId)?.chatRoom?.userPublicKey ?: return
@@ -298,6 +300,7 @@ object GroupArkCoSigner {
     suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound, height: Long? = null) {
         height?.let { database.groupArkDao().expireFrom(row.wallet, row.commitment, it) }
         settled(database, row.wallet, row.commitment)
+        GroupWavelengthDeposits.roundHappened(database, row.chatRoomId, row.chain, row.wallet, row.commitment)
         database.groupArkDao().deletePendingRound(row.wallet, row.commitment)
         val localChatRoom = database.chatRoomDao().findChatRoomById(row.chatRoomId) ?: return
         val wallet = walletOf(database, row.chatRoomId, row.wallet) ?: return
@@ -505,6 +508,7 @@ object GroupArkCoSigner {
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }
         effect.reserves.forEach { outpoint -> known[outpoint]?.let { dao.upsertVtxo(it.copy(reservedBy = effect.towards, term = term)) } }
+        effect.boarded.forEach { dao.upsertBoarded(GroupArkBoarded(key, it.outpoint, effect.towards, it.amountSat, it.script.toHex())) }
         // A credit never overwrites: what this device has already seen settle isn't for a note to change.
         // A transfer makes coins in the batches it spent from, so they go no later than the soonest of those.
         val inherited = effect.reserves.mapNotNull { known[it]?.expiresAtHeight }.minOrNull()

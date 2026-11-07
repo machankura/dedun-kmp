@@ -13,7 +13,9 @@ import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.ME
@@ -214,5 +216,40 @@ class GroupWavelengthWalletScreenJvmTest {
         onNodeWithText("Held for something signed").assertIsDisplayed()
         onNodeWithText("The operator reports", substring = true).assertIsDisplayed()
         onNodeWithText("A unilateral exit, which leaves without the Ark operator's help, has never been run on any network.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an address says it was checked, what it takes and what it costs`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Ready("bc1paddress", GroupWavelengthTerms.of(Chain.Mainnet), 2_000, 60_000), Chain.Mainnet)
+                }
+            }
+        }
+        onNodeWithText("bc1paddress").assertIsDisplayed()
+        onNodeWithText("Your device checked that this address is one the group's key makes. Whatever's sent here counts as yours.").assertIsDisplayed()
+        onNodeWithText("Coins join the wallet in a round, once they have 6 confirmations and enough of the group's devices are online.").assertIsDisplayed()
+        onNodeWithText("Send at least 1,000 sats, and no more than 50,000 to a coin.").assertIsDisplayed()
+        onNodeWithText("The wallet can take 60,000 sats more on mainnet, and a coin that would pass that won't be signed for.").assertIsDisplayed()
+        onNodeWithText("A round takes its fee out of what's sent: the group lets it take up to 2,000 sats.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `someone who hasn't started depositing is told why not, and a full wallet says so`() = runDesktopComposeUiTest(phone, 800) {
+        var state: GroupWavelengthReceiveUIState by androidx.compose.runtime.mutableStateOf(GroupWavelengthReceiveUIState.NotADepositor)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, state, Chain.Mainnet) } } }
+        onNodeWithText("Only a member who has started depositing", substring = true).assertIsDisplayed()
+        state = GroupWavelengthReceiveUIState.AtTheCap
+        waitForIdle()
+        onNodeWithText("This wallet is at the most it can hold on mainnet", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `asking gets an address, from the wallet's screen too`() = runDesktopComposeUiTest(phone, 1400) {
+        var asked = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.CanAsk, Chain.Mainnet, onAsk = { asked++ }) } } }
+        onNodeWithText("Get an address").performClick()
+        assertEquals(1, asked)
     }
 }

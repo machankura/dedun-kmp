@@ -40,3 +40,11 @@ data class GroupWavelengthSnapshot(
 /** An operator stopping, kind 30382: what the next one can't rebuild from the chain (D14). */
 @Serializable
 data class GroupWavelengthStopped(val wallet: String, val term: Long, val exitsUnderWay: Int = 0, val paymentsInFlight: Int = 0)
+
+/** A member asking for an address to pay the wallet at, kind 30380. Who's asking is who sent it. */
+@Serializable
+data class GroupWavelengthDepositRequest(val requestId: String, val wallet: String)
+
+/** The operator's answer, kind 30381, which every device checks is an address of the group's before believing it's the requester's. */
+@Serializable
+data class GroupWavelengthDepositAnswer(val requestId: String, val wallet: String, val term: Long, val address: String)

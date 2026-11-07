@@ -16,6 +16,9 @@ import engineering.lightning.wavelength.FacadeWavelengthClient
 import engineering.lightning.wavelength.SignerHost
 import engineering.lightning.wavelength.testing.FakeFacadeBindings
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,14 +97,15 @@ class GroupWavelengthRunnerJvmTest {
         suspend fun <T> pumped(block: suspend () -> T): T {
             val pump = scope.launch {
                 while (isActive) {
-                    fixture.pump(all, GroupWavelengthEvents.CO_SIGNING)
+                    // Whole passes: a message counted as delivered and cancelled on its way would be lost, which no relay here does.
+                    withContext(NonCancellable) { fixture.pump(all, GroupWavelengthEvents.CO_SIGNING) }
                     delay(20)
                 }
             }
             return try {
                 block()
             } finally {
-                pump.cancel()
+                pump.cancelAndJoin()
             }
         }
 

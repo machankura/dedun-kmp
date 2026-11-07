@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.repository
 
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -49,6 +50,15 @@ interface GroupWavelengthRepository {
 
     suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession
 
+    /** Whether [member] has a depositor statement on [chain]: nobody else gets an address. */
+    suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean
+
+    /** Asks the operator for a boarding address for this device's member. */
+    suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String
+
+    /** [member]'s requests for addresses, and what's been answered and checked. */
+    fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>>
+
     /** What the wallet's operator last said it holds, and when, which is a claim. */
     fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?>
 
@@ -85,6 +95,9 @@ interface GroupWavelengthRepository {
             override suspend fun proposeWallet(localChatRoom: LocalChatRoom, userPublicKey: HexKey, nostrPrivateKey: ByteArray, chain: Chain): FrostSigningSession = error("No room to propose in")
             override suspend fun nominateSelf(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
+            override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false
+            override suspend fun requestDepositAddress(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): String = error("No room to ask in")
+            override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> = flowOf(emptyList())
             override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> = flowOf(null)
             override suspend fun tipHeight(chain: Chain): Long? = null
             override suspend fun seen(chatRoomId: String): Map<HexKey, Instant> = emptyMap()

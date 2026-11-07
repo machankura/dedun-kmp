@@ -5,7 +5,9 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Upsert
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
@@ -29,6 +31,27 @@ interface GroupArkDao {
 
     @Query("SELECT MAX(child) FROM GroupArkTreeShare WHERE wallet = :wallet AND participant = :participant")
     suspend fun highestTreeShare(wallet: String, participant: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDepositAddress(row: GroupArkDepositAddress)
+
+    @Query("UPDATE GroupArkDepositAddress SET address = :address, script = :script WHERE wallet = :wallet AND requestId = :requestId AND address IS NULL")
+    suspend fun answerDepositAddress(wallet: String, requestId: String, address: String, script: String)
+
+    @Query("SELECT * FROM GroupArkDepositAddress WHERE wallet = :wallet")
+    suspend fun depositAddresses(wallet: String): List<GroupArkDepositAddress>
+
+    @Query("SELECT * FROM GroupArkDepositAddress WHERE wallet = :wallet")
+    fun observeDepositAddresses(wallet: String): Flow<List<GroupArkDepositAddress>>
+
+    @Upsert
+    suspend fun upsertBoarded(row: GroupArkBoarded)
+
+    @Query("SELECT * FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun boardedIn(wallet: String, commitment: String): List<GroupArkBoarded>
+
+    @Query("DELETE FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun forgetBoarded(wallet: String, commitment: String)
 
     @Upsert
     suspend fun upsertSnapshot(row: GroupArkSnapshotRow)

@@ -49,6 +49,8 @@ import com.machankura.dedun.compose.ui.composable.IcebergCeremonyScreen
 import com.machankura.dedun.compose.database.repository.DatabaseGroupLightningRepository
 import com.machankura.dedun.compose.database.repository.DatabaseGroupWavelengthRepository
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthAdvancedScreen
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
@@ -986,6 +988,21 @@ fun DedunNavHost(
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthReceiveRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthReceiveRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthReceiveScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

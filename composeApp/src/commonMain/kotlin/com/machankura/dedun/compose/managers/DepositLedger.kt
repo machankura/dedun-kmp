@@ -154,8 +154,8 @@ object DepositLedger {
     }
 
     /** One member's deposits in, and what the group has paid out to them. */
-    data class Tally(val member: HexKey, val onchainMsat: Long = 0, val lightningMsat: Long = 0, val paidOutMsat: Long = 0) {
-        val depositedMsat: Long get() = onchainMsat + lightningMsat
+    data class Tally(val member: HexKey, val onchainMsat: Long = 0, val lightningMsat: Long = 0, val paidOutMsat: Long = 0, val wavelengthMsat: Long = 0) {
+        val depositedMsat: Long get() = onchainMsat + lightningMsat + wavelengthMsat
     }
 
     /**
@@ -172,8 +172,11 @@ object DepositLedger {
         rows.forEach { row ->
             val member = row.member ?: return@forEach run { unattributed += row.amountMsat }
             val tally = tallies.getOrPut(member) { Tally(member) }
-            tallies[member] = if (row.source == DepositRow.ONCHAIN) tally.copy(onchainMsat = tally.onchainMsat + row.amountMsat)
-            else tally.copy(lightningMsat = tally.lightningMsat + row.amountMsat)
+            tallies[member] = when (row.source) {
+                DepositRow.ONCHAIN -> tally.copy(onchainMsat = tally.onchainMsat + row.amountMsat)
+                DepositRow.WAVELENGTH -> tally.copy(wavelengthMsat = tally.wavelengthMsat + row.amountMsat)
+                else -> tally.copy(lightningMsat = tally.lightningMsat + row.amountMsat)
+            }
         }
         paidOut(database, chatRoomId, chain).forEach { (member, msat) ->
             val tally = tallies.getOrPut(member) { Tally(member) }

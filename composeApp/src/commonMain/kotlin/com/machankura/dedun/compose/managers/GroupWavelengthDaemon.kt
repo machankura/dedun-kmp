@@ -149,6 +149,9 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
         )
     }
 
+    /** A new address for the group's boarding key, from the running daemon, which every device checks before believing. */
+    suspend fun newBoardingAddress(): String = client.deposit().address
+
     /** How many exits the running daemon has under way, which nobody can rebuild from the chain (D14). */
     suspend fun exitsUnderWay(): Int = client.exitSummary().exits.size
 

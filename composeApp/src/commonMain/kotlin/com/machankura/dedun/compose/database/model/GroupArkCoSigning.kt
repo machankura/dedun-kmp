@@ -93,6 +93,24 @@ data class GroupArkFloor(val wallet: String, val floor: Long? = null, val treeFl
 @Entity(primaryKeys = ["wallet"])
 data class GroupArkSnapshotRow(val wallet: String, val sentBy: HexKey, val term: Long, val content: String, val sentAt: Instant)
 
+/**
+ * A member's request for a boarding address and what the operator answered, on every device: an address is one member's for good, and
+ * [script] is only ever one this device recomputed from the statement, so a deposit is attributed before it can be shown.
+ */
+@Entity(primaryKeys = ["wallet", "requestId"])
+data class GroupArkDepositAddress(
+    val wallet: String,
+    val requestId: String,
+    val requester: HexKey,
+    val requestedAt: Instant,
+    val address: String? = null,
+    val script: HexKey? = null,
+)
+
+/** A boarding coin this device signed into a round it hasn't seen happen: it becomes a deposit when the round does. */
+@Entity(primaryKeys = ["wallet", "outpoint"])
+data class GroupArkBoarded(val wallet: String, val outpoint: String, val commitment: String, val amountSat: Long, val script: HexKey)
+
 /** How far one participant says it has answered. */
 @Entity(primaryKeys = ["wallet", "participant"])
 data class GroupArkMark(val wallet: String, val participant: HexKey, val highest: Long, val highestChild: Long)

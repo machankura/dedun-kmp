@@ -9,6 +9,7 @@ import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.GroupArkTransport
 import com.machankura.dedun.compose.managers.GroupLightningLines
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
+import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
@@ -162,6 +163,7 @@ class GroupWavelengthRunner(
                 }
                 else -> {
                     topUp(live)
+                    act(live)
                     report(live)
                 }
             }
@@ -260,6 +262,12 @@ class GroupWavelengthRunner(
         if (plainLow) live.plainTo = plainUsed + PLAIN_WINDOW
         if (treeLow) live.treeTo = treeUsed + TREE_WINDOW
         live.transport.provision(live.plainTo, live.treeTo)
+    }
+
+    /** What the group has asked of whoever runs the wallet. Each failure is its own, and none reaches the daemon. */
+    private suspend fun act(live: Running) {
+        runCatching { GroupWavelengthDeposits.answerOutstanding(database, live.room, userPublicKey, live.wallet, live.term) { daemon.newBoardingAddress() } }
+            .onFailure { logger.w(it) { "Couldn't answer a request for a deposit address" } }
     }
 
     /** Each coin this device knows of came from a key the wallet has used, so a scan that wide finds them, and some margin finds the rest. */

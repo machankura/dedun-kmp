@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.managers.GroupLightningCoSigner
 import com.machankura.dedun.compose.managers.GroupLightningReports
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
+import com.machankura.dedun.compose.managers.GroupWavelengthDeposits
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
@@ -1647,6 +1648,14 @@ abstract class NostrDao(
                                 innerEvent = innerEvent,
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // A member asking for a boarding address, and the operator's answer.
+                        innerEvent.kind == GroupWavelengthEvents.DEPOSIT_REQUEST || innerEvent.kind == GroupWavelengthEvents.DEPOSIT_ANSWER ->
+                            GroupWavelengthDeposits.process(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
                             )
 
                         // What the operator says about the Wavelength wallet.
