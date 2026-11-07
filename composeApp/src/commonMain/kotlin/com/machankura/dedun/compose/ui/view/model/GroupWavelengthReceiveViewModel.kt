@@ -9,6 +9,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.touchlab.kermit.Logger
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
+import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
+import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.repository.ChatRepository
@@ -16,10 +21,12 @@ import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRequests
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -55,10 +62,14 @@ class GroupWavelengthReceiveViewModel(
                 uiState = GroupWavelengthReceiveUIState.NotADepositor
                 return@launch
             }
-            if (repository.operator(chatRoomId, chain, number)?.publicKey == null) {
+            val operator = repository.operator(chatRoomId, chain, number)?.publicKey
+            if (operator == null) {
                 uiState = GroupWavelengthReceiveUIState.NobodyRunsIt
                 return@launch
             }
+            val operatorName = localChatRoom.localParticipants
+                .firstOrNull { it.participant.participantPublicKey.equals(operator, ignoreCase = true) }
+                ?.profile?.humanReadableNameOrPubkey() ?: operator.take(8)
             val ledger = GroupWavelengthLedger.of(repository.observeCoins(chatRoomId, chain, number).first())
             val cap = GroupWavelengthRollout.capFor(chain)?.sat
             val roomLeft = cap?.let { (it - ledger.settledSat - ledger.pendingSat).coerceAtLeast(0) }
@@ -70,24 +81,50 @@ class GroupWavelengthReceiveViewModel(
             val since = Clock.System.now() - GroupWavelengthWalletUIState.Opened.SEEN_WINDOW
             val seen = repository.seen(chatRoomId)
             val enoughSeen = found.statement.participants.count { p -> seen[p]?.let { it >= since } == true } >= needed
-            repository.observeDepositAddresses(chatRoomId, chain, number, activeUserPublicKey).collect { rows ->
-                val addresses = rows.filter { it.invoiceAmountSat == null }
-                val invoices = rows.filter { it.invoiceAmountSat != null }.sortedBy { it.requestedAt }
+            val terms = repository.terms(chain)
+            // The coins are followed rather than read once: a deposit that lands while the screen
+            // is open takes room under the cap, and "ask for another" must not offer an amount
+            // that no longer fits.
+            combine(
+                repository.observeDepositAddresses(chatRoomId, chain, number, activeUserPublicKey),
+                repository.observeCoins(chatRoomId, chain, number),
+                repository.observeBoarded(chatRoomId, chain, number),
+                repository.observeClaims(chatRoomId, chain, number),
+                repository.observeArkPayments(chatRoomId, chain, number),
+            ) { rows, coins, boarded, claims, payments ->
+                Reading(rows, coins, boarded, claims, payments)
+            }.combine(repository.observeSnapshot(chatRoomId, chain, number)) { reading, snapshot ->
+                val addresses = reading.rows.filter { it.invoiceAmountSat == null }
+                val invoices = reading.rows.filter { it.invoiceAmountSat != null }.sortedBy { it.requestedAt }
                 val newest = invoices.lastOrNull()
-                uiState = GroupWavelengthReceiveUIState.Loaded(
-                    address = addresses.lastOrNull { it.address != null }?.address,
+                val shownAddress = addresses.lastOrNull { it.address != null }
+                val live = GroupWavelengthLedger.of(reading.coins)
+                GroupWavelengthReceiveUIState.Loaded(
+                    address = shownAddress?.address,
                     addressAsked = addresses.isNotEmpty(),
                     invoice = newest?.invoice,
                     invoiceAmountSat = newest?.invoiceAmountSat,
                     invoiceAsked = newest != null && newest.invoice == null,
-                    terms = repository.terms(chain),
+                    terms = terms,
                     maxRoundFeeSat = found.statement.policy.maxRoundFeeSat,
-                    roomLeftSat = roomLeft,
+                    roomLeftSat = cap?.let { (it - live.settledSat - live.pendingSat).coerceAtLeast(0) },
                     enoughSeen = enoughSeen,
+                    addressPaid = shownAddress?.let { GroupWavelengthRequests.paidOnAddress(it, reading.boarded) },
+                    invoicePaid = newest?.let { GroupWavelengthRequests.paidOnInvoice(it, reading.claims, reading.payments, snapshot) },
+                    operatorName = operatorName,
                 )
-            }
+            }.collect { uiState = it }
         }
     }
+
+    /** The five device-local flows as one value, because `combine` takes five at a time. */
+    private data class Reading(
+        val rows: List<GroupArkDepositAddress>,
+        val coins: List<GroupArkVtxo>,
+        val boarded: List<GroupArkBoarded>,
+        val claims: List<GroupArkClaim>,
+        val payments: List<GroupArkPayment>,
+    )
 
     fun ask(onFailure: () -> Unit) {
         val localChatRoom = room ?: return

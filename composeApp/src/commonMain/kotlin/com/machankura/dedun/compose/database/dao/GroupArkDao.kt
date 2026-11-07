@@ -51,6 +51,9 @@ interface GroupArkDao {
     @Query("SELECT * FROM GroupArkClaim WHERE wallet = :wallet AND ark = :ark")
     suspend fun claim(wallet: String, ark: String): GroupArkClaim?
 
+    @Query("SELECT * FROM GroupArkClaim WHERE wallet = :wallet")
+    fun observeClaims(wallet: String): Flow<List<GroupArkClaim>>
+
     @Query("DELETE FROM GroupArkClaim WHERE wallet = :wallet AND ark = :ark")
     suspend fun forgetClaim(wallet: String, ark: String)
 
@@ -65,6 +68,9 @@ interface GroupArkDao {
 
     @Query("SELECT * FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment")
     suspend fun boardedIn(wallet: String, commitment: String): List<GroupArkBoarded>
+
+    @Query("SELECT * FROM GroupArkBoarded WHERE wallet = :wallet")
+    fun observeBoarded(wallet: String): Flow<List<GroupArkBoarded>>
 
     @Query("DELETE FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment")
     suspend fun forgetBoarded(wallet: String, commitment: String)
@@ -142,6 +148,9 @@ interface GroupArkDao {
 
     @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
     suspend fun payments(wallet: String): List<GroupArkPayment>
+
+    @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
+    fun observePayments(wallet: String): Flow<List<GroupArkPayment>>
 
     @Upsert
     suspend fun upsertFee(row: GroupArkFee)

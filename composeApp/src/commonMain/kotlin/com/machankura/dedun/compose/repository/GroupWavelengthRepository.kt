@@ -1,7 +1,10 @@
 package com.machankura.dedun.compose.repository
 
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
+import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -99,6 +102,18 @@ interface GroupWavelengthRepository {
     /** What this device has itself signed for the wallet: its own ledger, never the operator's word. */
     fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>>
 
+    /**
+     * Boarding coins this device has signed into a round it hasn't seen happen, which is how it
+     * knows a member's deposit address was paid (`docs/paid-requests.md`, Phase 3).
+     */
+    fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>>
+
+    /** Lightning claims this device has signed: the amount it believes arrived, per payment hash. */
+    fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>>
+
+    /** Payment hashes this device has filed against a transaction: paid, with no amount of its own. */
+    fun observeArkPayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkPayment>>
+
     companion object {
         val NO_OP: GroupWavelengthRepository = object : GroupWavelengthRepository {
             override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain): Boolean = false
@@ -130,6 +145,9 @@ interface GroupWavelengthRepository {
             override suspend fun feesSince(chatRoomId: String, chain: Chain, wallet: Long, term: Long, since: Long): Long = 0
             override suspend fun labelsLeft(chatRoomId: String, chain: Chain, wallet: Long, userPublicKey: HexKey): Long = 0
             override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(emptyList())
+            override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> = flowOf(emptyList())
+            override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> = flowOf(emptyList())
+            override fun observeArkPayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkPayment>> = flowOf(emptyList())
         }
     }
 }
