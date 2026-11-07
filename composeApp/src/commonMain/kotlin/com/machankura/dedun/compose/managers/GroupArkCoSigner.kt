@@ -651,7 +651,7 @@ object GroupArkCoSigner {
         val dao = database.groupArkDao()
         if (message.asking) {
             // How far this device has checked, which is further than it has signed: a label it echoed is already spoken for.
-            val answer = ArkWire.HighWater(message.wallet, asking = false, highest = dao.highestPlainChecked(message.wallet) ?: -1, highestChild = dao.highestChildChecked(message.wallet) ?: -1)
+            val answer = ArkWire.HighWater(message.wallet, asking = false, highest = dao.highestPlainChecked(message.wallet) ?: -1, highestChild = dao.highestChildChecked(message.wallet) ?: -1, answers = event.id)
             queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.HIGH_WATER, CommonJson.encodeToString(ArkWire.HighWater.serializer(), answer))
             return
         }
