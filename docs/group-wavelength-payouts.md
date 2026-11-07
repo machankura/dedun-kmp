@@ -5,8 +5,54 @@ How the group's Wavelength wallet pays a depositor their balance at the destinat
 an invoice from their Lightning address. Both under payouts-only: a member's own money, to that member's own
 destination, approved by a quorum and checked by every co-signer.
 
-**Plan, not built.** Written on 7 November 2026 against `30a9f5e3`, with `wavelength-kmp` at `80569131`, read in the main
-checkout because a fresh worktree doesn't have the submodule. Files and lines named below are as they stood then.
+**Built on 7 November 2026, in `jvmTest` only, except what needs coins or the owner.** Written the same day against
+`30a9f5e3`, with `wavelength-kmp` at `80569131`, read in the main checkout because a fresh worktree doesn't have the
+submodule. Files and lines named in the plan below are as they stood then. **No payout of either kind has met a real
+daemon, a real round or a coin,** and both rails stay off on mainnet.
+
+### Where the build stands
+
+| phase | state |
+|---|---|
+| 0 | **not run: it needs signet coins.** One answer came from the SDK instead: `SendResult.actualAmountSat` says a bounded onchain send *"matches the requested amount (the seal-time fee handshake returns change)"*, so W5's exact leave is what the daemon means to do. Nothing has shown that a real round does it |
+| 1 | done, `1a8b2124`: the leave budget, exact and once, and no approved script reaching a transfer or an on-chain spend |
+| 2 | done, `300e8cc2`: `payout-onchain`, its rules, `GroupArkLeave`, the balance. Schema 42 |
+| 3 | done, `b163c0e6`: the runner sends each approval once, noted with its id |
+| 4 | done, `45db1971`: the row's offer, the wallet screen's rows, the line when a round confirms |
+| 5 | done, `1bff41c9`: `lnurl`, charging what the vHTLC held, a settled refund given back. Schema 43 |
+| 6 | **half.** The vHTLC's unilateral refund without the receiver is signed when it pays the group's onchain wallet, which is the daemon's own on-chain recovery. The cooperative refund without the receiver turned out to be allowed already. **Forfeiting a funded vHTLC into a round has no daemon path,** so it stays refused |
+| 7 | **not run:** signet coins and phones |
+| 8 | **not done: the owner's decision.** `paysOnchain` and `paysOverLightning` are both off on mainnet |
+
+**Where the build chose differently from the plan:**
+
+| the plan said | what was built |
+|---|---|
+| a dead round holds the payout until the term ends | `abandoned` forgets its leave row, so a device's balance shows the approval open again and its co-signer will pay it in another round while it stands. The runner tries each approval once a term, though, so in practice the next try is the next operator's, or this one's after a restart |
+| W7: a floor from the operator's onchain terms | the signer refuses a leave under 546 sats, the dust limit of the costliest address type. The screen offers nothing that arrives with less than 1,000 sats (`MIN_ONCHAIN_PAYOUT_SAT`), a stand-in until Phase 0 reads the operator's terms |
+| `max_fee_sat` chosen per payout | the statement's `maxRoundFeeSat`, so it is never tighter than what a round may cost anyway, and the screen states it |
+| Phase 4: a preview dialog before proposing | the row's own line says what arrives where and what it may cost, as the Lightning offer beside it does. The approval screen says it again |
+| W9 for onchain payouts | for both rails. A second Lightning payout while one is open was allowed within the balance, and is now refused |
+| W12 when an older build is in the room | a Lightning payout without `lnurl` is refused, and no build has proposed one outside a test since this wallet's payouts have only been on off mainnet |
+| a refunded payout shown on the wallet screen | not built. The operator's activity line still says it failed, and the member's balance comes back once the refund settles. No transcript line says so |
+| Phase 6's recovery credits the member | it can't, on this wallet: the money lands in the group's onchain wallet as a coin nobody owns, and the member stays charged here. A 30341 assignment from the Wavelength ledger would close it, as it would for leaving (see "What this plan does not do") |
+| a migration test | none exists for any version of this database. Room's generated `42.json` and `43.json` are the check |
+
+**What the review found.** An adversarial reading of everything above that changes what a device signs, by a reviewer that
+isn't a person and was given the code rather than this note, before anything was pushed. Fixed, each with a test:
+
+| found | what it would have let happen | now |
+|---|---|---|
+| **a round paid any standing approval, whatever this device knew of the member's balance** | a member paid in a round one device missed could get a second payout of the same money approved by themselves and that device, and every device that saw the first would still pay the second. The loss would fall on everyone else's share. Lightning payouts had the same gap | a co-signer pays an approval only if everything open for that member fits what they hold by its own count, on both rails. One already given a round still finishes |
+| **a paid approval stood in for a later one to the same address** | after a member's first payout confirmed, every later one to the same address was refused by every device, and each try killed the whole round, renewals included | a confirmed leave no longer counts, and approving refuses a second payout to an address while one is still being paid to it |
+| two payouts in one round were each charged its whole fee | sats charged that left nobody's balance | the fee is split between them in proportion, as the onchain wallet's payouts split theirs |
+| a refund recorded once, never replaced | a refund signed and never settled kept the member charged after a later one brought the money home | an unsettled refund gives way to the next |
+| a vHTLC's recovery paid a fee outside the group's budget | fees past `maxMonthlyFeeSat` | it is counted against the budget and filed |
+
+**Still open from that reading, and not fixed here:**
+- **A Lightning payee is still the proposer's word,** `lnurl` or not: a member's metadata is public, and a proposer can put it in an invoice from their own node. W12 says so. Accepting a Lightning payout only from the member it pays, or with their own device's word on the invoice, would close it, and is the owner's call.
+- **A member who signs another's onchain address as their own blocks that member's onchain payouts** until one of them changes it. The group's onchain wallet has the same rule (`docs/payouts-only.md`, D7), and both should change together if either does.
+- **A device that missed a round still doesn't count the payout it made.** Its co-signer now refuses to pay that money again, but its screen shows the member's balance as unpaid. Crediting a leave from the chain, by script and amount, would fix the screen.
 
 Read these first:
 
