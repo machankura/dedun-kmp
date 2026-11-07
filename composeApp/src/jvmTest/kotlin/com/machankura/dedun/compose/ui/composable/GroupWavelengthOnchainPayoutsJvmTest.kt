@@ -74,7 +74,7 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         wavelength = GroupWavelengthPayouts.Balance(depositedSat = availableSat + openSat, openSat = openSat, availableSat = availableSat),
     )
 
-    private fun loaded(balance: MemberBalances.MemberBalance, paysOnchain: Boolean = true) = GroupPayoutsUIState.Loaded(
+    private fun loaded(balance: MemberBalances.MemberBalance, paysOnchain: Boolean = true, paysLightning: Boolean = false) = GroupPayoutsUIState.Loaded(
         localChatRoom = room,
         balances = MemberBalances.Balances(mapOf(aliceKey to balance), emptyList()),
         walletState = null,
@@ -85,6 +85,7 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         self = ME,
         wavelengthWallet = wallet,
         wavelengthPaysOnchain = paysOnchain,
+        wavelengthPaysLightning = paysLightning,
     )
 
     private class Proposing : GroupWavelengthRepository by GroupWavelengthRepository.NO_OP {
@@ -154,12 +155,26 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         onNodeWithText("@Alice hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.").assertIsDisplayed()
     }
 
-    private fun render(balance: MemberBalances.MemberBalance, usage: UnusedAddressCheck.Usage, assertions: ComposeUiTest.() -> Unit) =
+    @Test
+    fun `a member with both addresses is offered each rail, by name`() = render(balance(10_000), UnusedAddressCheck.Usage.Unused, paysLightning = true) {
+        onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertIsDisplayed()
+        onNodeWithText("Pay out onchain from the Wavelength wallet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a payout waiting on either rail holds the Lightning one back too`() {
+        val waiting = balance(5_000, openSat = 5_000)
+        assertNull(viewModel(loaded(waiting, paysLightning = true)).wavelengthPayable(waiting))
+        val free = balance(5_000)
+        assertIs<Pair<Long, Long>>(viewModel(loaded(free, paysLightning = true)).wavelengthPayable(free))
+    }
+
+    private fun render(balance: MemberBalances.MemberBalance, usage: UnusedAddressCheck.Usage, paysLightning: Boolean = false, assertions: ComposeUiTest.() -> Unit) =
         runDesktopComposeUiTest(width = 400, height = 2000) {
             val destinations = object : PayoutDestinationRepository by PayoutDestinationRepository.NO_OP {
                 override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector) = usage
             }
-            val state = loaded(balance).copy(context = PayoutRule.Context(CoinOwnership.Records.NONE, balance.destination?.onchainAddress?.let { mapOf(aliceKey to ByteVector("0014" + "11".repeat(20))) }.orEmpty()))
+            val state = loaded(balance, paysLightning = paysLightning).copy(context = PayoutRule.Context(CoinOwnership.Records.NONE, balance.destination?.onchainAddress?.let { mapOf(aliceKey to ByteVector("0014" + "11".repeat(20))) }.orEmpty()))
             setContent {
                 DedunTheme {
                     ProvideSnackbarHost {

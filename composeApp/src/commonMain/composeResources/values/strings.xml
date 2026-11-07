@@ -1274,7 +1274,7 @@
     <string name="group_wavelength_receive_room_s">The wallet can take %1$s sats more on mainnet, and a coin that would pass that won't be signed for.</string>
     <string name="group_wavelength_receive_fee_s">A round takes its fee out of what's sent: the group lets it take up to %1$s sats.</string>
     <string name="wavelength_s_sats">Wavelength wallet: %1$s sats</string>
-    <string name="pay_out_over_wavelength">Pay out from the Wavelength wallet</string>
+    <string name="pay_out_over_lightning_from_wavelength">Pay out over Lightning from the Wavelength wallet</string>
     <string name="pay_out_onchain_from_wavelength">Pay out onchain from the Wavelength wallet</string>
     <string name="wavelength_onchain_payout_pays_s_s_s_s">Pays %1$s %2$s sats onchain to %3$s in the wallet's next round, and up to %4$s sats in fees from their balance.</string>
     <string name="wavelength_onchain_payout_no_address_s">%1$s hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.</string>
