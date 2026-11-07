@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.view.state
 
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
+import com.machankura.dedun.compose.wallet.wavelength.group.PaidRequest
 
 /** A member getting an address to pay the wallet at, with what it takes to get one. */
 sealed interface GroupWavelengthReceiveUIState {
@@ -32,6 +33,15 @@ sealed interface GroupWavelengthReceiveUIState {
         val roomLeftSat: Long? = null,
         /** Whether enough of the group's devices have answered lately. A payment fails on the payer's side if they can't claim it in time. */
         val enoughSeen: Boolean = true,
+        /**
+         * What has arrived against [address] and [invoice], or null while nothing has. Set means
+         * the request stops being a QR code (`docs/paid-requests.md`, D1); the amount inside can
+         * still be null where this device knows a payment happened but not how much.
+         */
+        val addressPaid: PaidRequest? = null,
+        val invoicePaid: PaidRequest? = null,
+        /** Whoever runs the wallet, named so that a payment only they vouch for says whose word it is (D4). */
+        val operatorName: String? = null,
     ) : GroupWavelengthReceiveUIState {
         /** The most an invoice can be for: a coin's most, and what's left under the cap. */
         val maxInvoiceSat: Long? get() = listOfNotNull(terms?.maxVtxoSat, roomLeftSat).minOrNull()

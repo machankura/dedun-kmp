@@ -163,7 +163,7 @@ internal fun GroupWavelengthEntryDetail(
         Text(entryHeadline(entry, localChatRoom, reader), style = MaterialTheme.typography.headlineSmall)
         Text(signedAmount(entry), style = MaterialTheme.typography.displaySmall)
 
-        DetailLine(stringResource(Res.string.wavelength_entry_status), entryStatus(entry))
+        DetailLine(stringResource(Res.string.wavelength_entry_status), entryStatus(entry, localChatRoom, reader))
         // A round moved the group's own coins and nothing else: it has a cost and no amount, so saying
         // "0 sats" under Amount beside the same figure above would be saying nothing, twice (T10).
         if (entry.kind != GroupWavelengthEntry.Kind.ROUND) {

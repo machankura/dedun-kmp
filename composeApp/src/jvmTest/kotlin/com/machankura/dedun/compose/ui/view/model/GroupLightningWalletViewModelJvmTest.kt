@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -33,6 +35,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.PrivateKey
+import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.utils.Either
 import fr.acinq.lightning.CltvExpiryDelta
 import fr.acinq.lightning.Feature
@@ -66,8 +69,22 @@ class GroupLightningWalletViewModelJvmTest {
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
+    /**
+     * Clearing the store cancels every `viewModelScope`, so no collector outlives the test --
+     * the receive screen watches the operator's payments for a match that may never come, and a
+     * collector still live when the next test class calls `Dispatchers.setMain` fails *that*
+     * class with "Main is used concurrently with setting it".
+     */
     @AfterTest
-    fun tearDown() = Dispatchers.resetMain()
+    fun tearDown() {
+        store.clear()
+        Dispatchers.resetMain()
+    }
+
+    private val store = ViewModelStore()
+    private var kept = 0
+
+    private fun <T : ViewModel> keep(viewModel: T): T = viewModel.also { store.put("vm-${kept++}", it) }
 
     private val chatRoomId = "d4c3b2a1".repeat(8)
     private val me = "a".repeat(64)
@@ -127,7 +144,10 @@ class GroupLightningWalletViewModelJvmTest {
         override suspend fun nominateSelf(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("unused")
         override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("unused")
         override fun observeReport(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupLightningReports.Report?> = flowOf(report)
-        override fun observePayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupLightningPaymentRow>> = flowOf(payments)
+
+        /** Mutable so a test can land a payment after a screen has already drawn its invoice. */
+        val paid = MutableStateFlow(payments)
+        override fun observePayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupLightningPaymentRow>> = paid
         override suspend fun requestInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, amountMsat: Long?, description: String): String =
             "r1".also { requests += amountMsat to description }
         override fun observeInvoice(chatRoomId: String, chain: Chain, wallet: Long, requestId: String): Flow<GroupLightningInvoiceRow?> = flowOf(invoice?.takeIf { it.requestId == requestId })
@@ -280,11 +300,65 @@ class GroupLightningWalletViewModelJvmTest {
         DepositRepository.Standing.Open(com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent.Depositor(destination.member, Chain.Testnet3, 2, 0, destination, event))
     }
 
+    /**
+     * A paid invoice stops being shown (`docs/paid-requests.md`, Phase 1): whoever was scanning it
+     * has already paid, and a bolt11 paid twice is the second payer's money gone.
+     */
+    @Test
+    fun `a paid invoice stops being shown, and another can be asked for`() {
+        val hash = "ab".repeat(32)
+        val lightning = Lightning(completed = key, wallet = wallet, operator = operator("b".repeat(64)), invoice = GroupLightningInvoiceRow("w", "r1", "lnbcrt1", paymentHash = hash))
+        val viewModel = receiving(lightning)
+        viewModel.amountField.edit { append("2100") }
+        viewModel.request(onFailure = { error("the request failed") })
+        settle(viewModel) { it is GroupLightningReceiveUIState.Invoice }
+
+        // Three payments that are not this member's deposit, and the invoice stays up.
+        lightning.paid.value = listOf(
+            payment(hash, incoming = false, succeeded = true),
+            payment(hash, incoming = true, succeeded = false),
+            payment("cd".repeat(32), incoming = true, succeeded = true),
+        )
+        runBlocking { delay(100) }
+        assertIs<GroupLightningReceiveUIState.Invoice>(viewModel.uiState, "only an incoming payment that succeeded, on this invoice's hash")
+
+        lightning.paid.value = lightning.paid.value + payment(hash, incoming = true, succeeded = true, amountMsat = 2_100_450L)
+        val paid = assertIs<GroupLightningReceiveUIState.Paid>(settle(viewModel) { it is GroupLightningReceiveUIState.Paid })
+        assertEquals("lnbcrt1", paid.bolt11, "kept to read against what the payer says they paid, never as a QR code")
+        assertEquals(Satoshi(2_100), paid.amount, "what the operator's snapshot says arrived, truncated to sats")
+        assertEquals("bbbbbbbb", paid.onTheWordOf, "on this wallet a payment is only ever the operator's word")
+
+        viewModel.askAgain()
+        assertIs<GroupLightningReceiveUIState.Form>(settle(viewModel) { it is GroupLightningReceiveUIState.Form })
+    }
+
+    /**
+     * No payment hash on the invoice row -- a row written before deposits were attributed -- and
+     * there is no way to tell this member's payment from anybody else's, so nothing is claimed.
+     */
+    @Test
+    fun `an invoice from before deposits were attributed is never read as paid`() {
+        val lightning = Lightning(completed = key, wallet = wallet, operator = operator("b".repeat(64)), invoice = GroupLightningInvoiceRow("w", "r1", "lnbcrt1"))
+        val viewModel = receiving(lightning)
+        viewModel.amountField.edit { append("2100") }
+        viewModel.request(onFailure = { error("the request failed") })
+        settle(viewModel) { it is GroupLightningReceiveUIState.Invoice }
+        lightning.paid.value = listOf(payment("ab".repeat(32), incoming = true, succeeded = true))
+        runBlocking { delay(100) }
+        assertIs<GroupLightningReceiveUIState.Invoice>(viewModel.uiState)
+    }
+
+    private fun payment(hash: String, incoming: Boolean, succeeded: Boolean, amountMsat: Long = 1_000L) =
+        GroupLightningPaymentRow("w", "$hash-$incoming-$succeeded", incoming, amountMsat, 0, hash, null, null, succeeded)
+
+    private fun settle(viewModel: GroupLightningReceiveViewModel, until: (GroupLightningReceiveUIState) -> Boolean): GroupLightningReceiveUIState =
+        runBlocking { withTimeout(5_000) { while (!until(viewModel.uiState)) delay(10); viewModel.uiState } }
+
     private fun receiving(lightning: GroupLightningRepository, standing: DepositRepository.Standing = depositor): GroupLightningReceiveViewModel {
         val deposits = object : DepositRepository by DepositRepository.NO_OP {
             override suspend fun standing(chatRoomId: String, chain: Chain, canPropose: Boolean) = standing
         }
-        val viewModel = GroupLightningReceiveViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningReceiveUIState.Loading, chat, lightning, deposits)
+        val viewModel = keep(GroupLightningReceiveViewModel(me, chatRoomId, Chain.Testnet3, GroupLightningReceiveUIState.Loading, chat, lightning, deposits))
         viewModel.initiate()
         runBlocking { withTimeout(5_000) { while (viewModel.uiState == GroupLightningReceiveUIState.Loading) delay(10) } }
         return viewModel

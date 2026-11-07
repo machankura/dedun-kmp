@@ -95,6 +95,10 @@ sealed class GroupWavelengthWalletUIState {
          * Everything the wallet has done, as this device reads it: its own records with the operator's claim
          * joined on (`docs/group-wavelength-transaction-details.md`). The one list the screen draws, in place
          * of the three it drew before -- approved payouts, onchain payouts, and the operator's activity.
+         *
+         * A payout that went nowhere is not a field here any more: it is `wentNowhere` on the entry's own
+         * `LightningPayout` detail, so the distinction between a payout that failed and one that failed
+         * before anything was signed travels with the entry rather than beside it.
          */
         val entries: List<GroupWavelengthEntry> = emptyList(),
     ) : GroupWavelengthWalletUIState() {

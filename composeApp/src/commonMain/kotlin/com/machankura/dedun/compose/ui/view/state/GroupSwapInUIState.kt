@@ -24,5 +24,10 @@ sealed interface GroupSwapInUIState {
         val others: List<Pair<String, List<SwapInAddress>>>,
         val minConfirmations: Int,
         val refundDelay: Int,
+        /**
+         * The address this screen was handing out, once it has been paid: the wallet has already
+         * moved on to [current], and this is what says so (`docs/paid-requests.md`, D7).
+         */
+        val justPaid: SwapInAddress? = null,
     ) : GroupSwapInUIState
 }

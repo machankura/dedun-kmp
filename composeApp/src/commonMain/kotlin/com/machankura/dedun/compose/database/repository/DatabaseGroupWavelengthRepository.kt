@@ -7,6 +7,8 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayou
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -97,6 +99,9 @@ class DatabaseGroupWavelengthRepository(
     override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> =
         GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet }
 
+    override suspend fun wentNowhere(chatRoomId: String, chain: Chain, wallet: Long): Set<String> =
+        payouts(chatRoomId, chain, wallet).filter { GroupWavelengthPayouts.wentNowhere(database, chatRoomId, it) }.mapNotNull { it.paymentHash?.toString()?.lowercase() }.toSet()
+
     override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession {
         val chain = wallet.statement.chain
         require(GroupWavelengthRollout.paysOverLightning(chain)) { "Payouts over Lightning are off on ${chain.name}" }
@@ -138,6 +143,12 @@ class DatabaseGroupWavelengthRepository(
 
     override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> =
         database.groupArkDao().observeDepositAddresses(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { rows -> rows.filter { it.requester == member.lowercase() } }
+
+    override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> =
+        database.groupArkDao().observeBoarded(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
+
+    override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> =
+        database.groupArkDao().observeClaims(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
 
     override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> =
         database.groupArkDao().observeSnapshot(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { row ->
@@ -183,6 +194,7 @@ class DatabaseGroupWavelengthRepository(
             deposits = database.depositDao().inRoom(chatRoomId, GroupWalletStatementEvent.chainName(chain)),
             payouts = GroupWavelengthPayouts.signed(database, chatRoomId, chain).filter { it.wallet == wallet },
             payoutsAskedAt = GroupWavelengthPayouts.signedAt(database, chatRoomId, chain),
+            payoutsWentNowhere = wentNowhere(chatRoomId, chain, wallet),
             onchainPayouts = GroupWavelengthPayouts.signedOnchain(database, chatRoomId, chain).filter { it.wallet == wallet },
             exits = GroupWavelengthPayouts.signedExits(database, chatRoomId, chain, wallet),
         )

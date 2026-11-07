@@ -5,6 +5,8 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkPolicy
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -117,6 +119,22 @@ object GroupWavelengthPayouts {
         return row.amountSat ?: payment.maxSat
     }
 
+    /**
+     * Whether [payment] went nowhere: the operator last reported it failed, and this device never signed a transfer for it, so nothing of
+     * it left the wallet by this device's count. It stops holding the member's balance before its approval runs out, and this device won't
+     * sign for it afterwards, whatever the operator asks. The operator's word can only kill a payment here, never pay one. A quorum that
+     * could still fund it would have to be made of devices that haven't dropped it, which go on holding the balance, so the money can't be
+     * approved twice. That rests on two quorums sharing a device, as a payout a device missed already does.
+     */
+    suspend fun wentNowhere(database: DedunDatabase, chatRoomId: String, payment: GroupWavelengthPaymentEvent.Payment): Boolean {
+        val key = GroupArkCoSigner.walletKey(chatRoomId, payment.chain, payment.wallet)
+        val hash = payment.paymentHash?.toString() ?: return false
+        val dao = database.groupArkDao()
+        if (dao.payments(key).any { it.paymentHash.equals(hash, ignoreCase = true) }) return false
+        val report = dao.snapshot(key)?.let { row -> runCatching { CommonJson.decodeFromString(GroupWavelengthSnapshot.serializer(), row.content) }.getOrNull() } ?: return false
+        return report.activity.any { it.status == FAILED && it.paymentHash.equals(hash, ignoreCase = true) }
+    }
+
     /** What this device has signed a round paying [payout] with, the leave and the round's fee, or null when it hasn't. */
     private suspend fun leftWith(database: DedunDatabase, chatRoomId: String, payout: GroupWavelengthOnchainPayoutEvent.Payout): Long? {
         val key = GroupArkCoSigner.walletKey(chatRoomId, payout.chain, payout.wallet)
@@ -137,7 +155,7 @@ object GroupWavelengthPayouts {
             val sent = sentFor(database, chatRoomId, payment)
             when {
                 sent != null -> paid[member] = (paid[member] ?: 0) + sent
-                payment.expiresAt > nowSeconds -> open[member] = (open[member] ?: 0) + cost
+                payment.expiresAt > nowSeconds && !wentNowhere(database, chatRoomId, payment) -> open[member] = (open[member] ?: 0) + cost
             }
         }
         signedOnchain(database, chatRoomId, chain).forEach { payout ->
@@ -251,6 +269,9 @@ object GroupWavelengthPayouts {
             }
             .filter { (id, _) -> id != itself }
             .toMap()
+
+    /** The daemon's word for a payment that didn't go, as its activity reports it. */
+    private const val FAILED = "failed"
 
     /** The longest a device signs an approval to stand for. A far-off one could still be acted on long after anyone remembers it. */
     private const val MAX_APPROVAL_SECONDS = 7L * 24 * 60 * 60

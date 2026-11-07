@@ -2,10 +2,12 @@ package com.machankura.dedun.compose.ui.composable
 
 import dedun.composeapp.generated.resources.pays_s_s_sats_up_to_s_in_fees_to_s
 import dedun.composeapp.generated.resources.pay_out_over_lightning
-import dedun.composeapp.generated.resources.pay_out_over_wavelength
+import dedun.composeapp.generated.resources.pay_out_over_lightning_from_wavelength
 import dedun.composeapp.generated.resources.pay_out_onchain_from_wavelength
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_pays_s_s_s_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_needs_s_more
+import dedun.composeapp.generated.resources.wavelength_onchain_payout_leaves_too_little_s_s
+import dedun.composeapp.generated.resources.wavelength_payout_leaves_too_little_s_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_waiting_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_no_address_s
 import dedun.composeapp.generated.resources.wavelength_s_sats
@@ -217,6 +219,7 @@ fun GroupPayoutsScreen(
                                 wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && state.wavelengthPaysLightning && balance.destination != null) {
                                     viewModel.wavelengthPayable(balance)
                                 } else null,
+                                wavelengthChangeShortSat = viewModel.wavelengthChangeShortSat(balance),
                                 // The same balance, onchain, as a leave in the wallet's next round (docs/group-wavelength-payouts.md).
                                 wavelengthOnchain = if (state.canSign && balance.destination != null) viewModel.wavelengthOnchainOffer(balance) else null,
                                 wavelengthOnchainProblem = viewModel.usageProblemOf(balance.member),
@@ -315,6 +318,8 @@ private fun MemberPayoutRow(
     onPayLightning: (() -> Unit)?,
     /** The same from the Wavelength wallet. */
     wavelengthOffer: Pair<Long, Long>? = null,
+    /** How many sats more the wallet needs before that payout leaves change the operator accepts, or 0 when it does. */
+    wavelengthChangeShortSat: Long = 0,
     onPayWavelength: (() -> Unit)? = null,
     /** The Wavelength balance paid out onchain, or why it can't be: null where there's nothing to say. */
     wavelengthOnchain: GroupPayoutsViewModel.WavelengthOnchainOffer? = null,
@@ -387,7 +392,13 @@ private fun MemberPayoutRow(
                 Text(stringResource(Res.string.pay_out_over_lightning))
             }
         }
-        if (wavelengthOffer != null) {
+        if (wavelengthOffer != null && wavelengthChangeShortSat > 0) {
+            Text(
+                stringResource(Res.string.wavelength_payout_leaves_too_little_s_s, name, Satoshi(wavelengthChangeShortSat).grouped()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (wavelengthOffer != null) {
             val (amount, fee) = wavelengthOffer
             Text(
                 stringResource(
@@ -398,7 +409,7 @@ private fun MemberPayoutRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TextButton(onClick = { onPayWavelength?.invoke() }, enabled = onPayWavelength != null) {
-                Text(stringResource(Res.string.pay_out_over_wavelength))
+                Text(stringResource(Res.string.pay_out_over_lightning_from_wavelength))
             }
         }
         WavelengthOnchainOffer(name, wavelengthOnchain, wavelengthOnchainProblem, onCheckOnchainAddress, onPayWavelengthOnchain)
@@ -426,6 +437,8 @@ private fun WavelengthOnchainOffer(
             Text(stringResource(Res.string.wavelength_onchain_payout_waiting_s, name), style = MaterialTheme.typography.bodySmall, color = muted)
         is GroupPayoutsViewModel.WavelengthOnchainOffer.TooLittle ->
             Text(stringResource(Res.string.wavelength_onchain_payout_needs_s_more, Satoshi(offer.shortSat).grouped()), style = MaterialTheme.typography.bodySmall, color = muted)
+        is GroupPayoutsViewModel.WavelengthOnchainOffer.LeavesTooLittle ->
+            Text(stringResource(Res.string.wavelength_onchain_payout_leaves_too_little_s_s, name, Satoshi(offer.shortSat).grouped()), style = MaterialTheme.typography.bodySmall, color = muted)
         is GroupPayoutsViewModel.WavelengthOnchainOffer.Offer -> {
             LaunchedEffect(offer.address) { onCheck() }
             Text(

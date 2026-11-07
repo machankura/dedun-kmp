@@ -29,6 +29,7 @@ import dedun.composeapp.generated.resources.group_wavelength_payout_failed_s
 import dedun.composeapp.generated.resources.group_wavelength_payout_in_flight
 import dedun.composeapp.generated.resources.group_wavelength_payout_paid
 import dedun.composeapp.generated.resources.group_wavelength_payout_s_s
+import dedun.composeapp.generated.resources.group_wavelength_payout_went_nowhere_s_s
 import dedun.composeapp.generated.resources.wavelength_entry_failed
 import dedun.composeapp.generated.resources.wavelength_entry_succeeded
 import dedun.composeapp.generated.resources.wavelength_entry_waiting_for_payment
@@ -71,7 +72,7 @@ fun entryHeadline(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, rea
 
 /** Where it has got to, in the words each kind already used. */
 @Composable
-fun entryStatus(entry: GroupWavelengthEntry): String = when (entry.kind) {
+fun entryStatus(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, reader: HexKey): String = when (entry.kind) {
     GroupWavelengthEntry.Kind.DEPOSIT_ONCHAIN, GroupWavelengthEntry.Kind.DEPOSIT_LIGHTNING -> when (entry.status) {
         GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.wavelength_entry_waiting_for_payment)
         GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.group_wavelength_coin_settled)
@@ -81,10 +82,20 @@ fun entryStatus(entry: GroupWavelengthEntry): String = when (entry.kind) {
 
     GroupWavelengthEntry.Kind.PAYOUT_LIGHTNING -> when (entry.status) {
         GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.group_wavelength_payout_paid)
-        GroupWavelengthEntry.Status.FAILED -> stringResource(
-            Res.string.group_wavelength_payout_failed_s,
-            (entry.detail as? GroupWavelengthEntry.Detail.LightningPayout)?.line?.failure.orEmpty(),
-        )
+        // A payout that failed before anything was signed tied nothing up, so it says whose balance is
+        // free again: the one of the two outcomes a member can act on.
+        GroupWavelengthEntry.Status.FAILED -> {
+            val payout = entry.detail as? GroupWavelengthEntry.Detail.LightningPayout
+            if (payout?.wentNowhere == true) {
+                stringResource(
+                    Res.string.group_wavelength_payout_went_nowhere_s_s,
+                    payout.line?.failure.orEmpty(),
+                    memberName(localChatRoom, entry.member, reader),
+                )
+            } else {
+                stringResource(Res.string.group_wavelength_payout_failed_s, payout?.line?.failure.orEmpty())
+            }
+        }
         GroupWavelengthEntry.Status.IN_FLIGHT -> stringResource(Res.string.group_wavelength_payout_in_flight)
         GroupWavelengthEntry.Status.EXPIRED -> stringResource(Res.string.group_wavelength_onchain_payout_expired)
         GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.group_wavelength_payout_approved)

@@ -38,6 +38,8 @@ import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWalletUIState
+import com.machankura.dedun.compose.wallet.GroupAddress
+import com.machankura.dedun.compose.wallet.PaidAddressWatch
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
@@ -149,6 +151,9 @@ class GroupWalletViewModel(
             val chainState = wallets.walletFor(wallet.account, chatRoomId).state
             noticeGuardianSpends(wallet.account)
             recordDeposits(chainState)
+            // The receive card's address rotates by itself when one is paid; this says so.
+            // docs/paid-requests.md, D7.
+            val paidWatch = PaidAddressWatch(GroupAddress::address)
             watching = viewModelScope.launch(Dispatchers.IO) {
                 combine(
                     chainState,
@@ -158,7 +163,15 @@ class GroupWalletViewModel(
                     Triple(state, transactions.map { rowOf(it) }, guardedWallets)
                 }.collect { (state, rows, guardedWallets) ->
                     val unowned = payoutRepository.balances(chatRoomId, chain, state).unownedSat
-                    groupWalletUIState = loaded.copy(walletState = state, spends = rows, guardedWallets = guardedWallets, unownedSat = unowned)
+                    val mine = state.depositAddressesOf(activeUserPublicKey)
+                    val justPaid = paidWatch.seen(
+                        current = state.depositAddressOf(activeUserPublicKey),
+                        used = mine.orEmpty().filter { it.status == GroupAddress.Status.USED },
+                    )
+                    groupWalletUIState = loaded.copy(
+                        walletState = state, spends = rows, guardedWallets = guardedWallets,
+                        unownedSat = unowned, justPaidDeposit = justPaid,
+                    )
                 }
             }
         }

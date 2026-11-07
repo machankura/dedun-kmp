@@ -225,6 +225,26 @@ class GroupWavelengthHistoryJvmTest {
     }
 
     @Test
+    fun `a payout that failed before anything was signed is marked as having gone nowhere`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        val said = snapshot(line("l1", status = GroupWavelengthHistory.LINE_FAILED, failure = "no route", paymentHash = hash))
+
+        // Nothing of it left the wallet, so the member's balance is free again: a different outcome from a
+        // payout that failed, and the only one of the two a member can act on.
+        val nowhere = of(
+            GroupWavelengthHistory.Rows(payouts = listOf(approval), payoutsWentNowhere = setOf(hash.lowercase())),
+            said,
+        ).single()
+        assertEquals(Status.FAILED, nowhere.status)
+        assertTrue(assertNotNull(nowhere.detail as? GroupWavelengthEntry.Detail.LightningPayout).wentNowhere)
+
+        // One this device did sign for is not: its value may still be tied up in a vHTLC.
+        val signed = of(GroupWavelengthHistory.Rows(payouts = listOf(approval)), said).single()
+        assertFalse(assertNotNull(signed.detail as? GroupWavelengthEntry.Detail.LightningPayout).wentNowhere)
+    }
+
+    @Test
     fun `a Lightning payout nobody paid before its approval ran out is spent, not still waiting`() {
         val entry = of(GroupWavelengthHistory.Rows(payouts = listOf(payout(expiresAt = now - 1)))).single()
         assertEquals(Status.EXPIRED, entry.status)

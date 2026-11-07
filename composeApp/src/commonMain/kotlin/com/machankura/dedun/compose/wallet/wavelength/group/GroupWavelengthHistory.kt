@@ -118,6 +118,12 @@ data class GroupWavelengthEntry(
             val signed: GroupArkPayment? = null,
             /** The operator's line about it, which is the only word on whether it arrived. */
             val line: GroupWavelengthSnapshot.Line? = null,
+            /**
+             * Whether it failed before this device signed anything of it, so nothing of it left the wallet
+             * and the member's balance is free again (`GroupWavelengthPayouts.wentNowhere`). A different
+             * thing from a payout that failed, and the only one of the two a member can act on.
+             */
+            val wentNowhere: Boolean = false,
         ) : Detail
 
         data class OnchainPayout(
@@ -185,6 +191,8 @@ object GroupWavelengthHistory {
          * without this a payout waiting on the operator has none either.
          */
         val payoutsAskedAt: Map<HexKey, Long> = emptyMap(),
+        /** The payment hashes of [payouts] that failed before anything of them was signed. */
+        val payoutsWentNowhere: Set<HexKey> = emptySet(),
         val onchainPayouts: List<GroupWavelengthOnchainPayoutEvent.Payout> = emptyList(),
         val exits: List<GroupWavelengthExitEvent.Exit> = emptyList(),
     )
@@ -368,7 +376,12 @@ object GroupWavelengthHistory {
             at = line?.at?.takeIf { it > 0 } ?: signed?.atEpochSeconds ?: hash?.let { rows.payoutsAskedAt[it] },
             member = approval.payout?.member,
             direction = GroupWavelengthEntry.Direction.OUT,
-            detail = GroupWavelengthEntry.Detail.LightningPayout(approval, signed, line),
+            detail = GroupWavelengthEntry.Detail.LightningPayout(
+                approval = approval,
+                signed = signed,
+                line = line,
+                wentNowhere = hash != null && hash in rows.payoutsWentNowhere,
+            ),
         )
     }
 

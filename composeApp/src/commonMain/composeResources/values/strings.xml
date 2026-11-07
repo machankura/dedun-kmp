@@ -568,6 +568,7 @@
     <string name="lightning_wallet_key">Lightning wallet key</string>
     <string name="this_group_has_no_lightning_wallet_key_yet">This group has no key for a Lightning wallet yet.</string>
     <string name="open_the_group_s_onchain_wallet_first">A Lightning wallet closes to the group's onchain wallet. Open that first.</string>
+    <string name="open_the_group_s_onchain_wallet_first_wavelength">A Wavelength wallet's money leaves to the group's onchain wallet. Open that first.</string>
     <string name="a_lightning_wallet_needs_four_signers">A Lightning wallet needs at least four members who hold the onchain wallet's key.</string>
     <string name="the_lightning_wallet_key_is_made_by_everyone">The key is made by everyone who holds the onchain wallet's key. Every payment will need %1$s of their devices online.</string>
     <string name="start_a_key_ceremony">Start a key ceremony</string>
@@ -1337,11 +1338,13 @@
     <string name="group_wavelength_receive_room_s">The wallet can take %1$s sats more on mainnet, and a coin that would pass that won't be signed for.</string>
     <string name="group_wavelength_receive_fee_s">A round takes its fee out of what's sent: the group lets it take up to %1$s sats.</string>
     <string name="wavelength_s_sats">Wavelength wallet: %1$s sats</string>
-    <string name="pay_out_over_wavelength">Pay out from the Wavelength wallet</string>
+    <string name="pay_out_over_lightning_from_wavelength">Pay out over Lightning from the Wavelength wallet</string>
     <string name="pay_out_onchain_from_wavelength">Pay out onchain from the Wavelength wallet</string>
     <string name="wavelength_onchain_payout_pays_s_s_s_s">Pays %1$s %2$s sats onchain to %3$s in the wallet's next round, and up to %4$s sats in fees from their balance.</string>
     <string name="wavelength_onchain_payout_no_address_s">%1$s hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.</string>
     <string name="wavelength_onchain_payout_waiting_s">A payout to %1$s from the Wavelength wallet is waiting for signatures or a round.</string>
+    <string name="wavelength_payout_leaves_too_little_s_s">Paying %1$s out over Lightning would leave less change in the Wavelength wallet than its operator accepts. It can go once someone deposits %2$s sats more.</string>
+    <string name="wavelength_onchain_payout_leaves_too_little_s_s">Paying %1$s out onchain would leave less change in the Wavelength wallet than its operator accepts. It can go once someone deposits %2$s sats more.</string>
     <string name="wavelength_onchain_payout_needs_s_more">%1$s sats more and the Wavelength balance is worth paying out onchain.</string>
     <string name="group_wavelength_payout_s_s">%1$s sats to %2$s</string>
     <string name="group_wavelength_payout_approved">Approved. Waiting for whoever runs the wallet</string>
@@ -1351,6 +1354,7 @@
     <string name="group_wavelength_onchain_payout_in_a_round">In a round. Paid once it confirms</string>
     <string name="group_wavelength_onchain_payout_paid_s">Paid, with %1$s sats in fees</string>
     <string name="group_wavelength_onchain_payout_expired">No round paid it before the approval ran out. Nothing left</string>
+    <string name="group_wavelength_payout_went_nowhere_s_s">Didn't go: %1$s. Nothing left the wallet, so %2$s can be paid out again.</string>
     <string name="group_wavelength_payout_failed_s">Didn't go: %1$s. It needs a new invoice, and whatever was tied up comes back when the refund does.</string>
     <string name="group_wavelength_leave">Leave</string>
     <string name="group_wavelength_leave_question">Leave for the onchain wallet?</string>
@@ -1391,6 +1395,7 @@
     <string name="group_wavelength_wallet">Wavelength wallet</string>
     <string name="group_wavelength_on_s">On %1$s</string>
     <string name="group_wavelength_test_network_s">A test wallet on %1$s: its coins have no value</string>
+    <string name="group_wavelength_needs_an_onchain_wallet">A Wavelength wallet is only available once the group has an onchain wallet.</string>
     <string name="wavelength_wallet_key">Wavelength wallet key</string>
     <string name="the_group_has_a_wavelength_wallet_key">The group has a key for a Wavelength wallet.</string>
     <string name="the_wavelength_wallet_key_is_made_by_everyone">The key is made by everyone who holds the onchain wallet's key. Keeping the wallet's coins renewed will need %1$s of their devices online every few days.</string>
@@ -1419,4 +1424,11 @@
     <string name="group_wavelength_leave_this_open">Leave Dedun open on this device: it only signs for the wallet while it's running.</string>
     <string name="group_wavelength_signers_s_of_s">%1$s of %2$s to sign, %3$s devices online to renew</string>
     <string name="group_wavelength_cap_s">At most %1$s sats on mainnet</string>
+    <string name="payment_received">Payment received</string>
+    <string name="the_operator_says_a_payment_arrived">%1$s says a payment arrived</string>
+    <string name="ask_for_another_invoice">Ask for another invoice</string>
+    <string name="ask_for_another_address">Ask for another address</string>
+    <string name="this_invoice_was_paid_and_should_not_be_paid_again">This invoice was paid. Paying it again would send money nobody can credit.</string>
+    <string name="this_address_was_paid_and_the_next_one_is_below">This address was paid. The one below it is fresh.</string>
+    <string name="this_address_was_paid_ask_for_another">This address was paid. Ask for another to keep your deposits apart.</string>
 </resources>

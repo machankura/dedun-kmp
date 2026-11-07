@@ -183,6 +183,31 @@ Written on 7 November 2026, building `GroupWavelengthHistory` against the code r
 | a Lightning payout has two different fees | the operator's line reports the routing fee; the fee row reports what the group paid for the Ark transfer | the entry's `feeSat` is the routing fee, which is what the member was told the payment would cost. The transfer's own fee stays on the fee row for the sheet to show (Phase 5) |
 | a payout fixture can't be built on signet | `Bolt11Invoice.create(Chain.Signet, …)` throws *unknown chain hash* — the other half of the gap `GroupWavelengthPaymentEvent.readInvoice` exists for, which reads signet's prefix by hand because `Bolt11Invoice` doesn't know it | the test's invoices are regtest's, whose prefix both halves know. Eight tests failed on this and none of them on the model |
 
+## What merging `dedun` found
+
+`dedun` had moved 25 commits on while this was built, and twelve of the files overlapped. One of them
+carried behaviour that a careless merge would have dropped in silence.
+
+**`wentNowhere` is now a field of the entry, not of the screen's state.** `dedun`'s payouts work added
+`GroupWavelengthWalletUIState.Opened.wentNowhere`: the payment hashes of approved payouts that failed
+*before this device signed anything of them*, so nothing of them left the wallet and the member's balance
+is free again. Its `PayoutRow` said so in a sentence of its own, distinct from a payout that merely
+failed — the one of the two outcomes a member can act on.
+
+This plan deleted `payouts` and `onchainPayouts` from that state (Phase 3), and `wentNowhere` sat between
+them. Keeping the field beside `entries` would have put the distinction back where T1 took it from, so it
+moved instead: `Rows.payoutsWentNowhere` into `GroupWavelengthHistory`, `wentNowhere` onto
+`Detail.LightningPayout`, and the sentence into `entryStatus`. The behaviour travels with the entry rather
+than beside it, which is what the detail screen and the sheet need anyway.
+
+`dedun` tested `wentNowhere` only at the manager level (`GroupWavelengthPayouts.wentNowhere`), never on a
+screen, so the row's two sentences had no test at all. They have one now, in
+`GroupWavelengthWalletScreenJvmTest`, and the joining has one in `GroupWavelengthHistoryJvmTest`.
+
+The rest resolved without judgement: `dedun`'s `observeBoarded` and `observeClaims` flows (its paid-requests
+work) sit beside this plan's suspend reads, since the two ask different questions of the same tables, and
+the screen's own conflicts were the three rows this plan had already replaced.
+
 ## The screens
 
 ### The history, on the wallet screen

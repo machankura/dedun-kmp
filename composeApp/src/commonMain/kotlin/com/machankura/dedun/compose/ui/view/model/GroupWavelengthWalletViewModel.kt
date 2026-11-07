@@ -169,7 +169,10 @@ class GroupWavelengthWalletViewModel(
         val alarms = repository.alarms(chatRoomId)
         val fees = repository.feesSince(chatRoomId, chain, number, term, monthAgo)
         val labels = repository.labelsLeft(chatRoomId, chain, number, activeUserPublicKey)
+        // The history's rows, and which approved payouts went nowhere -- a payout that failed before
+        // anything was signed is a different thing from one that failed, and the entry carries which.
         val historyRows = repository.historyRows(chatRoomId, chain, number)
+        val wentNowhere = repository.wentNowhere(chatRoomId, chain, number)
         val leaveAsked = repository.leaveAsked(chatRoomId, chain, number)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
             uiState = it.copy(
@@ -179,7 +182,7 @@ class GroupWavelengthWalletViewModel(
                 feesSat = fees,
                 labelsLeft = labels,
                 // Built here rather than stored, from the rows read a moment ago and the report held now.
-                entries = GroupWavelengthHistory.of(historyRows, it.snapshot),
+                entries = GroupWavelengthHistory.of(historyRows.copy(payoutsWentNowhere = wentNowhere), it.snapshot),
                 leaveAsked = leaveAsked,
             )
         }

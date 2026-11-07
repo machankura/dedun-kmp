@@ -13,6 +13,8 @@ import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.repository.MemberWalletRepository
 import com.machankura.dedun.compose.ui.view.state.MemberWalletUIState
 import com.machankura.dedun.compose.ui.view.state.TakenLine
+import com.machankura.dedun.compose.wallet.GroupAddress
+import com.machankura.dedun.compose.wallet.PaidAddressWatch
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlinx.coroutines.Dispatchers
@@ -76,20 +78,27 @@ class MemberWalletViewModel(
             if (!wallet.isCertified) return@launch
             watching = viewModelScope.launch(Dispatchers.IO) {
                 var taken = emptyList<TakenLine>()
+                // The receive card's address rotates by itself when one is paid; this says so.
+                // docs/paid-requests.md, D7.
+                val paidWatch = PaidAddressWatch(GroupAddress::address)
                 combine(
                     wallets.walletFor(wallet.account).state
                         .distinctUntilChangedBy { state -> state.utxos.map { it.utxo.outPoint } to state.tipHeight },
                     memberWalletRepository.observeSpends(walletId),
                 ) { state, spends -> state to spends }
                     .collect { (state, spends) ->
-                        uiState = loaded.copy(walletState = state, taken = taken, spends = spends)
+                        val justPaid = paidWatch.seen(
+                            current = state.receiveAddress,
+                            used = state.receiveAddresses.orEmpty().filter { it.status == GroupAddress.Status.USED },
+                        )
+                        uiState = loaded.copy(walletState = state, taken = taken, spends = spends, justPaid = justPaid)
                         follow(spends, wallet.account.chain)
                         // History, not a watch: a device asleep when a guardian took a
                         // coin still finds it, since the chain keeps the record.
                         taken = wallets.guardianSpends(state).map { spend ->
                             TakenLine(spend.txid.toString(), memberWalletRepository.roomName(spend.guardian.chatRoomId), spend.amount)
                         }
-                        uiState = loaded.copy(walletState = state, taken = taken, spends = spends)
+                        uiState = loaded.copy(walletState = state, taken = taken, spends = spends, justPaid = justPaid)
                     }
             }
         }

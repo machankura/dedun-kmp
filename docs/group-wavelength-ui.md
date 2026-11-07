@@ -9,7 +9,7 @@ How a group gets from nothing to a Wavelength wallet it can see, fund, pay from 
 | phase | state |
 |---|---|
 | 1 | done. Three purpose-blind key lookups fixed, 30371 summarised, `verify` says why, expiry on the ledger, schema 40 |
-| 2 | done, in `jvmTest` only: rows, ceremony by purpose, every state before a wallet exists, transcript lines |
+| 2 | done, in `jvmTest` only: rows, ceremony by purpose, every state before a wallet exists, transcript lines. **One thing this table called done was not:** the row was live whether or not the group had an onchain wallet, against what the screens table below asks. Closed in [group-wavelength-row-gate.md](./group-wavelength-row-gate.md) |
 | 3 | done, in `jvmTest` only, over the SDK's fake: `GroupWavelengthRunner`, `GroupWavelengthProcess`, the holder in `IdentityWavelength`, `GroupWavelengthService`. **The service has never started on a device.** The type is `specialUse`, from memory of Android 15's limits, and still needs checking |
 | 4 | **not run, by decision:** it waits until everything is merged and pushed. It needs fresh signet coins |
 | 5 | done, in `jvmTest` only: snapshot, comparison, deadlines, who's been seen, two panes, Advanced, transcript lines |
@@ -142,6 +142,8 @@ Each row is a known gap from the wallet note, and what the UI does about it unti
 
 **U8. Networks are a list, which is now mainnet alone.** `GroupWavelengthRollout.NETWORKS` lists them. `ChatRoomDetailScreen` has a row for each, the route carries its chain, and the runner looks after every wallet on every network in it. Signet was offered beside mainnet until the gate was lifted, and the screens still say a test wallet's coins have no value. `allows` still takes signet, so a device co-signs for a signet wallet if one exists. Tests pass a chain in.
 
+> **Putting a non-mainnet chain back in `NETWORKS` needs a way to a group onchain wallet on that chain first.** The row for a network is now disabled until the group has an onchain wallet on it ([group-wavelength-row-gate.md](./group-wavelength-row-gate.md)), and `GroupWavelengthWalletScreen` is the only caller in the app that passes a non-null `chain` to `GroupWalletRoute` -- the onchain row beside it passes none, which that route reads as the node's own network. So a disabled signet row is a dead end, where a live one was the one way through. On mainnet alone the two routes reach the same wallet and nothing is lost, which is why the gate could land as it is.
+
 **U9. `ENABLED` is read in two places:** the row on `ChatRoomDetailScreen` and the runner. A device with it off still verifies and co-signs, as its comment says. Screen tests take state directly, so they don't depend on it. A build for phones turns it on in a commit on a test branch, which never merges.
 
 **U10. Words come from `strings.xml`.** `GroupWavelengthDaemon.Outcome.Refused`, `GroupArkCoSigner.sayRefused` and `walletName` hold English today. They become reason types that a screen renders, so the literals budget doesn't grow. *Renew*, never *refresh*. *Coin* on the main screen, and *VTXO* only on Advanced (D16).
@@ -150,7 +152,7 @@ Each row is a known gap from the wallet note, and what the UI does about it unti
 
 | route | who sees what | phase |
 |---|---|---|
-| row on `ChatRoomDetailScreen` | everyone in the room, disabled with a reason until the onchain wallet exists | 2 |
+| row on `ChatRoomDetailScreen` | everyone in the room, disabled with a reason until the onchain wallet exists on that row's network. **Written in the row gate note, not in Phase 2:** Phase 2 shipped the row live, and its screen told whoever tapped it about a Lightning wallet | 2 |
 | `IcebergCeremonyRoute(purpose)` | share holders take part, others watch | 2 |
 | `GroupWavelengthWalletRoute`, not yet open | what's still needed, in the order below | 2 |
 | `GroupWavelengthWalletRoute`, open | balance, deadline, who's been seen, activity, operator, limits. Two panes from `Breakpoint.Expanded` | 2, 3 and 5 |

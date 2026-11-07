@@ -38,5 +38,7 @@ sealed interface GroupPayoutsUIState {
         /** Which of its rails pay out on this network (`docs/group-wavelength-payouts.md`, W13). */
         val wavelengthPaysLightning: Boolean = false,
         val wavelengthPaysOnchain: Boolean = false,
+        /** What's in the Wavelength wallet by this device's own record, which the change a payout leaves is counted from. */
+        val wavelengthInWalletSat: Long = 0,
     ) : GroupPayoutsUIState
 }
