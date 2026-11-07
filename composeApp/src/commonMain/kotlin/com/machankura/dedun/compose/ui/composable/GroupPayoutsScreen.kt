@@ -2,7 +2,7 @@ package com.machankura.dedun.compose.ui.composable
 
 import dedun.composeapp.generated.resources.pays_s_s_sats_up_to_s_in_fees_to_s
 import dedun.composeapp.generated.resources.pay_out_over_lightning
-import dedun.composeapp.generated.resources.pay_out_over_wavelength
+import dedun.composeapp.generated.resources.pay_out_over_lightning_from_wavelength
 import dedun.composeapp.generated.resources.pay_out_onchain_from_wavelength
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_pays_s_s_s_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_needs_s_more
@@ -409,7 +409,7 @@ private fun MemberPayoutRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TextButton(onClick = { onPayWavelength?.invoke() }, enabled = onPayWavelength != null) {
-                Text(stringResource(Res.string.pay_out_over_wavelength))
+                Text(stringResource(Res.string.pay_out_over_lightning_from_wavelength))
             }
         }
         WavelengthOnchainOffer(name, wavelengthOnchain, wavelengthOnchainProblem, onCheckOnchainAddress, onPayWavelengthOnchain)

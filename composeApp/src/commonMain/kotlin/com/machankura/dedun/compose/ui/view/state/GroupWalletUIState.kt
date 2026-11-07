@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.managers.GuardianManager
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.lightning.utils.sum
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
+import com.machankura.dedun.compose.wallet.GroupAddress
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.wallet.GroupSpend
 import com.machankura.dedun.compose.wallet.PayoutRule
@@ -75,6 +76,12 @@ sealed interface GroupWalletUIState {
         val memberNames: Map<HexKey, String> = emptyMap(),
         /** What the wallet holds that nobody owns yet, and so nobody can be paid: `docs/payouts-only.md`. */
         val unownedSat: Long = 0,
+        /**
+         * The deposit address the receive card was handing out, once it has been paid: the branch
+         * has already moved on to the next one, and this is what says so
+         * (`docs/paid-requests.md`, D7).
+         */
+        val justPaidDeposit: GroupAddress? = null,
     ): GroupWalletUIState
 
     data class Error(

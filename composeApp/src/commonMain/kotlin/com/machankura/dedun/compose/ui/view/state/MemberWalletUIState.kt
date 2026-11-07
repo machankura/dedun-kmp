@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.view.state
 
 import com.machankura.dedun.compose.database.model.MemberWalletSpend
 import com.machankura.dedun.compose.managers.MemberWalletManager
+import com.machankura.dedun.compose.wallet.GroupAddress
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import fr.acinq.bitcoin.Satoshi
 
@@ -22,6 +23,11 @@ sealed interface MemberWalletUIState {
         val reach: Int = wallet.account.guardians.size,
         /** Each guardian's delay, nearest first: the leaves the wallet's addresses carry. */
         val delays: List<Long> = wallet.account.guardians.map { it.delay },
+        /**
+         * The address the receive card was handing out, once it has been paid: the wallet has
+         * already moved on to the next one, and this is what says so (`docs/paid-requests.md`, D7).
+         */
+        val justPaid: GroupAddress? = null,
     ) : MemberWalletUIState
 }
 

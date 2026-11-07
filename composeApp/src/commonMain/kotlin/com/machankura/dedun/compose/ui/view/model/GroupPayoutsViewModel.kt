@@ -234,8 +234,12 @@ class GroupPayoutsViewModel(
         return LightningBalance.payable(available)
     }
 
-    /** What a payout from the Wavelength wallet would be, as (amount, fee limit) in msat, or null when nothing can be paid. */
-    fun wavelengthPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? = LightningBalance.payable(balance.wavelength.availableSat * 1000)
+    /**
+     * What a Lightning payout from the Wavelength wallet would be, as (amount, fee limit) in msat, or null when nothing can be paid --
+     * including while another payout of theirs, on either rail, is approved and waiting to be paid, which every device refuses (W9).
+     */
+    fun wavelengthPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? =
+        if (balance.wavelength.openSat > 0) null else LightningBalance.payable(balance.wavelength.availableSat * 1000)
 
     /**
      * How many sats short the Wavelength wallet is of paying [balance] out over Lightning, or 0 when it isn't: the change it would leave
@@ -300,7 +304,7 @@ class GroupPayoutsViewModel(
     sealed interface WavelengthOnchainOffer {
         data class Offer(val amountSat: Long, val maxFeeSat: Long, val address: String) : WavelengthOnchainOffer
         data object NoAddress : WavelengthOnchainOffer
-        /** Another payout of theirs, on either rail, is being signed or waiting to be paid (W9). */
+        /** Another payout of theirs, on either rail, is approved and waiting to be paid (W9). One still being signed shows only once approved. */
         data object Waiting : WavelengthOnchainOffer
         data class TooLittle(val shortSat: Long) : WavelengthOnchainOffer
         /** What it leaves in the wallet is under the operator's least change, and a deposit of [shortSat] lets it go. */

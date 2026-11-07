@@ -356,10 +356,21 @@ private fun entryStatusText(entry: Entry): String = stringResource(
     }
 )
 
-/** An invoice or address nobody has paid yet, which is no money on its way. */
+/**
+ * An invoice or address nobody has paid yet, which is no money on its way.
+ *
+ * [EntryPhase.UNSPECIFIED] is in the list because it means what a null phase means -- "the
+ * backing subsystem provided no lifecycle hint" -- and leaving it out labelled a request the
+ * daemon had said nothing about as *Pending*, as though money were on its way to it.
+ *
+ * This is the label on a history row. Whether a request has been paid, which is what takes a
+ * QR code off a screen, is [com.machankura.dedun.compose.wallet.wavelength.WavelengthRequests]
+ * and is stated the other way round: from the phases that say a payment happened.
+ */
 private val Entry.isUnpaidRequest: Boolean
     get() = status == EntryStatus.PENDING && (kind == EntryKind.RECEIVE || kind == EntryKind.DEPOSIT) &&
-        (progress?.phase == null || progress?.phase == EntryPhase.REQUEST_CREATED || progress?.phase == EntryPhase.WAITING_FOR_PAYMENT)
+        (progress?.phase == null || progress?.phase == EntryPhase.UNSPECIFIED ||
+            progress?.phase == EntryPhase.REQUEST_CREATED || progress?.phase == EntryPhase.WAITING_FOR_PAYMENT)
 
 /** The status, then when -- *Pending · 14:02 2 Nov 2026*. */
 @Composable

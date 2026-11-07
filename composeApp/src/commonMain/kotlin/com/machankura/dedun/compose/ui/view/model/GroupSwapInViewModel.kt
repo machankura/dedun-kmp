@@ -13,6 +13,7 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
 import com.machankura.dedun.compose.ui.view.state.GroupSwapInUIState
 import com.machankura.dedun.compose.managers.GroupLightningSweeps
+import com.machankura.dedun.compose.wallet.PaidAddressWatch
 import com.machankura.dedun.compose.wallet.SwapInAddress
 import com.machankura.dedun.compose.wallet.SwapInCoin
 import com.machankura.dedun.compose.wallet.SwapInWalletView
@@ -82,7 +83,15 @@ class GroupSwapInViewModel(
             val names = chatRepository.getChatRoomByIdentifier(chatRoomId)?.localParticipants.orEmpty().associate { p ->
                 p.participant.participantPublicKey.lowercase() to (p.profile?.humanReadableNameOrPubkey() ?: p.participant.participantPublicKey.take(8))
             }
-            swapIn.state.collect { state -> uiState = stateOf(state, activeUserPublicKey, names) }
+            val watch = PaidAddressWatch(SwapInAddress::address)
+            swapIn.state.collect { state ->
+                val next = stateOf(state, activeUserPublicKey, names)
+                uiState = if (next is GroupSwapInUIState.Loaded) {
+                    next.copy(justPaid = watch.seen(next.current.address, next.used))
+                } else {
+                    next
+                }
+            }
         }
     }
 

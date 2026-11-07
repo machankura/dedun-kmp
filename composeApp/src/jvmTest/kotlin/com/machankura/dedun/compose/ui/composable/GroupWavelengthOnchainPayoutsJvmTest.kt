@@ -141,7 +141,7 @@ class GroupWavelengthOnchainPayoutsJvmTest {
     @Test
     fun `the Lightning payout that would leave too little change isn't offered, and the row says why`() = render(balance(1_214), UnusedAddressCheck.Usage.Unused, inWalletSat = 1_218, paysLightning = true) {
         onNodeWithText("Paying @Alice out over Lightning", substring = true).assertIsDisplayed()
-        onNodeWithText("Pay out from the Wavelength wallet").assertDoesNotExist()
+        onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertDoesNotExist()
     }
 
     @Test
@@ -179,6 +179,20 @@ class GroupWavelengthOnchainPayoutsJvmTest {
     @Test
     fun `a member with no onchain address is told it can only be paid over Lightning`() = render(balance(10_000, onchain = null), UnusedAddressCheck.Usage.Unused) {
         onNodeWithText("@Alice hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a member with both addresses is offered each rail, by name`() = render(balance(10_000), UnusedAddressCheck.Usage.Unused, paysLightning = true) {
+        onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertIsDisplayed()
+        onNodeWithText("Pay out onchain from the Wavelength wallet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a payout waiting on either rail holds the Lightning one back too`() {
+        val waiting = balance(5_000, openSat = 5_000)
+        assertNull(viewModel(loaded(waiting, paysLightning = true)).wavelengthPayable(waiting))
+        val free = balance(5_000)
+        assertIs<Pair<Long, Long>>(viewModel(loaded(free, paysLightning = true)).wavelengthPayable(free))
     }
 
     private fun render(balance: MemberBalances.MemberBalance, usage: UnusedAddressCheck.Usage, inWalletSat: Long = 0, paysLightning: Boolean = false, assertions: ComposeUiTest.() -> Unit) =

@@ -6,6 +6,8 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayou
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkBoarded
+import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -139,6 +141,12 @@ class DatabaseGroupWavelengthRepository(
 
     override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> =
         database.groupArkDao().observeDepositAddresses(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { rows -> rows.filter { it.requester == member.lowercase() } }
+
+    override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> =
+        database.groupArkDao().observeBoarded(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
+
+    override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> =
+        database.groupArkDao().observeClaims(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
 
     override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> =
         database.groupArkDao().observeSnapshot(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet)).map { row ->
