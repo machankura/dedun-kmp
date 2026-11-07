@@ -54,6 +54,8 @@ import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.deposit_onchain_instead
 import dedun.composeapp.generated.resources.amount_in_sats
 import dedun.composeapp.generated.resources.ask_for_an_invoice
+import dedun.composeapp.generated.resources.ask_for_another_invoice
+import dedun.composeapp.generated.resources.this_invoice_was_paid_and_should_not_be_paid_again
 import dedun.composeapp.generated.resources.copy_invoice
 import dedun.composeapp.generated.resources.couldn_t_ask_for_an_invoice
 import dedun.composeapp.generated.resources.invoice_copied
@@ -77,6 +79,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
@@ -251,6 +254,32 @@ fun GroupLightningReceiveScreen(
                     // The URI scheme, so a scanning wallet knows what the text is.
                     QRCodeView("lightning:${state.bolt11}")
                     Text(stringResource(Res.string.this_invoice_pays_the_group_s_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SelectionContainer { Text(state.bolt11, style = MaterialTheme.typography.bodySmall) }
+                    TextButton(onClick = {
+                        clipboardManager.setText(buildAnnotatedString { append(state.bolt11) })
+                        notify(copied)
+                    }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = Decorative)
+                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                        Text(stringResource(Res.string.copy_invoice))
+                    }
+                }
+
+                // Paid: no QR code, and the bolt11 stays only to be read against what a payer
+                // says they paid (`docs/paid-requests.md`, D6).
+                is GroupLightningReceiveUIState.Paid -> Column(
+                    modifier = Modifier.padding(padding).readableContent().fillMaxSize().verticalScroll(rememberScrollState()).padding(MaterialTheme.spacing.screenMargin),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+                ) {
+                    PaymentReceived(
+                        amount = state.amount,
+                        note = stringResource(Res.string.this_invoice_was_paid_and_should_not_be_paid_again),
+                        onTheWordOf = state.onTheWordOf,
+                        action = {
+                            Button(onClick = viewModel::askAgain) { Text(stringResource(Res.string.ask_for_another_invoice)) }
+                        },
+                    )
                     SelectionContainer { Text(state.bolt11, style = MaterialTheme.typography.bodySmall) }
                     TextButton(onClick = {
                         clipboardManager.setText(buildAnnotatedString { append(state.bolt11) })
