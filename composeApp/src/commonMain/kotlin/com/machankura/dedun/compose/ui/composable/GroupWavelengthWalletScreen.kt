@@ -110,6 +110,7 @@ import dedun.composeapp.generated.resources.group_wavelength_leave_question
 import dedun.composeapp.generated.resources.group_wavelength_run_it_yourself
 import dedun.composeapp.generated.resources.group_wavelength_activity_fee_s
 import dedun.composeapp.generated.resources.group_wavelength_history
+import dedun.composeapp.generated.resources.group_wavelength_history_earlier_wallets
 import dedun.composeapp.generated.resources.group_wavelength_history_none
 import dedun.composeapp.generated.resources.group_wavelength_history_operator_only
 import dedun.composeapp.generated.resources.group_wavelength_history_when_unknown
@@ -481,6 +482,18 @@ private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened,
 private fun LazyListScope.historyItems(state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit) {
     val (theirs, mine) = state.entries.partition { it.source == GroupWavelengthEntry.Source.THE_OPERATOR }
     item { Text(stringResource(Res.string.group_wavelength_history), style = MaterialTheme.typography.titleSmall) }
+    // The deposit ledger counts a deposit for the group, not for one of its wallets, and a landed boarding
+    // coin leaves nothing wallet-scoped behind to tell them apart. Said where a group has more than one
+    // wallet, which is the only case it can mislead (Phase 6).
+    if (state.earlier.isNotEmpty()) {
+        item {
+            Text(
+                stringResource(Res.string.group_wavelength_history_earlier_wallets),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
     if (mine.isEmpty() && theirs.isEmpty()) {
         item {
             EmptyState(

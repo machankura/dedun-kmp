@@ -4,7 +4,7 @@ A member taps a line in the wallet's activity and gets a screen about that one t
 much, whose, where it got to, and what it cost. Behind a *Technical details* button, a bottom sheet with
 every field this device holds and every field the operator claims, each marked as one or the other.
 
-**Phases 1 to 5 and 7 are built and merged into `dedun`; Phase 6 is not.** Written against `9f99e06b`,
+**Every phase is built and merged into `dedun`.** Written against `9f99e06b`,
 and the files and lines named below are as they stood at that commit; `dedun` had moved 25 commits on by
 the time it merged, which "What merging `dedun` found" below accounts for. It takes over nothing from
 the earlier notes: it adds a screen the UI plan never had, on top of
@@ -23,7 +23,7 @@ refusal rule. If a phase below ever needs to, it stops and gets the reading thos
 | 3 | done. One *History* on the wallet screen, in place of three lists |
 | 4 | done. The detail screen, pushed at every width |
 | 5 | done. The *Technical details* sheet |
-| 6 | **not done.** Most of its behaviour is already in -- a restored device's entries are all `THE_OPERATOR`, the screen groups them under their own heading, and the Lightning-claim deadline gap is on the sheet -- so what is missing is its tests, and saying it once at the list's head rather than per row |
+| 6 | done. The audit it exists for found one real violation (below), and the restored device now has its tests |
 | 7 | done, with this table and the link from the UI note |
 
 **Nothing here has met a real wallet.** Every fixture is hand-built or from the signet harness, and the
@@ -225,6 +225,43 @@ screen, so the row's two sentences had no test at all. They have one now, in
 The rest resolved without judgement: `dedun`'s `observeBoarded` and `observeClaims` flows (its paid-requests
 work) sit beside this plan's suspend reads, since the two ask different questions of the same tables, and
 the screen's own conflicts were the three rows this plan had already replaced.
+
+## What Phase 6 found
+
+The phase exists to check one property: **no screen here may show a figure as this device's own that
+came from the operator.** Auditing each kind against that turned up one real violation, and confirmed
+the rest.
+
+**A Lightning payout's fee and time are the operator's, and were shown unmarked.** Its amount is this
+device's own — what the vHTLC held, which is what the member is charged — so the detail showed *Amount*
+and *Fee* side by side under a line reading *"Your device signed this."* But only the operator knows
+what the payment cost to route or when it arrived: `feeSat` comes from the report's line and so does
+`at`. A reader had every reason to take all four as checked. They now read *Fee, as whoever runs the
+wallet reports it* and *When they say it happened*, from `entryProgressIsTheirs`, which is true for a
+Lightning payout once a line has joined it and for an operator-only entry.
+
+The row keeps the plain *Fee N sats* in its trailing slot. A row is a summary and the detail is where
+provenance belongs (T5); marking it in both would put the longest label in the narrowest place.
+
+**What the audit confirmed, kind by kind.** A boarding deposit's amount comes from the coin this device
+signed, a Lightning deposit's from the claim it signed, an onchain payout's from its own leave, a round's
+fee from its own fee row, and an exit's from its own coins. A Wavelength deposit is only ever attributed
+by an address this device recomputed or an invoice it holds the request for — never the operator's bare
+word, which `DepositRow.BY_OPERATOR` would have been and which nothing on this rail writes. Two tests
+now hold the whole set: one drives every kind at once with a report contradicting all of them and checks
+no entry took its figures, and one checks that only a Lightning payout and the operator's own line take
+their fee from the report.
+
+**A group that has had more than one wallet is told so.** The deposit ledger counts a deposit for the
+group rather than for one of its wallets (`member-deposits.md`), and a landed boarding coin leaves
+nothing wallet-scoped behind to tell them apart — `roundHappened` forgets the boarded row. So an earlier
+wallet's deposits are in the current wallet's history, and the history says so where there is an earlier
+wallet, which is the only case it can mislead. Separating them properly needs a wallet on the deposit
+row, which is a schema change this plan does not make.
+
+**Said once, not per row.** The operator's heading sits above the rows it covers, and a test asserts
+there is exactly one of it — the failure mode the plan named was five rows each apologising for
+themselves.
 
 ## The screens
 

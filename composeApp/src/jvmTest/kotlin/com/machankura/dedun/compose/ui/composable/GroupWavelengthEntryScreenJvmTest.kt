@@ -134,6 +134,54 @@ class GroupWavelengthEntryScreenJvmTest {
         onNodeWithText("Amount").assertDoesNotExist()
     }
 
+    @Test
+    fun `a Lightning payout's fee and time are labelled as the operator's, because that is whose they are`() =
+        runDesktopComposeUiTest(phone, 1600) {
+            val approval = lightningPayout()
+            val hash = "d".repeat(64)
+            val said = GroupWavelengthSnapshot(
+                "w", 3, now, 500, 0,
+                activity = listOf(GroupWavelengthSnapshot.Line("l1", "send", GroupWavelengthHistory.LINE_COMPLETE, 4_000, 41, now - 50, paymentHash = hash)),
+            )
+            // Built directly: the fixture's invoice doesn't decode, and what this asserts is the labels.
+            val entry = GroupWavelengthEntry(
+                id = "payout-ln:x",
+                kind = GroupWavelengthEntry.Kind.PAYOUT_LIGHTNING,
+                status = GroupWavelengthEntry.Status.DONE,
+                source = GroupWavelengthEntry.Source.BOTH,
+                amountSat = 4_010,
+                feeSat = 41,
+                at = now - 50,
+                member = OTHER,
+                direction = GroupWavelengthEntry.Direction.OUT,
+                detail = GroupWavelengthEntry.Detail.LightningPayout(approval, line = said.activity.single()),
+            )
+            setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+            // The amount is this device's own, so it keeps the plain label.
+            onNodeWithText("Amount").assertIsDisplayed()
+            // The fee and the time are not, and an unmarked "Fee" beside that amount would read as though
+            // they were. This is what Phase 6 found.
+            onNodeWithText("Fee, as whoever runs the wallet reports it").assertIsDisplayed()
+            onNodeWithText("When they say it happened").assertIsDisplayed()
+            onNodeWithText("Fee").assertDoesNotExist()
+            onNodeWithText("When").assertDoesNotExist()
+        }
+
+    @Test
+    fun `an onchain payout's fee keeps the plain label, since this device signed the round that cost it`() =
+        runDesktopComposeUiTest(phone, 1600) {
+            val approval = onchainPayout()
+            val rows = GroupWavelengthHistory.Rows(
+                leaves = listOf(GroupArkLeave("w", approval.id, "round", "00", 8_000, 400, confirmed = true, confirmedAtEpochSeconds = now - 10)),
+                onchainPayouts = listOf(approval),
+            )
+            val entry = assertNotNull(of(rows).singleOrNull())
+            setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+            onNodeWithText("Fee").assertIsDisplayed()
+            onNodeWithText("When").assertIsDisplayed()
+            onNodeWithText("Fee, as whoever runs the wallet reports it").assertDoesNotExist()
+        }
+
     // ---- the technical sheet ----
 
     @Test

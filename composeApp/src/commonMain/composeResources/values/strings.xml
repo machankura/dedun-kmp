@@ -1250,6 +1250,8 @@
     <string name="group_wavelength_entry_source_mismatch">Your device and whoever runs the wallet disagree about this. The amount above is your device's.</string>
     <string name="group_wavelength_entry_source_operator">Only whoever runs the wallet says this happened. Your device has no record of it.</string>
     <string name="group_wavelength_entry_select">Select a transaction to see it in full</string>
+    <string name="group_wavelength_entry_fee_theirs">Fee, as whoever runs the wallet reports it</string>
+    <string name="group_wavelength_history_earlier_wallets">This group has had more than one Wavelength wallet. A deposit is counted for the group rather than for one wallet, so an older wallet's deposits are in this list too.</string>
     <string name="group_wavelength_tech_open">Technical details</string>
     <string name="group_wavelength_tech_device">What your device signed</string>
     <string name="group_wavelength_tech_approval">What the group approved</string>

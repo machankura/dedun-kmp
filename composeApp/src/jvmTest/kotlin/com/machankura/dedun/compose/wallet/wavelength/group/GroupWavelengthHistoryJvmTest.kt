@@ -590,6 +590,117 @@ class GroupWavelengthHistoryJvmTest {
         assertEquals(setOf(Source.BOTH, Source.THIS_DEVICE, Source.THE_OPERATOR), entries.map { it.source }.toSet())
     }
 
+    // ---- Phase 6: no figure is shown as this device's own that came from the operator ----
+
+    @Test
+    fun `every kind's amount is this device's own figure, or the entry says it is the operator's`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        val onchain = onchainPayout()
+        // The operator reports a different amount for every one of them. Nothing but its own line may
+        // take that figure as the entry's amount.
+        val said = snapshot(
+            line("l-pay", status = GroupWavelengthHistory.LINE_COMPLETE, amountSat = 99_999, paymentHash = hash),
+            line("l-theirs", kind = "receive", amountSat = 77_777, paymentHash = "f".repeat(64)),
+        )
+        // One entry of each kind, so each round is its own: a round a deposit or a payout speaks for gets
+        // no entry, which is T10's rule and would otherwise leave this test with no ROUND to check.
+        val rows = GroupWavelengthHistory.Rows(
+            coins = listOf(GroupArkVtxo(wallet, "$other:0", 49_000, origin = "c-round", settled = true)),
+            claims = listOf(GroupArkClaim(wallet, "ark", "c".repeat(64), 8_900)),
+            payments = listOf(GroupArkPayment(wallet, hash, "ark", amountSat = 12_010)),
+            leaves = listOf(GroupArkLeave("w", onchain.id, "c-leave", "0014bb", 3_000, 180)),
+            fees = listOf(GroupArkFee(wallet, "c-round", 30, 3, now - 200)),
+            rounds = listOf(GroupArkRound(wallet, "c-round", "note")),
+            deposits = listOf(deposit("$txid:0", 50_000)),
+            payouts = listOf(approval),
+            onchainPayouts = listOf(onchain),
+        )
+        val built = of(rows, said)
+        val entries = built.associateBy { it.kind }
+        assertEquals(built.size, entries.size, "one entry of each kind, or the lookup below hides one")
+
+        // The device's own figure, every one of them, and none of them 99,999 or 77,777.
+        assertEquals(50_000, assertNotNull(entries[Kind.DEPOSIT_ONCHAIN]).amountSat)
+        assertEquals(8_900, assertNotNull(entries[Kind.DEPOSIT_LIGHTNING]).amountSat)
+        assertEquals(12_010, assertNotNull(entries[Kind.PAYOUT_LIGHTNING]).amountSat)
+        assertEquals(3_000, assertNotNull(entries[Kind.PAYOUT_ONCHAIN]).amountSat)
+        assertEquals(0, assertNotNull(entries[Kind.ROUND]).amountSat)
+        // And the one entry that does carry the operator's figure says so.
+        val theirs = assertNotNull(entries[Kind.OPERATOR])
+        assertEquals(77_777, theirs.amountSat)
+        assertEquals(Source.THE_OPERATOR, theirs.source)
+    }
+
+    @Test
+    fun `only a Lightning payout and the operator's own line take their fee from the report`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        val onchain = onchainPayout()
+        val said = snapshot(
+            line("l-pay", status = GroupWavelengthHistory.LINE_COMPLETE, amountSat = 12_010, feeSat = 41, paymentHash = hash),
+            line("l-theirs", kind = "receive", amountSat = 500, feeSat = 7, paymentHash = "f".repeat(64)),
+        )
+        val rows = GroupWavelengthHistory.Rows(
+            leaves = listOf(GroupArkLeave("w", onchain.id, "c-leave", "0014bb", 3_000, 180)),
+            fees = listOf(GroupArkFee(wallet, "c-round", 30, 3, now - 200)),
+            rounds = listOf(GroupArkRound(wallet, "c-round", "note")),
+            payouts = listOf(approval),
+            onchainPayouts = listOf(onchain),
+        )
+        val entries = of(rows, said).associateBy { it.kind }
+        // The two that are the device's own: a leave's share of its round, and a round's own fee.
+        assertEquals(180, assertNotNull(entries[Kind.PAYOUT_ONCHAIN]).feeSat)
+        assertEquals(30, assertNotNull(entries[Kind.ROUND]).feeSat)
+        // The two the operator reports. These are the ones a screen has to label as theirs.
+        assertEquals(41, assertNotNull(entries[Kind.PAYOUT_LIGHTNING]).feeSat)
+        assertEquals(7, assertNotNull(entries[Kind.OPERATOR]).feeSat)
+    }
+
+    @Test
+    fun `a report that contradicts two entries marks both, and neither takes its figure`() {
+        val approval = payout()
+        val hash = assertNotNull(approval.paymentHash).toString()
+        val second = payout(bolt11 = invoice(4_000_000))
+        val secondHash = assertNotNull(second.paymentHash).toString()
+        val rows = GroupWavelengthHistory.Rows(
+            payments = listOf(
+                GroupArkPayment(wallet, hash, "ark1", amountSat = 12_010),
+                GroupArkPayment(wallet, secondHash, "ark2", amountSat = 4_010),
+            ),
+            payouts = listOf(approval, second),
+        )
+        val said = snapshot(
+            line("l1", status = GroupWavelengthHistory.LINE_COMPLETE, amountSat = 1, paymentHash = hash),
+            line("l2", status = GroupWavelengthHistory.LINE_COMPLETE, amountSat = 2, paymentHash = secondHash),
+        )
+        val entries = of(rows, said)
+        assertEquals(2, entries.size)
+        assertTrue(entries.all { it.source == Source.MISMATCH })
+        assertEquals(listOf(4_010L, 12_010L), entries.map { it.amountSat }.sorted())
+    }
+
+    @Test
+    fun `a device that has signed nothing reads a history that is entirely the operator's, of every kind`() {
+        // A restored phone, and a member who holds no share, are in the same position: no rows of their
+        // own, so nothing to set the report beside.
+        val said = snapshot(
+            line("l1", kind = "deposit", amountSat = 50_000, at = now - 10),
+            line("l2", kind = "receive", amountSat = 8_000, at = now - 20),
+            line("l3", kind = "send", status = GroupWavelengthHistory.LINE_FAILED, amountSat = 12_000, at = now - 30),
+            line("l4", kind = "exit", amountSat = 40_000, at = now - 40),
+        )
+        val entries = of(GroupWavelengthHistory.Rows(), said)
+        assertEquals(4, entries.size)
+        assertTrue(entries.all { it.source == Source.THE_OPERATOR }, "no row may claim to be the device's")
+        assertTrue(entries.all { it.kind == Kind.OPERATOR })
+        // Their kinds still say which way the money went, which is all a line says about it.
+        assertEquals(
+            listOf(GroupWavelengthEntry.Direction.IN, GroupWavelengthEntry.Direction.IN, GroupWavelengthEntry.Direction.OUT, GroupWavelengthEntry.Direction.OUT),
+            entries.map { it.direction },
+        )
+    }
+
     @Test
     fun `a deposit nobody has attributed is still a deposit`() {
         val entry = of(GroupWavelengthHistory.Rows(deposits = listOf(deposit("$txid:0", 4_000, member = null)))).single()

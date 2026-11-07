@@ -4,6 +4,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -350,6 +352,37 @@ class GroupWavelengthWalletScreenJvmTest {
             setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(entries = listOf(entry(wentNowhere = false))), Chain.Signet) } } }
             onNodeWithText("It needs a new invoice", substring = true).assertIsDisplayed()
         }
+    }
+
+    @Test
+    fun `a device that has signed nothing reads a history under the operator's heading alone`() =
+        runDesktopComposeUiTest(phone, 1800) {
+            val said = GroupWavelengthSnapshot(
+                "w", 3, 100, 500, 0,
+                activity = listOf(
+                    GroupWavelengthSnapshot.Line("l1", "deposit", "complete", 50_000, 0, 1_799_999_000),
+                    GroupWavelengthSnapshot.Line("l2", "send", "complete", 12_000, 0, 1_799_998_000),
+                ),
+            )
+            setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, withHistory(snapshot = said), Chain.Signet) } } }
+            onNodeWithText("Only whoever runs the wallet says these happened. Your device has no record of them.").assertIsDisplayed()
+            // Said once, at the head of the rows it covers, rather than on each of them.
+            onAllNodesWithText("Only whoever runs the wallet says these happened. Your device has no record of them.").assertCountEquals(1)
+            // And the history's empty state is not shown beside them: there is something to read.
+            onNodeWithText("Nothing has happened in this wallet yet").assertDoesNotExist()
+        }
+
+    @Test
+    fun `a group that has had more than one wallet is told its deposits are the group's`() = runDesktopComposeUiTest(phone, 2000) {
+        val earlier = GroupWavelengthWalletUIState.Earlier(wallet(Chain.Signet, number = 0), null, settledSat = 0, leaveAsked = false)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(earlier = listOf(earlier)), Chain.Signet) } } }
+        onNodeWithText("A deposit is counted for the group rather than for one wallet", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a group with one wallet is not told that`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(), Chain.Signet) } } }
+        onNodeWithText("A deposit is counted for the group rather than for one wallet", substring = true).assertDoesNotExist()
     }
 
     @Test

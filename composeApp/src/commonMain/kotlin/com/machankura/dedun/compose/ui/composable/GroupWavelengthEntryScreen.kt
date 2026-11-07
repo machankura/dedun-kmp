@@ -41,6 +41,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.DetailLine
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryHeadline
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryProgressIsTheirs
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryStatus
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.memberName
 import com.machankura.dedun.compose.ui.theme.readableContent
@@ -53,6 +54,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.group_wavelength_advanced_untested_refund
 import dedun.composeapp.generated.resources.group_wavelength_entry_from_address
+import dedun.composeapp.generated.resources.group_wavelength_entry_fee_theirs
 import dedun.composeapp.generated.resources.group_wavelength_entry_how
 import dedun.composeapp.generated.resources.group_wavelength_entry_how_lightning
 import dedun.composeapp.generated.resources.group_wavelength_entry_how_onchain
@@ -67,6 +69,7 @@ import dedun.composeapp.generated.resources.group_wavelength_entry_when
 import dedun.composeapp.generated.resources.group_wavelength_entry_whose
 import dedun.composeapp.generated.resources.group_wavelength_history_when_unknown
 import dedun.composeapp.generated.resources.group_wavelength_invoice_warning
+import dedun.composeapp.generated.resources.group_wavelength_tech_their_time
 import dedun.composeapp.generated.resources.group_wavelength_tech_open
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.wavelength_amount
@@ -169,13 +172,20 @@ internal fun GroupWavelengthEntryDetail(
         if (entry.kind != GroupWavelengthEntry.Kind.ROUND) {
             DetailLine(stringResource(Res.string.wavelength_amount), stringResource(Res.string.s_sats, Satoshi(entry.amountSat).grouped()))
         }
+        // A fee that came from the operator's report is labelled as theirs. A Lightning payout is the one
+        // kind where this matters: its amount is what this device signed, so an unmarked "Fee" beside it
+        // reads as the device's own figure too, and it never is (Phase 6).
+        val theirs = entryProgressIsTheirs(entry)
         if (entry.feeSat > 0) {
-            DetailLine(stringResource(Res.string.wavelength_entry_fee), stringResource(Res.string.s_sats, Satoshi(entry.feeSat).grouped()))
+            DetailLine(
+                label = stringResource(if (theirs) Res.string.group_wavelength_entry_fee_theirs else Res.string.wavelength_entry_fee),
+                value = stringResource(Res.string.s_sats, Satoshi(entry.feeSat).grouped()),
+            )
         }
         entry.member?.let { DetailLine(stringResource(Res.string.group_wavelength_entry_whose), memberName(localChatRoom, it, reader)) }
         rail(entry)?.let { DetailLine(stringResource(Res.string.group_wavelength_entry_how), it) }
         DetailLine(
-            label = stringResource(Res.string.group_wavelength_entry_when),
+            label = stringResource(if (theirs) Res.string.group_wavelength_tech_their_time else Res.string.group_wavelength_entry_when),
             value = entry.at?.let { Instant.fromEpochSeconds(it).toFormattedTimeAndDateString() }
                 ?: stringResource(Res.string.group_wavelength_history_when_unknown),
         )

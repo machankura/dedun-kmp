@@ -123,3 +123,17 @@ fun entryStatus(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, reade
         }
     }
 }
+
+/**
+ * Whether the fee and the time on this entry are the operator's word rather than this device's.
+ *
+ * A Lightning payout is the one kind where the two are mixed: the group signed the approval and this
+ * device signed the payment, so its amount is its own, but what it cost to route and when it arrived are
+ * only ever reported (`docs/group-wavelength-transaction-details.md`, Phase 6). Said on the detail, where
+ * the provenance belongs, rather than in the row, which is a summary.
+ */
+fun entryProgressIsTheirs(entry: GroupWavelengthEntry): Boolean = when (val detail = entry.detail) {
+    is GroupWavelengthEntry.Detail.LightningPayout -> detail.line != null
+    is GroupWavelengthEntry.Detail.OperatorLine -> true
+    else -> false
+}
