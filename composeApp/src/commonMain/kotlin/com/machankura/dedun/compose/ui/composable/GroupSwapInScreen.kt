@@ -43,6 +43,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.approximateDuration
@@ -58,6 +59,7 @@ import com.machankura.dedun.compose.wallet.bip21Uri
 import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallet
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_refund
 import dedun.composeapp.generated.resources.the_group_was_asked_to_refund
 import dedun.composeapp.generated.resources.ask_the_group_to_refund_s_sats
@@ -184,6 +186,17 @@ private fun SwapInList(state: GroupSwapInUIState.Loaded, notify: (String) -> Uni
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+
+        // The address rotates by itself when one is paid, so what is missing here is only the
+        // saying so (docs/paid-requests.md, D7).
+        state.justPaid?.let { paid ->
+            item(key = "just-paid") {
+                PaymentReceived(
+                    amount = paid.balance,
+                    note = stringResource(Res.string.this_address_was_paid_and_the_next_one_is_below),
                 )
             }
         }

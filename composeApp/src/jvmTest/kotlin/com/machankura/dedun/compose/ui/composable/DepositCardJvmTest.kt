@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.ui.composable
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -18,6 +19,7 @@ import com.machankura.dedun.compose.text.LightningAddress
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.wallet.GroupUtxo
+import com.machankura.dedun.compose.wallet.bip21Uri
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.OutPoint
@@ -48,7 +50,7 @@ class DepositCardJvmTest {
         DepositorStatementEvent.verify(GroupFixtures.signedAsRoom(group, template.kind, template.tags, template.content, 1_700_000_100), room)!!
     }
 
-    private fun render(standing: DepositRepository.Standing, address: String? = this.address, onEvent: (String) -> Unit = {}, assertions: ComposeUiTest.() -> Unit) =
+    private fun render(standing: DepositRepository.Standing, address: String? = this.address, justPaidSat: Satoshi? = null, onEvent: (String) -> Unit = {}, assertions: ComposeUiTest.() -> Unit) =
         runDesktopComposeUiTest(width = 400, height = 1600) {
             setContent {
                 DedunTheme {
@@ -56,6 +58,7 @@ class DepositCardJvmTest {
                         DepositCard(
                             standing = standing,
                             address = address,
+                            justPaidSat = justPaidSat,
                             isPending = false,
                             onCopy = { onEvent("copy") },
                             onOpenAddresses = { onEvent("addresses") },
@@ -101,6 +104,25 @@ class DepositCardJvmTest {
         onNodeWithText(address).assertIsDisplayed()
         onNodeWithText("Everything paid to your addresses is counted as yours.").assertIsDisplayed()
     }
+
+    /**
+     * The address rotates by itself when one is paid, so the card keeps its QR code -- for the
+     * fresh address below -- and gains a line saying what arrived (`docs/paid-requests.md`, D7).
+     */
+    @Test
+    fun `a paid address is announced, and the fresh one is still scannable`() =
+        render(DepositRepository.Standing.Open(depositor), justPaidSat = Satoshi(12_000)) {
+            onNodeWithText("Payment received").assertIsDisplayed()
+            onNodeWithText("12,000 sats").assertIsDisplayed()
+            onNodeWithText("This address was paid. The one below it is fresh.").assertIsDisplayed()
+            assertEquals(1, onAllNodesWithContentDescription(bip21Uri(address)).fetchSemanticsNodes().size, "the fresh address is still a QR code")
+        }
+
+    @Test
+    fun `an address nobody has paid says nothing about a payment`() =
+        render(DepositRepository.Standing.Open(depositor)) {
+            assertEquals(0, onAllNodesWithText("Payment received").fetchSemanticsNodes().size)
+        }
 
     private fun coin(branch: Long): GroupUtxo {
         val derived = GroupWalletDerivation.derive(GroupWalletDerivation.account(GroupFixtures.thresholdKeyOf(group), Chain.Regtest), branch, 0)
