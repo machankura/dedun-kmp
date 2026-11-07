@@ -57,6 +57,21 @@ class GroupWavelengthWalletScreenJvmTest {
         onNodeWithText("On mainnet").assertIsDisplayed()
     }
 
+    /**
+     * With no onchain wallet on its network the row has one thing to say, and the network line
+     * gives way to it: this wallet's money leaves to that one, so there is nothing behind the row
+     * until the group has opened it.
+     */
+    @Test
+    fun `a row with no onchain wallet behind it says so, and opens nothing`() = runDesktopComposeUiTest(phone, 800) {
+        var opened = 0
+        setContent { DedunTheme { WavelengthWalletRow(Chain.Mainnet, hasOnchainWallet = false) { opened++ } } }
+        onNodeWithText("A Wavelength wallet is only available once the group has an onchain wallet.").assertIsDisplayed()
+        onNodeWithText("On mainnet").assertDoesNotExist()
+        onNodeWithText("Wavelength wallet").performClick()
+        assertEquals(0, opened)
+    }
+
     @Test
     fun `no onchain wallet leads to the onchain wallet`() = runDesktopComposeUiTest(phone, 800) {
         var opened = 0
