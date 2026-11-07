@@ -10,6 +10,33 @@ say so and open nothing — exactly as the Lightning wallet's row above it does.
 
 and Phase 2 is marked done. The row shipped without it. This note is the plan for closing that gap.
 
+## What landed
+
+Built on 7 November 2026, in the phases below. `:composeApp:jvmTest` passes whole, `m3Audit`
+reports all budgets met, and the three new gate tests were each checked by reverting
+`enabled = hasOnchainWallet` to `enabled = true`: all three fail, and pass again restored.
+
+Three things went differently from the plan, and the plan is left as it was written so the
+difference is visible:
+
+- **The two existing `WavelengthWalletRow` call sites moved in Phase 2, not Phase 4.** Changing the
+  composable's signature breaks `jvmTest` compilation, so its callers have to move in the same
+  commit or the tree is broken between two of them.
+- **The `onchainWallet` fixture did not need parameterising on a chain.** The plan assumed the row
+  would read a `GroupWallet`; it reads `wavelengthOnchainChains`, so a test states the chains
+  directly and builds no wallet at all.
+- **The "what is missing" table's first row (`docs/group-wavelength-ui.md:97`) was left alone.** The
+  plan called it drift. It is not: that table says "From reading the code at `3648764f`" and is a
+  deliberate point-in-time record, so correcting it would destroy what it is for. What was corrected
+  instead is the build-state table and U8, which describe the present.
+
+The per-network claim in R1 is tested, but only from one side: `NETWORKS` is a hardcoded
+`listOf(Chain.Mainnet)` and nothing injects it, so the test that holds the chain-keying in place puts
+a chain that is *not* offered into `wavelengthOnchainChains` and asserts the mainnet row still waits.
+That catches a later change to the single `groupWallet`, which is the regression R1 exists to prevent.
+It does not exercise two live rows at once; nothing can until `NETWORKS` is injectable or holds two
+chains again.
+
 ## What is there today
 
 | | Lightning | Wavelength |
