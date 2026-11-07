@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.ui.view.state
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.repository.DepositRepository
+import fr.acinq.bitcoin.Satoshi
 
 /** Asking the operator's node for an invoice: the form, the wait for the operator's device, the invoice. */
 sealed class GroupLightningReceiveUIState {
@@ -29,4 +30,16 @@ sealed class GroupLightningReceiveUIState {
 
     /** An invoice the operator made, already checked to pay the group's node. */
     data class Invoice(val bolt11: String) : GroupLightningReceiveUIState()
+
+    /**
+     * That invoice, paid. It stops being a QR code here and nothing shows it as one again:
+     * whoever was scanning it has already paid, and a bolt11 paid twice is the second
+     * payer's money gone rather than a second credit (`docs/paid-requests.md`, D1).
+     *
+     * [onTheWordOf] is the operator's name, because on this wallet it always is: a payment
+     * is known only from the snapshot the operator sends, so the panel says whose word it
+     * is (D4). [amount] is what that snapshot says arrived, which can differ from what was
+     * asked for.
+     */
+    data class Paid(val bolt11: String, val amount: Satoshi?, val onTheWordOf: String?) : GroupLightningReceiveUIState()
 }

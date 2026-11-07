@@ -52,6 +52,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
@@ -63,7 +64,10 @@ import com.machankura.dedun.compose.wallet.bip21Uri
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.address_copied
+import dedun.composeapp.generated.resources.ask_for_another_address
 import dedun.composeapp.generated.resources.copy_address
+import dedun.composeapp.generated.resources.this_address_was_paid_ask_for_another
+import dedun.composeapp.generated.resources.this_invoice_was_paid_and_should_not_be_paid_again
 import dedun.composeapp.generated.resources.group_wavelength_invoice_amount
 import dedun.composeapp.generated.resources.group_wavelength_invoice_ask
 import dedun.composeapp.generated.resources.group_wavelength_invoice_ask_another
@@ -176,8 +180,20 @@ private fun LazyListScope.onchainItems(state: GroupWavelengthReceiveUIState.Load
         return
     }
     item { Text(stringResource(Res.string.group_wavelength_receive_address), style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth()) }
-    item { Text(stringResource(Res.string.group_wavelength_receive_checked), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth()) }
-    item { QRCodeView(bip21Uri(address)) }
+    val paid = state.addressPaid
+    if (paid != null) {
+        // No operator fallback on this rail, so this is always the device's own word.
+        item {
+            PaymentReceived(
+                amount = paid.amount,
+                note = stringResource(Res.string.this_address_was_paid_ask_for_another),
+                action = { Button(onClick = onAsk) { Text(stringResource(Res.string.ask_for_another_address)) } },
+            )
+        }
+    } else {
+        item { Text(stringResource(Res.string.group_wavelength_receive_checked), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth()) }
+        item { QRCodeView(bip21Uri(address)) }
+    }
     item { Copyable(address, Res.string.copy_address, Res.string.address_copied, notify) }
     state.terms?.let { terms ->
         item { Line(stringResource(Res.string.group_wavelength_receive_confirmations_s, terms.boardingConfirmations.toString())) }
@@ -194,9 +210,20 @@ private fun LazyListScope.lightningItems(state: GroupWavelengthReceiveUIState.Lo
         item { Text(stringResource(Res.string.group_wavelength_invoice_devices_needed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth()) }
     }
     val invoice = state.invoice
+    val paid = state.invoicePaid
     if (invoice != null) {
-        item { Text(stringResource(Res.string.group_wavelength_invoice_checked_s, Satoshi(state.invoiceAmountSat ?: 0).grouped()), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth()) }
-        item { QRCodeView(invoice) }
+        if (paid != null) {
+            item {
+                PaymentReceived(
+                    amount = paid.amount,
+                    note = stringResource(Res.string.this_invoice_was_paid_and_should_not_be_paid_again),
+                    onTheWordOf = state.operatorName.takeIf { paid.onTheOperatorsWord },
+                )
+            }
+        } else {
+            item { Text(stringResource(Res.string.group_wavelength_invoice_checked_s, Satoshi(state.invoiceAmountSat ?: 0).grouped()), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth()) }
+            item { QRCodeView(invoice) }
+        }
         item { Copyable(invoice, Res.string.group_wavelength_invoice_copy, Res.string.group_wavelength_invoice_copied, notify) }
     }
     if (state.invoiceAsked) {
