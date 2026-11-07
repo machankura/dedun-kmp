@@ -568,6 +568,7 @@
     <string name="lightning_wallet_key">Lightning wallet key</string>
     <string name="this_group_has_no_lightning_wallet_key_yet">This group has no key for a Lightning wallet yet.</string>
     <string name="open_the_group_s_onchain_wallet_first">A Lightning wallet closes to the group's onchain wallet. Open that first.</string>
+    <string name="open_the_group_s_onchain_wallet_first_wavelength">A Wavelength wallet's money leaves to the group's onchain wallet. Open that first.</string>
     <string name="a_lightning_wallet_needs_four_signers">A Lightning wallet needs at least four members who hold the onchain wallet's key.</string>
     <string name="the_lightning_wallet_key_is_made_by_everyone">The key is made by everyone who holds the onchain wallet's key. Every payment will need %1$s of their devices online.</string>
     <string name="start_a_key_ceremony">Start a key ceremony</string>

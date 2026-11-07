@@ -177,7 +177,7 @@ import dedun.composeapp.generated.resources.group_wavelength_wallet
 import dedun.composeapp.generated.resources.make_a_key
 import dedun.composeapp.generated.resources.nobody_runs_this_wallet
 import dedun.composeapp.generated.resources.open_a_wavelength_wallet
-import dedun.composeapp.generated.resources.open_the_group_s_onchain_wallet_first
+import dedun.composeapp.generated.resources.open_the_group_s_onchain_wallet_first_wavelength
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.run_by_s_term_s
 import dedun.composeapp.generated.resources.run_this_wallet_on_my_device
@@ -290,7 +290,7 @@ internal fun GroupWavelengthWalletContent(
 
         is GroupWavelengthWalletUIState.NeedsOnchainWallet -> EmptyState(
             modifier = modifier.readableContent(),
-            message = stringResource(Res.string.open_the_group_s_onchain_wallet_first),
+            message = stringResource(Res.string.open_the_group_s_onchain_wallet_first_wavelength),
             icon = Icons.Default.AccountBalanceWallet,
             action = { Button(onClick = onOpenOnchainWallet) { Text(stringResource(Res.string.group_wallet)) } },
         )
