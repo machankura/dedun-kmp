@@ -862,6 +862,38 @@ class ArkPolicyJvmTest {
         refused(fixtures.claimArk.copy(leafScript = Hex.encode(refundShaped), digest = null), "doesn't recognise as this key's")
     }
 
+    // ---- a payment's vHTLC recovered onchain: docs/group-wavelength-payouts.md, Phase 6 ----
+
+    /** A vHTLC the group paid, as its unilateral refund without the receiver spends it back once unrolled, paying [pays]. */
+    private fun recovery(pays: ByteVector, value: Long = 9_000, sender: PublicKey = keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0), index: Long = 0): ArkRequest {
+        val v = ArkScripts.Vhtlc(sender, stranger, operator, ByteVector32("ab".repeat(32)), 400_000, 10, 20, 30)
+        val leaf = ArkScripts.vhtlcLeaves(v)[5]
+        val tx = Transaction(2, listOf(TxIn(OutPoint(TxId("22".repeat(32)), 0), 30L)), listOf(TxOut(Satoshi(value), pays)), 400_000)
+        return ArkRequest(
+            kind = ArkRequest.INPUT, family = 202, index = index, tx = Hex.encode(Transaction.write(tx)),
+            prevOuts = listOf(ArkOutput(10_000, Hex.encode(ArkScripts.vhtlcScript(v).toByteArray()))), method = ArkRequest.METHOD_SCRIPT_PATH,
+            leafVersion = Script.TAPROOT_LEAF_TAPSCRIPT, leafScript = Hex.encode(leaf.toByteArray()),
+        )
+    }
+
+    @Test
+    fun `a payment's vHTLC unrolled onto the chain comes home to the group's onchain wallet, and nowhere else`() {
+        val v = ArkScripts.Vhtlc(keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0), stranger, operator, ByteVector32("ab".repeat(32)), 400_000, 10, 20, 30)
+        assertEquals(400_000L to 30L, ArkScripts.unilateralRefundOf(ArkScripts.vhtlcLeaves(v)[5], v.sender))
+        assertTrue(ArkScripts.vhtlcLeaves(v).filterIndexed { i, _ -> i != 5 }.all { ArkScripts.unilateralRefundOf(it, v.sender) == null }, "no other leaf reads as one")
+
+        allowed(recovery(onchain), ArkPolicy.What.VHTLC_RECOVERY)
+        refused(recovery(thief), "a vHTLC's recovery that pays somewhere other than the group's onchain wallet")
+        refused(recovery(anchor, 0).let { r -> r.copy(tx = Hex.encode(Transaction.write(Transaction.read(r.tx!!).let { it.copy(txOut = it.txOut + TxOut(Satoshi(9_000), thief)) }))) }, "somewhere other than the group's onchain wallet")
+        refused(recovery(onchain, 1_000), "in fees")
+    }
+
+    @Test
+    fun `only the group's own swap key recovers a vHTLC, and only one it sent`() {
+        refused(recovery(onchain, sender = stranger), "doesn't recognise as this key's")
+        refused(recovery(onchain, index = 1), "doesn't recognise as this key's")
+    }
+
     // ---- a Lightning payment going out ----
 
     private val notedSend: NotedTransfer = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.sendCheckpoint.note!!.material)

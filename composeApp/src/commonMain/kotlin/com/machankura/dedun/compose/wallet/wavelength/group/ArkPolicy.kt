@@ -33,7 +33,7 @@ import kotlinx.serialization.json.JsonElement
  */
 object ArkPolicy {
     /** What an allowed request is, and so how the co-signer files it. */
-    enum class What { PROOF, SWAP_AUTH, SWAP_ACK, TREE, FORFEIT, BOARDING, JOIN_PROOF, EXIT_SWEEP, ONCHAIN, TRANSFER }
+    enum class What { PROOF, SWAP_AUTH, SWAP_ACK, TREE, FORFEIT, BOARDING, JOIN_PROOF, EXIT_SWEEP, ONCHAIN, TRANSFER, VHTLC_RECOVERY }
 
     /**
      * What a signature means for this device's own record, which only the policy has worked out. It reserves and it pends, and never
@@ -289,6 +289,7 @@ object ArkPolicy {
             }
             else -> {
                 val swapKey = slot == GroupArkDerivation.Slot.OOR_RECEIVE && request.index == 0L
+                if (swapKey && ArkScripts.unilateralRefundOf(leaf, own) != null) return vhtlcRecovery(context, tx, prevOuts, message)
                 val back = ArkScripts.claimHash(leaf, own) != null || ArkScripts.isRefundLeaf(leaf, own)
                 if (!swapKey || !back) refuse("a leaf this device doesn't recognise as this key's")
                 claimInput(context, request, note, tx, prevOuts, spentScript, leaf, message, ArkScripts.claimHash(leaf, own))
@@ -330,6 +331,22 @@ object ArkPolicy {
         val fee = prevOuts.sumOf { it.amount.sat } - tx.txOut.sumOf { it.amount.sat }
         if (fee !in 0..context.maxOnchainFeeSat) refuse("an exit paying $fee sats in fees")
         return Verdict.Allow(What.EXIT_SWEEP, message)
+    }
+
+    /**
+     * A payment's vHTLC, unrolled onto the chain, spent back by its sender alone once its locktime and delay have passed: the daemon's
+     * recovery when the swap server won't refund (`docs/group-wavelength-payouts.md`, Phase 6). Like an exit's sweep, safe without knowing
+     * which payment it was, because every output pays the group's onchain wallet and the signature commits to that. The money lands there
+     * as a coin nobody owns, until the group says whose.
+     */
+    private fun vhtlcRecovery(context: Context, tx: Transaction, prevOuts: List<TxOut>, message: ByteVector32): Verdict {
+        tx.txOut.forEach {
+            val anchor = it.publicKeyScript == ANCHOR && it.amount == Satoshi(0)
+            if (!context.isOnchainWallet(it.publicKeyScript) && !anchor) refuse("a vHTLC's recovery that pays somewhere other than the group's onchain wallet")
+        }
+        val fee = prevOuts.sumOf { it.amount.sat } - tx.txOut.sumOf { it.amount.sat }
+        if (fee !in 0..context.maxOnchainFeeSat) refuse("a vHTLC's recovery paying $fee sats in fees")
+        return Verdict.Allow(What.VHTLC_RECOVERY, message)
     }
 
     /**
