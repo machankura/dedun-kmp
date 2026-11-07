@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.managers
 
+import co.touchlab.kermit.Severity
+import co.touchlab.kermit.StaticConfig
+import co.touchlab.kermit.platformLogWriter
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
@@ -7,6 +10,15 @@ import com.machankura.dedun.compose.database.model.GroupWavelengthSeed
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.wallet.ElectrumClientLink
+import com.machankura.dedun.compose.wallet.GroupChainClients
+import com.machankura.dedun.compose.wallet.StandaloneElectrum
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkWatcher
+import fr.acinq.lightning.logging.LoggerFactory
+import fr.acinq.phoenix.data.ElectrumConfig
+import fr.acinq.phoenix.managers.global.NetworkState
+import kotlinx.coroutines.flow.flowOf
+import kotlin.time.Duration.Companion.seconds
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkRequest
@@ -50,8 +62,8 @@ import kotlin.time.Clock
  * daemon and a real operator on signet. The daemon is Go and its bindings are Android's, so it runs in `TestHostedBridge`, in another
  * process, and each request it makes comes here over HTTP to the same [GroupArkTransport] an elected phone would use.
  *
- * Whoever drives it starts that test on the same directory, reads what this writes, sends coins by hand, and writes a txid to
- * `settle.txt` once they have seen it confirm, which is what Phase 8's watcher will do. It runs until `stop` exists. Skipped unless
+ * Whoever drives it starts that test on the same directory, reads what this writes, and sends coins by hand. The devices see the
+ * chain for themselves, through [GroupArkWatcher]. It runs until `stop` exists. Skipped unless
  * `DEDUN_SIGNET_DIR` names a directory. **The directory ends up holding the group's shares, so it is only for signet.**
  */
 class GroupWavelengthSignetJvmTest {
@@ -172,6 +184,18 @@ class GroupWavelengthSignetJvmTest {
                 delay(20)
             }
         }
+        // Each device sees the chain for itself, on one connection here, as it would on its own.
+        val electrum = StandaloneElectrum(
+            Chain.Signet, flowOf(NetworkState.Available), flowOf(false), flowOf<ElectrumConfig.Custom?>(null),
+            ElectrumClientLink(LoggerFactory(StaticConfig(Severity.Warn, listOf(platformLogWriter())))),
+        ).also { it.start() }
+        val watchers = all.map { GroupArkWatcher(it.db, GroupChainClients.single(electrum.client), this) }
+        val watching = launch(Dispatchers.Default) {
+            while (isActive) {
+                watchers.forEach { it.pass() }
+                delay(15.seconds)
+            }
+        }
         val began = System.nanoTime()
         var plainTo = floor + 127L
         transport.provision(plainTo, 7)
@@ -206,7 +230,6 @@ class GroupWavelengthSignetJvmTest {
         say("asked the daemon to open")
 
         // Until told to stop: keeps round one topped up, files what has been seen to settle, and says what the devices refuse or know.
-        val settled = HashSet<String>()
         val approvals = HashSet<String>()
         val refused = HashSet<String>()
         var ledger = ""
@@ -226,10 +249,6 @@ class GroupWavelengthSignetJvmTest {
                     say("approved a payment: ${GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet).size} approved now")
                 }.onFailure { say("couldn't approve a payment: ${it.message}") }
             }
-            File(dir, "settle.txt").takeIf { it.exists() }?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() && settled.add(it) }?.forEach { txid ->
-                all.forEach { GroupArkCoSigner.settled(it.db, key, txid) }
-                say("settled $txid")
-            }
             all.forEach { d ->
                 fixture.lines(d, ChatMessage.TYPE_LIGHTNING_REFUSED).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
                 fixture.lines(d, ChatMessage.TYPE_LIGHTNING_EQUIVOCATION).forEach { if (refused.add("${d.index}${it.content}")) say("device ${d.index}: ${it.content}") }
@@ -244,6 +263,8 @@ class GroupWavelengthSignetJvmTest {
         }
         server.stop(0)
         pump.cancelAndJoin()
+        watching.cancelAndJoin()
+        electrum.stop()
         fixture.close()
         assertEquals(false, statement.chain.isMainnet())
     }

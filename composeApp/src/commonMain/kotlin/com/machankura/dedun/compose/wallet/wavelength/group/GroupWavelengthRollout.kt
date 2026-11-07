@@ -31,6 +31,13 @@ object GroupWavelengthRollout {
     /** The most the group's unspent coins may come to on mainnet, against each co-signer's own ledger. */
     val MAINNET_CAP: Satoshi = Satoshi(100_000)
 
+    /**
+     * How deep a commitment has to be before a device believes its round happened, or that a conflict killed it. A reorg past this
+     * leaves a device's record wrong until an election, which costs the group its coins' use and not the coins: the operator's own
+     * terms on mainnet ask for 1, in November 2026, and a little more costs only a wait before a new coin can be spent.
+     */
+    fun settleDepth(chain: Chain): Int = if (chain.isMainnet()) 3 else 1
+
     /** The most on [chain], or null where there is no cap. */
     fun capFor(chain: Chain): Satoshi? = MAINNET_CAP.takeIf { chain.isMainnet() }
 }

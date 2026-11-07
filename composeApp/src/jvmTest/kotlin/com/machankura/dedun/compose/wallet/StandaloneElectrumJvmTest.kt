@@ -153,7 +153,7 @@ class StandaloneElectrumJvmTest {
     @Test
     fun `a network with no servers is not connected to, and does not crash`() = runTest {
         val electrum = StandaloneElectrum(
-            chain = Chain.Signet,
+            chain = Chain.Testnet4,
             networkState = network,
             isTorEnabled = tor,
             customServer = customServer,

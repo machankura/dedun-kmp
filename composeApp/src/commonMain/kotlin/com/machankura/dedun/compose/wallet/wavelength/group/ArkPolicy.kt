@@ -52,6 +52,12 @@ object ArkPolicy {
         val feeSat: Long = 0,
         /** The Lightning payments it makes. */
         val payments: List<ByteVector32> = emptyList(),
+        /** A round's commitment, whose confirmation is what makes the round so. */
+        val commitmentTx: ByteVector? = null,
+        /** A transfer's checkpoints, whose signatures being complete are what make the transfer so: it never reaches the chain. */
+        val checkpoints: List<String> = emptyList(),
+        /** The one of [checkpoints] this signature is on, or null for an Ark transaction's. */
+        val signing: String? = null,
     )
 
     sealed class Verdict {
@@ -545,7 +551,7 @@ object ArkPolicy {
             if (context.unspentSat - (context.pendingFromSat[id] ?: 0) - forfeited + ownOut > cap) refuse("a round taking the wallet over its cap")
         }
         checkFeeBudget(context, id, fee)
-        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee))
+        return CheckedRound(paths, signed, Effect(id, credits, forfeitedPoints, noteHash(note), fee, commitmentTx = ByteVector(Transaction.write(commitment))))
     }
 
     /** That a forfeit's connector comes from this commitment: the chain of transactions that makes the forfeit conditional. */
@@ -618,7 +624,7 @@ object ArkPolicy {
             out += output.amount.sat
         }
         if (out != into) refuse("a transfer that doesn't move exactly what it spends")
-        val effect = Effect(arkId, credits, spent.toList(), payments = payments)
+        val effect = Effect(arkId, credits, spent.toList(), payments = payments, checkpoints = checkpoints.map { (c, _) -> c.txid.toString() })
 
         return when {
             tx.txid == ark.txid -> {
@@ -631,7 +637,7 @@ object ArkPolicy {
                 if (spentScript != standard) refuse("a leaf this output doesn't commit to")
                 if (checkpoints.first { (c, _) -> c.txid == tx.txid }.second != prevOuts) refuse("a checkpoint with prevouts other than the transfer's")
                 checkCoSigned(context, transfer, ark, checkpoints.map { it.first })
-                Verdict.Allow(What.TRANSFER, message, effect)
+                Verdict.Allow(What.TRANSFER, message, effect.copy(signing = tx.txid.toString()))
             }
             else -> refuse("a transaction outside the transfer that was noted")
         }
@@ -697,7 +703,7 @@ object ArkPolicy {
         }
         if (out != input.amount.sat) refuse("a claim that doesn't keep what it claims")
         context.capSat?.let { cap -> if (context.unspentSat - (context.pendingFromSat[arkId] ?: 0) + out > cap) refuse("a claim taking the wallet over its cap") }
-        val effect = Effect(arkId, credits, emptyList())
+        val effect = Effect(arkId, credits, emptyList(), checkpoints = listOf(checkpoint.txid.toString()))
 
         return when {
             tx.txid == ark.txid -> {
@@ -707,7 +713,7 @@ object ArkPolicy {
             tx.txid == checkpoint.txid -> {
                 if (outputsOf(noted.prevOuts) != prevOuts || request.inputIndex != 0) refuse("a checkpoint with prevouts other than the transfer's")
                 checkLeafCoSigned(context, transfer, ark, listOf(expected to leaf))
-                Verdict.Allow(What.TRANSFER, message, effect)
+                Verdict.Allow(What.TRANSFER, message, effect.copy(signing = tx.txid.toString()))
             }
             else -> refuse("a transaction outside the claim that was noted")
         }

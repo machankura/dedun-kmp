@@ -3,11 +3,13 @@ package com.machankura.dedun.compose.managers
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
+import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
@@ -40,10 +42,14 @@ import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.bitcoin.crypto.iceberg.Iceberg
 import fr.acinq.bitcoin.crypto.iceberg.NonceContribution
+import fr.acinq.bitcoin.crypto.iceberg.PublicShare
 import fr.acinq.bitcoin.crypto.iceberg.Share
+import fr.acinq.bitcoin.crypto.iceberg.SignatureShare
 import fr.acinq.bitcoin.crypto.musig2.AggregatedNonce
 import fr.acinq.bitcoin.crypto.musig2.KeyAggCache
 import fr.acinq.bitcoin.utils.Either
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 
 /**
@@ -61,6 +67,7 @@ import kotlin.time.Clock
  */
 object GroupArkCoSigner {
     private val logger = Logger.withTag("GroupArkCoSigner")
+    private val answering = Mutex()
 
     private const val LABEL_TAG = "dedun/group-wavelength/label/v1"
 
@@ -156,7 +163,7 @@ object GroupArkCoSigner {
                 GroupWavelengthEvents.PROVISION -> fileProvision(database, localChatRoom, innerEvent)
                 GroupWavelengthEvents.SIGNING_REQUEST -> handleBatch(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.ECHO -> fileEchoes(database, localChatRoom, innerEvent, userPublicKey)
-                GroupWavelengthEvents.SIGNATURE_SHARES -> fileShares(database, localChatRoom, innerEvent)
+                GroupWavelengthEvents.SIGNATURE_SHARES -> fileShares(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.HIGH_WATER -> fileHighWater(database, localChatRoom, innerEvent, userPublicKey)
             }
         } catch (e: Throwable) {
@@ -180,11 +187,12 @@ object GroupArkCoSigner {
         }
     }
 
-    private suspend fun fileShares(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event) {
+    private suspend fun fileShares(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
         val batch = CommonJson.decodeFromString(ArkWire.ShareBatch.serializer(), event.content)
         val wallet = walletOf(database, localChatRoom.chatRoom.id, batch.wallet) ?: return
         if (indexOf(wallet, event.pubKey) == null) return
         batch.items.forEach { database.icebergCoSigningDao().insertShare(IcebergShareRow(batch.wallet, it.requestId, event.pubKey.lowercase(), it.share)) }
+        settleTransfers(database, localChatRoom, wallet, batch.wallet, userPublicKey)
     }
 
     /** The tree keys the group has made, from `2t-1` public shares of each: what a VTXO's tree key has to be one of. */
@@ -248,12 +256,124 @@ object GroupArkCoSigner {
     /**
      * What this device has seen [origin], a commitment or an Ark transaction, take effect: the VTXOs it made are the group's to spend
      * now, and the ones it replaced are gone. What calls this has to have seen that for itself, on the chain or from the operator's
-     * own signature, and never because the wallet's operator says so. Nothing calls it yet: that is the watcher Phase 8 needs, and
-     * until it exists a device signs for no VTXO it has only ever seen pending.
+     * own signature, and never because the wallet's operator says so: [GroupArkWatcher][com.machankura.dedun.compose.wallet.wavelength.group.GroupArkWatcher]
+     * for a round, and [settleTransfers] for a transfer.
      */
     suspend fun settled(database: DedunDatabase, key: String, origin: String) {
         database.groupArkDao().settle(key, origin)
         database.groupArkDao().spendReservedBy(key, origin)
+    }
+
+    /**
+     * What this device has seen prove that [commitment] will never confirm, a conflict in a block. Its forfeits can't count, since the
+     * connectors they spend don't exist, so what it reserved is free again, and what it would have made and cost never happened. A tree
+     * key stays spent on it: that binding is for good, whatever became of the round.
+     */
+    suspend fun abandoned(database: DedunDatabase, key: String, commitment: String) {
+        val dao = database.groupArkDao()
+        dao.releaseReservedBy(key, commitment)
+        dao.forgetPendingFrom(key, commitment)
+        dao.forgetFee(key, commitment)
+        dao.deletePendingRound(key, commitment)
+    }
+
+    /** A round this device has now seen confirm, and whatever it refused for not having seen that yet. */
+    suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound) {
+        settled(database, row.wallet, row.commitment)
+        database.groupArkDao().deletePendingRound(row.wallet, row.commitment)
+        val localChatRoom = database.chatRoomDao().findChatRoomById(row.chatRoomId) ?: return
+        val wallet = walletOf(database, row.chatRoomId, row.wallet) ?: return
+        val userPublicKey = localChatRoom.chatRoom.userPublicKey ?: return
+        catchUp(database, localChatRoom, wallet, row.wallet, userPublicKey)
+        settleTransfers(database, localChatRoom, wallet, row.wallet, userPublicKey)
+    }
+
+    /**
+     * Settles every transfer whose checkpoints all have `t` good shares. The operator's co-signature on the Ark transaction was checked
+     * before this device gave its own share of a checkpoint, and a checkpoint with the group's whole signature hands the coin on: the
+     * Ark transaction and it can now be published with nobody's further help. Whoever runs the daemon can still sit on them instead of
+     * telling the Ark server, which leaves this device's record ahead of the server's until an election: the shares are all in the room,
+     * so the next operator can finish it. That costs time and no coin.
+     */
+    private suspend fun settleTransfers(database: DedunDatabase, localChatRoom: LocalChatRoom, wallet: GroupWavelengthWalletManager.Wallet, key: String, userPublicKey: HexKey) {
+        val dao = database.groupArkDao()
+        while (true) {
+            val done = dao.checkpoints(key).groupBy { it.ark }.filterValues { rows -> rows.all { complete(database, wallet, key, it.label) } }.keys
+            if (done.isEmpty()) return
+            done.forEach { ark ->
+                settled(database, key, ark)
+                dao.deleteCheckpoints(key, ark)
+            }
+            catchUp(database, localChatRoom, wallet, key, userPublicKey)
+        }
+    }
+
+    /** Whether the signature this device gave a share of under [label] now has `t` shares that each verify, so a member can't fake it. */
+    private suspend fun complete(database: DedunDatabase, wallet: GroupWavelengthWalletManager.Wallet, key: String, label: String?): Boolean {
+        val checked = database.groupArkDao().checked(key, label ?: return false) ?: return false
+        val item = CommonJson.decodeFromString(ArkWire.SigningItem.serializer(), checked.item)
+        val cache = cacheOf(wallet, item.request) ?: return false
+        val publicShares = publicSharesOf(database, wallet, key, item.domain)
+        val contributions = item.contributions.map { NonceContribution(it) }
+        val cosigners = item.cosignerNonce?.let { AggregatedNonce(ByteVector(it)) } ?: GroupArkSigner.NO_COSIGNERS
+        val groupKey = PublicKey.fromHex(wallet.statement.icebergKey)
+        val n = wallet.statement.participants.size
+        val t = wallet.statement.threshold
+        val good = database.icebergCoSigningDao().sharesFor(key, item.requestId).count { row ->
+            val publicShare = publicShares[row.participant] ?: return@count false
+            runCatching { Iceberg.verifyPartialSignature(SignatureShare(row.share), publicShare, contributions, n, t, groupKey, cache, ByteVector32(checked.message), cosigners) }.getOrDefault(false)
+        }
+        return good >= t
+    }
+
+    /** The public shares a signature's shares are checked against, by participant. */
+    suspend fun publicSharesOf(database: DedunDatabase, wallet: GroupWavelengthWalletManager.Wallet, key: String, domain: ArkWire.Domain): Map<String, PublicShare> {
+        val child = domain.child ?: return database.icebergKeySessionDao().getSessionById(wallet.statement.ceremonyId)?.publicShareList().orEmpty()
+            .mapIndexedNotNull { i, share -> wallet.statement.participants.getOrNull(i)?.let { it to PublicShare(ByteVector(share)) } }.toMap()
+        return database.groupArkDao().treeShares(key).filter { it.child == child }.associate { it.participant to PublicShare(ByteVector(it.share)) }
+    }
+
+    /**
+     * Answers what the current operator asked this term and this device has no answer to, once it knows more than it did: a device a
+     * block behind the others refuses a coin it hasn't seen settle, and if it stayed refused it would never learn what that spend made,
+     * and go on refusing everything after. Every check is made again, so the worst this does is agree to a request late. It says nothing
+     * about what it still refuses, having said so the first time.
+     */
+    private suspend fun catchUp(database: DedunDatabase, localChatRoom: LocalChatRoom, wallet: GroupWavelengthWalletManager.Wallet, key: String, userPublicKey: HexKey) {
+        if (userPublicKey.lowercase() !in wallet.statement.participants) return
+        val roomId = localChatRoom.chatRoom.id
+        val operator = GroupWavelengthOperatorManager.current(database, roomId, wallet.statement.chain, wallet.statement.wallet) ?: return
+        val publicKey = operator.publicKey ?: return
+        val unanswered = requestsOf(database, roomId, key, publicKey, operator.term)
+            .filter { database.icebergCoSigningDao().ledgerFor(key, label(wallet.statement, it.domain, it.counter).toHex()) == null }
+        if (unanswered.isEmpty()) return
+        val floor = floorOf(database, localChatRoom, key, userPublicKey, wallet) ?: return
+        answerAll(database, localChatRoom, wallet, key, operator.term, unanswered, floor, userPublicKey, publicKey, sayRefused = false)
+    }
+
+    /** Answers [items], one caller at a time: a label is looked up and then filed, and two at once could each find it free. */
+    private suspend fun answerAll(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        wallet: GroupWavelengthWalletManager.Wallet,
+        key: String,
+        term: Long,
+        items: List<ArkWire.SigningItem>,
+        floor: GroupArkFloor,
+        userPublicKey: HexKey,
+        operator: HexKey,
+        sayRefused: Boolean,
+    ) = answering.withLock {
+        val roomId = localChatRoom.chatRoom.id
+        val echoes = mutableListOf<ArkWire.EchoItem>()
+        for (item in items) {
+            val refusal = answer(database, roomId, wallet, key, term, item, floor, userPublicKey, operator, echoes)
+            if (refusal != null && sayRefused) sayRefused(database, roomId, item.requestId, userPublicKey, refusal)
+        }
+        if (echoes.isNotEmpty()) {
+            queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.ECHO, CommonJson.encodeToString(ArkWire.EchoBatch.serializer(), ArkWire.EchoBatch(key, echoes)))
+        }
+        maybeSign(database, localChatRoom, wallet, key, items.map { label(wallet.statement, it.domain, it.counter).toHex() }, userPublicKey)
     }
 
     private suspend fun handleBatch(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, userPublicKey: HexKey) {
@@ -276,15 +396,8 @@ object GroupArkCoSigner {
 
         // A device that doesn't yet know how far the group has answered asks, and answers nothing until it knows.
         val floor = floorOf(database, localChatRoom, batch.wallet, userPublicKey, wallet) ?: return
-        val echoes = mutableListOf<ArkWire.EchoItem>()
-        for (item in batch.items) {
-            val refusal = answer(database, roomId, wallet, batch.wallet, batch.term, item, floor, userPublicKey, event.pubKey, echoes)
-            if (refusal != null) sayRefused(database, roomId, item.requestId, userPublicKey, refusal)
-        }
-        if (echoes.isNotEmpty()) {
-            queue(database, localChatRoom, userPublicKey, GroupWavelengthEvents.ECHO, CommonJson.encodeToString(ArkWire.EchoBatch.serializer(), ArkWire.EchoBatch(batch.wallet, echoes)))
-        }
-        maybeSign(database, localChatRoom, wallet, batch.wallet, batch.items.map { label(wallet.statement, it.domain, it.counter).toHex() }, userPublicKey)
+        answerAll(database, localChatRoom, wallet, batch.wallet, batch.term, batch.items, floor, userPublicKey, event.pubKey, sayRefused = true)
+        settleTransfers(database, localChatRoom, wallet, batch.wallet, userPublicKey)
     }
 
     /** A person never sees what their device signs, so a refusal is the one thing about this they are told, and only on this device. */
@@ -350,7 +463,7 @@ object GroupArkCoSigner {
             raiseEquivocation(database, roomId, label, operator)
             return "a label already echoed for something else"
         }
-        allowed.effect?.let { remember(database, key, term, it, sessionKey) }
+        allowed.effect?.let { remember(database, roomId, wallet, key, term, it, sessionKey, label) }
         if (existing == null) {
             database.groupArkDao().insertChecked(GroupArkChecked(key, label, child, item.counter, CommonJson.encodeToString(ArkWire.SigningItem.serializer(), item), message))
             dao.insertLedger(IcebergLabelLedger(key, label, item.requestId, binding))
@@ -361,8 +474,11 @@ object GroupArkCoSigner {
     }
 
     /** What signing this means for this device's own record. Written before the echo, so it is never behind one. */
-    private suspend fun remember(database: DedunDatabase, key: String, term: Long, effect: ArkPolicy.Effect, sessionKey: PublicKey?) {
+    private suspend fun remember(database: DedunDatabase, roomId: String, wallet: GroupWavelengthWalletManager.Wallet, key: String, term: Long, effect: ArkPolicy.Effect, sessionKey: PublicKey?, label: String) {
         val dao = database.groupArkDao()
+        effect.commitmentTx?.let { dao.upsertPendingRound(GroupArkPendingRound(key, effect.towards, roomId, GroupWalletStatementEvent.chainName(wallet.statement.chain), it.toHex())) }
+        effect.checkpoints.forEach { dao.insertCheckpoint(GroupArkCheckpoint(key, effect.towards, it)) }
+        effect.signing?.let { dao.signedCheckpoint(key, effect.towards, it, label) }
         effect.noteHash?.let { dao.upsertRound(GroupArkRound(key, effect.towards, it)) }
         effect.payments.forEach { dao.upsertPayment(GroupArkPayment(key, it.toHex(), effect.towards)) }
         if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, Clock.System.now().epochSeconds))
@@ -378,7 +494,8 @@ object GroupArkCoSigner {
         val wallet = walletOf(database, localChatRoom.chatRoom.id, batch.wallet) ?: return
         if (indexOf(wallet, event.pubKey) == null) return
         batch.items.forEach { database.icebergCoSigningDao().insertEcho(IcebergEchoRow(batch.wallet, it.label, event.pubKey.lowercase(), it.messageHash)) }
-        maybeSign(database, localChatRoom, wallet, batch.wallet, batch.items.map { it.label }, userPublicKey)
+        answering.withLock { maybeSign(database, localChatRoom, wallet, batch.wallet, batch.items.map { it.label }, userPublicKey) }
+        settleTransfers(database, localChatRoom, wallet, batch.wallet, userPublicKey)
     }
 
     /** The alarm the echo rule exists to raise: two challenges under one label. Said once per label, on every device that sees it. */

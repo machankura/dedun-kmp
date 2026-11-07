@@ -22,7 +22,9 @@ import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
+import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
@@ -167,7 +169,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkFloor::class,
         GroupArkMark::class,
         GroupArkFee::class,
+        GroupArkCheckpoint::class,
         GroupArkPayment::class,
+        GroupArkPendingRound::class,
         GroupArkRound::class,
         GroupArkTreeBinding::class,
         GroupArkChecked::class,
@@ -213,7 +217,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 38,
+    version = 39,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -457,6 +461,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // co-signer knows the wallet holds, and how far the group has answered (docs/group-wavelength-wallet.md,
         // Phases 4 and 6). None of this has been on an installed database, so it is one version.
         AutoMigration(from = 37, to = 38),
+        // v39 adds what a co-signer waits on before it believes a Wavelength coin: rounds it hasn't seen confirm, and
+        // the checkpoints of transfers it hasn't seen signed (docs/group-wavelength-wallet.md). v38 had reached `dedun`,
+        // so this is a version of its own. New tables are a shape Room migrates itself, and nothing can be pending yet.
+        AutoMigration(from = 38, to = 39),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

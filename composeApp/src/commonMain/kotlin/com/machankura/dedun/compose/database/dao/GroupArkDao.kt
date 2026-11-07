@@ -5,15 +5,18 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Upsert
+import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
 import com.machankura.dedun.compose.database.model.GroupArkTreeShare
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface GroupArkDao {
@@ -37,6 +40,40 @@ interface GroupArkDao {
 
     @Query("UPDATE GroupArkVtxo SET spent = 1 WHERE wallet = :wallet AND reservedBy = :by")
     suspend fun spendReservedBy(wallet: String, by: String)
+
+    @Query("UPDATE GroupArkVtxo SET reservedBy = NULL, term = NULL WHERE wallet = :wallet AND reservedBy = :by AND spent = 0")
+    suspend fun releaseReservedBy(wallet: String, by: String)
+
+    @Query("DELETE FROM GroupArkVtxo WHERE wallet = :wallet AND origin = :origin AND settled = 0")
+    suspend fun forgetPendingFrom(wallet: String, origin: String)
+
+    @Query("DELETE FROM GroupArkFee WHERE wallet = :wallet AND tx = :tx")
+    suspend fun forgetFee(wallet: String, tx: String)
+
+    @Upsert
+    suspend fun upsertPendingRound(row: GroupArkPendingRound)
+
+    @Query("SELECT * FROM GroupArkPendingRound")
+    suspend fun pendingRounds(): List<GroupArkPendingRound>
+
+    @Query("SELECT COUNT(*) FROM GroupArkPendingRound")
+    fun observePendingRounds(): Flow<Int>
+
+    @Query("DELETE FROM GroupArkPendingRound WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun deletePendingRound(wallet: String, commitment: String)
+
+    /** Keeps a label already filed: an Ark transaction's signature comes after a checkpoint's, on a retry. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCheckpoint(row: GroupArkCheckpoint)
+
+    @Query("UPDATE GroupArkCheckpoint SET label = :label WHERE wallet = :wallet AND ark = :ark AND checkpoint = :checkpoint")
+    suspend fun signedCheckpoint(wallet: String, ark: String, checkpoint: String, label: String)
+
+    @Query("SELECT * FROM GroupArkCheckpoint WHERE wallet = :wallet")
+    suspend fun checkpoints(wallet: String): List<GroupArkCheckpoint>
+
+    @Query("DELETE FROM GroupArkCheckpoint WHERE wallet = :wallet AND ark = :ark")
+    suspend fun deleteCheckpoints(wallet: String, ark: String)
 
     @Upsert
     suspend fun upsertPayment(row: GroupArkPayment)

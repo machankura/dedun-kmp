@@ -1,6 +1,8 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.model.ChatMessage
+import com.machankura.dedun.compose.database.model.GroupArkPendingRound
+import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
@@ -16,6 +18,9 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkKeys
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkSigner
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkScripts
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedNode
+import com.machankura.dedun.compose.wallet.wavelength.group.NotedSig
+import com.machankura.dedun.compose.wallet.wavelength.group.NotedTransfer
+import com.machankura.dedun.compose.wallet.wavelength.group.NotedTx
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedRound
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedTree
 import com.machankura.dedun.compose.wallet.wavelength.group.NotedVtxo
@@ -325,6 +330,149 @@ class GroupArkCoSigningJvmTest {
             assertEquals(listOf(50_000L), contextOn(d, group).knownVtxos.values.toList(), "device ${d.index} spends it once it has")
             assertEquals(50_000L, contextOn(d, group).unspentSat)
         }
+    }
+
+    /** A transfer of a coin the group holds to another of its own keys: the Ark transaction's request, and the checkpoint's, co-signed by the operator or not. */
+    private inner class Transfer(group: Group, index: Long = 3) {
+        private val operator = arkOperator.publicKey()
+        private val delay = group.wallet.statement.policy.exitDelay
+        private val owner = group.keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, index)
+        private val leaf = ArkScripts.collabLeaf(owner, operator)
+        private val standard = ArkScripts.standardScript(owner, operator, delay)
+        private val anchor = ByteVector(Script.write(Script.pay2anchor))
+        private val funding = coin(standard, 40_000)
+        private val checkpointScript = ArkScripts.checkpointScript(operator, delay, leaf)
+        private val checkpoint = Transaction(3, listOf(TxIn(OutPoint(funding, 0), 0xffffffffL)), listOf(TxOut(Satoshi(40_000), checkpointScript), TxOut(Satoshi(0), anchor)), 0)
+        private val ark = Transaction(
+            3, listOf(TxIn(OutPoint(checkpoint, 0), 0xffffffffL)),
+            listOf(TxOut(Satoshi(40_000), ArkScripts.standardScript(group.keys.key(GroupArkDerivation.Slot.VTXO_OWNER, 0, index + 1), operator, delay)), TxOut(Satoshi(0), anchor)), 0,
+        )
+        private val family = 44
+        val spent = "${funding.txid}:0"
+        val made = "${ark.txid}:0"
+        val arkId = ark.txid.toString()
+        private val index = index
+
+        private fun note(cosigned: Boolean): ArkNote {
+            val sigs = if (cosigned) {
+                val digest = ark.hashForSigningTaprootScriptPath(0, listOf(TxOut(Satoshi(40_000), checkpointScript)), SigHash.SIGHASH_DEFAULT, ArkScripts.leafHash(leaf))
+                listOf(NotedSig(0, Hex.encode(Crypto.signSchnorr(digest, arkOperator, null).toByteArray())))
+            } else {
+                emptyList()
+            }
+            val transfer = NotedTransfer(
+                NotedTx(Hex.encode(Transaction.write(ark)), listOf(ArkOutput(40_000, Hex.encode(checkpointScript.toByteArray()))), sigs),
+                listOf(NotedTx(Hex.encode(Transaction.write(checkpoint)), listOf(ArkOutput(40_000, Hex.encode(standard.toByteArray()))))),
+            )
+            return ArkNote(ArkNote.OOR, arkId, CommonJson.encodeToJsonElement(NotedTransfer.serializer(), transfer))
+        }
+
+        private fun request(tx: Transaction, prevOut: ByteVector, cosigned: Boolean) = ArkRequest(
+            kind = ArkRequest.INPUT, family = family, index = index, tx = Hex.encode(Transaction.write(tx)),
+            prevOuts = listOf(ArkOutput(40_000, Hex.encode(prevOut.toByteArray()))), method = ArkRequest.METHOD_SCRIPT_PATH,
+            leafScript = Hex.encode(leaf.toByteArray()), leafVersion = Script.TAPROOT_LEAF_TAPSCRIPT, note = note(cosigned),
+        )
+
+        val arkRequest get() = request(ark, checkpointScript, cosigned = false)
+        val checkpointRequest get() = request(checkpoint, standard, cosigned = true)
+        val uncosignedCheckpoint get() = request(checkpoint, standard, cosigned = false)
+    }
+
+    private suspend fun holds(d: GroupLightningFixture.Device, group: Group, outpoint: String, settled: Boolean = true) =
+        d.db.groupArkDao().upsertVtxo(GroupArkVtxo(group.key, outpoint, 40_000, origin = if (settled) null else "ff".repeat(32), settled = settled))
+
+    private suspend fun vtxoOn(d: GroupLightningFixture.Device, group: Group, outpoint: String) =
+        d.db.groupArkDao().vtxos(group.key).firstOrNull { it.outpoint == outpoint }
+
+    @Test
+    fun `a transfer settles on every device when the checkpoint's signature is complete, and not before`() = runBlocking<Unit> {
+        val group = group()
+        val transfer = Transfer(group)
+        group.all.forEach { holds(it, group, transfer.spent) }
+
+        answered(group, transfer.arkRequest).getOrThrow()
+        pump(group.all)
+        group.all.forEach { d ->
+            assertEquals(false, vtxoOn(d, group, transfer.made)?.settled, "device ${d.index} has signed the Ark transaction, which hands nothing over")
+            assertEquals(false, vtxoOn(d, group, transfer.spent)?.spent)
+        }
+
+        assertTrue(answered(group, transfer.uncosignedCheckpoint).isFailure, "no checkpoint goes without the operator's co-signature")
+        pump(group.all)
+        group.all.forEach { assertEquals(false, vtxoOn(it, group, transfer.made)?.settled) }
+
+        answered(group, transfer.checkpointRequest).getOrThrow()
+        repeat(3) { pump(group.all) }
+        group.all.forEach { d ->
+            assertEquals(true, vtxoOn(d, group, transfer.made)?.settled, "device ${d.index} can spend what it made")
+            assertEquals(true, vtxoOn(d, group, transfer.spent)?.spent, "and what it replaced is gone")
+            assertEquals(mapOf(transfer.made to 40_000L), contextOn(d, group).knownVtxos)
+            assertEquals(emptyList(), d.db.groupArkDao().checkpoints(group.key), "and nothing is waited on")
+        }
+    }
+
+    @Test
+    fun `shares that don't verify settle nothing, so no member can talk a device into it`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val transfer = Transfer(group)
+        group.all.forEach { holds(it, group, transfer.spent) }
+        answered(group, transfer.arkRequest).getOrThrow()
+        pump(group.all)
+
+        // The checkpoint reaches the last device alone, so it has signed nothing and nobody has answered.
+        val last = group.all.last()
+        val counter = 200L
+        val contributions = contributionsAt(group, 8)
+        val item = ArkWire.SigningItem("forged", ArkWire.Domain(), 8, transfer.checkpointRequest, contributions)
+        sendTo(group, listOf(last), ArkWire.SigningBatch(group.key, currentTerm(group), items = listOf(item)))
+        val filed = last.db.groupArkDao().checkpoints(group.key).single()
+        assertEquals(labelAt(group, 8), filed.label, "it checked the checkpoint and filed where it signs")
+
+        group.all.dropLast(1).forEach { from ->
+            val garbage = ArkWire.ShareBatch(group.key, listOf(ArkWire.ShareItem("forged", filed.label!!, "11".repeat(32))))
+            val event = Event("${counter + from.index}".padStart(64, '0'), from.publicKey, 0, GroupWavelengthEvents.SIGNATURE_SHARES, emptyArray(), CommonJson.encodeToString(ArkWire.ShareBatch.serializer(), garbage), "")
+            GroupArkCoSigner.process(last.db, last.room, event, last.publicKey)
+        }
+        assertEquals(false, vtxoOn(last, group, transfer.made)?.settled)
+        assertEquals(false, vtxoOn(last, group, transfer.spent)?.spent)
+    }
+
+    @Test
+    fun `a device a block behind refuses a transfer, then catches up on it when it sees the block`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val transfer = Transfer(group)
+        val (behind, others) = group.all.last() to group.all.dropLast(1)
+        others.forEach { holds(it, group, transfer.spent) }
+        holds(behind, group, transfer.spent, settled = false)
+
+        answered(group, transfer.arkRequest).getOrThrow()
+        answered(group, transfer.checkpointRequest).getOrThrow()
+        repeat(3) { pump(group.all) }
+        others.forEach { assertEquals(true, vtxoOn(it, group, transfer.made)?.settled) }
+        assertEquals(null, vtxoOn(behind, group, transfer.made), "it refused, so it knows nothing of what the spend made")
+        assertTrue(fixture.lines(behind, ChatMessage.TYPE_LIGHTNING_REFUSED).any { "doesn't know of" in it.content })
+
+        GroupArkCoSigner.roundSettled(behind.db, GroupArkPendingRound(group.key, "ff".repeat(32), fixture.roomId, "regtest", ""))
+        repeat(3) { pump(group.all) }
+        assertEquals(true, vtxoOn(behind, group, transfer.spent)?.spent, "having seen the round, it agrees to the spend and sees it done")
+        assertEquals(true, vtxoOn(behind, group, transfer.made)?.settled)
+    }
+
+    @Test
+    fun `catching up says nothing about what it still refuses, having said so once`() = runBlocking<Unit> {
+        val group = group()
+        floorsKnown(group)
+        val theft = sweep(group, 5, to = ByteVector("5120" + "99".repeat(32))).first
+        assertTrue(answered(group, theft).isFailure)
+        pump(group.all)
+        val device = group.all.last()
+        val before = fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size
+        assertTrue(before > 0)
+        GroupArkCoSigner.roundSettled(device.db, GroupArkPendingRound(group.key, "ff".repeat(32), fixture.roomId, "regtest", ""))
+        assertEquals(before, fixture.lines(device, ChatMessage.TYPE_LIGHTNING_REFUSED).size)
+        assertEquals(null, device.db.icebergCoSigningDao().ledgerFor(group.key, labelAt(group, device.db.groupArkDao().highestPlainChecked(group.key)!! + 1)), "and it still refuses")
     }
 
     private suspend fun contextOn(d: GroupLightningFixture.Device, group: Group) = GroupArkCoSigner.contextOf(d.db, fixture.roomId, group.wallet, group.key, currentTerm(group))

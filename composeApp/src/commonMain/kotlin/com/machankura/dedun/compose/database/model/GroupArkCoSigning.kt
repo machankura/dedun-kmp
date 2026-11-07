@@ -35,6 +35,21 @@ data class GroupArkVtxo(
     val spent: Boolean = false,
 )
 
+/**
+ * A round this device has signed something towards and has seen neither confirm nor die. [commitmentTx] is what the operator noted
+ * and this device checked, kept so that a commitment no Electrum server has heard of can still be asked after by its inputs.
+ */
+@Entity(primaryKeys = ["wallet", "commitment"])
+data class GroupArkPendingRound(val wallet: String, val commitment: String, val chatRoomId: String, val chain: String, val commitmentTx: HexKey)
+
+/**
+ * One checkpoint of a transfer this device has signed something towards. A transfer never reaches the chain, so what makes it so is
+ * the group's signature on every checkpoint being complete. [label] is where this device signed this one, and is only ever set after
+ * it verified that the operator had co-signed the Ark transaction.
+ */
+@Entity(primaryKeys = ["wallet", "ark", "checkpoint"])
+data class GroupArkCheckpoint(val wallet: String, val ark: String, val checkpoint: String, val label: HexKey? = null)
+
 /** The transfer this device signed a Lightning payment into. A payment goes once, whatever the daemon asks. */
 @Entity(primaryKeys = ["wallet", "paymentHash"])
 data class GroupArkPayment(val wallet: String, val paymentHash: HexKey, val tx: String)

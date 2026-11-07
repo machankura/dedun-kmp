@@ -233,9 +233,7 @@ class GroupArkTransport(
 
     /** Each participant's public share for [domain], to check what they send against. */
     private suspend fun publicSharesOf(domain: ArkWire.Domain): Map<String, PublicShare> {
-        val child = domain.child ?: return database.icebergKeySessionDao().getSessionById(statement.ceremonyId)?.publicShareList().orEmpty()
-            .mapIndexedNotNull { i, share -> statement.participants.getOrNull(i)?.let { it to PublicShare(ByteVector(share)) } }.toMap()
-        return database.groupArkDao().treeShares(key).filter { it.child == child }.associate { it.participant to PublicShare(ByteVector(it.share)) }
+        return GroupArkCoSigner.publicSharesOf(database, wallet, key, domain)
     }
 
     /**

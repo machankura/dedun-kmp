@@ -625,6 +625,7 @@ class ArkPolicyJvmTest {
         val built = Built()
         assertEquals(mapOf("${built.leaf.txid}:0" to 30_000L), verdict.effect!!.credits)
         assertEquals(built.commitment.txid.toString(), verdict.effect!!.towards)
+        assertEquals(built.commitment.txid, Transaction.read(verdict.effect!!.commitmentTx!!.toByteArray()).txid, "with what to watch the chain for")
         assertEquals(listOf(spent), assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), fixtures.forfeit)).effect!!.reserves)
     }
 
@@ -862,6 +863,8 @@ class ArkPolicyJvmTest {
         assertEquals(ArkPolicy.What.TRANSFER, ark.what)
         assertEquals(fixtures.sendArk.digest, ark.message.toHex(), "the digest this device computed is the daemon's")
         assertEquals(listOf(sendHash), ark.effect!!.payments, "and the payment is remembered")
+        assertEquals(notedSend.checkpoints.map { Transaction.read(it.tx).txid.toString() }, ark.effect!!.checkpoints, "and what would make it so")
+        assertEquals(null, ark.effect!!.signing, "which the Ark transaction's signature isn't")
         assertEquals(listOf(25_000L), ark.effect!!.credits.values.toList(), "and only the change is the group's")
         assertEquals(listOf(spent), ark.effect!!.reserves)
         allowed(fixtures.sendCheckpoint, ArkPolicy.What.TRANSFER, approving())
