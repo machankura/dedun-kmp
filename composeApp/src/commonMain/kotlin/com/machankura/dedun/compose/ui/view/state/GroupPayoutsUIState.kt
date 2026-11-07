@@ -35,5 +35,8 @@ sealed interface GroupPayoutsUIState {
         val lightningSpendableMsat: Long? = null,
         /** The group's Wavelength wallet, where it has one with someone running it and payouts are on for its network. */
         val wavelengthWallet: GroupWavelengthWalletManager.Wallet? = null,
+        /** Which of its rails pay out on this network (`docs/group-wavelength-payouts.md`, W13). */
+        val wavelengthPaysLightning: Boolean = false,
+        val wavelengthPaysOnchain: Boolean = false,
     ) : GroupPayoutsUIState
 }

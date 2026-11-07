@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.wallet.PayoutFees
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -11,6 +12,7 @@ import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkPayment
+import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkRound
 import com.machankura.dedun.compose.database.model.GroupArkTreeBinding
@@ -335,6 +337,8 @@ object GroupArkCoSigner {
             maxRecentFeesSat = statement.policy.maxMonthlyFeeSat,
             approvedPayments = GroupWavelengthPayments.approved(database, chatRoomId, wallet),
             paidIn = dao.payments(key).associate { ByteVector32(it.paymentHash) to it.tx },
+            authorisedLeaves = GroupWavelengthPayouts.approvedLeaves(database, chatRoomId, wallet),
+            leftIn = dao.leaves(key).associate { it.authorisation to it.commitment },
             notedRounds = dao.rounds(key).associate { it.commitment to it.noteHash },
             treeKeyRounds = dao.treeBindings(key).associate { it.treeKey to it.commitment },
             minSweepDelay = statement.policy.minSweepDelay,
@@ -364,6 +368,8 @@ object GroupArkCoSigner {
         dao.forgetPendingFrom(key, commitment)
         dao.forgetFee(key, commitment)
         dao.forgetBoarded(key, commitment)
+        // A payout it would have made didn't leave, so its approval can be paid in another round while it stands.
+        dao.forgetLeaves(key, commitment)
         dao.deletePendingRound(key, commitment)
         val roomId = key.split(":").getOrNull(1) ?: return
         val reader = database.chatRoomDao().findChatRoomById(roomId)?.chatRoom?.userPublicKey ?: return
@@ -378,6 +384,7 @@ object GroupArkCoSigner {
     suspend fun roundSettled(database: DedunDatabase, row: GroupArkPendingRound, height: Long? = null) {
         height?.let { database.groupArkDao().expireFrom(row.wallet, row.commitment, it) }
         settled(database, row.wallet, row.commitment)
+        paidOut(database, row)
         GroupWavelengthDeposits.roundHappened(database, row.chatRoomId, row.chain, row.wallet, row.commitment)
         database.groupArkDao().deletePendingRound(row.wallet, row.commitment)
         val localChatRoom = database.chatRoomDao().findChatRoomById(row.chatRoomId) ?: return
@@ -385,6 +392,25 @@ object GroupArkCoSigner {
         val userPublicKey = localChatRoom.chatRoom.userPublicKey ?: return
         catchUp(database, localChatRoom, wallet, row.wallet, userPublicKey)
         settleTransfers(database, localChatRoom, wallet, row.wallet, userPublicKey)
+    }
+
+    /** The onchain payouts [row]'s round made, confirmed with it, and said once in the room by each device that saw it. */
+    private suspend fun paidOut(database: DedunDatabase, row: GroupArkPendingRound) {
+        val dao = database.groupArkDao()
+        val paid = dao.leaves(row.wallet).filter { it.commitment == row.commitment && !it.confirmed }
+        if (paid.isEmpty()) return
+        dao.confirmLeaves(row.wallet, row.commitment)
+        val reader = database.chatRoomDao().findChatRoomById(row.chatRoomId)?.chatRoom?.userPublicKey ?: return
+        val chain = GroupWalletStatementEvent.chainNamed(row.chain) ?: return
+        val payouts = GroupWavelengthPayouts.signedOnchain(database, row.chatRoomId, chain).associateBy { it.id }
+        paid.forEach { leave ->
+            val member = payouts[leave.authorisation]?.member ?: return@forEach
+            GroupLightningLines.writeFact(
+                database, row.chatRoomId, ChatMessage.TYPE_WAVELENGTH_PAID_OUT, leave.authorisation, reader,
+                "The Wavelength wallet paid @${ChatMessage.memberName(database, member)} ${leave.amountSat} sats onchain, with ${leave.feeSat} sats in fees from their balance.",
+                Clock.System.now(),
+            )
+        }
     }
 
     /**
@@ -603,7 +629,14 @@ object GroupArkCoSigner {
         effect.checkpoints.forEach { dao.insertCheckpoint(GroupArkCheckpoint(key, effect.towards, it)) }
         effect.signing?.let { dao.signedCheckpoint(key, effect.towards, it, label) }
         effect.noteHash?.let { dao.upsertRound(GroupArkRound(key, effect.towards, it)) }
-        effect.payments.forEach { dao.upsertPayment(GroupArkPayment(key, it.toHex(), effect.towards)) }
+        effect.payments.forEach { hash ->
+            val funded = effect.funded.firstOrNull { it.paymentHash == hash }
+            dao.insertPayment(GroupArkPayment(key, hash.toHex(), effect.towards, funded?.amountSat, funded?.script?.toHex()))
+        }
+        effect.refunded?.let { dao.refundPayment(key, it.toHex(), effect.towards) }
+        // A round's fee once, shared by the payouts in it in proportion, as the onchain wallet's payouts share theirs (payouts-only D5).
+        val feeShares = if (effect.leaves.isEmpty()) emptyMap() else PayoutFees.split(effect.leaves.associate { it.authorisation to it.amountSat }, effect.feeSat)
+        effect.leaves.forEach { dao.upsertLeave(GroupArkLeave(key, it.authorisation, effect.towards, it.script.toHex(), it.amountSat, feeShares[it.authorisation] ?: 0)) }
         if (effect.feeSat > 0) dao.upsertFee(GroupArkFee(key, effect.towards, effect.feeSat, term, Clock.System.now().epochSeconds))
         sessionKey?.let { dao.upsertTreeBinding(GroupArkTreeBinding(key, it.toString(), effect.towards)) }
         val known = dao.vtxos(key).associateBy { it.outpoint }

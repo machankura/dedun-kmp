@@ -4,12 +4,13 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
-import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
@@ -61,7 +62,13 @@ interface GroupWavelengthRepository {
     suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment>
 
     /** Asks the group to pay a member from their balance: a proposal `t` people have to sign, like any other. */
-    suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession
+    suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession
+
+    /** Every onchain payout the group has approved from [wallet], with what this device has seen become of it. */
+    suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout>
+
+    /** Asks the group to pay a member onchain, [amountSat] to the address they gave, as a leave in a round. */
+    suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession
 
     /** Asks the group to leave [wallet] for its onchain wallet. */
     suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession
@@ -111,8 +118,6 @@ interface GroupWavelengthRepository {
     /** Lightning claims this device has signed: the amount it believes arrived, per payment hash. */
     fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>>
 
-    /** Payment hashes this device has filed against a transaction: paid, with no amount of its own. */
-    fun observeArkPayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkPayment>>
 
     companion object {
         val NO_OP: GroupWavelengthRepository = object : GroupWavelengthRepository {
@@ -131,7 +136,9 @@ interface GroupWavelengthRepository {
             override suspend fun stepDown(localChatRoom: LocalChatRoom, userPublicKey: HexKey, chain: Chain, wallet: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun departed(wallet: GroupWavelengthWalletManager.Wallet): List<HexKey> = emptyList()
             override suspend fun payouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthPaymentEvent.Payment> = emptyList()
-            override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout): FrostSigningSession = error("No room to propose in")
+            override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession = error("No room to propose in")
+            override suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout> = emptyList()
+            override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession = error("No room to propose in")
             override suspend fun leaveAsked(chatRoomId: String, chain: Chain, wallet: Long): Boolean = false
             override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false
@@ -147,7 +154,19 @@ interface GroupWavelengthRepository {
             override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(emptyList())
             override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> = flowOf(emptyList())
             override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> = flowOf(emptyList())
-            override fun observeArkPayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkPayment>> = flowOf(emptyList())
         }
     }
+}
+
+/**
+ * An onchain payout the group approved, and where it has got to by this device's own record (`docs/group-wavelength-payouts.md`, W11):
+ * waiting for a round while [leftSat] is null, in one once this device signed it, and paid once that round confirmed.
+ */
+data class GroupWavelengthOnchainPayout(
+    val payout: GroupWavelengthOnchainPayoutEvent.Payout,
+    /** What left with it, the leave and the round's fee, once this device signed a round paying it. */
+    val leftSat: Long? = null,
+    val confirmed: Boolean = false,
+) {
+    fun isExpired(nowSeconds: Long): Boolean = leftSat == null && payout.expiresAt <= nowSeconds
 }

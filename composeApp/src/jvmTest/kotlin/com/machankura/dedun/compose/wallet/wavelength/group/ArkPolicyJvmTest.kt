@@ -78,7 +78,8 @@ class ArkPolicyJvmTest {
         maxOnchainFeeSat: Long = 5_000,
         isTreeKey: (PublicKey) -> Boolean = { it == treeKey },
         isOnchain: (ByteVector) -> Boolean = { it == onchain },
-        authorised: Map<ByteVector, Long> = emptyMap(),
+        leaves: Map<ByteVector, ArkPolicy.AuthorisedLeave> = emptyMap(),
+        leftIn: Map<String, String> = emptyMap(),
         capSat: Long? = null,
         operatorKey: PublicKey = operator,
         exitDelay: Long = fixtures.exitDelay,
@@ -93,7 +94,7 @@ class ArkPolicyJvmTest {
         approved: Map<ByteVector32, ArkPolicy.ApprovedPayment> = emptyMap(),
         paidIn: Map<ByteVector32, String> = emptyMap(),
     ) = ArkPolicy.Context(
-        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, authorised,
+        keys, operatorKey, exitDelay, maxRoundFeeSat, maxOnchainFeeSat, isTreeKey, isOnchain, known, leaves, leftIn,
         capSat, unspentSat, pendingFromSat, reservedFor, notedRounds, treeKeyRounds, minSweepDelay, recentFeesSat, maxRecentFeesSat,
         approvedPayments = approved, paidIn = paidIn,
     )
@@ -352,8 +353,39 @@ class ArkPolicyJvmTest {
     @Test
     fun `a leave the group didn't authorise is refused, and one it did is allowed`() {
         refused(fixtures.forfeit, "a leave to a script nobody authorised", context(isOnchain = { false }))
-        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, context(isOnchain = { false }, authorised = mapOf(onchain to 9_000)))
-        refused(fixtures.forfeit, "a leave to a script nobody authorised", context(isOnchain = { false }, authorised = mapOf(onchain to 8_999)))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice())
+    }
+
+    /** The fixture's 9,000-sat leave, as a payout to a member a quorum approved, in a round whose fee is 1,000. */
+    private fun payingAlice(amountSat: Long = 9_000, maxFeeSat: Long = 1_000, leftIn: Map<String, String> = emptyMap()) =
+        context(isOnchain = { false }, leaves = mapOf(onchain to ArkPolicy.AuthorisedLeave("alice", amountSat, maxFeeSat)), leftIn = leftIn)
+
+    @Test
+    fun `an approved leave pays exactly what was approved, neither less nor more`() {
+        refused(fixtures.forfeit, "a leave of 9000 sats where the group approved 9001", payingAlice(amountSat = 9_001))
+        refused(fixtures.forfeit, "a leave of 9000 sats where the group approved 8999", payingAlice(amountSat = 8_999))
+    }
+
+    @Test
+    fun `an approved leave is paid in one round, however many times that round is asked about`() {
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice(leftIn = mapOf("alice" to commitmentId)))
+        refused(fixtures.forfeit, "an approved leave already paid in another round", payingAlice(leftIn = mapOf("alice" to "another commitment")))
+        // Another approval having gone elsewhere says nothing about this one.
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice(leftIn = mapOf("bob" to "another commitment")))
+    }
+
+    @Test
+    fun `a round paying a leave costs no more than its payout allows`() {
+        refused(fixtures.forfeit, "more than the 999 a payout in it allows", payingAlice(maxFeeSat = 999))
+        allowed(fixtures.forfeit, ArkPolicy.What.FORFEIT, payingAlice(maxFeeSat = 1_000))
+    }
+
+    @Test
+    fun `a round says which approved leave it pays, so the device can file it`() {
+        val verdict = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(payingAlice(), fixtures.forfeit))
+        assertEquals(listOf(ArkPolicy.Leave("alice", onchain, 9_000)), verdict.effect!!.leaves)
+        // A leave to the group's own wallet is nobody's payout.
+        assertEquals(emptyList(), assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), fixtures.forfeit)).effect!!.leaves)
     }
 
     @Test
@@ -667,6 +699,10 @@ class ArkPolicyJvmTest {
         }
         refused(stolen(fixtures.oorCheckpoint), "a transfer to a script nobody authorised")
         refused(stolen(fixtures.oorArk), "a transfer to a script nobody authorised")
+        // A leave's approval pays a round's output and nothing else: a VTXO at a member's onchain key is a coin their wallet can't see.
+        val approved = context(leaves = mapOf(thief to ArkPolicy.AuthorisedLeave("alice", 1_000_000, 1_000)))
+        refused(stolen(fixtures.oorCheckpoint), "a transfer to a script nobody authorised", approved)
+        refused(stolen(fixtures.oorArk), "a transfer to a script nobody authorised", approved)
     }
 
     @Test
@@ -692,10 +728,10 @@ class ArkPolicyJvmTest {
     }
 
     @Test
-    fun `the on-chain account pays the group's wallet or what was authorised, and nobody else`() {
+    fun `the on-chain account pays the group's wallet, and nobody else, not even an approved leave's script`() {
         assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), onchainSpend(onchain, 9_000)))
         refused(onchainSpend(thief, 9_000), "to a script nobody authorised")
-        assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(authorised = mapOf(thief to 9_000)), onchainSpend(thief, 9_000)))
+        refused(onchainSpend(thief, 9_000), "to a script nobody authorised", context(leaves = mapOf(thief to ArkPolicy.AuthorisedLeave("alice", 9_000, 1_000))))
         refused(onchainSpend(onchain, 1_000), "in fees")
         refused(onchainSpend(onchain, 9_000).copy(method = ArkRequest.METHOD_SCRIPT_PATH), "only by its key path")
         refused(onchainSpend(onchain, 9_000).copy(index = 1), "doesn't own")
@@ -826,6 +862,41 @@ class ArkPolicyJvmTest {
         refused(fixtures.claimArk.copy(leafScript = Hex.encode(refundShaped), digest = null), "doesn't recognise as this key's")
     }
 
+    // ---- a payment's vHTLC recovered onchain: docs/group-wavelength-payouts.md, Phase 6 ----
+
+    /** A vHTLC the group paid, as its unilateral refund without the receiver spends it back once unrolled, paying [pays]. */
+    private fun recovery(pays: ByteVector, value: Long = 9_000, sender: PublicKey = keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0), index: Long = 0): ArkRequest {
+        val v = ArkScripts.Vhtlc(sender, stranger, operator, ByteVector32("ab".repeat(32)), 400_000, 10, 20, 30)
+        val leaf = ArkScripts.vhtlcLeaves(v)[5]
+        val tx = Transaction(2, listOf(TxIn(OutPoint(TxId("22".repeat(32)), 0), 30L)), listOf(TxOut(Satoshi(value), pays)), 400_000)
+        return ArkRequest(
+            kind = ArkRequest.INPUT, family = 202, index = index, tx = Hex.encode(Transaction.write(tx)),
+            prevOuts = listOf(ArkOutput(10_000, Hex.encode(ArkScripts.vhtlcScript(v).toByteArray()))), method = ArkRequest.METHOD_SCRIPT_PATH,
+            leafVersion = Script.TAPROOT_LEAF_TAPSCRIPT, leafScript = Hex.encode(leaf.toByteArray()),
+        )
+    }
+
+    @Test
+    fun `a payment's vHTLC unrolled onto the chain comes home to the group's onchain wallet, and nowhere else`() {
+        val v = ArkScripts.Vhtlc(keys.key(GroupArkDerivation.Slot.OOR_RECEIVE, 0, 0), stranger, operator, ByteVector32("ab".repeat(32)), 400_000, 10, 20, 30)
+        assertEquals(400_000L to 30L, ArkScripts.unilateralRefundOf(ArkScripts.vhtlcLeaves(v)[5], v.sender))
+        assertTrue(ArkScripts.vhtlcLeaves(v).filterIndexed { i, _ -> i != 5 }.all { ArkScripts.unilateralRefundOf(it, v.sender) == null }, "no other leaf reads as one")
+
+        allowed(recovery(onchain), ArkPolicy.What.VHTLC_RECOVERY)
+        refused(recovery(thief), "a vHTLC's recovery that pays somewhere other than the group's onchain wallet")
+        refused(recovery(anchor, 0).let { r -> r.copy(tx = Hex.encode(Transaction.write(Transaction.read(r.tx!!).let { it.copy(txOut = it.txOut + TxOut(Satoshi(9_000), thief)) }))) }, "somewhere other than the group's onchain wallet")
+        refused(recovery(onchain, 1_000), "in fees")
+        val allowed = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(), recovery(onchain)))
+        assertEquals(1_000, allowed.effect!!.feeSat, "its fee is filed against the group's budget")
+        refused(recovery(onchain), "more in fees than the group lets this wallet spend", context(recentFeesSat = mapOf("other" to 49_500), maxRecentFeesSat = 50_000))
+    }
+
+    @Test
+    fun `only the group's own swap key recovers a vHTLC, and only one it sent`() {
+        refused(recovery(onchain, sender = stranger), "doesn't recognise as this key's")
+        refused(recovery(onchain, index = 1), "doesn't recognise as this key's")
+    }
+
     // ---- a Lightning payment going out ----
 
     private val notedSend: NotedTransfer = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.sendCheckpoint.note!!.material)
@@ -865,6 +936,8 @@ class ArkPolicyJvmTest {
         assertEquals(ArkPolicy.What.TRANSFER, ark.what)
         assertEquals(fixtures.sendArk.digest, ark.message.toHex(), "the digest this device computed is the daemon's")
         assertEquals(listOf(sendHash), ark.effect!!.payments, "and the payment is remembered")
+        val vhtlc = Transaction.read(notedSend.ark.tx).txOut[0]
+        assertEquals(listOf(ArkPolicy.Funded(sendHash, vhtlc.publicKeyScript, vhtlc.amount.sat)), ark.effect!!.funded, "with what it holds and where, for its refund")
         assertEquals(notedSend.checkpoints.map { Transaction.read(it.tx).txid.toString() }, ark.effect!!.checkpoints, "and what would make it so")
         assertEquals(null, ark.effect!!.signing, "which the Ark transaction's signature isn't")
         assertEquals(listOf(25_000L), ark.effect!!.credits.values.toList(), "and only the change is the group's")
@@ -924,6 +997,12 @@ class ArkPolicyJvmTest {
     @Test
     fun `a failed payment's refund comes home, and goes nowhere else`() {
         allowed(fixtures.refundArk, ArkPolicy.What.TRANSFER, context(known = emptyMap()))
+        // It says which vHTLC came home, which is how the payment it was is known: a refund's leaf names no hash.
+        val home = assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(known = emptyMap()), fixtures.refundArk))
+        val checkpointPrevout = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.refundArk.note!!.material).checkpoints.single().prevOuts.single()
+        assertEquals(ByteVector(Hex.decode(checkpointPrevout.pkScript)), home.effect!!.refunded)
+        assertEquals(null, home.effect!!.claimedHash, "and it's nobody's deposit")
+        assertEquals(null, assertIs<ArkPolicy.Verdict.Allow>(ArkPolicy.check(context(known = emptyMap()), fixtures.claimArk)).effect!!.refunded, "a claim is no refund")
         val refund = CommonJson.decodeFromJsonElement(NotedTransfer.serializer(), fixtures.refundArk.note!!.material)
         val ark = Transaction.read(refund.ark.tx)
         fun paying(script: ByteVector) = fixtures.refundArk.withTransfer { t ->

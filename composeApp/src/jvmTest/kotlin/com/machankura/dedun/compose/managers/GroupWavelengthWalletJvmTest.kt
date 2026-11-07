@@ -208,7 +208,8 @@ class GroupWavelengthWalletJvmTest {
     fun `mainnet is allowed, offered and capped, testnets are refused, and the screen's gate is open by decision`() = runBlocking<Unit> {
         assertTrue(GroupWavelengthRollout.ENABLED)
         assertEquals(listOf(Chain.Mainnet), GroupWavelengthRollout.NETWORKS)
-        assertFalse(GroupWavelengthRollout.paysOverLightning(Chain.Mainnet), "a refund still hasn't really run")
+        assertTrue(GroupWavelengthRollout.paysOverLightning(Chain.Mainnet), "on by decision, though a refund still hasn't really run")
+        assertTrue(GroupWavelengthRollout.paysOnchain(Chain.Mainnet), "on by decision, though no payout leave has been in a real round")
         assertFalse(GroupWavelengthRollout.offersUnilateralExit(Chain.Mainnet), "nor has a unilateral exit")
         assertTrue(GroupWavelengthRollout.allows(Chain.Mainnet))
         assertTrue(GroupWavelengthRollout.allows(Chain.Signet))
@@ -289,8 +290,9 @@ class GroupWavelengthWalletJvmTest {
         assertNull(payment(Chain.Mainnet, regtest).paymentHash, "regtest's prefix starts with mainnet's")
     }
 
-    private fun invoice(amountMsat: Long?, chain: Chain = fixture.chain) = Bolt11Invoice.create(
-        chain, amountMsat?.msat, randomBytes32(), PrivateKey(randomBytes32()), Either.Left("the group's lunch"), CltvExpiryDelta(144),
+    private fun invoice(amountMsat: Long?, chain: Chain = fixture.chain, metadata: String? = null) = Bolt11Invoice.create(
+        chain, amountMsat?.msat, randomBytes32(), PrivateKey(randomBytes32()),
+        metadata?.let { Either.Right(fr.acinq.bitcoin.Crypto.sha256(it.encodeToByteArray()).let(::ByteVector32)) } ?: Either.Left("the group's lunch"), CltvExpiryDelta(144),
         Features(Feature.VariableLengthOnion to FeatureSupport.Mandatory, Feature.PaymentSecret to FeatureSupport.Mandatory),
     )
 
@@ -300,10 +302,10 @@ class GroupWavelengthWalletJvmTest {
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
         fixture.openWallet(all)
         val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
-        val pay = invoice(10_000_500)
+        val pay = invoice(10_000_500, metadata = fixture.metadataOf(all[1]))
         val expiresAt = Clock.System.now().epochSeconds + 3600
 
-        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, expiresAt, fixture.payable(all, all[1], wallet, 200_000))
+        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, expiresAt, fixture.payable(all, all[1], wallet, 200_000), fixture.metadataOf(all[1]))
         assertEquals(emptyMap(), GroupWavelengthPayments.approved(all[0].db, fixture.roomId, wallet), "proposed is not approved")
         fixture.signSession(all, all[1], session.id)
 
@@ -321,7 +323,7 @@ class GroupWavelengthWalletJvmTest {
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
         fixture.openWallet(all)
         val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
-        assertTrue(runCatching { GroupWavelengthPayments.propose(all[0].db, all[0].room, all[0].publicKey, wallet, invoice(null).write(), 1_000, 400_000, 4_000_000_000, GroupWavelengthPaymentEvent.Payout("a", "b")) }.isFailure)
+        assertTrue(runCatching { GroupWavelengthPayments.propose(all[0].db, all[0].room, all[0].publicKey, wallet, invoice(null).write(), 1_000, 400_000, 4_000_000_000, GroupWavelengthPaymentEvent.Payout("a", "b"), null) }.isFailure)
 
         val pay = invoice(10_000_000)
         val good = GroupWavelengthPaymentEvent.template(GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, pay.write(), 1_000, 400_000, 4_000_000_000))

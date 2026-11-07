@@ -3,7 +3,6 @@ package com.machankura.dedun.compose.wallet.wavelength.group
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
-import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import fr.acinq.bitcoin.Satoshi
 
@@ -48,25 +47,22 @@ internal object GroupWavelengthRequests {
     }
 
     /**
-     * What arrived against the invoice in [row]: a claim this device signed, a payment it filed,
-     * or failing both the operator's own account of it.
+     * What arrived against the invoice in [row]: a claim this device signed, or failing that the
+     * operator's own account of it.
      *
-     * [GroupArkClaim] carries the amount it claimed; [GroupArkPayment] records only that a
-     * payment hash reached a transaction, so a request known that way is paid with no figure --
-     * which is what the panel's nullable amount is for.
+     * [GroupArkClaim] is the one device-local record that means money came *in* -- "a Lightning
+     * payment this device has signed the claim of" -- and it carries the amount. `GroupArkPayment`
+     * is not: it is "the transfer this device signed a Lightning payment into", a payout going
+     * out, and reading it as a deposit arriving was this screen's mistake for one commit.
      */
     fun paidOnInvoice(
         row: GroupArkDepositAddress,
         claims: List<GroupArkClaim>,
-        payments: List<GroupArkPayment>,
         snapshot: GroupWavelengthSnapshot?,
     ): PaidRequest? {
         val hash = row.paymentHash ?: return null
         claims.firstOrNull { it.paymentHash.equals(hash, ignoreCase = true) }
             ?.let { return PaidRequest(Satoshi(it.amountSat), onTheOperatorsWord = false) }
-        if (payments.any { it.paymentHash.equals(hash, ignoreCase = true) }) {
-            return PaidRequest(amount = null, onTheOperatorsWord = false)
-        }
         // "pending" is no help here: a line exists from the moment the invoice is made, so only
         // the operator saying it finished is the operator saying it was paid.
         return snapshot?.activity

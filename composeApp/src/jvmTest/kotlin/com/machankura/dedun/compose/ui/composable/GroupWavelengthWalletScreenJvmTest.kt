@@ -270,10 +270,11 @@ class GroupWavelengthWalletScreenJvmTest {
     private fun payout() = GroupWavelengthPaymentEvent.Payment(Chain.Signet, 0, "lntbs1000n1invalid", 50, 500, 4_000_000_000, GroupWavelengthPaymentEvent.Payout(OTHER, "d"))
 
     @Test
-    fun `on mainnet there's no payout over Lightning, and it says why and what to do instead`() = runDesktopComposeUiTest(phone, 1400) {
-        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(chain = Chain.Mainnet), Chain.Mainnet) } } }
-        onNodeWithText("Payouts over Lightning stay off on mainnet until a failed payment's refund has been shown to work. Leaving moves the money to the onchain wallet, which pays out.").assertIsDisplayed()
-        assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Pay out")).fetchSemanticsNodes().size)
+    fun `on mainnet a payout can be asked for, by decision`() = runDesktopComposeUiTest(phone, 1400) {
+        var paying = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened(chain = Chain.Mainnet), Chain.Mainnet, onPayOut = { paying++ }) } } }
+        onNodeWithText("Pay out").performClick()
+        assertEquals(1, paying)
     }
 
     @Test

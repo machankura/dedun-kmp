@@ -110,6 +110,30 @@ object ArkScripts {
         return ByteVector(Script.write(Script.pay2tr(NUMS, treeOf(sorted))))
     }
 
+    /**
+     * The locktime and delay of a vHTLC's unilateral refund without the receiver for [sender], or null when [leaf] isn't one:
+     * `<locktime> CLTV DROP <sender> CHECKSIG <delay> CSV DROP`, which the sender spends alone once both have passed, after the vHTLC has
+     * been unrolled onto the chain. It is how the daemon's own recovery gets a payment's money back when the swap server won't.
+     */
+    fun unilateralRefundOf(leaf: ByteVector, sender: PublicKey): Pair<Long, Long>? = runCatching {
+        val script = leaf.toByteArray()
+        val (locktime, afterLocktime) = numberAt(script, 0) ?: return null
+        val keyAt = afterLocktime + 2
+        val (delay, _) = numberAt(script, keyAt + 34) ?: return null
+        (locktime to delay).takeIf { ByteVector(timelock(locktime) + chain(sender) + delayed(delay)) == leaf }
+    }.getOrNull()
+
+    /** The number pushed at [at] in [script] as [pushNumber] writes one, and where what follows starts, or null for anything else. */
+    private fun numberAt(script: ByteArray, at: Int): Pair<Long, Int>? {
+        val op = script.getOrNull(at)?.toInt()?.and(0xff) ?: return null
+        return when (op) {
+            0 -> 0L to at + 1
+            in 0x51..0x60 -> (op - 0x50).toLong() to at + 1
+            in 1..5 -> if (at + 1 + op > script.size) null else Script.decodeNumber(script.copyOfRange(at + 1, at + 1 + op), checkMinimalEncoding = true, maximumSize = 5) to at + 1 + op
+            else -> null
+        }
+    }
+
     /** Whether [leaf] is a cooperative refund leaf of a vHTLC that [sender] paid. */
     fun isRefundLeaf(leaf: ByteVector, sender: PublicKey): Boolean {
         val script = leaf.toByteArray()

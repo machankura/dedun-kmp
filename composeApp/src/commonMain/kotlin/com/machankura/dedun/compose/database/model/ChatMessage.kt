@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
@@ -687,6 +688,9 @@ data class ChatMessage(
         const val TYPE_WAVELENGTH_DEADLINE = "wavelengthDeadline"
         const val TYPE_WAVELENGTH_OPERATOR_STOPPED = "wavelengthOperatorStopped"
 
+        /** An onchain payout this device saw leave in a round that confirmed, keyed on the approval's id (docs/group-wavelength-payouts.md). */
+        const val TYPE_WAVELENGTH_PAID_OUT = "wavelengthPaidOut"
+
         /** What a group's Wavelength wallet writes in its room. Reports, so they stay quiet: the wallet's screen is where they lead, and it's per network. */
         val WAVELENGTH_TYPES = setOf(
             TYPE_WAVELENGTH_REFUSED,
@@ -694,6 +698,7 @@ data class ChatMessage(
             TYPE_WAVELENGTH_ROUND_DIED,
             TYPE_WAVELENGTH_DEADLINE,
             TYPE_WAVELENGTH_OPERATOR_STOPPED,
+            TYPE_WAVELENGTH_PAID_OUT,
         )
 
         /** The ones a member should see on the wallet's screen as well. */
@@ -1491,6 +1496,19 @@ data class ChatMessage(
                             chatRoomId = groupId,
                             createdAt = createdAt,
                             content = "The group asked the Wavelength wallet to leave for its onchain wallet.",
+                        )
+                    }
+                    GroupWavelengthOnchainPayoutEvent.read(event.tags)?.let { payout ->
+                        return ChatMessage(
+                            giftWrapPayloadId = null,
+                            messageType = TYPE_GROUP_WAVELENGTH_PAYMENT_APPROVED,
+                            marmotGroupEventId = marmotGroupEventId,
+                            marmotInnerEventId = marmotInnerEventId,
+                            senderPublicKey = senderPublicKey,
+                            isUserMessage = isUserMessage,
+                            chatRoomId = groupId,
+                            createdAt = createdAt,
+                            content = "The group approved paying @${memberName(database, payout.member)} ${payout.amountSat} sats from the Wavelength wallet, onchain.",
                         )
                     }
                     val payment = GroupWavelengthPaymentEvent.read(event.tags) ?: return null

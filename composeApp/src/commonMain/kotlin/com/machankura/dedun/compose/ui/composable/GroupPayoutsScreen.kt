@@ -3,6 +3,11 @@ package com.machankura.dedun.compose.ui.composable
 import dedun.composeapp.generated.resources.pays_s_s_sats_up_to_s_in_fees_to_s
 import dedun.composeapp.generated.resources.pay_out_over_lightning
 import dedun.composeapp.generated.resources.pay_out_over_wavelength
+import dedun.composeapp.generated.resources.pay_out_onchain_from_wavelength
+import dedun.composeapp.generated.resources.wavelength_onchain_payout_pays_s_s_s_s
+import dedun.composeapp.generated.resources.wavelength_onchain_payout_needs_s_more
+import dedun.composeapp.generated.resources.wavelength_onchain_payout_waiting_s
+import dedun.composeapp.generated.resources.wavelength_onchain_payout_no_address_s
 import dedun.composeapp.generated.resources.wavelength_s_sats
 import dedun.composeapp.generated.resources.something_went_wrong
 import androidx.compose.runtime.remember
@@ -209,8 +214,24 @@ fun GroupPayoutsScreen(
                                     viewModel.lightningPayable(balance)
                                 } else null,
                                 // The whole Wavelength balance, through the group's Wavelength wallet.
-                                wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && balance.destination != null) {
+                                wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && state.wavelengthPaysLightning && balance.destination != null) {
                                     viewModel.wavelengthPayable(balance)
+                                } else null,
+                                // The same balance, onchain, as a leave in the wallet's next round (docs/group-wavelength-payouts.md).
+                                wavelengthOnchain = if (state.canSign && balance.destination != null) viewModel.wavelengthOnchainOffer(balance) else null,
+                                wavelengthOnchainProblem = viewModel.usageProblemOf(balance.member),
+                                onCheckOnchainAddress = { viewModel.checkUsage(listOf(balance.member)) },
+                                onPayWavelengthOnchain = if (!viewModel.isActionPending.value) {
+                                    {
+                                        viewModel.payOutWavelengthOnchain(
+                                            member = balance.member,
+                                            onSuccess = { sessionId ->
+                                                notify(asked)
+                                                onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId))
+                                            },
+                                            onFailure = { notify(couldNotAsk) },
+                                        )
+                                    }
                                 } else null,
                                 onPayWavelength = if (!viewModel.isActionPending.value) {
                                     {
@@ -295,6 +316,12 @@ private fun MemberPayoutRow(
     /** The same from the Wavelength wallet. */
     wavelengthOffer: Pair<Long, Long>? = null,
     onPayWavelength: (() -> Unit)? = null,
+    /** The Wavelength balance paid out onchain, or why it can't be: null where there's nothing to say. */
+    wavelengthOnchain: GroupPayoutsViewModel.WavelengthOnchainOffer? = null,
+    /** What was found of the address's use, which an onchain payout waits on (`docs/payouts-only.md`, D7). */
+    wavelengthOnchainProblem: GroupPayoutsViewModel.UsageProblem? = null,
+    onCheckOnchainAddress: () -> Unit = {},
+    onPayWavelengthOnchain: (() -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space50)) {
         Row(
@@ -372,6 +399,48 @@ private fun MemberPayoutRow(
             )
             TextButton(onClick = { onPayWavelength?.invoke() }, enabled = onPayWavelength != null) {
                 Text(stringResource(Res.string.pay_out_over_wavelength))
+            }
+        }
+        WavelengthOnchainOffer(name, wavelengthOnchain, wavelengthOnchainProblem, onCheckOnchainAddress, onPayWavelengthOnchain)
+    }
+}
+
+/**
+ * A member's Wavelength balance paid out onchain: what arrives where and what it may cost, or why it can't go yet. The address is checked
+ * for use before the button does anything, as an onchain payout from the group's own wallet is (`docs/payouts-only.md`, D7).
+ */
+@Composable
+private fun WavelengthOnchainOffer(
+    name: String,
+    offer: GroupPayoutsViewModel.WavelengthOnchainOffer?,
+    problem: GroupPayoutsViewModel.UsageProblem?,
+    onCheck: () -> Unit,
+    onPay: (() -> Unit)?,
+) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    when (offer) {
+        null -> Unit
+        GroupPayoutsViewModel.WavelengthOnchainOffer.NoAddress ->
+            Text(stringResource(Res.string.wavelength_onchain_payout_no_address_s, name), style = MaterialTheme.typography.bodySmall, color = muted)
+        GroupPayoutsViewModel.WavelengthOnchainOffer.Waiting ->
+            Text(stringResource(Res.string.wavelength_onchain_payout_waiting_s, name), style = MaterialTheme.typography.bodySmall, color = muted)
+        is GroupPayoutsViewModel.WavelengthOnchainOffer.TooLittle ->
+            Text(stringResource(Res.string.wavelength_onchain_payout_needs_s_more, Satoshi(offer.shortSat).grouped()), style = MaterialTheme.typography.bodySmall, color = muted)
+        is GroupPayoutsViewModel.WavelengthOnchainOffer.Offer -> {
+            LaunchedEffect(offer.address) { onCheck() }
+            Text(
+                stringResource(Res.string.wavelength_onchain_payout_pays_s_s_s_s, name, Satoshi(offer.amountSat).grouped(), offer.address, Satoshi(offer.maxFeeSat).grouped()),
+                style = MaterialTheme.typography.bodySmall,
+                color = muted,
+            )
+            when (problem) {
+                is GroupPayoutsViewModel.UsageProblem.Checking -> Text(stringResource(Res.string.checking_s_address, name), style = MaterialTheme.typography.bodySmall)
+                is GroupPayoutsViewModel.UsageProblem.CouldNotCheck -> Text(stringResource(Res.string.couldn_t_check_the_address), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                is GroupPayoutsViewModel.UsageProblem.PaidBefore -> Text(stringResource(Res.string.paid_before_ask_s_for_a_new_address, name), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                null -> Unit
+            }
+            TextButton(onClick = { onPay?.invoke() }, enabled = onPay != null && problem == null) {
+                Text(stringResource(Res.string.pay_out_onchain_from_wavelength))
             }
         }
     }

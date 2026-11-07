@@ -39,11 +39,26 @@ object GroupWavelengthRollout {
     val MAINNET_CAP: Satoshi = Satoshi(100_000)
 
     /**
-     * Whether a payout goes out over Lightning from a wallet on [chain]. Not on mainnet until a failed payment's refund has run on a real
-     * operator: it has only met fixtures, and a funded vHTLC has no other way back through a device (`docs/group-wavelength-wallet.md`,
-     * "What Lightning found"). Leaving to the onchain wallet still works there, and pays out from that.
+     * Whether a payout goes out over Lightning from a wallet on [chain]. On mainnet by decision on 7 November 2026, ahead of what the plan
+     * named for it: a failed payment's refund run on a real operator (`docs/group-wavelength-payouts.md`, W13). It has only met fixtures,
+     * and a funded vHTLC the swap server abandons comes back only by the daemon's on-chain recovery, which has never run either. What bounds
+     * a loss is one member's balance and [MAINNET_CAP].
      */
-    fun paysOverLightning(chain: Chain): Boolean = !chain.isMainnet()
+    fun paysOverLightning(chain: Chain): Boolean = true
+
+    /**
+     * Whether a payout goes out onchain, as a leave in a round, from a wallet on [chain]. On mainnet by decision on 7 November 2026, ahead
+     * of what the plan named for it: one paid on signet, and the operator's onchain terms read (`docs/group-wavelength-payouts.md`, W13).
+     * No payout leave has been in a real round. A device co-signs one whatever this says.
+     */
+    fun paysOnchain(chain: Chain): Boolean = true
+
+    /**
+     * The least an onchain payout offers to send. A stand-in until the operator's own onchain terms are read (Phase 0 of
+     * `docs/group-wavelength-payouts.md`): mainnet's operator asked a minimum fee of 1,000 sats for a round, and less than that arriving
+     * would lose most of itself to it.
+     */
+    const val MIN_ONCHAIN_PAYOUT_SAT: Long = 1_000
 
     /**
      * Whether the wallet offers to leave without the Ark operator's help on [chain]. A unilateral exit has never run on any network, so

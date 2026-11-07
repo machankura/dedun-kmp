@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.database.model.GroupArkChecked
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkFloor
+import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
@@ -149,8 +150,34 @@ interface GroupArkDao {
     @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
     suspend fun payments(wallet: String): List<GroupArkPayment>
 
-    @Query("SELECT * FROM GroupArkPayment WHERE wallet = :wallet")
-    fun observePayments(wallet: String): Flow<List<GroupArkPayment>>
+    /** The first record of a payment stands: a payment goes once, and its refund is never written over. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPayment(row: GroupArkPayment)
+
+    /**
+     * The refund [ark] of the payment whose vHTLC is [script], unless one already recorded has settled. One that was signed and never
+     * happened gives way to the next, or a member would stay charged for money that came home by another transfer.
+     */
+    @Query(
+        "UPDATE GroupArkPayment SET refundedIn = :ark WHERE wallet = :wallet AND vhtlcScript = :script AND (refundedIn IS NULL OR " +
+            "refundedIn NOT IN (SELECT origin FROM GroupArkVtxo WHERE wallet = :wallet AND settled = 1 AND origin IS NOT NULL))"
+    )
+    suspend fun refundPayment(wallet: String, script: String, ark: String)
+
+    @Upsert
+    suspend fun upsertLeave(row: GroupArkLeave)
+
+    @Query("SELECT * FROM GroupArkLeave WHERE wallet = :wallet")
+    suspend fun leaves(wallet: String): List<GroupArkLeave>
+
+    @Query("SELECT * FROM GroupArkLeave WHERE wallet = :wallet")
+    fun observeLeaves(wallet: String): Flow<List<GroupArkLeave>>
+
+    @Query("UPDATE GroupArkLeave SET confirmed = 1 WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun confirmLeaves(wallet: String, commitment: String)
+
+    @Query("DELETE FROM GroupArkLeave WHERE wallet = :wallet AND commitment = :commitment")
+    suspend fun forgetLeaves(wallet: String, commitment: String)
 
     @Upsert
     suspend fun upsertFee(row: GroupArkFee)

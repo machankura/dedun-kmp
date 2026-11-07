@@ -23,6 +23,7 @@ import fr.acinq.bitcoin.PublicKey
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import engineering.lightning.wavelength.ExitRequest
 import engineering.lightning.wavelength.ListRequest
+import engineering.lightning.wavelength.model.EntryStatus
 import engineering.lightning.wavelength.model.ExitSummaryResult
 import engineering.lightning.wavelength.model.GetExitPlanResult
 import engineering.lightning.wavelength.model.ListView
@@ -178,6 +179,22 @@ class GroupWavelengthDaemon(private val client: HostedWalletClient, private val 
     suspend fun pay(invoice: String, maxFeeSat: Long) {
         client.send(SendRequest.Invoice(invoice, maxFeeSat = maxFeeSat, maxCreditSat = 0, maxCreditTopupSat = 0))
     }
+
+    /**
+     * Pays a member's approved onchain payout: a leave of exactly [amountSat] to [address] in the next round, with the fee taken from the
+     * change, which every device checks against the approval (`docs/group-wavelength-payouts.md`, W5). [note] is the approval's id, so the
+     * daemon's own activity says which approvals it already has in hand.
+     */
+    suspend fun sendOnchain(address: String, amountSat: Long, maxFeeSat: Long, note: String) {
+        client.send(SendRequest.Onchain(address, amountSat = amountSat, sweepAll = false, note = note, maxFeeSat = maxFeeSat))
+    }
+
+    /** The notes of the daemon's activity that hasn't failed: the approvals it is paying or has paid, as [sendOnchain] wrote them. */
+    suspend fun notedActivity(): Set<String> =
+        client.list(ListRequest(limit = GroupWavelengthSnapshot.MAX_ACTIVITY.toLong())).activity?.entries.orEmpty()
+            .filter { it.status != EntryStatus.FAILED && it.note.isNotEmpty() }
+            .map { it.note }
+            .toSet()
 
     /** The coins the running daemon can still move. */
     suspend fun liveCoins(): List<String> =

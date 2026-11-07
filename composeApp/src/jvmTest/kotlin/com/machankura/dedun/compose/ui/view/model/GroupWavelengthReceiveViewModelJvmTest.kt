@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModelStore
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
-import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupWavelengthOperatorManager
@@ -75,7 +74,6 @@ class GroupWavelengthReceiveViewModelJvmTest {
         val rows = MutableStateFlow<List<GroupArkDepositAddress>>(emptyList())
         val boarded = MutableStateFlow<List<GroupArkBoarded>>(emptyList())
         val claims = MutableStateFlow<List<GroupArkClaim>>(emptyList())
-        val payments = MutableStateFlow<List<GroupArkPayment>>(emptyList())
         val snapshot = MutableStateFlow<GroupWavelengthSnapshot?>(null)
 
         override suspend fun wallets(chatRoomId: String, chain: Chain) = listOf(wallet)
@@ -87,7 +85,6 @@ class GroupWavelengthReceiveViewModelJvmTest {
         override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = MutableStateFlow(emptyList())
         override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> = boarded
         override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> = claims
-        override fun observeArkPayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkPayment>> = payments
         override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> = snapshot
     }
 
@@ -163,19 +160,6 @@ class GroupWavelengthReceiveViewModelJvmTest {
         val paid = loaded(viewModel).invoicePaid
         assertEquals(Satoshi(5_000), paid?.amount)
         assertEquals(false, paid?.onTheOperatorsWord, "this device signed the claim itself")
-    }
-
-    /** A filed payment says it happened and nothing about how much, which is what a null amount is for. */
-    @Test
-    fun `a filed payment marks the invoice paid with no figure`() {
-        val repository = repository()
-        repository.rows.value = listOf(invoiceRow())
-        val viewModel = receiving(repository)
-        repository.payments.value = listOf(GroupArkPayment("w", hash, "tx1"))
-        settle()
-        val paid = loaded(viewModel).invoicePaid
-        assertEquals(null, paid?.amount)
-        assertEquals(false, paid?.onTheOperatorsWord)
     }
 
     /**

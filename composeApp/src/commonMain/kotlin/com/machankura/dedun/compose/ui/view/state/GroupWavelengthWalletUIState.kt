@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -93,6 +94,8 @@ sealed class GroupWavelengthWalletUIState {
         val leaveAsked: Boolean = false,
         /** What the group has approved paying from this wallet. */
         val payouts: List<GroupWavelengthPaymentEvent.Payment> = emptyList(),
+        /** The onchain payouts it has approved, and what this device has seen become of each. */
+        val onchainPayouts: List<GroupWavelengthOnchainPayout> = emptyList(),
     ) : GroupWavelengthWalletUIState() {
         /** Whether enough signers have answered lately for a round to be likely to work: `2t-1` of them have to. */
         val enoughSeen: Boolean get() = seenRecently() >= 2 * wallet.statement.threshold - 1

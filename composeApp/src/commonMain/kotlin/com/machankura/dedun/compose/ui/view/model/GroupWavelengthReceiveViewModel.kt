@@ -9,11 +9,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.touchlab.kermit.Logger
-import com.machankura.dedun.compose.database.model.GroupArkBoarded
-import com.machankura.dedun.compose.database.model.GroupArkClaim
-import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
-import com.machankura.dedun.compose.database.model.GroupArkPayment
-import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.repository.ChatRepository
@@ -90,15 +85,13 @@ class GroupWavelengthReceiveViewModel(
                 repository.observeCoins(chatRoomId, chain, number),
                 repository.observeBoarded(chatRoomId, chain, number),
                 repository.observeClaims(chatRoomId, chain, number),
-                repository.observeArkPayments(chatRoomId, chain, number),
-            ) { rows, coins, boarded, claims, payments ->
-                Reading(rows, coins, boarded, claims, payments)
-            }.combine(repository.observeSnapshot(chatRoomId, chain, number)) { reading, snapshot ->
-                val addresses = reading.rows.filter { it.invoiceAmountSat == null }
-                val invoices = reading.rows.filter { it.invoiceAmountSat != null }.sortedBy { it.requestedAt }
+                repository.observeSnapshot(chatRoomId, chain, number),
+            ) { rows, coins, boarded, claims, snapshot ->
+                val addresses = rows.filter { it.invoiceAmountSat == null }
+                val invoices = rows.filter { it.invoiceAmountSat != null }.sortedBy { it.requestedAt }
                 val newest = invoices.lastOrNull()
                 val shownAddress = addresses.lastOrNull { it.address != null }
-                val live = GroupWavelengthLedger.of(reading.coins)
+                val live = GroupWavelengthLedger.of(coins)
                 GroupWavelengthReceiveUIState.Loaded(
                     address = shownAddress?.address,
                     addressAsked = addresses.isNotEmpty(),
@@ -109,22 +102,14 @@ class GroupWavelengthReceiveViewModel(
                     maxRoundFeeSat = found.statement.policy.maxRoundFeeSat,
                     roomLeftSat = cap?.let { (it - live.settledSat - live.pendingSat).coerceAtLeast(0) },
                     enoughSeen = enoughSeen,
-                    addressPaid = shownAddress?.let { GroupWavelengthRequests.paidOnAddress(it, reading.boarded) },
-                    invoicePaid = newest?.let { GroupWavelengthRequests.paidOnInvoice(it, reading.claims, reading.payments, snapshot) },
+                    addressPaid = shownAddress?.let { GroupWavelengthRequests.paidOnAddress(it, boarded) },
+                    invoicePaid = newest?.let { GroupWavelengthRequests.paidOnInvoice(it, claims, snapshot) },
                     operatorName = operatorName,
                 )
             }.collect { uiState = it }
         }
     }
 
-    /** The five device-local flows as one value, because `combine` takes five at a time. */
-    private data class Reading(
-        val rows: List<GroupArkDepositAddress>,
-        val coins: List<GroupArkVtxo>,
-        val boarded: List<GroupArkBoarded>,
-        val claims: List<GroupArkClaim>,
-        val payments: List<GroupArkPayment>,
-    )
 
     fun ask(onFailure: () -> Unit) {
         val localChatRoom = room ?: return
