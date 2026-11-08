@@ -224,6 +224,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupSwapInR
 import com.machankura.dedun.compose.ui.composable.GroupSwapInScreen
 import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkBoardingWatch
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkWatcher
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthProcess
 import fr.acinq.phoenix.managers.NodeParamsManager
@@ -503,6 +504,18 @@ fun DedunNavHost(
     }
     DisposableEffect(groupArkWatcher) {
         onDispose { groupArkWatcher?.stop() }
+    }
+
+    // Sees for itself what has been paid to the group's Wavelength boarding addresses before any
+    // round takes it in, on the same lifetime: without it, a deposit is invisible from the moment
+    // it is broadcast until this device co-signs the round, which on mainnet is nine blocks at best.
+    val groupArkBoardingWatch = remember(groupChainClients) {
+        groupChainClients?.let {
+            GroupArkBoardingWatch(auxDatabaseManager.auxDatabase, it, applicationIOScope).also { watch -> watch.start() }
+        }
+    }
+    DisposableEffect(groupArkBoardingWatch) {
+        onDispose { groupArkBoardingWatch?.stop() }
     }
 
     // Whatever group Wavelength wallets this profile is elected to run. The process's rather than this
