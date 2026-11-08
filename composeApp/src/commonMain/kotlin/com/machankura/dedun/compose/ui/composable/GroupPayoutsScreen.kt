@@ -69,6 +69,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
+import com.machankura.dedun.compose.ui.composable.widgets.LocalAmount
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
@@ -518,6 +519,7 @@ private fun PayoutPreview(
                             stringResource(Res.string.s_s_sats_arrive_at_s, name(payee.member), Satoshi(payee.paid).grouped(), ProposedSpend.addressOf(payee.script, chain)),
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                        LocalAmount(Satoshi(payee.paid))
                         if (payee.member !in viewModel.selected) {
                             Text(
                                 stringResource(Res.string.this_also_pays_s_their_share, name(payee.member)),

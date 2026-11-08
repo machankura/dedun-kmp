@@ -36,6 +36,7 @@ import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
+import com.machankura.dedun.compose.ui.composable.widgets.LocalAmount
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
@@ -165,6 +166,7 @@ internal fun GroupWavelengthEntryDetail(
     ) {
         Text(entryHeadline(entry, localChatRoom, reader), style = MaterialTheme.typography.headlineSmall)
         Text(signedAmount(entry), style = MaterialTheme.typography.displaySmall)
+        LocalAmount(Satoshi(entry.amountSat))
 
         DetailLine(stringResource(Res.string.wavelength_entry_status), entryStatus(entry, localChatRoom, reader))
         // A round moved the group's own coins and nothing else: it has a cost and no amount, so saying

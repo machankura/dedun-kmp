@@ -73,6 +73,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
+import com.machankura.dedun.compose.ui.composable.widgets.LocalAmount
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
@@ -375,7 +376,12 @@ private fun Commitment(
         item { Text(stringResource(Res.string.group_wavelength_commitment_fees), style = MaterialTheme.typography.bodyMedium) }
         item { Text(stringResource(Res.string.group_wavelength_commitment_unreviewed), style = MaterialTheme.typography.bodyMedium) }
         GroupWavelengthRollout.capFor(chain)?.let { cap ->
-            item { Text(stringResource(Res.string.group_wavelength_commitment_cap_s, cap.grouped()), style = MaterialTheme.typography.bodyMedium) }
+            item {
+                Column {
+                    Text(stringResource(Res.string.group_wavelength_commitment_cap_s, cap.grouped()), style = MaterialTheme.typography.bodyMedium)
+                    LocalAmount(cap)
+                }
+            }
         }
         item {
             Text(stringResource(Res.string.your_share_of_this_key_is_stored_unencrypted), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -538,7 +544,14 @@ private fun LazyListScope.groupItems(
             headlineContent = {
                 Text(stringResource(Res.string.group_wavelength_signers_s_of_s, statement.threshold.toString(), statement.participants.size.toString(), (2 * statement.threshold - 1).toString()))
             },
-            supportingContent = GroupWavelengthRollout.capFor(chain)?.let { cap -> { Text(stringResource(Res.string.group_wavelength_cap_s, cap.grouped())) } },
+            supportingContent = GroupWavelengthRollout.capFor(chain)?.let { cap ->
+                {
+                    Column {
+                        Text(stringResource(Res.string.group_wavelength_cap_s, cap.grouped()))
+                        LocalAmount(cap)
+                    }
+                }
+            },
         )
     }
     item { TextButton(onClick = onOpenAdvanced) { Text(stringResource(Res.string.group_wavelength_advanced)) } }
@@ -606,6 +619,7 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                 Text(stringResource(Res.string.group_wavelength_balance_none), style = MaterialTheme.typography.bodyLarge)
             } else {
                 Text(stringResource(Res.string.s_sats, Satoshi(ledger.settledSat).grouped()), style = MaterialTheme.typography.headlineMedium)
+                LocalAmount(Satoshi(ledger.settledSat))
             }
             if (ledger.pendingSat > 0) {
                 Text(stringResource(Res.string.group_wavelength_pending_s, Satoshi(ledger.pendingSat).grouped()), style = MaterialTheme.typography.bodyMedium)

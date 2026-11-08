@@ -50,6 +50,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
+import com.machankura.dedun.compose.ui.composable.widgets.LocalAmount
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.InvoiceExpired
@@ -208,7 +209,12 @@ private fun LazyListScope.onchainItems(state: GroupWavelengthReceiveUIState.Load
         item { Line(stringResource(Res.string.group_wavelength_receive_limits_s_s, Satoshi(terms.minBoardingSat).grouped(), Satoshi(terms.maxVtxoSat).grouped())) }
     }
     state.roomLeftSat?.let { item { Line(stringResource(Res.string.group_wavelength_receive_room_s, Satoshi(it).grouped())) } }
-    item { Line(stringResource(Res.string.group_wavelength_receive_fee_s, Satoshi(state.maxRoundFeeSat).grouped())) }
+    item {
+        Column {
+            Line(stringResource(Res.string.group_wavelength_receive_fee_s, Satoshi(state.maxRoundFeeSat).grouped()))
+            LocalAmount(Satoshi(state.maxRoundFeeSat))
+        }
+    }
 }
 
 /** The one place in this wallet a member takes the operator's word for something, so it says so first. */

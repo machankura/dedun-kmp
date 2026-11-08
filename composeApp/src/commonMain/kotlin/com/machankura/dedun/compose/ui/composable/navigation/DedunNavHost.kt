@@ -197,7 +197,9 @@ import com.machankura.dedun.compose.ui.view.state.NostrEventDetailUIState
 import com.machankura.dedun.compose.ui.view.state.SearchUIState
 import com.machankura.dedun.compose.ui.theme.NavigationMotion
 import com.machankura.dedun.compose.ui.composable.SignOutDependencies
+import com.machankura.dedun.compose.ui.composable.widgets.ProvideExchangeRate
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSigningCapability
+import com.machankura.dedun.compose.ui.composable.widgets.rememberPrimaryFiatRate
 import com.machankura.dedun.compose.ui.theme.breakpoint
 import co.touchlab.kermit.Logger
 import fr.acinq.phoenix.PhoenixGlobal
@@ -714,9 +716,15 @@ fun DedunNavHost(
         )
     }
 
+    // Once, above every screen, and for the same reason as the line below: a rate is a fact about
+    // this member's device rather than about any one wallet, and the screens that put a figure in
+    // their own currency have three different view models between them.
+    val primaryFiatRate = rememberPrimaryFiatRate(phoenixGlobal.currencyManager, sovereignWalletViewModel.activeIdentity)
+
     // Once, above every screen: what a read-only identity may not be offered is decided
     // where the control is drawn, and this is how the control finds out.
     ProvideSigningCapability(sovereignWalletViewModel.activeIdentity) {
+    ProvideExchangeRate(primaryFiatRate) {
     DedunNavigationSuite(
         navController = navController,
         breakpoint = MaterialTheme.breakpoint,
@@ -2017,6 +2025,7 @@ fun DedunNavHost(
                 )
             }
         }
+    }
     }
     }
 

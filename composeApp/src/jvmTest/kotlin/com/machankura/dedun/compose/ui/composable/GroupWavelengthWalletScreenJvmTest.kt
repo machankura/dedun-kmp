@@ -31,10 +31,13 @@ import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.OTHER
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.key
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.localChatRoom
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures.wallet
+import com.machankura.dedun.compose.ui.composable.widgets.ProvideExchangeRate
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import fr.acinq.bitcoin.Chain
+import fr.acinq.phoenix.data.ExchangeRate
+import fr.acinq.phoenix.data.FiatCurrency
 import kotlin.test.Test
 import kotlin.time.Instant
 import kotlin.test.assertEquals
@@ -185,6 +188,63 @@ class GroupWavelengthWalletScreenJvmTest {
 
     private val settledCoin = GroupArkVtxo("w", "a:0", 10_000, settled = true)
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
+
+    // ---------------------------------------------------------------------
+    // The second line, in money the group counts in (Phase 2, B1).
+    // ---------------------------------------------------------------------
+
+    /** Two million of a currency per bitcoin, so 10,000 sats is 200.00 of it and the arithmetic is readable. */
+    private val zar = ExchangeRate.BitcoinPriceRate(
+        fiatCurrency = FiatCurrency.ZAR, price = 2_000_000.0, source = "test", timestampMillis = 0,
+    )
+
+    /**
+     * The figure stays in sats and the local currency goes *under* it. This is the whole of B1: a
+     * member comparing a balance to a threshold is comparing sats, and a rate that is stale or wrong
+     * must not be able to change what they compare.
+     */
+    @Test
+    fun `the balance keeps its sats figure and gains a line in the member's own currency`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    ProvideExchangeRate(zar) {
+                        GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet)
+                    }
+                }
+            }
+        }
+        onNodeWithText("10,000 sats").assertIsDisplayed()
+        onNodeWithText("200.00 ZAR").assertIsDisplayed()
+    }
+
+    /** No rate is the ordinary case for a member signed in with a bare nostr key, and it shows nothing. */
+    @Test
+    fun `with no rate the balance is one line, as it was`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet) } } }
+        onNodeWithText("10,000 sats").assertIsDisplayed()
+        onAllNodesWithText("ZAR", substring = true).assertCountEquals(0)
+    }
+
+    /**
+     * The cap on the commitment screen, which is a group deciding whether it wants this wallet at all
+     * and the one figure on that screen anybody weighs. It is drawn from `NotOpened`, before a wallet
+     * exists -- which is why the rate is a composition local rather than a field on `Opened`.
+     */
+    @Test
+    fun `the mainnet cap says what it is worth, before the wallet exists`() = runDesktopComposeUiTest(phone, 1200) {
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    ProvideExchangeRate(zar) {
+                        GroupWavelengthWalletContent(Modifier, GroupWavelengthWalletUIState.NotOpened(localChatRoom, key, null, null), Chain.Mainnet)
+                    }
+                }
+            }
+        }
+        onNodeWithText("On mainnet this wallet holds at most 100,000 sats, and every member's device holds it to that.").assertIsDisplayed()
+        onNodeWithText("2,000.00 ZAR").assertIsDisplayed()
+    }
 
     @Test
     fun `the balance is what this device signed for, with the figure of whoever runs it beside it`() = runDesktopComposeUiTest(phone, 1400) {

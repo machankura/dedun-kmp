@@ -3,6 +3,9 @@ package com.machankura.dedun.compose.text
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.insert
 import fr.acinq.bitcoin.Satoshi
+import fr.acinq.phoenix.data.ExchangeRate
+import kotlin.math.abs
+import kotlin.math.round
 
 /**
  * An amount in sats, its thousands grouped: `120,000`.
@@ -13,8 +16,121 @@ import fr.acinq.bitcoin.Satoshi
  */
 fun Satoshi.grouped(): String {
     val digits = sat.toString().removePrefix("-")
-    val grouped = digits.reversed().chunked(3).joinToString(",").reversed()
+    val grouped = groupThousands(digits)
     return if (sat < 0) "-$grouped" else grouped
+}
+
+/** Digits with a comma every three from the right. Shared with the local-currency line below. */
+private fun groupThousands(digits: String): String =
+    digits.reversed().chunked(3).joinToString(",").reversed()
+
+/**
+ * This many sats in a member's own currency, or null where there is nothing honest to say.
+ *
+ * **Never the figure a decision reads** (B1 of `docs/group-wavelength-redesign.md`). It goes under a
+ * sats figure, never instead of one: a rate is a claim about the outside world that can be stale or
+ * absent, and every threshold, cap, fee limit and approval in this wallet is in sats. A member acting
+ * on this line is acting on the wrong number. Null rather than a guess where there is no rate, and
+ * null for a price that is zero, negative or not finite -- which is not a rate.
+ *
+ * The rounding is the guide's as far as the guide goes.
+ * [Formatting very small amounts](https://bitcoin.design/guide/designing-products/units-and-symbols/#formatting-very-small-amounts)
+ * gives eight worked examples and **every one of them is below one unit of currency**: the section is
+ * headed for small amounts and says nothing about the figures this wallet mostly shows. So below one
+ * unit this is the guide's rule exactly -- a value already carrying two or fewer non-zero digits keeps
+ * its own digits, and any other rounds to two non-zero digits -- which turns its `$0.038878830` into
+ * `~0.039` and its `0.0000431`, the value it says most libraries render as `0.00`, into `~0.000043`.
+ * **At or above one unit the rule is this app's:** two decimal places, which is what a member reading a
+ * balance expects, and the guide neither gives nor forbids it.
+ *
+ * The `~` is the guide's mark, under the guide's condition: rounding changed the value. On a converted
+ * amount that is almost always true, which is the point -- the line is an estimate and says so.
+ *
+ * The currency is the member's own primary preference, so four members may read one balance in four
+ * currencies. That is right for each of them and odd in a room, and it is question 1 of the plan.
+ */
+fun Satoshi.inLocalCurrency(rate: ExchangeRate.BitcoinPriceRate?): String? {
+    if (rate == null || !rate.price.isFinite() || rate.price <= 0.0) return null
+    val value = sat / SATS_PER_BITCOIN * rate.price
+    if (!value.isFinite()) return null
+    val magnitude = abs(value)
+    // A figure this large is a broken rate rather than a balance, and past a double's exact integer
+    // range the scaling below starts dropping digits silently.
+    if (magnitude >= TOO_LARGE) return null
+
+    var places = placesFor(magnitude)
+    var rounded = roundTo(magnitude, places)
+    // Rounding can cross a decade -- 0.0999 becomes 0.100 -- and two non-zero digits then need one
+    // place fewer than the unrounded value asked for.
+    placesFor(rounded).takeIf { it != places }?.let {
+        places = it
+        rounded = roundTo(magnitude, it)
+    }
+
+    // Not `rounded == magnitude`. The conversion is a double multiply, so an amount that is round to
+    // the last digit arrives as 0.029999999999999998 or 246.90000000000003 and an exact comparison
+    // calls it rounded -- which put a `~` on a figure that had lost nothing, and padded the guide's
+    // 0.03 out to 0.030. The question this asks is whether the *display* lost anything, so the
+    // tolerance is above a double's noise and far below any rounding a reader would care about.
+    val exact = abs(rounded - magnitude) <= magnitude * NOISE
+    val digits = fixed(rounded, places, trimTo = if (exact) MIN_PLACES else places)
+    val sign = if (value < 0) "-" else ""
+    val approximately = if (exact) "" else "~"
+    return "$approximately$sign$digits ${rate.fiatCurrency.displayCode}"
+}
+
+private const val SATS_PER_BITCOIN = 100_000_000.0
+
+/** Two decimal places, because cents are hundredths. The guide's minimum, and this app's rule above one unit. */
+private const val MIN_PLACES = 2
+
+/** Deep enough for two non-zero digits of a value a hundred-millionth of a unit, and no deeper. */
+private const val MAX_PLACES = 12
+
+/** Ten trillion of any currency. Past it a double no longer holds the scaled integer exactly. */
+private const val TOO_LARGE = 1e13
+
+/**
+ * What counts as the same figure. A double carries about 15 significant digits, so a relative
+ * difference this small is arithmetic noise rather than a figure that was rounded.
+ */
+private const val NOISE = 1e-9
+
+/** [MIN_PLACES] at or above one unit; below it, the place that leaves two non-zero digits. */
+private fun placesFor(magnitude: Double): Int {
+    var places = MIN_PLACES
+    var scaled = magnitude
+    while (scaled > 0.0 && scaled < 0.1 && places < MAX_PLACES) {
+        scaled *= 10
+        places++
+    }
+    return places
+}
+
+private fun roundTo(magnitude: Double, places: Int): Double {
+    val scale = scaleOf(places)
+    return round(magnitude * scale) / scale
+}
+
+private fun scaleOf(places: Int): Double {
+    var scale = 1.0
+    repeat(places) { scale *= 10 }
+    return scale
+}
+
+/**
+ * [magnitude] with [places] digits after the point and its thousands grouped, then trailing zeros
+ * dropped down to [trimTo]. The trim is what keeps the guide's `0.03` from being padded to `0.030`:
+ * a value that is already round shows the digits it has, and a rounded one shows the place it was
+ * rounded to.
+ */
+private fun fixed(magnitude: Double, places: Int, trimTo: Int): String {
+    val scale = scaleOf(places).toLong()
+    val units = round(magnitude * scaleOf(places)).toLong()
+    val whole = groupThousands((units / scale).toString())
+    var fraction = (units % scale).toString().padStart(places, '0')
+    while (fraction.length > trimTo && fraction.endsWith("0")) fraction = fraction.dropLast(1)
+    return if (fraction.isEmpty()) whole else "$whole.$fraction"
 }
 
 /** What a member typed as an amount in sats, read -- or the reason it cannot be. */

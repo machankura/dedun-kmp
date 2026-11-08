@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phase 1 is built; Phases 2 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 and 2 are built; Phases 3 to 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -522,33 +522,66 @@ Fourteen strings, one widget and two budgets. No behaviour change, and nothing a
 **Done** on 8 November 2026: both budgets are in `m3-audit.sh` at zero, `--check` passes, and
 `:composeApp:jvmTest` is green.
 
-### Phase 2: an amount in money the group counts in
+### Phase 2: an amount in money the group counts in — **built**
 
-The rate, and one formatter. B1.
+One formatter, one composition local, six lines. B1. No view model and no UI state changed, which is
+not what this plan expected and is the better half of what the build found.
 
-- `Sats.kt` gains `Satoshi.inLocalCurrency(rate: ExchangeRate?): String?` — null when there is no rate,
-  and otherwise the guide's rounding: at least two digits, digits kept below one cent, two non-zero
-  digits with `~` where it is uneven. A pure function, tested on its own.
-- **`ratesFlow` is a `StateFlow<List<ExchangeRate>>`, one rate per currency, not one rate** — so a second
-  thing has to be read to pick from it: the member's preferred fiat currency, which is Phoenix's own
-  preference and the same one `SovereignWalletViewModel` would have needed had it ever drawn the figure.
-  Phase 2 reads it from `getGlobalPrefs(phoenixGlobal)` (`extensions/Phoenix.kt:15`) and falls back to the
-  device locale's currency, then to showing nothing. **This is what Question 1 is about,** and the
-  fallback chain is the part to settle before the phase rather than during it.
-- `GroupWavelengthWalletViewModel` and `GroupWavelengthReceiveViewModel` take the flow and the preference
-  the way they take `daemonSource`, from the same `phoenixGlobal` that `SovereignWalletViewModel.kt:126`
-  already holds. `GroupWavelengthWalletUIState.Opened` gains `rate: ExchangeRate? = null` — the single
-  resolved rate, not the list, so the composable never picks a currency; the receive state the same.
-- The second line appears under: the balance figure, the cap on the wallet screen and the commitment
-  screen, the round's fee cap on the receive screen, the entry detail's signed amount, and the payout
-  preview's per-member amount in `GroupPayoutsScreen.kt`. Nowhere else.
-- **Tests**, `SatsJvmTest`: each of the guide's five rounding examples; no rate gives null and the screen
-  tests assert the sats line stands alone; a rate of zero is null rather than `R 0.00`.
-  `GroupWavelengthWalletScreenJvmTest` gains a case asserting no approval or threshold string contains the
-  local currency.
+- `Sats.kt` gained `Satoshi.inLocalCurrency(rate: ExchangeRate.BitcoinPriceRate?): String?` — null when
+  there is no rate, null for a price that is zero, negative or not finite, and null past ten trillion
+  of a currency, where a double stops holding the scaled integer exactly. A pure function, tested on
+  its own.
+- **The guide's rounding rules are narrower than this plan said, and the plan's "five examples" was
+  wrong.** The [units page](https://bitcoin.design/guide/designing-products/units-and-symbols/#formatting-very-small-amounts)
+  gives **eight** worked examples — four round, four uneven — and **every one of them is below one unit
+  of currency.** The section is headed *Formatting very small amounts* and the guide says nothing about
+  amounts of one unit or more, which is what this wallet almost always shows. So below one unit the
+  built rule is the guide's exactly, and **at or above one unit the rule is this app's:** two decimal
+  places, grouped. The mark is `~`, which is the guide's; `≈` appears nowhere in the guide. The
+  condition for it is the guide's too — rounding changed the value — so on a converted amount it is
+  there nearly always, which is the honest result.
+- **The preference is not in `GlobalPrefs`.** It is `UserPrefs.getFiatCurrencies`, reached through
+  `Identity.userPrefs`, and **its `primary` defaults to `FiatCurrency.USD`** — so there is no such
+  thing as a member who has set no preference, and the locale fallback this plan asked for was neither
+  needed nor built. That is half of Question 1 answered by the build rather than by a decision.
+- **`ratesFlow` on its own would have been wrong, not just insufficient.** Most currencies arrive as an
+  `ExchangeRate.UsdPriceRate` — a price against the US dollar, not against bitcoin — so
+  `rates.first { it.fiatCurrency == mine }` returns a rate whose `price` read as a bitcoin price is out
+  by the whole dollar rate. `CurrencyManager.calculateOriginalFiat` does the two-step and is what this
+  uses. **Phoenix's own `primaryFiatRate` ambient has exactly that bug** (a plain lookup in
+  `LocalExchangeRatesMap`), which is why it is not reused.
+- **A composition local, not a field on `Opened`.** `LocalExchangeRate` is provided once in
+  `DedunNavHost`, above every screen, beside `ProvideSigningCapability`. A rate is a fact about this
+  device and this member, not about a wallet — and more concretely, two of the six sites cannot be
+  reached from `Opened` at all: the cap on the commitment screen is drawn from `NotOpened`, before a
+  wallet exists, and `GroupPayoutsScreen` has a view model of its own. The plan's design would have
+  shipped four of six.
+- The one widget is `LocalAmount`, which draws the line in `onSurfaceVariant` at `bodySmall` or nothing
+  at all. One widget rather than six `?.let { Text(…) }`, so the line has one style and one condition
+  everywhere: **the sats figure above it is the figure.**
+- The six sites, as planned: the balance figure, the cap beside the thresholds, the cap on the
+  commitment screen, the round's fee cap on the receive screen, the entry detail's leading amount, and
+  the payout preview's per-member amount. Nowhere else.
+- **A rate needs a started Phoenix business.** `BusinessManager.startNewBusiness` is what calls
+  `startMonitoringCurrencies`, and a member signed in with a bare nostr key starts no business. They
+  have no rates and see no second line anywhere, which is right — the alternative is quoting a price
+  this app never fetched — and is worth knowing before reading an empty screen as a bug.
+- **Tests** are in `commonTest/SatsTest.kt`, which already existed, rather than a new `SatsJvmTest`:
+  all eight of the guide's examples, the €0.0000431 the guide names as the problem case, the rule above
+  one unit, every null, a negative, and the figure too large to hold.
+  `GroupWavelengthWalletScreenJvmTest` gained three: the balance keeps its sats figure *and* gains the
+  line; with no rate it is one line as before; and the mainnet cap says what it is worth on the
+  commitment screen. **The case this plan asked for — "no approval or threshold string contains the
+  local currency" — was not written, because there is no such string with an amount in it to leak
+  into.** What is asserted instead is B1 itself: the sats figure is still there and the currency is a
+  second line under it.
+- **One bug worth the note.** The first cut tested *exact* for the `~`, and a double multiply means a
+  figure that is round to its last digit arrives as `246.90000000000003`. That put a `~` on a figure
+  that had lost nothing and padded the guide's `0.03` out to `0.030`. The question the code asks now is
+  whether the *display* lost anything, at a tolerance above a double's noise.
 
-**Done when** a screen test with a rate shows two lines and one without shows one, and no refusal reads
-the fiat figure.
+**Done** on 8 November 2026: a screen test with a rate shows two lines, one without shows one, and the
+figure a decision reads is still in sats everywhere.
 
 ### Phase 3: the balance, as a balance
 
@@ -791,12 +824,12 @@ phones will.
 
 ## Questions, for the owner
 
-1. **The local currency's source, and whether the group shares one.** `ratesFlow` carries a rate per
-   currency, so something has to choose. Phase 2 chooses the member's own Phoenix preference, which means
-   four members may see four currencies for one balance — right for each of them, and odd in a shared
-   wallet when two of them compare screens in the room. Per-member, or one currency the group signs into
-   the wallet's statement? And where a member has set no preference: the device locale's currency, or
-   nothing until they choose?
+1. **Whether the group shares one currency.** *Half answered by the build:* there is no member who has
+   set no preference, because `UserPrefs.getFiatCurrencies` defaults its `primary` to USD, so the
+   locale fallback this plan asked about was never needed. What is still open is the other half. Phase 2
+   shipped the member's own Phoenix preference, so four members may read one balance in four currencies
+   — right for each of them, and odd in a shared wallet when two of them compare screens in the room.
+   Per-member, or one currency the group signs into the wallet's statement?
 2. **Whether the hide/reveal preference is per wallet or per app.** Phase 3 makes it per group wallet. A
    member who wants balances hidden probably wants it everywhere, and *everywhere* is nine other screens
    and a plan of its own.
