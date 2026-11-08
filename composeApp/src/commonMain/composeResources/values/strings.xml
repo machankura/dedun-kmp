@@ -1469,6 +1469,7 @@
     <string name="group_wavelength_receipt">Copy this as a receipt</string>
     <string name="group_wavelength_receipt_copied">Receipt copied</string>
     <string name="group_wavelength_receipt_holds_s">What the group can show for it: %1$s</string>
+    <string name="group_wavelength_commitment_already_open">The group opened this wallet before you joined it, and your device has been signing for it since. Here is what it commits the group to, which nobody has shown you yet.</string>
     <string name="group_wavelength_commitment_understood">I understand, and the group can open it</string>
     <string name="group_wavelength_commitment_not_yet">Not yet</string>
     <string name="group_wavelength_health_leaving">If the group's devices stop answering, a unilateral exit is what is left: your device publishes the coins to the chain by itself and waits out a delay. It has never been run on any network, and it costs onchain fees.</string>

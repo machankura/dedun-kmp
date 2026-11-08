@@ -195,6 +195,78 @@ class GroupWavelengthWalletScreenJvmTest {
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
 
     // ---------------------------------------------------------------------
+    // What this device remembers (the per-group-wallet store).
+    // ---------------------------------------------------------------------
+
+    /**
+     * The half of B10 the store makes possible: a member who joined after the wallet was opened has
+     * never been shown what it commits the group to, because the commitment screen is the `NotOpened`
+     * state and theirs is open.
+     */
+    @Test
+    fun `a member who has not acknowledged the wallet reads the six sentences over it`() = runDesktopComposeUiTest(phone, 2400) {
+        var acknowledged = 0
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(
+                        Modifier,
+                        opened().copy(acknowledged = false),
+                        Chain.Mainnet,
+                        onAcknowledge = { acknowledged++ },
+                    )
+                }
+            }
+        }
+        onNodeWithText("The group opened this wallet before you joined it, and your device has been signing for it since.", substring = true).assertIsDisplayed()
+        // The same six sentences the group read before opening it, not a second set of words.
+        onNodeWithText("On mainnet this wallet holds at most 100,000 sats, and every member's device holds it to that.").assertIsDisplayed()
+        // And not the wallet behind them.
+        onAllNodesWithText("What your device has signed for").assertCountEquals(0)
+        onNodeWithText("I understand, and the group can open it").performClick()
+        assertEquals(1, acknowledged)
+    }
+
+    /** Once acknowledged, the wallet is the screen again and the sentences are gone. */
+    @Test
+    fun `a member who has acknowledged it sees the wallet`() = runDesktopComposeUiTest(phone, 2400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(acknowledged = true), Chain.Mainnet) } } }
+        onNodeWithText("What your device has signed for").assertIsDisplayed()
+        onAllNodesWithText("The group opened this wallet before you joined it", substring = true).assertCountEquals(0)
+    }
+
+    /** Not acknowledging leaves, and records nothing. */
+    @Test
+    fun `not yet on an open wallet records nothing and leaves`() = runDesktopComposeUiTest(phone, 2400) {
+        var acknowledged = 0
+        var left = 0
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(
+                        Modifier,
+                        opened().copy(acknowledged = false),
+                        Chain.Signet,
+                        onAcknowledge = { acknowledged++ },
+                        onNotYet = { left++ },
+                    )
+                }
+            }
+        }
+        onNodeWithText("Not yet").performClick()
+        assertEquals(1, left)
+        assertEquals(0, acknowledged)
+    }
+
+    /** A balance the member hid stays hidden when the screen is built again, which is the whole point. */
+    @Test
+    fun `a balance the store says is hidden comes back hidden`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)).copy(balanceHidden = true), Chain.Signet) } } }
+        onAllNodesWithText("10,000 sats").assertCountEquals(0)
+        onNodeWithContentDescription("Show the balance").assertIsDisplayed()
+    }
+
+    // ---------------------------------------------------------------------
     // The way in, acknowledged (Phase 10, B10).
     // ---------------------------------------------------------------------
 
@@ -658,18 +730,29 @@ class GroupWavelengthWalletScreenJvmTest {
      * Hiding replaces the digits and nothing else. The warning stays, because hiding is about who can
      * read the screen over a member's shoulder and not about what the member is told.
      */
+    /**
+     * Hiding is a preference in the store now rather than the card's own memory, so the test holds it
+     * the way the app does: the screen asks, the state changes, the card follows.
+     */
     @Test
     fun `hiding the balance hides every figure on the card and leaves the rest of the screen alone`() = runDesktopComposeUiTest(phone, 1600) {
+        var hidden by androidx.compose.runtime.mutableStateOf(false)
         setContent {
             DedunTheme {
                 ProvideSnackbarHost {
                     ProvideExchangeRate(zar) {
-                        GroupWavelengthWalletContent(Modifier, money(said(10_000, 90_000), listOf(settledCoin, pendingCoin, heldCoin), WalletExpiry.Urgent(144)), Chain.Mainnet)
+                        GroupWavelengthWalletContent(
+                            Modifier,
+                            money(said(10_000, 90_000), listOf(settledCoin, pendingCoin, heldCoin), WalletExpiry.Urgent(144)).copy(balanceHidden = hidden),
+                            Chain.Mainnet,
+                            onHideBalance = { hidden = it },
+                        )
                     }
                 }
             }
         }
         onNodeWithContentDescription("Hide the balance").performClick()
+        waitForIdle()
         // 10,700: the settled coin and the held one, since a held coin is settled and reserved.
         onAllNodesWithText("10,700 sats").assertCountEquals(0)
         onAllNodesWithText("214.00 ZAR").assertCountEquals(0)
@@ -680,6 +763,7 @@ class GroupWavelengthWalletScreenJvmTest {
         onNodeWithText("Coins need renewing within", substring = true).assertIsDisplayed()
         onNodeWithText("What your device has signed for").assertIsDisplayed()
         onNodeWithContentDescription("Show the balance").performClick()
+        waitForIdle()
         onNodeWithText("10,700 sats").assertIsDisplayed()
     }
 

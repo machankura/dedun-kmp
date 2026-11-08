@@ -73,6 +73,7 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.repository.GroupWalletPrefs
 import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.text.BlockDuration
@@ -204,6 +205,7 @@ import dedun.composeapp.generated.resources.group_wavelength_seen_too_few_s_s
 import dedun.composeapp.generated.resources.group_wavelength_signers
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.group_wavelength_cap_s
+import dedun.composeapp.generated.resources.group_wavelength_commitment_already_open
 import dedun.composeapp.generated.resources.group_wavelength_commitment_cap_s
 import dedun.composeapp.generated.resources.group_wavelength_commitment_not_yet
 import dedun.composeapp.generated.resources.group_wavelength_commitment_understood
@@ -275,6 +277,8 @@ fun GroupWavelengthWalletScreen(
     chatRepository: ChatRepository,
     repository: GroupWavelengthRepository,
     daemonSource: GroupWavelengthDaemonSource,
+    /** This device's memory of the wallet: the balance's hide toggle, and this member's acknowledgement. */
+    prefs: GroupWalletPrefs,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
     /** One entry of the history, in full. Wired to its route in Phase 4 of the transaction-details plan. */
@@ -291,6 +295,7 @@ fun GroupWavelengthWalletScreen(
             repository = repository,
             canRunHere = WavelengthPlatform.client != null,
             daemonSource = daemonSource,
+            prefs = prefs,
         )
     )
     LaunchedEffect(true) { viewModel.initiate() }
@@ -340,6 +345,8 @@ fun GroupWavelengthWalletScreen(
                 onOpenHealth = { onNavigateToRoute(GroupWavelengthHealthRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 notify = notify,
                 onNotYet = onNavigateBack,
+                onHideBalance = { viewModel.setBalanceHidden(it) },
+                onAcknowledge = { viewModel.acknowledge() },
             )
         }
     }
@@ -376,6 +383,10 @@ internal fun GroupWavelengthWalletContent(
     notify: (String) -> Unit = {},
     /** The commitment screen's second choice: leave, and be shown the six sentences again (B10). */
     onNotYet: () -> Unit = {},
+    /** Hides or shows this wallet's balance on this device, through the store (B2). */
+    onHideBalance: (Boolean) -> Unit = {},
+    /** Records that this member understands what the wallet commits the group to (B10). */
+    onAcknowledge: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = onRetry)
@@ -438,7 +449,85 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup, onOpenHealth, notify)
+        // A member who joined after the wallet was opened has never been shown what it commits the
+        // group to -- the commitment screen is the `NotOpened` state, and theirs is open. They get the
+        // same six sentences and the same two choices above the wallet, once, and **their device has
+        // been co-signing all along** (B10's limit): this changes what they are shown and nothing
+        // about what their device signs.
+        is GroupWavelengthWalletUIState.Opened -> if (!state.acknowledged) {
+            AcknowledgeFirst(modifier, state, chain, onAcknowledge, onNotYet)
+        } else {
+            OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup, onOpenHealth, notify, onHideBalance)
+        }
+    }
+}
+
+
+/**
+ * What a group is agreeing to, in the six sentences both screens that ask have to say.
+ *
+ * Extracted so the member who joined after the wallet was opened reads exactly what the group read
+ * before opening it, rather than a second set of words that drift apart. The numbers come from
+ * whichever the caller has -- the key, before a wallet exists, or the statement, after.
+ */
+private fun LazyListScope.commitmentSentences(chain: Chain, threshold: Int, participantCount: Int) {
+    item { NetworkNote(chain) }
+    item {
+        Text(
+            stringResource(Res.string.group_wavelength_commitment_devices, (2 * threshold - 1).toString(), participantCount.toString()),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    item { Text(stringResource(Res.string.group_wavelength_commitment_operator), style = MaterialTheme.typography.bodyMedium) }
+    item { Text(stringResource(Res.string.group_wavelength_commitment_fees), style = MaterialTheme.typography.bodyMedium) }
+    item { Text(stringResource(Res.string.group_wavelength_commitment_unreviewed), style = MaterialTheme.typography.bodyMedium) }
+    GroupWavelengthRollout.capFor(chain)?.let { cap ->
+        item {
+            Column {
+                Text(stringResource(Res.string.group_wavelength_commitment_cap_s, cap.grouped()), style = MaterialTheme.typography.bodyMedium)
+                LocalAmount(cap)
+            }
+        }
+    }
+    item {
+        Text(stringResource(Res.string.your_share_of_this_key_is_stored_unencrypted), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * The six sentences over a wallet somebody else opened, once, for a member who has never read them.
+ *
+ * The half of B10 the record makes possible. There is nothing to propose here -- the wallet exists --
+ * so the first choice records and shows the wallet, and the second leaves. **Their device has been
+ * co-signing rounds for this wallet all along**, which is B10's own limit: a device that refused to
+ * sign because its owner had not tapped a screen would lose the group money on a deadline.
+ */
+@Composable
+private fun AcknowledgeFirst(
+    modifier: Modifier,
+    state: GroupWavelengthWalletUIState.Opened,
+    chain: Chain,
+    onAcknowledge: () -> Unit,
+    onNotYet: () -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+    ) {
+        item {
+            Text(stringResource(Res.string.group_wavelength_commitment_already_open), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        commitmentSentences(chain, state.wallet.statement.threshold, state.wallet.statement.participants.size)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                Button(onClick = onAcknowledge) {
+                    Icon(Icons.Default.Waves, contentDescription = Decorative)
+                    Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                    Text(stringResource(Res.string.group_wavelength_commitment_understood))
+                }
+                TextButton(onClick = onNotYet) { Text(stringResource(Res.string.group_wavelength_commitment_not_yet)) }
+            }
+        }
     }
 }
 
@@ -457,27 +546,7 @@ private fun Commitment(
         modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
     ) {
-        item { NetworkNote(chain) }
-        item {
-            Text(
-                stringResource(Res.string.group_wavelength_commitment_devices, (2 * state.key.threshold - 1).toString(), state.key.participantCount.toString()),
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-        item { Text(stringResource(Res.string.group_wavelength_commitment_operator), style = MaterialTheme.typography.bodyMedium) }
-        item { Text(stringResource(Res.string.group_wavelength_commitment_fees), style = MaterialTheme.typography.bodyMedium) }
-        item { Text(stringResource(Res.string.group_wavelength_commitment_unreviewed), style = MaterialTheme.typography.bodyMedium) }
-        GroupWavelengthRollout.capFor(chain)?.let { cap ->
-            item {
-                Column {
-                    Text(stringResource(Res.string.group_wavelength_commitment_cap_s, cap.grouped()), style = MaterialTheme.typography.bodyMedium)
-                    LocalAmount(cap)
-                }
-            }
-        }
-        item {
-            Text(stringResource(Res.string.your_share_of_this_key_is_stored_unencrypted), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        commitmentSentences(chain, state.key.threshold, state.key.participantCount)
         when (state.blocked) {
             GroupWavelengthWalletUIState.Blocked.TERMS_CHANGED -> item {
                 Text(stringResource(Res.string.group_wavelength_terms_changed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -545,13 +614,14 @@ private fun OpenedWallet(
     onOpenOtherGroup: (chatRoomId: String) -> Unit,
     onOpenHealth: () -> Unit,
     notify: (String) -> Unit,
+    onHideBalance: (Boolean) -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth, notify)
+                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth, notify, onHideBalance)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
@@ -562,17 +632,17 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth, notify)
+            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth, notify, onHideBalance)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit, onOpenHealth: () -> Unit, notify: (String) -> Unit) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit, onOpenHealth: () -> Unit, notify: (String) -> Unit, onHideBalance: (Boolean) -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
     if (state.departed.isNotEmpty()) item { DepartedCard(state, isPending, onOpenNew, onMakeKey) }
-    item { BalanceCard(state, chain, onReceive, onPayOut, onLeave, isPending) }
+    item { BalanceCard(state, chain, onReceive, onPayOut, onLeave, isPending, onHideBalance) }
     if (state.leaveAsked) item { Text(stringResource(Res.string.group_wavelength_leave_asked), style = MaterialTheme.typography.bodyMedium) }
     item { HealthRow(state) { onOpenHealth() } }
     // The way out when whoever runs it has gone: another member takes over, and renewal or leaving carries on from them.
@@ -902,12 +972,13 @@ private fun AlarmCard(alarms: List<String>) {
  * *things to be aware of*.
  */
 @Composable
-private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, isPending: Boolean) {
+private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, isPending: Boolean, onHideBalance: (Boolean) -> Unit) {
     var isConfirmingLeave by remember { mutableStateOf(false) }
-    // Not persisted. A member who wants balances hidden wants it across visits and across the app's
-    // other nine wallets, and that is question 2 of the plan rather than something this card should
-    // settle by writing a preference nothing else reads.
-    var isHidden by rememberSaveable { mutableStateOf(false) }
+    // Persisted per group wallet, in `GroupWalletPrefs`. It was a `rememberSaveable` that forgot
+    // itself the moment a member navigated away, because the app had nowhere to put it; the store
+    // answers the half of question 2 that was about where it lives. Whether hiding should follow a
+    // member across the app's nine other wallet screens is still a plan of its own.
+    val isHidden = state.balanceHidden
     val haptics = LocalHapticFeedback.current
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
@@ -926,7 +997,7 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                         style = MaterialTheme.typography.headlineMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = { isHidden = !isHidden }) {
+                    IconButton(onClick = { onHideBalance(!isHidden) }) {
                         Icon(
                             if (isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                             contentDescription = stringResource(if (isHidden) Res.string.group_wavelength_balance_show else Res.string.group_wavelength_balance_hide),

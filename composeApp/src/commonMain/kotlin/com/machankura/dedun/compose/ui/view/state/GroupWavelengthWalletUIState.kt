@@ -101,6 +101,22 @@ sealed class GroupWavelengthWalletUIState {
          * before anything was signed travels with the entry rather than beside it.
          */
         val entries: List<GroupWavelengthEntry> = emptyList(),
+        /**
+         * Whether this member has hidden this wallet's balance on this device, from
+         * [com.machankura.dedun.compose.repository.GroupWalletPrefs]. Nothing to do with the group.
+         */
+        val balanceHidden: Boolean = false,
+        /**
+         * Whether this member has said they understand what this wallet commits the group to.
+         *
+         * Defaults to **true**, which is the opposite of the store's default and deliberate: a state
+         * built without the store -- a preview, a test, a screen that has not read it yet -- must not
+         * flash the commitment screen over a wallet. The view model sets it from the store, where a
+         * member with no record reads as false.
+         *
+         * Read by the screen and by nothing that signs (B10's limit).
+         */
+        val acknowledged: Boolean = true,
     ) : GroupWavelengthWalletUIState() {
         /** Whether enough signers have answered lately for a round to be likely to work: `2t-1` of them have to. */
         val enoughSeen: Boolean get() = seenRecently() >= 2 * wallet.statement.threshold - 1

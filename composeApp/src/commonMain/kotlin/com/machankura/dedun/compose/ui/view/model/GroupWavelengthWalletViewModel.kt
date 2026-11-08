@@ -14,9 +14,11 @@ import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.IcebergRitualStage
 import com.machankura.dedun.compose.identity.Identity
+import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.repository.GroupWalletPrefs
 import com.machankura.dedun.compose.repository.GroupWavelengthDaemonSource
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
@@ -51,6 +53,12 @@ class GroupWavelengthWalletViewModel(
     private val repository: GroupWavelengthRepository,
     private val canRunHere: Boolean,
     private val daemonSource: GroupWavelengthDaemonSource = GroupWavelengthDaemonSource.None,
+    /**
+     * What this device remembers about this wallet for this member: the balance's hide toggle and
+     * whether they have acknowledged what it commits the group to. Null where there is no store -- a
+     * test, or a preview -- and the state then keeps its defaults.
+     */
+    private val prefs: GroupWalletPrefs? = null,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -117,6 +125,30 @@ class GroupWavelengthWalletViewModel(
         return GroupWavelengthWalletUIState.NeedsKey(localChatRoom, running, canMakeKey = repository.ceremonyThresholds(chatRoomId).isNotEmpty())
     }
 
+
+    /** Hides or shows this wallet's balance on this device. Nothing to do with the group (B2). */
+    fun setBalanceHidden(hidden: Boolean) {
+        val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
+        val store = prefs ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            store.setBalanceHidden(GroupArkCoSigner.walletKey(chatRoomId, chain, state.wallet.statement.wallet), hidden)
+        }
+    }
+
+    /**
+     * Records that this member has said they understand what this wallet commits the group to.
+     *
+     * Changes what they are shown and nothing about what their device signs (B10's limit). With no
+     * store the state keeps its default, so the screen behaves as it did before the store existed.
+     */
+    fun acknowledge() {
+        val state = uiState as? GroupWavelengthWalletUIState.Opened ?: return
+        val store = prefs ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            store.acknowledge(GroupArkCoSigner.walletKey(chatRoomId, chain, state.wallet.statement.wallet), activeUserPublicKey)
+        }
+    }
+
     /** What stops this device proposing: a statement under terms the operator has left would be refused by every co-signer, every round. */
     private suspend fun blocked(): GroupWavelengthWalletUIState.Blocked? {
         if (activeIdentityStateFlow.value?.nostrPrivateKey == null) return GroupWavelengthWalletUIState.Blocked.NO_KEY
@@ -153,6 +185,21 @@ class GroupWavelengthWalletViewModel(
             if (opened.isOperator) launch {
                 daemonSource.observe(chatRoomId, chain, opened.wallet.statement.wallet).collect { status ->
                     (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(daemon = status) }
+                }
+            }
+            // This device's own memory of the wallet, watched rather than read once: a member who
+            // acknowledges on the screen above the wallet has to see the wallet without navigating.
+            prefs?.let { store ->
+                val key = GroupArkCoSigner.walletKey(chatRoomId, chain, number)
+                launch {
+                    store.balanceHidden(key).collect { hidden ->
+                        (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(balanceHidden = hidden) }
+                    }
+                }
+                launch {
+                    store.acknowledged(key, activeUserPublicKey).collect { yes ->
+                        (uiState as? GroupWavelengthWalletUIState.Opened)?.let { uiState = it.copy(acknowledged = yes) }
+                    }
                 }
             }
         }
@@ -255,9 +302,10 @@ class GroupWavelengthWalletViewModel(
             repository: GroupWavelengthRepository,
             canRunHere: Boolean,
             daemonSource: GroupWavelengthDaemonSource,
+            prefs: GroupWalletPrefs? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                GroupWavelengthWalletViewModel(activeUserPublicKey, chatRoomId, chain, GroupWavelengthWalletUIState.Loading, activeIdentityStateFlow, chatRepository, repository, canRunHere, daemonSource)
+                GroupWavelengthWalletViewModel(activeUserPublicKey, chatRoomId, chain, GroupWavelengthWalletUIState.Loading, activeIdentityStateFlow, chatRepository, repository, canRunHere, daemonSource, prefs)
             }
         }
     }

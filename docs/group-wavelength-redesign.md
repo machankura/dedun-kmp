@@ -5,10 +5,11 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026 and built on the same day, in the order 1-5, 7, 8, 10, 9.** Eight of the
-ten phases are complete; **Phase 6's notification and Phase 10's acknowledgement record are not**, each
-for a reason stated in its own section, and each leaving an owner's question open rather than answering
-it by implementation. Written against `9d22a7c0`,
+**Planned on 8 November 2026 and built on the same day, in the order 1-5, 7, 8, 10, 9, then the store.**
+Nine of the ten phases are complete. **Phase 6's notification is not** — see *What Phase 6 left* — and it
+is the one piece still waiting on a decision. Phases 3 and 10 were each completed afterwards by the
+per-group-wallet store they had both been blocked on, which answered questions 2 and 6 (see *The store,
+afterwards*). Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -607,12 +608,11 @@ Layout within `BalanceCard`, one new widget, and B5 done early. B2.
   size, and the local-currency line and the whole disclosure gone while it is hidden. **The warning
   stays** — hiding is about who can read the screen over a member's shoulder, not about what the member
   is told.
-- **No "hold to reveal", and the state is not persisted.** A long press with no affordance is
-  undiscoverable, and one tap already reveals. Persisting it needs a per-group preference store, which
-  the app does not have: `UserPrefs` and `InternalPrefs` are Phoenix's and per wallet, and there is no
-  dedun-side store to key by room. Writing one would answer **question 2** by implementation, so the
-  toggle lives in `rememberSaveable` and forgets when a member navigates away. That is the one place
-  this phase is thinner than the plan, and it is thinner on purpose.
+- **No "hold to reveal":** a long press with no affordance is undiscoverable, and one tap already
+  reveals.
+- The toggle was **not persisted** when this phase landed — `rememberSaveable`, forgetting itself the
+  moment a member navigated away — because the app had no per-group preference store and writing one
+  would have answered **question 2** by implementation. It persists now: see *The store, afterwards*.
 - **B5 is done here rather than in Phase 4.** `group_wavelength_receive_room_s` is deleted, not moved:
   the receive screen's sentence was written for that screen, and the disclosure gets a shorter
   `group_wavelength_room_s`. Doing it now avoids the figure standing in two places between phases.
@@ -902,7 +902,7 @@ Phase 6 added a screen the plan's list of three does not mention.
 one row per member, the two committing actions are felt, and the brightness actual is verified on a
 device.
 
-### Phase 10: the way in, acknowledged — **the two choices and the way out are built; the record is not**
+### Phase 10: the way in, acknowledged — **built** (the record, with the store)
 
 B10. Built out of order, before Phase 9, because the plan requires Phase 9 to be last.
 
@@ -917,17 +917,9 @@ B10. Built out of order, before Phase 9, because the plan requires Phase 9 to be
   actually offered** — `offersUnilateralExit` and the device that runs the wallet. A button to a screen
   that would refuse is worse than a sentence saying what would happen. A member who cannot start one
   still gets the sentence.
-- **The acknowledgement record is not built,** which leaves question 6 open rather than answering it by
-  writing a migration. It needs one row per member and wallet, and the app has nowhere local to put it:
-  `UserPrefs` and `InternalPrefs` are Phoenix's and per wallet, there is no dedun-side preference store
-  (the same wall Phase 3's hide/reveal hit), and the aux database means a Room schema migration — which
-  `composeApp/schemas` tracks and which is a decision about the shape of the group's data rather than
-  about a screen. The plan's own question 6 says *if that is not worth a table, Phase 10 shrinks to the
-  two choices and no record, which is most of its value*; this is that shrink, taken deliberately.
-- **What is lost by that, exactly:** a member who reaches a wallet somebody else opened is not shown the
-  six sentences before their device co-signs its first round. They can read them nowhere, because the
-  commitment screen is the `NotOpened` state and their wallet is open. That is the gap, and it is the
-  half of B10 worth the table.
+- The acknowledgement record was **not built** when this phase landed, because the app had nowhere
+  local to put one row per member and wallet, and writing one would have answered **question 6** by
+  implementation. It is built now: see *The store, afterwards*.
 - **Nothing was gated on anything,** which is B10's own limit and the one part of this phase that could
   have done harm. A device that refuses to sign because its owner has not tapped a screen loses the
   group money on a deadline.
@@ -935,9 +927,47 @@ B10. Built out of order, before Phase 9, because the plan requires Phase 9 to be
   and links to it for the device that runs the wallet; a member who does not run it gets the sentence
   and no button.
 
-**Done** on 8 November 2026 for the part that is built: the commitment screen asks rather than tells,
-and the way out is answerable without the word *Advanced*. **Not done:** a member who joined after the
-wallet was opened still never sees the six sentences.
+**Done** on 8 November 2026: the commitment screen asks rather than tells, the way out is answerable
+without the word *Advanced*, and — once the store landed — a member who joined after the wallet was
+opened reads the six sentences before the wallet.
+
+## The store, afterwards
+
+Phases 3 and 10 each shipped without a per-group-wallet fact they needed, and each wrote down why rather
+than deciding it: the balance's hide toggle forgot itself the moment a member left the screen, and the
+commitment screen's acknowledgement was not recorded at all. Both were the same gap. `GroupWalletPrefs`
+is it, built after Phase 9 on the owner's answer to questions 2 and 6.
+
+- **A `DataStore`, not a table.** Everything in it is a local per-device preference: nothing is signed,
+  nothing goes on the wire, nothing another member can read, nothing a query joins against. A Room table
+  would have meant a schema migration in `composeApp/schemas` for two booleans.
+- **And no new platform code.** `computePreferencePath` is Phoenix's own public `expect`, with an
+  `actual` for each of the three targets — so the store is one file, and the thing both phases called a
+  wall turned out to be a function that was already there. Worth saying plainly: the obstacle was not
+  that the platform work was hard, it was that neither phase had looked for it.
+- Keys are the wallet key `GroupArkCoSigner.walletKey` already builds, so a group with two wallets, or
+  the same group on two networks, keeps them apart. The acknowledgement's key carries the member's own
+  key too, because two members sharing a device must not acknowledge for each other — which is the one
+  assertion in its test that would matter.
+- `GroupWavelengthWalletUIState.Opened` gains `balanceHidden` and `acknowledged`, and the view model
+  **watches** them rather than reading once: a member who acknowledges on the screen above the wallet
+  has to reach the wallet without navigating. `acknowledged` defaults to **true**, the opposite of the
+  store's default, so a state built without a store — a preview, a test, a screen that has not read it
+  yet — never flashes the commitment screen over a wallet.
+- **The six sentences are now one `commitmentSentences`,** shared by the screen that asks before opening
+  and the screen that asks a member who joined later. Two copies would have drifted, and a member
+  joining late should read exactly what the group read.
+- **Still nothing is gated on anything.** `acknowledged` is read by the screen and by nothing that
+  signs, which is B10's own limit: a device that refused to co-sign because its owner had not tapped a
+  screen would lose the group money on a deadline, and D16's fee arithmetic makes that everyone's loss.
+- **Tests:** nine in `GroupWalletPrefsJvmTest`, all of them about scoping — one member with two wallets,
+  two members on one device, a key in the wrong case, and the two preferences not standing in for each
+  other. Four screen cases: the six sentences over an unacknowledged wallet and not the wallet behind
+  them, the wallet once acknowledged, *Not yet* recording nothing, and a hidden balance coming back
+  hidden.
+
+**What the store does not touch.** Phase 6's notification is still not built: its blocker is the chain
+tip needing a live Electrum subscription, which no preference store helps with.
 
 ## Order
 
@@ -998,11 +1028,11 @@ phones will.
    shipped the member's own Phoenix preference, so four members may read one balance in four currencies
    — right for each of them, and odd in a shared wallet when two of them compare screens in the room.
    Per-member, or one currency the group signs into the wallet's statement?
-2. **Whether the hide/reveal preference is per wallet or per app, and whether it persists at all.**
-   *Sharpened by the build:* Phase 3 shipped the toggle without persistence, because the app has no
-   per-group preference store to write it to — `UserPrefs` and `InternalPrefs` are Phoenix's and per
-   wallet. So this is now two questions: where such a store should live, and whether hiding should
-   follow a member across the app's nine other wallet screens, which is a plan of its own.
+2. **Whether the hide/reveal preference is per wallet or per app.** *Half answered by the build:* it
+   persists, per group wallet, in `GroupWalletPrefs`. What is still open is the other half — whether a
+   member who hides one balance means *hide balances*, which is nine other wallet screens and a plan of
+   its own. Nothing here presumes an answer: the key is the wallet's, so an app-wide preference later
+   would read these as the per-wallet overrides they are.
 3. **The exit's location.** B10 leaves it under *Advanced* and names it on the health screen. The guide's
    Interested-phase question argues for it being answerable before a member commits — which would mean on
    the commitment screen, saying *this is how you leave if the group's devices stop answering*, about a
@@ -1013,12 +1043,10 @@ phones will.
 5. **Who may export.** Phase 7 lets any member export every member's deposits and payouts to a file. The
    same is true of the screen today, and a file is different. Every member, the operator only, or a
    per-member export of their own rows?
-6. **Whether acknowledgement is worth a row.** *Still open, and Phase 10 shrank rather than decide it.*
-   The record changes nothing a device does, by B10's own limit — it is there so a member who never read
-   the six sentences is shown them. It needs a per-member-per-wallet row, which means either a
-   dedun-side preference store the app does not have (the same gap as question 2) or a Room migration in
-   `composeApp/schemas`. Phase 10 built the two choices and no record. What that costs is exact: a
-   member who reaches a wallet somebody else opened never sees the six sentences at all.
+6. **Whether acknowledgement is worth a row.** *Answered: yes, and it is not a row.* It is two keys in
+   `GroupWalletPrefs`, which cost no schema migration, and it buys the half of B10 that was missing — a
+   member who reaches a wallet somebody else opened now reads the six sentences before the wallet. It
+   still changes nothing a device signs, which is B10's own limit and is asserted.
 
 ## What this plan does not do
 

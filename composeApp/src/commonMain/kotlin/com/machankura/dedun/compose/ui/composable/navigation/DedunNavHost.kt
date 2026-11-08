@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.repository.GroupWalletPrefs
 import com.machankura.dedun.compose.ui.composable.GroupPayoutsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import com.machankura.dedun.compose.ui.composable.DepositsScreen
@@ -721,6 +722,13 @@ fun DedunNavHost(
         )
     }
 
+    // What this device remembers about each group wallet for the member using it: the balance's hide
+    // toggle and their acknowledgement of what the wallet commits the group to. One store for the
+    // whole app -- the keys keep the wallets apart, not the files.
+    // Phoenix's `PlatformContext`, not dedun's: `computePreferencePath` is Phoenix's own expect, and
+    // it is what decides where a preferences file belongs on each of the three targets.
+    val groupWalletPrefs = remember(phoenixGlobal) { GroupWalletPrefs.of(phoenixGlobal.ctx) }
+
     // Once, above every screen, and for the same reason as the line below: a rate is a fact about
     // this member's device rather than about any one wallet, and the screens that put a figure in
     // their own currency have three different view models between them.
@@ -1002,6 +1010,7 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     repository = databaseGroupWavelengthRepository,
                     daemonSource = GroupWavelengthProcess,
+                    prefs = groupWalletPrefs,
                     onNavigateToRoute = { actionRoute ->
                         navController.navigate(route = actionRoute)
                     },
