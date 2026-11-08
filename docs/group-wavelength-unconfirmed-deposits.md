@@ -8,9 +8,12 @@ an hour at the very best, a day if nobody is at their phone, and for ever if the
 stopped. Meanwhile the receive screen keeps handing out the same QR code, which is how one address
 gets paid twice.
 
-**Planned, not built.** Nothing here has a commit. Every figure below is read off the code as it
-stands on 8 November 2026 from `9d22a7c0`, and the two numbers that matter — six confirmations and
-how long after them the operator actually boards a coin — are Phase 0's to confirm.
+**Phases 1 to 5 built on 8 November 2026,** from `9d22a7c0`. `jvmTest`,
+`compileDebugKotlinAndroid` and `m3Audit` pass. **Phase 0's spikes and Phase 7's real deposit have
+not run**, so no coin has gone through any of this: every figure below is read off the code or out
+of a test, and the two numbers that matter — six confirmations and how long after them the operator
+actually boards a coin — are still Phase 0's to confirm. What the build changed from the plan, and
+the one figure it measured, are in *what the build found*.
 
 **What this is, in one line.** Each device already holds every boarding address of the wallet, and
 already has its own Electrum connection. This note has it watch those addresses, keep what it sees
@@ -24,21 +27,66 @@ deposit ledger, for the reason in A2, which is the one dangerous thing in the ar
 
 | phase | state |
 |---|---|
-| 0 spikes, against the real operators | **not run** |
-| 1 the table, schema 45 | not built |
-| 2 the watch | not built |
-| 3 the history row | not built |
-| 4 the balance card, the cap, the operator's figure | not built |
-| 5 the receive screen pays off D1 | not built |
-| 6 the guard tests, the strings, the notes | not built |
+| 0 spikes, against the real operators | **not run**: needs signet coins and both operators |
+| 1 the table, schema 45 | built, `5cc95e53` |
+| 2 the watch | built, `f500022f` |
+| 3 the history row | built, `14c454eb` |
+| 4 the balance card, the cap, the operator's figure | built, `d32ec556` |
+| 5 the receive screen pays off D1 | built, `46491aa6` |
+| 6 the guard tests, the strings, the notes | built |
 | 7 a real deposit, by hand | **not run**: needs a phone and a boarding address |
 
-## What is invisible today
+## What the build found
 
-A boarding deposit passes through six states. The device holds a record for the first and the last
-two, and nothing at all for the three in the middle.
+**A2's dilution is real, and here is what it costs.** The guard test in Phase 6 was written to fail
+if somebody files an arriving coin into the deposit ledger, and it was run that way once to check
+that it bites. In a room where @Bob has deposited 30,000 sats and @Carol 10,000, one 50,000-sat
+payment of @Bob's sitting in the mempool moves the figures to:
 
-| state | what this device holds | what any screen shows |
+| member | payable before | payable with the mempool payment filed as a deposit |
+|---|---|---|
+| @Bob | 30,000 | 35,555 |
+| @Carol | 10,000 | **4,444** |
+
+@Carol loses 56% of what she can be paid, to a transaction that has not confirmed and can be
+replaced for the cost of a fee bump — and because the ledger is kept rather than derived, it would
+not come back. That is the whole reason this note has a table of its own, and the reason Phase 6 is
+a phase rather than a tidy-up.
+
+**The watch's collectors were leaking exceptions into the identity's own scope,** which a flaking
+test in the *personal* Wavelength wallet is what exposed: `UncaughtExceptionsBeforeTest` in a test
+class that touches none of this. An exception in the address collector would have taken down every
+group's chain work on that device and landed on whatever ran next. It now runs in a supervised scope
+of its own with a handler, and each collector logs rather than throwing. Worth knowing before adding
+another background watcher: `GroupArkWatcher` next door has the same shape and the same exposure.
+
+**`ElectrumMiniWallet` fits this job as it stands,** which is why Phase 2 is one class and no
+subscription handling. `addAddress(String)` takes a single address at any time through its mailbox,
+resubscribes on reconnection, and gives `WalletState.AddressState.alreadyUsed` — which is a
+subscription *status* rather than a history call, so it is the one signal here that cannot be
+confused with a failed call. A15's rule is built on that distinction: `alreadyUsed == false` is an
+answer and a row goes; an empty history from an address that `alreadyUsed` says has been paid is a
+contradiction, so it is a failed call and nothing changes.
+
+**Three things in the plan were not built as written.**
+
+- **The receive panel's depth is coarse, not a count.** The plan had it saying *n of 6*. The screen
+  would have had to read the tip when it opened and then go stale under the reader, so the panel
+  says *in the mempool* or *confirming* and the exact count lives on the history row, which gets a
+  tip read a minute ago. D2 asks the panel to say the money arrived, not to be a block explorer.
+- **The under-minimum wording is not in.** It depends on S1 — whether the mainnet operator refuses a
+  coin under `minBoardingSat` or silently ignores it — and guessing is how this feature would first
+  lie to somebody. Still owed.
+- **`Rows` carries the tip and the operator's depth rather than `historyRows` reading them.**
+  `tipHeight` suspends on a disconnected client, and the view model already reads it once a minute;
+  putting it inside `historyRows` would have doubled that exposure for no gain.
+
+## What was invisible, and why
+
+A boarding deposit passes through six states. Before this note the device held a record for the
+first and the last two, and nothing at all for the three in the middle.
+
+| state | what this device held | what any screen showed |
 |---|---|---|
 | the operator answered with an address | `GroupArkDepositAddress` with `address` and `script`, written after `isBoardingScript` checked it (`GroupWavelengthDeposits.kt:122`) | the receive screen's QR code |
 | somebody paid it; the transaction is in the mempool | **nothing** | nothing |
@@ -47,8 +95,8 @@ two, and nothing at all for the three in the middle.
 | this device co-signed it into a round | `GroupArkBoarded` | a history row, `IN_FLIGHT` (`GroupWavelengthHistory.kt:271`); `addressPaid` on the receive screen |
 | the commitment is `settleDepth` deep | `DepositRow(source = WAVELENGTH, confirmedAt = now)` | a history row, `DONE`; the member's payable balance; the room's tally |
 
-The three blank rows are not an oversight. They are a decision that was made deliberately and
-written down, in `GroupWavelengthRequests.paidOnAddress` (`GroupWavelengthRequests.kt:42`):
+The three blank rows were not an oversight. They were a decision that was made deliberately and
+written down, in `GroupWavelengthRequests.paidOnAddress`:
 
 > There is no operator fallback: the snapshot's activity lines carry a payment hash and nothing that
 > names an address, so a boarding payment the operator alone has seen cannot be told from any other
