@@ -11,6 +11,7 @@ import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.getPluralString
 import dedun.composeapp.generated.resources.about_n_hours
 import dedun.composeapp.generated.resources.n_blocks
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -75,6 +76,70 @@ class StringCatalogueJvmTest {
         assertEquals(
             "Recovered 3 of 12 · 9 still unreadable",
             getString(Res.string.recovered_of_still_unreadable, "3", "12", "9", ""),
+        )
+    }
+
+    private val source: File =
+        File("src").takeIf { it.resolve("commonMain").isDirectory } ?: File("composeApp/src")
+
+    private val catalogue: List<Pair<String, String>> by lazy {
+        Regex("""<string name="([^"]+)">([^<]*)</string>""")
+            .findAll(source.resolve("commonMain/composeResources/values/strings.xml").readText())
+            .map { it.groupValues[1] to it.groupValues[2] }
+            .toList()
+    }
+
+    /**
+     * The feature's own strings, plus any string a Wavelength screen borrows from elsewhere: a
+     * word is jargon because of the screen it is on, not because of the prefix on its key.
+     */
+    private val wavelengthStrings: List<Pair<String, String>> by lazy {
+        val borrowed = source.resolve("commonMain/kotlin").walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && ("Wavelength" in it.name || "GroupPayouts" in it.name) }
+            .flatMap { file -> Regex("""Res\.string\.([a-z0-9_]+)""").findAll(file.readText()).map { it.groupValues[1] } }
+            .toSet()
+        catalogue.filter { (key, _) ->
+            key.startsWith("wavelength_") || key.startsWith("group_wavelength_") || key in borrowed
+        }
+    }
+
+    /** Every "operator" in [value] that is not the tail of "Ark operator". */
+    private fun saysBareOperator(value: String) =
+        Regex("operator", RegexOption.IGNORE_CASE)
+            .findAll(value)
+            .any { !value.substring(0, it.range.first).endsWith("Ark ") }
+
+    /**
+     * One name per party, in the strings the Wavelength screens show.
+     *
+     * Two words were naming things a member has no way to know. *daemon* is what the code calls
+     * the process that runs the wallet, and on a screen it is a word about this app's internals.
+     * A bare *operator* was worse: eight strings said *Ark operator* for the server the coins
+     * live with, four said *the operator* for the member the group elected to keep the wallet
+     * running, and three said *operator* for the server without the *Ark* -- two parties a word
+     * apart, one of them the second figure on the balance card.
+     *
+     * The same rule is in `docs/scripts/m3-jargon.py`, which is what `m3Audit` reports and what
+     * fails `./gradlew check`. It is here as well because this is the half that fails in the
+     * loop a developer actually runs, and a budget enforced only by a script somebody remembers
+     * is the state this rule was written to leave.
+     */
+    @Test
+    fun `no string a Wavelength screen shows says daemon`() {
+        assertEquals(
+            emptyList(),
+            wavelengthStrings.filter { (_, value) -> value.contains("daemon", ignoreCase = true) }.map { it.first },
+            "a device is a device on a screen; see docs/scripts/m3-jargon.py --list",
+        )
+    }
+
+    @Test
+    fun `a Wavelength string names the Ark operator or whoever runs the wallet, never a bare operator`() {
+        assertEquals(
+            emptyList(),
+            wavelengthStrings.filter { (_, value) -> saysBareOperator(value) }.map { it.first },
+            "say \"Ark operator\" for the server or \"whoever runs the wallet\" for the member; " +
+                "see docs/scripts/m3-jargon.py --list",
         )
     }
 

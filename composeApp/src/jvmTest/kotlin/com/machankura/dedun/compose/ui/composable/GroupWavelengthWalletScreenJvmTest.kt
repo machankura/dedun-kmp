@@ -187,18 +187,18 @@ class GroupWavelengthWalletScreenJvmTest {
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
 
     @Test
-    fun `the balance is what this device signed for, with the operator's figure beside it`() = runDesktopComposeUiTest(phone, 1400) {
+    fun `the balance is what this device signed for, with the figure of whoever runs it beside it`() = runDesktopComposeUiTest(phone, 1400) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet) } } }
         onNodeWithText("10,000 sats").assertIsDisplayed()
-        onNodeWithText("The operator says 10,000 sats, as of its last report").assertIsDisplayed()
+        onNodeWithText("Whoever runs the wallet says 10,000 sats, as of their last report").assertIsDisplayed()
         onNodeWithText("Matches what your device signed").assertIsDisplayed()
     }
 
     @Test
-    fun `an operator that lies is shown differing, and doesn't change the headline`() = runDesktopComposeUiTest(phone, 1400) {
+    fun `a report that lies is shown differing, and doesn't change the headline`() = runDesktopComposeUiTest(phone, 1400) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000, 90_000), listOf(settledCoin)), Chain.Signet) } } }
         onNodeWithText("10,000 sats").assertIsDisplayed()
-        onNodeWithText("The operator says 100,000 sats, as of its last report").assertIsDisplayed()
+        onNodeWithText("Whoever runs the wallet says 100,000 sats, as of their last report").assertIsDisplayed()
         onNodeWithText("Differs from what your device signed").assertIsDisplayed()
     }
 
@@ -216,7 +216,7 @@ class GroupWavelengthWalletScreenJvmTest {
     }
 
     @Test
-    fun `a refusal is on the screen, and too few signers seen says a round may not work`() = runDesktopComposeUiTest(phone, 1600) {
+    fun `a refusal is on the screen, and too few devices seen says a round may not work`() = runDesktopComposeUiTest(phone, 1600) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, opened().copy(alarms = listOf("Your device refused to co-sign for the Wavelength wallet: a transfer to a script nobody authorised.")), Chain.Signet) } } }
         onNodeWithText("Your device refused something").assertIsDisplayed()
         onNodeWithText("Your device refused to co-sign for the Wavelength wallet: a transfer to a script nobody authorised.").assertIsDisplayed()
@@ -227,7 +227,7 @@ class GroupWavelengthWalletScreenJvmTest {
     fun `in a wide window the money and the group are side by side, and both are there`() = runDesktopComposeUiTest(wide, 1200) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet) } } }
         onNodeWithText("10,000 sats").assertIsDisplayed()
-        onNodeWithText("Signers").assertIsDisplayed()
+        onNodeWithText("Devices").assertIsDisplayed()
     }
 
     @Test
@@ -238,7 +238,7 @@ class GroupWavelengthWalletScreenJvmTest {
         onNodeWithText("Settled. Can be swept from block 2,000").assertIsDisplayed()
         onNodeWithText("Waiting to see its round finish").assertIsDisplayed()
         onNodeWithText("Held for something signed").assertIsDisplayed()
-        onNodeWithText("The operator reports", substring = true).assertIsDisplayed()
+        onNodeWithText("Whoever runs the wallet reports", substring = true).assertIsDisplayed()
         onNodeWithText("A unilateral exit, which leaves without the Ark operator's help, has never been run on any network.").assertIsDisplayed()
     }
 

@@ -36,6 +36,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.GroupWavelengthGlossaryButton
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
@@ -102,6 +103,7 @@ fun GroupWavelengthAdvancedScreen(
             TopAppBar(
                 title = { Text(stringResource(Res.string.group_wavelength_advanced), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { NavigateBackButton(onNavigateBack) },
+                actions = { GroupWavelengthGlossaryButton() },
             )
         }
     ) { padding ->

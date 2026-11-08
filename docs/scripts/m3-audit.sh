@@ -32,6 +32,12 @@ BUDGET_STRING_LITERALS=-1      # phase 4 drives to <10
 BUDGET_TITLE_CASE=0            # phase 4: reached 2026-09-08
 BUDGET_UNSET_COLOR_ROLES=0     # phase 1: reached 2026-09-07
 
+# Not M3's: the group Wavelength redesign's phase 1, which is in this file because this is
+# where a budget is checked rather than because it is a Material rule. See
+# docs/group-wavelength-redesign.md.
+BUDGET_JARGON_DAEMON=0         # wavelength phase 1: reached 2026-11-08
+BUDGET_BARE_OPERATOR=0         # wavelength phase 1: reached 2026-11-08
+
 # A floor rather than a ceiling: --check fails when the count drops *below* it. The
 # adaptive work is the one thing in this document that a later edit removes rather
 # than adds -- a screen that stops reading the breakpoint still compiles and still
@@ -244,6 +250,19 @@ note "stringResource / Res.string:            $res"
 title_case=$(python3 docs/scripts/m3-title-case.py | grep -oE '[0-9]+$')
 report 'Title Case in UI strings' "$title_case" "$BUDGET_TITLE_CASE"
 note 'run docs/scripts/m3-title-case.py --list to see them'
+
+# ---------------------------------------------------------------------------
+hdr 'Wavelength vocabulary  (group Wavelength redesign, phase 1)'
+
+# Two words, not a style: *daemon* names this app's internals on a member's screen, and a
+# bare *operator* named two different parties a word apart -- the Ark server and the member
+# the group elected. One name per party, so a new string has to pick one.
+jargon=$(python3 docs/scripts/m3-jargon.py)
+jargon_daemon=$(printf '%s\n' "$jargon" | grep 'daemon' | grep -oE '[0-9]+$')
+jargon_operator=$(printf '%s\n' "$jargon" | grep 'bare operator' | grep -oE '[0-9]+$')
+report 'daemon in Wavelength strings' "$jargon_daemon" "$BUDGET_JARGON_DAEMON"
+report 'bare operator in Wavelength strings' "$jargon_operator" "$BUDGET_BARE_OPERATOR"
+note 'run docs/scripts/m3-jargon.py --list to see them'
 
 # ---------------------------------------------------------------------------
 hdr 'States and feedback  (phase 5)'

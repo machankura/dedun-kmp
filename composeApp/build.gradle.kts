@@ -321,10 +321,20 @@ val m3Audit = tasks.register("m3Audit") {
     val script = rootProject.layout.projectDirectory.file("docs/scripts/m3-audit.sh").asFile
     val uiSources = rootProject.layout.projectDirectory
         .dir("composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/ui")
+    // The whole directory, not just the shell script: three of the counts are delegated to
+    // python next to it, and an edit to one of those changes what --check reports.
+    val auditScripts = rootProject.layout.projectDirectory.dir("docs/scripts")
+    // The catalogue, because four of the counts read it rather than the source tree -- title
+    // case and the two Wavelength vocabulary budgets among them. Without this input a commit
+    // that only touches strings.xml leaves the task up to date and the budgets unchecked,
+    // which is how a budget that passes CI comes to be one nobody ran.
+    val stringCatalogue = rootProject.layout.projectDirectory
+        .file("composeApp/src/commonMain/composeResources/values/strings.xml")
     val projectDirectory = rootProject.layout.projectDirectory.asFile
 
-    inputs.file(script).withPropertyName("auditScript")
+    inputs.dir(auditScripts).withPropertyName("auditScripts")
     inputs.dir(uiSources).withPropertyName("uiSources")
+    inputs.file(stringCatalogue).withPropertyName("stringCatalogue")
     // No outputs, so this would run every time. A marker file is what makes it
     // up-to-date-able, and it is the only thing the task writes.
     val marker = layout.buildDirectory.file("m3-audit/passed.txt")

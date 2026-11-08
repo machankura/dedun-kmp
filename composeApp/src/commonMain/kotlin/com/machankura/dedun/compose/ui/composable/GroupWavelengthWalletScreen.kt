@@ -85,6 +85,7 @@ import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.GroupWavelengthGlossaryButton
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryHeadline
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryIcon
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryStatus
@@ -240,7 +241,11 @@ fun GroupWavelengthWalletScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(Res.string.group_wavelength_wallet), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { NavigateBackButton(onNavigateBack) }
+                navigationIcon = { NavigateBackButton(onNavigateBack) },
+                // In the app bar rather than beside each term: the three words are spread over the
+                // card, the history and the devices, and an icon next to each one would be three
+                // icons saying the same thing.
+                actions = { GroupWavelengthGlossaryButton() },
             )
         }
     ) { padding ->

@@ -59,6 +59,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberInvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.GroupWavelengthGlossaryButton
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.GroupWavelengthReceiveViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
@@ -129,6 +130,7 @@ fun GroupWavelengthReceiveScreen(
             TopAppBar(
                 title = { Text(stringResource(Res.string.group_wavelength_receive_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { NavigateBackButton(onNavigateBack) },
+                actions = { GroupWavelengthGlossaryButton() },
             )
         }
     ) { padding ->
