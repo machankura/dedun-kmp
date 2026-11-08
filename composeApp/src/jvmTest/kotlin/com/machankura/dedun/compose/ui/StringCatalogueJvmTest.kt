@@ -143,6 +143,50 @@ class StringCatalogueJvmTest {
         )
     }
 
+    /**
+     * Every state these screens can get stuck in says two things: what happened, and what to do.
+     *
+     * The guide's error copy has four parts -- what went wrong, where the money stands, how it is
+     * fixed or avoided, what to do next -- and before Phase 5 these messages had the first and
+     * nothing else. Two sentence endings is a crude proxy for the rest, and it is the one a script can
+     * keep: a new state with a single sentence fails here.
+     *
+     * The distinctness half is the regression that mattered. Four of the wallet's ten refusals shared
+     * one sentence behind an `else`, and two of the daemon's seven shared another -- *wait* and
+     * *somebody has to volunteer*, which are opposite instructions. `group_wavelength_refused_chain`
+     * is the one deliberate reuse: the wallet refuses to sign for a network this build does not
+     * offer, and the device refuses to run it, which is one fact said once.
+     */
+    @Test
+    fun `every stuck state says what happened and what to do, and no two say the same`() {
+        val keys = listOf(
+            // GroupWavelengthWalletManager.Refusal, all ten.
+            "group_wavelength_refused_unreadable", "group_wavelength_refused_chain",
+            "group_wavelength_refused_no_key", "group_wavelength_refused_size",
+            "group_wavelength_refused_no_onchain", "group_wavelength_refused_holders",
+            "group_wavelength_refused_ceremony", "group_wavelength_refused_ceremony_disagrees",
+            "group_wavelength_refused_waiting_seed", "group_wavelength_refused_keys",
+            // GroupWavelengthDaemonStatus, the nine that are not a refusal.
+            "group_wavelength_daemon_not_on_device", "group_wavelength_daemon_catching_up",
+            "group_wavelength_daemon_waiting_for_signers", "group_wavelength_daemon_opening",
+            "group_wavelength_daemon_recovering", "group_wavelength_daemon_running",
+            "group_wavelength_daemon_paused", "group_wavelength_daemon_busy_s",
+            "group_wavelength_daemon_failed",
+            // GroupWavelengthDaemon.Refusal, the six with a string of their own.
+            "group_wavelength_daemon_no_seed", "group_wavelength_daemon_keys_disagree",
+            "group_wavelength_daemon_signers_not_ready", "group_wavelength_daemon_opened_as_another",
+            "group_wavelength_daemon_behind", "group_wavelength_daemon_nobody_runs_it",
+        )
+        val values = catalogue.filter { it.first in keys }
+        assertEquals(keys.size, values.size, "a key in this list is missing from the catalogue")
+
+        val oneSentence = values.filter { (_, value) -> value.count { it in ".!?\u2026" } < 2 }
+        assertEquals(emptyList(), oneSentence.map { it.first }, "says what happened and nothing about what to do")
+
+        val byValue = values.groupBy { it.second }.filterValues { it.size > 1 }
+        assertEquals(emptyMap(), byValue.mapValues { (_, same) -> same.map { it.first } }, "two states saying the same thing")
+    }
+
     @Test
     fun `a plural picks its form by the count, and substitutes it`() = runBlocking {
         // The catalogue's first plurals, for a guardian's delay. A plain

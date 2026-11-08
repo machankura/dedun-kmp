@@ -137,7 +137,7 @@ fun GroupWavelengthEntryScreen(
                     reader = state.userPublicKey,
                     modifier = Modifier.padding(padding),
                 )
-                is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = null)
+                is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = { viewModel.initiate() })
                 else -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
             }
         }

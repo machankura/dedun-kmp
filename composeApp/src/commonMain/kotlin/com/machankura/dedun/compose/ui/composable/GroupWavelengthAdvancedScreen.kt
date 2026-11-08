@@ -116,7 +116,7 @@ fun GroupWavelengthAdvancedScreen(
                 isPending = viewModel.isActionPending.value,
                 onLookForMoreCoins = { viewModel.lookForMoreCoins(onStarted = { notify(looking) }, onFailure = { notify(couldNotLook) }) },
             )
-            is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = null)
+            is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = { viewModel.initiate() })
             else -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
         }
     }

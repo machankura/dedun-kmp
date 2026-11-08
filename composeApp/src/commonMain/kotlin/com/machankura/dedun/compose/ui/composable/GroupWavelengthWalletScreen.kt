@@ -71,8 +71,10 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayouts
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
+import com.machankura.dedun.compose.ui.composable.navigation.routes.WavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.composable.widgets.Disclosure
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
@@ -104,12 +106,22 @@ import dedun.composeapp.generated.resources.a_wavelength_wallet_needs_four_signe
 import dedun.composeapp.generated.resources.couldn_t_propose_this
 import dedun.composeapp.generated.resources.cancel
 import dedun.composeapp.generated.resources.group_wallet
+import dedun.composeapp.generated.resources.group_wavelength_alarm_next
+import dedun.composeapp.generated.resources.group_wavelength_daemon_behind
+import dedun.composeapp.generated.resources.group_wavelength_daemon_nobody_runs_it
 import dedun.composeapp.generated.resources.group_wavelength_departed_s
 import dedun.composeapp.generated.resources.group_wavelength_earlier_empty
 import dedun.composeapp.generated.resources.group_wavelength_earlier_holds_s
 import dedun.composeapp.generated.resources.group_wavelength_earlier_leave
 import dedun.composeapp.generated.resources.group_wavelength_earlier_s
 import dedun.composeapp.generated.resources.group_wavelength_leave
+import dedun.composeapp.generated.resources.group_wavelength_open_other_group_s
+import dedun.composeapp.generated.resources.group_wavelength_open_your_wallet
+import dedun.composeapp.generated.resources.group_wavelength_refused_ceremony_disagrees
+import dedun.composeapp.generated.resources.group_wavelength_refused_no_key
+import dedun.composeapp.generated.resources.group_wavelength_refused_no_onchain
+import dedun.composeapp.generated.resources.group_wavelength_refused_unreadable
+import dedun.composeapp.generated.resources.group_wavelength_refused_waiting_seed
 import dedun.composeapp.generated.resources.open_a_new_wavelength_wallet
 import dedun.composeapp.generated.resources.group_wavelength_leave_ask
 import dedun.composeapp.generated.resources.group_wavelength_leave_asked
@@ -180,7 +192,6 @@ import dedun.composeapp.generated.resources.group_wavelength_refused_ceremony
 import dedun.composeapp.generated.resources.group_wavelength_refused_chain
 import dedun.composeapp.generated.resources.group_wavelength_refused_holders
 import dedun.composeapp.generated.resources.group_wavelength_refused_keys
-import dedun.composeapp.generated.resources.group_wavelength_refused_other
 import dedun.composeapp.generated.resources.group_wavelength_refused_size
 import dedun.composeapp.generated.resources.group_wavelength_signers_s_of_s
 import dedun.composeapp.generated.resources.group_wavelength_terms_changed
@@ -279,6 +290,11 @@ fun GroupWavelengthWalletScreen(
                 onLeaveEarlier = { viewModel.proposeLeave(onSession = toSession, onFailure = { notify(couldNotPropose) }, earlier = it.wallet) },
                 onRunEarlier = { viewModel.nominateSelf(onSession = toSession, onFailure = { notify(couldNotPropose) }, wallet = it.wallet.statement.wallet) },
                 onOpenEntry = onOpenEntry,
+                onRetry = { viewModel.initiate() },
+                onOpenPersonalWallet = { onNavigateToRoute(WavelengthWalletRoute(activeUserPublicKey = activeUserPublicKey)) },
+                onOpenOtherGroup = { otherRoom ->
+                    onNavigateToRoute(GroupWavelengthWalletRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = otherRoom, chain = chainName))
+                },
             )
         }
     }
@@ -304,9 +320,15 @@ internal fun GroupWavelengthWalletContent(
     onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit = {},
     onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit = {},
     onOpenEntry: (String) -> Unit = {},
+    /** What filled this screen, so an error has something to offer (B6). Null only in a test. */
+    onRetry: (() -> Unit)? = null,
+    /** The member's own Wavelength wallet, which has to be closed before the group's can start (D13). */
+    onOpenPersonalWallet: () -> Unit = {},
+    /** Another group's Wavelength wallet, which this device is running instead of this one (D13). */
+    onOpenOtherGroup: (chatRoomId: String) -> Unit = {},
 ) {
     when (state) {
-        is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
+        is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = onRetry)
 
         GroupWavelengthWalletUIState.Loading -> LoadingDataIndicator(modifier = modifier.fillMaxWidth())
 
@@ -342,22 +364,31 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.HourglassEmpty,
         )
 
+        // Ten refusals, ten messages, and no `else`. Four of them used to share one sentence --
+        // "this device can't confirm it" -- which is the same fault CLAUDE.md names for EmptyState's
+        // old default: one string standing for four different situations, each with a different next
+        // step. Exhaustive on purpose, so an eleventh refusal fails to compile rather than quietly
+        // joining them (B6).
         is GroupWavelengthWalletUIState.Refused -> EmptyState(
             modifier = modifier.readableContent(),
             message = stringResource(
                 when (state.why) {
+                    GroupWavelengthWalletManager.Refusal.UNREADABLE -> Res.string.group_wavelength_refused_unreadable
                     GroupWavelengthWalletManager.Refusal.CHAIN_REFUSED -> Res.string.group_wavelength_refused_chain
+                    GroupWavelengthWalletManager.Refusal.NO_GROUP_KEY -> Res.string.group_wavelength_refused_no_key
                     GroupWavelengthWalletManager.Refusal.SIZE_NOT_DEPLOYABLE -> Res.string.group_wavelength_refused_size
+                    GroupWavelengthWalletManager.Refusal.NO_ONCHAIN_WALLET -> Res.string.group_wavelength_refused_no_onchain
                     GroupWavelengthWalletManager.Refusal.NOT_KEY_HOLDERS -> Res.string.group_wavelength_refused_holders
-                    GroupWavelengthWalletManager.Refusal.NO_CEREMONY, GroupWavelengthWalletManager.Refusal.CEREMONY_DISAGREES -> Res.string.group_wavelength_refused_ceremony
+                    GroupWavelengthWalletManager.Refusal.NO_CEREMONY -> Res.string.group_wavelength_refused_ceremony
+                    GroupWavelengthWalletManager.Refusal.CEREMONY_DISAGREES -> Res.string.group_wavelength_refused_ceremony_disagrees
+                    GroupWavelengthWalletManager.Refusal.WAITING_FOR_SEED -> Res.string.group_wavelength_refused_waiting_seed
                     GroupWavelengthWalletManager.Refusal.KEYS_DISAGREE -> Res.string.group_wavelength_refused_keys
-                    else -> Res.string.group_wavelength_refused_other
                 }
             ),
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup)
     }
 }
 
@@ -449,6 +480,8 @@ private fun OpenedWallet(
     onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit,
     onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit,
     onOpenEntry: (String) -> Unit,
+    onOpenPersonalWallet: () -> Unit,
+    onOpenOtherGroup: (chatRoomId: String) -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
@@ -458,7 +491,7 @@ private fun OpenedWallet(
                 moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
+                groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
             }
         }
     } else {
@@ -467,7 +500,7 @@ private fun OpenedWallet(
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
             moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry)
-            groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced)
+            groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
         }
     }
 }
@@ -544,10 +577,13 @@ private fun LazyListScope.groupItems(
     onNominate: () -> Unit,
     onStepDown: () -> Unit,
     onOpenAdvanced: () -> Unit,
+    onOpenCeremony: () -> Unit,
+    onOpenPersonalWallet: () -> Unit,
+    onOpenOtherGroup: (chatRoomId: String) -> Unit,
 ) {
     val statement = state.wallet.statement
     item { SignersCard(state) }
-    item { OperatorCard(state, isPending, onNominate, onStepDown) }
+    item { OperatorCard(state, isPending, onNominate, onStepDown, onOpenCeremony, onOpenPersonalWallet, onOpenOtherGroup) }
     item {
         ListItem(
             leadingContent = { Icon(Icons.Default.Key, contentDescription = Decorative) },
@@ -613,6 +649,11 @@ private fun AlarmCard(alarms: List<String>) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.group_wavelength_alarm_title), style = MaterialTheme.typography.titleSmall)
             alarms.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            // One next step for the card rather than one per row. The rows are the device's own words
+            // about whatever it refused, and the step after any of them is the same: nothing of yours
+            // moved, so go and find out what was proposed. A supporting line repeated under every row
+            // would be the shared default this phase is undoing everywhere else.
+            Text(stringResource(Res.string.group_wavelength_alarm_next), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -816,7 +857,15 @@ private fun SignersCard(state: GroupWavelengthWalletUIState.Opened) {
 
 /** Who runs the wallet, and for a signer, whether that could be them. */
 @Composable
-private fun OperatorCard(state: GroupWavelengthWalletUIState.Opened, isPending: Boolean, onNominate: () -> Unit, onStepDown: () -> Unit) {
+private fun OperatorCard(
+    state: GroupWavelengthWalletUIState.Opened,
+    isPending: Boolean,
+    onNominate: () -> Unit,
+    onStepDown: () -> Unit,
+    onOpenCeremony: () -> Unit,
+    onOpenPersonalWallet: () -> Unit,
+    onOpenOtherGroup: (chatRoomId: String) -> Unit,
+) {
     val operatorName = state.operator?.publicKey?.let { key ->
         if (state.isOperator) stringResource(Res.string.you)
         else state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == key }?.profile?.humanReadableNameOrPubkey() ?: key.take(16)
@@ -828,7 +877,7 @@ private fun OperatorCard(state: GroupWavelengthWalletUIState.Opened, isPending: 
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(stringResource(Res.string.group_wavelength_operator_explainer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (state.isOperator) DaemonStatusLine(state.daemon)
+            if (state.isOperator) DaemonStatus(state.daemon, onOpenCeremony, onOpenPersonalWallet, onOpenOtherGroup)
             when {
                 !state.isParticipant -> Unit
                 state.isOperator -> OutlinedButton(onClick = onStepDown, enabled = !isPending) { Text(stringResource(Res.string.step_down)) }
@@ -845,33 +894,61 @@ private fun OperatorCard(state: GroupWavelengthWalletUIState.Opened, isPending: 
     }
 }
 
-/** What this device's own daemon is doing, on the device that runs it. */
+/**
+ * What this device's own wallet process is doing, on the device that runs it -- and what to do about it.
+ *
+ * Seventeen states between the ten here and the seven refusals under them, and every one of them now
+ * ends in a next step (B6). Two pairs used to share a sentence: `NOT_OPERATOR_OR_BEHIND` and
+ * `NOBODY_RUNS_IT` both read "waiting to catch up with the group", which are opposite instructions --
+ * *wait* against *somebody has to volunteer* -- behind one line.
+ *
+ * Three of them get a way on as well as words, because the next step is somewhere else in the app:
+ * the key ceremony that says who holds the seed, the member's own wallet that has to be closed, and
+ * the other group whose wallet this device is busy with. `SIGNERS_NOT_READY` and `Failed` get none:
+ * both retry themselves, and their strings say so.
+ */
 @Composable
-private fun DaemonStatusLine(status: GroupWavelengthDaemonStatus) {
+private fun DaemonStatus(
+    status: GroupWavelengthDaemonStatus,
+    onOpenCeremony: () -> Unit,
+    onOpenPersonalWallet: () -> Unit,
+    onOpenOtherGroup: (chatRoomId: String) -> Unit,
+) {
     val isTrouble = status is GroupWavelengthDaemonStatus.Refused || status == GroupWavelengthDaemonStatus.Failed
-    Text(
-        text = when (status) {
-            GroupWavelengthDaemonStatus.NotOnThisDevice -> stringResource(Res.string.group_wavelength_daemon_not_on_device)
-            GroupWavelengthDaemonStatus.CatchingUp -> stringResource(Res.string.group_wavelength_daemon_catching_up)
-            GroupWavelengthDaemonStatus.WaitingForSigners -> stringResource(Res.string.group_wavelength_daemon_waiting_for_signers)
-            GroupWavelengthDaemonStatus.Opening -> stringResource(Res.string.group_wavelength_daemon_opening)
-            GroupWavelengthDaemonStatus.Recovering -> stringResource(Res.string.group_wavelength_daemon_recovering)
-            is GroupWavelengthDaemonStatus.Running -> stringResource(Res.string.group_wavelength_daemon_running)
-            GroupWavelengthDaemonStatus.PausedForPersonal -> stringResource(Res.string.group_wavelength_daemon_paused)
-            is GroupWavelengthDaemonStatus.BusyWithAnother -> stringResource(Res.string.group_wavelength_daemon_busy_s, status.group)
-            GroupWavelengthDaemonStatus.Failed -> stringResource(Res.string.group_wavelength_daemon_failed)
-            is GroupWavelengthDaemonStatus.Refused -> stringResource(
-                when (status.reason) {
-                    GroupWavelengthDaemon.Refusal.NO_SEED -> Res.string.group_wavelength_daemon_no_seed
-                    GroupWavelengthDaemon.Refusal.KEYS_DISAGREE -> Res.string.group_wavelength_daemon_keys_disagree
-                    GroupWavelengthDaemon.Refusal.SIGNERS_NOT_READY -> Res.string.group_wavelength_daemon_signers_not_ready
-                    GroupWavelengthDaemon.Refusal.OPENED_AS_ANOTHER -> Res.string.group_wavelength_daemon_opened_as_another
-                    GroupWavelengthDaemon.Refusal.NOT_OPERATOR_OR_BEHIND, GroupWavelengthDaemon.Refusal.NOBODY_RUNS_IT -> Res.string.group_wavelength_daemon_catching_up
-                    GroupWavelengthDaemon.Refusal.CHAIN_REFUSED -> Res.string.group_wavelength_refused_chain
-                }
-            )
-        },
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (isTrouble) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+        Text(
+            text = when (status) {
+                GroupWavelengthDaemonStatus.NotOnThisDevice -> stringResource(Res.string.group_wavelength_daemon_not_on_device)
+                GroupWavelengthDaemonStatus.CatchingUp -> stringResource(Res.string.group_wavelength_daemon_catching_up)
+                GroupWavelengthDaemonStatus.WaitingForSigners -> stringResource(Res.string.group_wavelength_daemon_waiting_for_signers)
+                GroupWavelengthDaemonStatus.Opening -> stringResource(Res.string.group_wavelength_daemon_opening)
+                GroupWavelengthDaemonStatus.Recovering -> stringResource(Res.string.group_wavelength_daemon_recovering)
+                is GroupWavelengthDaemonStatus.Running -> stringResource(Res.string.group_wavelength_daemon_running)
+                GroupWavelengthDaemonStatus.PausedForPersonal -> stringResource(Res.string.group_wavelength_daemon_paused)
+                is GroupWavelengthDaemonStatus.BusyWithAnother -> stringResource(Res.string.group_wavelength_daemon_busy_s, status.group)
+                GroupWavelengthDaemonStatus.Failed -> stringResource(Res.string.group_wavelength_daemon_failed)
+                is GroupWavelengthDaemonStatus.Refused -> stringResource(
+                    when (status.reason) {
+                        GroupWavelengthDaemon.Refusal.NO_SEED -> Res.string.group_wavelength_daemon_no_seed
+                        GroupWavelengthDaemon.Refusal.KEYS_DISAGREE -> Res.string.group_wavelength_daemon_keys_disagree
+                        GroupWavelengthDaemon.Refusal.SIGNERS_NOT_READY -> Res.string.group_wavelength_daemon_signers_not_ready
+                        GroupWavelengthDaemon.Refusal.OPENED_AS_ANOTHER -> Res.string.group_wavelength_daemon_opened_as_another
+                        GroupWavelengthDaemon.Refusal.NOT_OPERATOR_OR_BEHIND -> Res.string.group_wavelength_daemon_behind
+                        GroupWavelengthDaemon.Refusal.NOBODY_RUNS_IT -> Res.string.group_wavelength_daemon_nobody_runs_it
+                        GroupWavelengthDaemon.Refusal.CHAIN_REFUSED -> Res.string.group_wavelength_refused_chain
+                    }
+                )
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isTrouble) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+        when {
+            status is GroupWavelengthDaemonStatus.Refused && status.reason == GroupWavelengthDaemon.Refusal.NO_SEED ->
+                OutlinedButton(onClick = onOpenCeremony) { Text(stringResource(Res.string.see_the_key_ceremony)) }
+            status == GroupWavelengthDaemonStatus.PausedForPersonal ->
+                OutlinedButton(onClick = onOpenPersonalWallet) { Text(stringResource(Res.string.group_wavelength_open_your_wallet)) }
+            status is GroupWavelengthDaemonStatus.BusyWithAnother && status.chatRoomId.isNotEmpty() ->
+                OutlinedButton(onClick = { onOpenOtherGroup(status.chatRoomId) }) { Text(stringResource(Res.string.group_wavelength_open_other_group_s, status.group)) }
+        }
+    }
 }

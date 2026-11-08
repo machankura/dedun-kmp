@@ -19,8 +19,14 @@ sealed interface GroupWavelengthDaemonStatus {
     /** The person is in their own wallet, which has the daemon until they leave it (D13). */
     data object PausedForPersonal : GroupWavelengthDaemonStatus
 
-    /** Elected here too, but the one daemon is running [group]'s wallet (D13). */
-    data class BusyWithAnother(val group: String) : GroupWavelengthDaemonStatus
+    /**
+     * Elected here too, but the one daemon is running [group]'s wallet (D13).
+     *
+     * [chatRoomId] is here so the screen can offer a way to that group rather than only name it: a
+     * member told "this device is already running Thembi's wallet" has to go and step down there, and
+     * a status that says where without saying how is a dead end (B6).
+     */
+    data class BusyWithAnother(val group: String, val chatRoomId: String = "") : GroupWavelengthDaemonStatus
 
     data class Refused(val reason: GroupWavelengthDaemon.Refusal) : GroupWavelengthDaemonStatus
 

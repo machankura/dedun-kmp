@@ -208,11 +208,11 @@ class GroupWavelengthRunner(
         val runningNow = running
         if (runningNow != null) {
             elected.filter { it.room.chatRoom.id != runningNow.chatRoomId || it.chain != runningNow.chain || it.number != runningNow.wallet.statement.wallet }
-                .forEach { say(it, GroupWavelengthDaemonStatus.BusyWithAnother(elected.first { e -> e.room.chatRoom.id == runningNow.chatRoomId }.name)) }
+                .forEach { say(it, GroupWavelengthDaemonStatus.BusyWithAnother(elected.first { e -> e.room.chatRoom.id == runningNow.chatRoomId }.name, runningNow.chatRoomId)) }
             return@withLock
         }
         val next = elected.firstOrNull() ?: return@withLock
-        elected.drop(1).forEach { say(it, GroupWavelengthDaemonStatus.BusyWithAnother(next.name)) }
+        elected.drop(1).forEach { say(it, GroupWavelengthDaemonStatus.BusyWithAnother(next.name, next.room.chatRoom.id)) }
         open(next)
     }
 

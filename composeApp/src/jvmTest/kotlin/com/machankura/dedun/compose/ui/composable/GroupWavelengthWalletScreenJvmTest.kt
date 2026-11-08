@@ -15,6 +15,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
+import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
 import com.machankura.dedun.compose.managers.GroupWavelengthReports
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
@@ -138,13 +140,15 @@ class GroupWavelengthWalletScreenJvmTest {
     }
 
     @Test
-    fun `a member waiting for the seed is told that, and a refusal offers nothing`() = runDesktopComposeUiTest(phone, 800) {
+    fun `a member waiting for the seed is told that, and a refusal says what to do`() = runDesktopComposeUiTest(phone, 800) {
         var state: GroupWavelengthWalletUIState by androidx.compose.runtime.mutableStateOf(GroupWavelengthWalletUIState.WaitingForSeed(localChatRoom))
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
         onNodeWithText("The group has opened a wallet, and this device is still waiting for its part of it. It will arrive when the member who opened it is next online.").assertIsDisplayed()
         state = GroupWavelengthWalletUIState.Refused(localChatRoom, GroupWavelengthWalletManager.Refusal.KEYS_DISAGREE)
         waitForIdle()
-        onNodeWithText("The group opened a wallet that doesn't match the keys this device holds. It won't sign for it.").assertIsDisplayed()
+        onNodeWithText("The group opened a wallet that doesn't match the keys this device holds. It won't sign for it.", substring = true).assertIsDisplayed()
+        // Since Phase 5 it does not stop at what happened: where the money stands, and what to do.
+        onNodeWithText("Ask the group to check what was proposed against the key ceremony.", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -189,6 +193,128 @@ class GroupWavelengthWalletScreenJvmTest {
 
     private val settledCoin = GroupArkVtxo("w", "a:0", 10_000, settled = true)
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
+
+    // ---------------------------------------------------------------------
+    // Errors that end in an action (Phase 5, B6).
+    // ---------------------------------------------------------------------
+
+    /**
+     * Four of the ten refusals used to share one sentence -- "the group opened a wallet this device
+     * can't confirm" -- behind an `else` branch. Four situations with four different next steps: a
+     * group with no key, a group with no onchain wallet to pay out to, a statement nobody signed, and
+     * a seed still on its way. They each say their own thing now, and the `when` is exhaustive, so an
+     * eleventh refusal fails to compile rather than joining them.
+     */
+    @Test
+    fun `the four refusals that shared a sentence each say their own, with a next step`() = runDesktopComposeUiTest(phone, 1600) {
+        var why by androidx.compose.runtime.mutableStateOf(GroupWavelengthWalletManager.Refusal.UNREADABLE)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, GroupWavelengthWalletUIState.Refused(localChatRoom, why), Chain.Signet) } } }
+        onNodeWithText("Ask the group to propose it again from a device that is up to date.", substring = true).assertIsDisplayed()
+
+        why = GroupWavelengthWalletManager.Refusal.NO_GROUP_KEY
+        waitForIdle()
+        onNodeWithText("Make the group's key first.", substring = true).assertIsDisplayed()
+
+        why = GroupWavelengthWalletManager.Refusal.NO_ONCHAIN_WALLET
+        waitForIdle()
+        onNodeWithText("Open the group's onchain wallet first.", substring = true).assertIsDisplayed()
+
+        why = GroupWavelengthWalletManager.Refusal.WAITING_FOR_SEED
+        waitForIdle()
+        onNodeWithText("Nothing is wrong.", substring = true).assertIsDisplayed()
+
+        // And the other pair that shared one: no record of the ceremony, against a record that disagrees.
+        why = GroupWavelengthWalletManager.Refusal.NO_CEREMONY
+        waitForIdle()
+        onNodeWithText("you were never part of it", substring = true).assertIsDisplayed()
+        why = GroupWavelengthWalletManager.Refusal.CEREMONY_DISAGREES
+        waitForIdle()
+        onNodeWithText("doesn't match what this device recorded in the key ceremony", substring = true).assertIsDisplayed()
+    }
+
+    /**
+     * `NOT_OPERATOR_OR_BEHIND` and `NOBODY_RUNS_IT` both read "waiting to catch up with the group"
+     * before this. They are opposite instructions -- *wait* against *somebody has to volunteer* --
+     * and a member reading the first when the second was true would wait for a wallet that was never
+     * going to renew.
+     */
+    @Test
+    fun `waiting to catch up and nobody running it are no longer the same sentence`() = runDesktopComposeUiTest(phone, 1600) {
+        var daemon: GroupWavelengthDaemonStatus by androidx.compose.runtime.mutableStateOf(
+            GroupWavelengthDaemonStatus.Refused(GroupWavelengthDaemon.Refusal.NOT_OPERATOR_OR_BEHIND)
+        )
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(Modifier, opened(isOperator = true, operator = ME).copy(daemon = daemon), Chain.Signet)
+                }
+            }
+        }
+        onNodeWithText("This device is elected but hasn't caught up with the group yet", substring = true).assertIsDisplayed()
+        onAllNodesWithText("Somebody has to volunteer", substring = true).assertCountEquals(0)
+
+        daemon = GroupWavelengthDaemonStatus.Refused(GroupWavelengthDaemon.Refusal.NOBODY_RUNS_IT)
+        waitForIdle()
+        onNodeWithText("Somebody has to volunteer", substring = true).assertIsDisplayed()
+        onAllNodesWithText("This device is elected but hasn't caught up", substring = true).assertCountEquals(0)
+    }
+
+    /**
+     * Three states have their next step somewhere else in the app, so they get a way there. The other
+     * fourteen say it in words; `SIGNERS_NOT_READY` and `Failed` retry themselves and get no button,
+     * which is the decision rather than an omission.
+     */
+    @Test
+    fun `the three states whose next step is elsewhere each offer a way there`() = runDesktopComposeUiTest(phone, 1600) {
+        var daemon: GroupWavelengthDaemonStatus by androidx.compose.runtime.mutableStateOf(
+            GroupWavelengthDaemonStatus.Refused(GroupWavelengthDaemon.Refusal.NO_SEED)
+        )
+        var ceremony = 0
+        var personal = 0
+        var otherGroup: String? = null
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(
+                        Modifier,
+                        opened(isOperator = true, operator = ME).copy(daemon = daemon),
+                        Chain.Signet,
+                        onOpenCeremony = { ceremony++ },
+                        onOpenPersonalWallet = { personal++ },
+                        onOpenOtherGroup = { otherGroup = it },
+                    )
+                }
+            }
+        }
+        onNodeWithText("See the key ceremony").performClick()
+        assertEquals(1, ceremony)
+
+        daemon = GroupWavelengthDaemonStatus.PausedForPersonal
+        waitForIdle()
+        onNodeWithText("Open your own wallet").performClick()
+        assertEquals(1, personal)
+
+        daemon = GroupWavelengthDaemonStatus.BusyWithAnother("Thembi's group", "other-room")
+        waitForIdle()
+        onNodeWithText("Open Thembi's group's wallet").performClick()
+        assertEquals("other-room", otherGroup)
+
+        // Retries itself, so no button: the string says so and a second one would be a lie.
+        daemon = GroupWavelengthDaemonStatus.Failed
+        waitForIdle()
+        onNodeWithText("it tries again by itself", substring = true).assertIsDisplayed()
+        onAllNodesWithText("See the key ceremony").assertCountEquals(0)
+    }
+
+    /** A read failed, and a read is the one thing a member can simply ask for again. */
+    @Test
+    fun `an error on the wallet screen offers a retry`() = runDesktopComposeUiTest(phone, 1200) {
+        var retried = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, GroupWavelengthWalletUIState.Error("Couldn't find the group"), Chain.Signet, onRetry = { retried++ }) } } }
+        onNodeWithText("Couldn't find the group").assertIsDisplayed()
+        onNodeWithText("Try again").performClick()
+        assertEquals(1, retried)
+    }
 
     // ---------------------------------------------------------------------
     // The second line, in money the group counts in (Phase 2, B1).

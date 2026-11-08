@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 4 are built; Phases 5 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 5 are built; Phases 6 to 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -676,35 +676,50 @@ The receive screen, restructured. B4, B5, and finding 9's three items.
 **Done** on 8 November 2026: a member on the receive screen cannot reach a Lightning invoice without
 passing its warning, and no screen test finds the balance or the room remaining on it.
 
-### Phase 5: errors that end in an action
+### Phase 5: errors that end in an action — **built**
 
-B6. Strings and five call sites, no new screen.
+B6. Twenty-five messages, five retries, and one `else` branch deleted.
 
-- All four `ErrorState(onRetry = null)` sites get a retry — each is a read, and `viewModel.initiate()` is
-  the retry. Where a later state turns out to have nothing to retry, null stays with a comment naming
-  which of the guide's four parts carries the next step in words, which is what `ScreenState.kt:60` asks
-  for.
-- **The ten-onto-six and seven-onto-six collapses are undone first,** because the fourth part cannot be
-  written for a message that stands for four different situations. `UNREADABLE`, `NO_GROUP_KEY`,
-  `NO_ONCHAIN_WALLET` and `WAITING_FOR_SEED` each get their own string;
-  `group_wavelength_refused_other` keeps only genuinely unknown refusals. `NOT_OPERATOR_OR_BEHIND` and
-  `NOBODY_RUNS_IT` separate, since one is *wait* and the other is *somebody has to volunteer* — opposite
-  instructions behind one sentence today.
-- Every one of the resulting states gains the fourth part. *This group has fewer than four devices with a
-  share, so it can't make this key* gains *Add a member, or use the group's onchain wallet.*
-- `AlarmCard`: each row becomes a `ListItem` with the refusal as the headline and a next step as the
-  supporting line. The card keeps `errorContainer`.
-- `DaemonStatusLine` becomes `DaemonStatus`, a `Column`: the state, a next step, and for three a
-  button — `NO_SEED` → see the key ceremony; `BusyWithAnother` → the other group's wallet;
-  `PausedForPersonal` → the member's own wallet, which is the thing to close. `SIGNERS_NOT_READY` and
-  `Failed` get no button: both retry themselves, and their strings already say so.
-- **Tests**, `GroupWavelengthWalletScreenJvmTest`: each of `Refusal`'s ten values and each of
-  `GroupWavelengthDaemonStatus`'s ten states renders a distinct message with a next step, and each of
-  `GroupWavelengthDaemon.Refusal`'s seven does too; the three buttons fire their callback; a
-  `StringCatalogueJvmTest` case asserting no two of the twenty-seven are the same string, which is the
-  regression that put six of them together in the first place.
+- **Five** `ErrorState(onRetry = null)` sites got a retry, not four: Phase 4 added the invoice screen.
+  Each is a read, and `viewModel.initiate()` is the retry. No null remains on these screens.
+- **The collapses are undone, and both were worse than counted.** The wallet's ten refusals shared six
+  messages behind an `else`, so `UNREADABLE`, `NO_GROUP_KEY`, `NO_ONCHAIN_WALLET` and
+  `WAITING_FOR_SEED` all read *this device can't confirm it* — four situations whose next steps are
+  *propose it again*, *make the key*, *open the onchain wallet* and *wait*. `NO_CEREMONY` and
+  `CEREMONY_DISAGREES` shared a seventh, which this plan did not notice: *no record of making this key*
+  and *a record that disagrees with it* are not the same thing to tell a member. All ten have their own
+  message and **the `when` is exhaustive**, so an eleventh refusal fails to compile instead of joining
+  them. `group_wavelength_refused_other` is deleted rather than kept for unknown refusals: with an
+  exhaustive `when` there are none, and a spare bucket is how this started.
+- `NOT_OPERATOR_OR_BEHIND` and `NOBODY_RUNS_IT` separate, as planned. Both read *waiting to catch up
+  with the group* before, which is *wait* standing in for *somebody has to volunteer* — a member
+  reading the first when the second was true would wait for a wallet that was never going to renew.
+- Every one of the twenty-five says where the money stands and what to do. *The group opened a wallet
+  that doesn't match the keys this device holds* now adds *Nothing has been signed, and nothing of
+  yours can move while it refuses. Ask the group to check what was proposed against the key ceremony.*
+- **`AlarmCard` gets one next step for the card, not one per row,** which is a departure. Its rows are
+  the device's own free text about whatever it refused — there is no enum to map — so a supporting line
+  under each row would have been the same string repeated, which is the shared default this phase
+  exists to undo. The step after any refusal is the same: nothing of yours moved, go and find out what
+  was proposed.
+- `DaemonStatusLine` is `DaemonStatus`, a `Column` with the state, its next step, and for three of them
+  a button. `BusyWithAnother` needed one more thing to make its button real: it carried a group's
+  **name** and not its id, so `GroupWavelengthDaemonStatus.BusyWithAnother` gained a `chatRoomId` and
+  `GroupWavelengthRunner` fills it from the room it is already holding. Nothing on the wire changed.
+  `SIGNERS_NOT_READY` and `Failed` get no button, and their strings say they retry themselves.
+- **Tests:** the four refusals that shared a sentence each say their own with a next step, and so do
+  `NO_CEREMONY` and `CEREMONY_DISAGREES`; *wait* and *somebody has to volunteer* are no longer one
+  string; the three buttons fire and `Failed` offers none; an error offers a retry.
+  `StringCatalogueJvmTest` asserts over the whole list that **every one of the twenty-five has at least
+  two sentence endings** — a crude proxy for the guide's four parts, and the one a script can keep —
+  and that no two are the same string. The one deliberate reuse is
+  `group_wavelength_refused_chain`, which is one fact said once: the wallet won't be signed for on a
+  network this build does not offer, and the device won't run it.
+- **Twenty-five, not the plan's twenty-seven.** Ten wallet refusals, nine daemon states and six daemon
+  refusals, with `refused_chain` serving the seventh.
 
-**Done when** no state on these screens says only what happened, and no two states say the same thing.
+**Done** on 8 November 2026: no state on these screens says only what happened, and no two say the same
+thing.
 
 ### Phase 6: the wallet's health, said before it is urgent
 

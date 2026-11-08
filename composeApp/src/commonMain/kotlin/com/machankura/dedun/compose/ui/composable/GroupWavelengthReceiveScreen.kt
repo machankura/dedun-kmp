@@ -134,16 +134,17 @@ fun GroupWavelengthReceiveScreen(
                 Modifier.padding(padding), uiState, chain, notify,
                 onAsk = { viewModel.ask(onFailure = { notify(couldNotAsk) }) },
                 onOpenInvoice = onOpenInvoice,
+                onRetry = { viewModel.initiate() },
             )
         }
     }
 }
 
 @Composable
-internal fun GroupWavelengthReceiveContent(modifier: Modifier, state: GroupWavelengthReceiveUIState, chain: Chain, notify: (String) -> Unit = {}, onAsk: () -> Unit = {}, onOpenInvoice: () -> Unit = {}) {
+internal fun GroupWavelengthReceiveContent(modifier: Modifier, state: GroupWavelengthReceiveUIState, chain: Chain, notify: (String) -> Unit = {}, onAsk: () -> Unit = {}, onOpenInvoice: () -> Unit = {}, onRetry: (() -> Unit)? = null) {
     when (state) {
         GroupWavelengthReceiveUIState.Loading -> LoadingDataIndicator(modifier = modifier.fillMaxWidth())
-        is GroupWavelengthReceiveUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = null)
+        is GroupWavelengthReceiveUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = onRetry)
         GroupWavelengthReceiveUIState.NotADepositor -> EmptyState(modifier = modifier.readableContent(), message = stringResource(Res.string.group_wavelength_receive_not_a_depositor), icon = Icons.Default.AccountBalanceWallet)
         GroupWavelengthReceiveUIState.NobodyRunsIt -> EmptyState(modifier = modifier.readableContent(), message = stringResource(Res.string.group_wavelength_receive_nobody_runs_it), icon = Icons.Default.Waves)
         GroupWavelengthReceiveUIState.AtTheCap -> EmptyState(modifier = modifier.readableContent(), message = stringResource(Res.string.group_wavelength_receive_at_cap), icon = Icons.Default.Waves)
