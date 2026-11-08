@@ -6,6 +6,7 @@ import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -246,20 +247,108 @@ class GroupWavelengthWalletScreenJvmTest {
         onNodeWithText("2,000.00 ZAR").assertIsDisplayed()
     }
 
+    // ---------------------------------------------------------------------
+    // The disclosure, and hiding the figure (Phase 3, B2).
+    // ---------------------------------------------------------------------
+
+    /** Pending, held and how much room is left: three figures somebody needed, none of them the balance. */
+    private val pendingCoin = GroupArkVtxo("w", "b:0", 500)
+    private val heldCoin = GroupArkVtxo("w", "c:0", 700, settled = true, reservedBy = "r")
+
+    /**
+     * A report naming the coins it is about, rather than [said]'s `a:0`, `b1:0`, … — because a report
+     * that does not name this device's own settled coins compares as `DIFFERS`, which would open the
+     * disclosure and make a test of the collapsed state test nothing at all.
+     */
+    private fun saidOf(vararg coins: Pair<String, Long>) = GroupWavelengthSnapshot(
+        "w", 3, 100, 500, coins.sumOf { it.second },
+        coins = coins.map { (outpoint, sat) -> GroupWavelengthSnapshot.Coin(outpoint, sat, "live") },
+    )
+
     @Test
-    fun `the balance is what this device signed for, with the figure of whoever runs it beside it`() = runDesktopComposeUiTest(phone, 1400) {
+    fun `the four figures under the balance are folded away, and one tap brings all four back`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(Modifier, money(saidOf("a:0" to 10_000, "c:0" to 700), listOf(settledCoin, pendingCoin, heldCoin)), Chain.Mainnet)
+                }
+            }
+        }
+        onNodeWithText("Matches what your device signed").assertIsDisplayed()
+        onAllNodesWithText("in a round your device hasn't seen finish", substring = true).assertCountEquals(0)
+        onAllNodesWithText("are held for something your device signed", substring = true).assertCountEquals(0)
+        onAllNodesWithText("Whoever runs the wallet says", substring = true).assertCountEquals(0)
+        onAllNodesWithText("Room for", substring = true).assertCountEquals(0)
+        onNodeWithText("More about this balance").performClick()
+        onNodeWithText("in a round your device hasn't seen finish", substring = true).assertIsDisplayed()
+        onNodeWithText("are held for something your device signed", substring = true).assertIsDisplayed()
+        onNodeWithText("Whoever runs the wallet says", substring = true).assertIsDisplayed()
+        onNodeWithText("Room for", substring = true).assertIsDisplayed()
+    }
+
+    /**
+     * A credit on the swap server is money no threshold guards (D10), so it is the second thing that
+     * opens the card by itself.
+     */
+    @Test
+    fun `a credit on the swap server opens the disclosure without a tap`() = runDesktopComposeUiTest(phone, 1600) {
+        val withCredit = said(10_000).copy(creditSat = 4_200)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(withCredit, listOf(settledCoin)), Chain.Signet) } } }
+        onNodeWithText("4,200 sats of credit on the swap server: not protected by the group, and not part of this balance").assertIsDisplayed()
+    }
+
+    /**
+     * Hiding replaces the digits and nothing else. The warning stays, because hiding is about who can
+     * read the screen over a member's shoulder and not about what the member is told.
+     */
+    @Test
+    fun `hiding the balance hides every figure on the card and leaves the rest of the screen alone`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    ProvideExchangeRate(zar) {
+                        GroupWavelengthWalletContent(Modifier, money(said(10_000, 90_000), listOf(settledCoin, pendingCoin, heldCoin), WalletExpiry.Urgent(144)), Chain.Mainnet)
+                    }
+                }
+            }
+        }
+        onNodeWithContentDescription("Hide the balance").performClick()
+        // 10,700: the settled coin and the held one, since a held coin is settled and reserved.
+        onAllNodesWithText("10,700 sats").assertCountEquals(0)
+        onAllNodesWithText("214.00 ZAR").assertCountEquals(0)
+        onAllNodesWithText("Whoever runs the wallet says", substring = true).assertCountEquals(0)
+        onAllNodesWithText("Room for", substring = true).assertCountEquals(0)
+        // Still said: the disagreement, the deadline, and the wallet's own label.
+        onNodeWithText("Differs from what your device signed").assertIsDisplayed()
+        onNodeWithText("Coins need renewing within", substring = true).assertIsDisplayed()
+        onNodeWithText("What your device has signed for").assertIsDisplayed()
+        onNodeWithContentDescription("Show the balance").performClick()
+        onNodeWithText("10,700 sats").assertIsDisplayed()
+    }
+
+    /**
+     * B2. What stays on the face of the card is the figure this device signed for and one line saying
+     * whether anybody disagrees. The other figure -- the one this device has not checked -- is a tap
+     * away, which is the whole point: it is provenance, not the balance.
+     */
+    @Test
+    fun `the balance is what this device signed for, and the figure of whoever runs it is a tap away`() = runDesktopComposeUiTest(phone, 1400) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000), listOf(settledCoin)), Chain.Signet) } } }
         onNodeWithText("10,000 sats").assertIsDisplayed()
-        onNodeWithText("Whoever runs the wallet says 10,000 sats, as of their last report").assertIsDisplayed()
         onNodeWithText("Matches what your device signed").assertIsDisplayed()
+        onAllNodesWithText("Whoever runs the wallet says", substring = true).assertCountEquals(0)
+        onNodeWithText("More about this balance").performClick()
+        onNodeWithText("Whoever runs the wallet says 10,000 sats, as of their last report").assertIsDisplayed()
     }
 
     @Test
     fun `a report that lies is shown differing, and doesn't change the headline`() = runDesktopComposeUiTest(phone, 1400) {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, money(said(10_000, 90_000), listOf(settledCoin)), Chain.Signet) } } }
         onNodeWithText("10,000 sats").assertIsDisplayed()
-        onNodeWithText("Whoever runs the wallet says 100,000 sats, as of their last report").assertIsDisplayed()
         onNodeWithText("Differs from what your device signed").assertIsDisplayed()
+        // Opened itself, with no tap: a disagreement folded away would make this card a way to hide
+        // bad news, which is the one way a disclosure can do harm.
+        onNodeWithText("Whoever runs the wallet says 100,000 sats, as of their last report").assertIsDisplayed()
     }
 
     @Test
@@ -326,7 +415,10 @@ class GroupWavelengthWalletScreenJvmTest {
         onNodeWithText("Your device checked that this address is one the group's key makes. Whatever's sent here counts as yours.").assertIsDisplayed()
         onNodeWithText("Coins join the wallet in a round, once they have 6 confirmations and enough of the group's devices are online.").assertIsDisplayed()
         onNodeWithText("Send at least 1,000 sats, and no more than 50,000 to a coin.").assertIsDisplayed()
-        onNodeWithText("The wallet can take 60,000 sats more on mainnet, and a coin that would pass that won't be signed for.").assertIsDisplayed()
+        // B5: how much room is left says what the wallet holds, and this is the screen a member holds
+        // up to whoever is paying them. It lives in the balance card's disclosure now.
+        onAllNodesWithText("Room for", substring = true).assertCountEquals(0)
+        onAllNodesWithText("60,000", substring = true).assertCountEquals(0)
         onNodeWithText("A round takes its fee out of what's sent: the group lets it take up to 2,000 sats.").assertIsDisplayed()
     }
 

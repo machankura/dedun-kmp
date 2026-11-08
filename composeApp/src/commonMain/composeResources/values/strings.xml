@@ -1337,7 +1337,6 @@
     <string name="group_wavelength_receive_checked">Your device checked that this address is one the group's key makes. Whatever's sent here counts as yours.</string>
     <string name="group_wavelength_receive_confirmations_s">Coins join the wallet in a round, once they have %1$s confirmations and enough of the group's devices are online.</string>
     <string name="group_wavelength_receive_limits_s_s">Send at least %1$s sats, and no more than %2$s to a coin.</string>
-    <string name="group_wavelength_receive_room_s">The wallet can take %1$s sats more on mainnet, and a coin that would pass that won't be signed for.</string>
     <string name="group_wavelength_receive_fee_s">A round takes its fee out of what's sent: the group lets it take up to %1$s sats.</string>
     <string name="wavelength_s_sats">Wavelength wallet: %1$s sats</string>
     <string name="pay_out_over_lightning_from_wavelength">Pay out over Lightning from the Wavelength wallet</string>
@@ -1427,6 +1426,10 @@
     <string name="group_wavelength_leave_this_open">Leave Dedun open on this device: it only signs for the wallet while it's running.</string>
     <string name="group_wavelength_signers_s_of_s">%1$s of %2$s to sign, %3$s devices online to renew</string>
     <string name="group_wavelength_cap_s">At most %1$s sats on mainnet</string>
+    <string name="group_wavelength_balance_details">More about this balance</string>
+    <string name="group_wavelength_balance_hide">Hide the balance</string>
+    <string name="group_wavelength_balance_show">Show the balance</string>
+    <string name="group_wavelength_room_s">Room for %1$s sats more under the mainnet cap</string>
     <string name="group_wavelength_glossary_title">What these words mean</string>
     <string name="group_wavelength_glossary_round">A round</string>
     <string name="group_wavelength_glossary_round_body">A round is the moment the group's coins are signed over to fresh ones, which is how they keep their deadline. It needs enough of the group's devices online to co-sign, and it takes a fee out of the wallet. Coins sent to the wallet join it at the next round, and coins leaving it leave at one.</string>

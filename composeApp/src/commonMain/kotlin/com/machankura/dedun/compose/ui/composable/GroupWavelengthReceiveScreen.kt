@@ -97,7 +97,6 @@ import dedun.composeapp.generated.resources.group_wavelength_receive_intro
 import dedun.composeapp.generated.resources.group_wavelength_receive_limits_s_s
 import dedun.composeapp.generated.resources.group_wavelength_receive_nobody_runs_it
 import dedun.composeapp.generated.resources.group_wavelength_receive_not_a_depositor
-import dedun.composeapp.generated.resources.group_wavelength_receive_room_s
 import dedun.composeapp.generated.resources.group_wavelength_receive_title
 import dedun.composeapp.generated.resources.group_wavelength_receive_waiting
 import dedun.composeapp.generated.resources.group_wavelength_test_network_s
@@ -208,7 +207,6 @@ private fun LazyListScope.onchainItems(state: GroupWavelengthReceiveUIState.Load
         item { Line(stringResource(Res.string.group_wavelength_receive_confirmations_s, terms.boardingConfirmations.toString())) }
         item { Line(stringResource(Res.string.group_wavelength_receive_limits_s_s, Satoshi(terms.minBoardingSat).grouped(), Satoshi(terms.maxVtxoSat).grouped())) }
     }
-    state.roomLeftSat?.let { item { Line(stringResource(Res.string.group_wavelength_receive_room_s, Satoshi(it).grouped())) } }
     item {
         Column {
             Line(stringResource(Res.string.group_wavelength_receive_fee_s, Satoshi(state.maxRoundFeeSat).grouped()))

@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 and 2 are built; Phases 3 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 3 are built; Phases 4 to 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -583,31 +583,52 @@ not what this plan expected and is the better half of what the build found.
 **Done** on 8 November 2026: a screen test with a rate shows two lines, one without shows one, and the
 figure a decision reads is still in sats everywhere.
 
-### Phase 3: the balance, as a balance
+### Phase 3: the balance, as a balance — **built**
 
-Layout only, within `BalanceCard`. B2.
+Layout within `BalanceCard`, one new widget, and B5 done early. B2.
 
-- The figure, the local currency, one status line, then a disclosure holding pending, held, whoever runs
-  the wallet's figure, the agreement line, credit, and B5's room remaining. Collapsed by default; expanded
-  whenever `Agreement.DIFFERS` or a credit is non-zero, because those are the guide's *things to be aware
-  of* and hiding them would be the one way this phase could do harm.
-- **The disclosure is a new widget.** `ui/composable/widgets/` has no expandable card today — the four
-  files that animate visibility each do it inline for their own case — so this phase writes
-  `DisclosureCard` beside `EmptyState` and `ErrorState`, taking a label, a default state and a content
-  slot. One widget rather than a sixth inline `AnimatedVisibility`, because Phase 7's renewal fold needs
-  the same thing.
-- The hide/reveal of finding 2, since it is the same card: an `IconButton` beside the figure, one tap to
-  hide, hold to reveal, the state in `rememberSaveable` and the preference in the group's own settings.
-  Hidden replaces the digits with `•` of the same width so the card does not resize. No PIN — the app has
-  none, and the guide calls it optional.
-- `ScreenStateTransition` already wraps this screen's `when`; the disclosure's own transition comes from
-  `MaterialTheme.motionScheme.defaultSpatialSpec` and honours `MaterialTheme.reducedMotion`.
-- **Tests**, `GroupWavelengthWalletScreenJvmTest`: collapsed by default and the four figures absent;
-  expanded on `DIFFERS` without a tap; expanded on a credit; hidden hides every figure on the card and
-  nothing else on the screen; the agreement line's three outcomes each render.
+- On the face of the card: the figure, what it is worth, and **one status line** — whether anybody
+  disagrees, or that nobody has reported yet. In the disclosure: pending, held, whoever-runs-the-wallet's
+  figure with its own currency line, a credit, and B5's room remaining. **This plan put the agreement
+  line inside the disclosure and also asked for "one status line" outside, which are not compatible;**
+  the agreement line *is* the status line, and it stays out, because the provenance of this balance is
+  the whole of U2 and must not be the thing a member goes looking for.
+- Collapsed by default, and it opens itself whenever `Agreement.DIFFERS` or a credit is non-zero — not
+  just at first composition. `openFor` reopens it if the figures start agreeing and later disagree,
+  which a once-only default would have missed, since `refreshFacts` fills the comparison in after the
+  card has already composed.
+- **The widget is `Disclosure`, not `DisclosureCard`.** Its one caller is already inside a `Card`, and a
+  card inside a card is two elevations saying one thing. A `ColumnScope` extension, so the label and the
+  content are siblings in the caller's column rather than a nested surface.
+- Hide and reveal: an `IconButton` beside the figure, one bullet per digit so the card does not change
+  size, and the local-currency line and the whole disclosure gone while it is hidden. **The warning
+  stays** — hiding is about who can read the screen over a member's shoulder, not about what the member
+  is told.
+- **No "hold to reveal", and the state is not persisted.** A long press with no affordance is
+  undiscoverable, and one tap already reveals. Persisting it needs a per-group preference store, which
+  the app does not have: `UserPrefs` and `InternalPrefs` are Phoenix's and per wallet, and there is no
+  dedun-side store to key by room. Writing one would answer **question 2** by implementation, so the
+  toggle lives in `rememberSaveable` and forgets when a member navigates away. That is the one place
+  this phase is thinner than the plan, and it is thinner on purpose.
+- **B5 is done here rather than in Phase 4.** `group_wavelength_receive_room_s` is deleted, not moved:
+  the receive screen's sentence was written for that screen, and the disclosure gets a shorter
+  `group_wavelength_room_s`. Doing it now avoids the figure standing in two places between phases.
+- The transition is `expandVertically` + `fadeIn` from `MaterialTheme.motionScheme` — spatial for the
+  height, effects for the fade — and under `MaterialTheme.reducedMotion` the section still appears and
+  disappears, it just stops growing.
+- **Tests**, `GroupWavelengthWalletScreenJvmTest`: all four figures absent until one tap brings all four
+  back; `DIFFERS` opens it with no tap; a credit opens it with no tap; hiding removes every figure on the
+  card and leaves the disagreement, the deadline and the card's label; the three agreement outcomes each
+  render, as they already did.
+- **Two things the build taught, both about the tools.** `said()` names its coins `a:0`, `b1:0`, …, so a
+  snapshot built with it never matches a ledger of named coins — a collapsed-state test written on that
+  fixture compares as `DIFFERS`, opens the disclosure and asserts nothing. And `m3-touch-targets.py`
+  reads a `.clickable`'s own line and the one above it, so `.minimumInteractiveComponentSize()` on the
+  line *below* reads as no minimum at all. The checker is left as it is: its window only ever produces a
+  false positive, and widening it could hide a real one.
 
-**Done when** the five cases pass and the card's collapsed height is one figure, one currency line and
-one sentence.
+**Done** on 8 November 2026: the five cases pass, and the card's collapsed height is one figure, one
+currency line and one sentence.
 
 ### Phase 4: one way in
 
@@ -616,8 +637,9 @@ The receive screen, restructured. B4, B5, and finding 9's three items.
 - `Rails` loses the `FilterChip` pair. The onchain items become the screen; the Lightning route becomes a
   `TextButton` with a two-line supporting label, navigating to a new `GroupWavelengthInvoiceRoute` whose
   screen is today's `lightningItems` with the warning first and `InvoiceAsk` under it.
-- `group_wavelength_receive_room_s` moves to the wallet screen's disclosure (Phase 3's card) and leaves
-  this screen.
+- ~~`group_wavelength_receive_room_s` moves to the wallet screen's disclosure (Phase 3's card) and
+  leaves this screen.~~ **Done in Phase 3,** which built the disclosure: the string is deleted rather
+  than moved, and the disclosure has a shorter `group_wavelength_room_s` of its own.
 - `QRCodeView` gains `contentDescription: String` as a required parameter — required, so every one of its
   call sites has to decide, which is the same argument `ScreenState.kt:60` makes for `onRetry`. Its **nine
   call sites across eight screens** each pass a label of the guide's form, so this one item reaches the
@@ -830,9 +852,11 @@ phones will.
    shipped the member's own Phoenix preference, so four members may read one balance in four currencies
    — right for each of them, and odd in a shared wallet when two of them compare screens in the room.
    Per-member, or one currency the group signs into the wallet's statement?
-2. **Whether the hide/reveal preference is per wallet or per app.** Phase 3 makes it per group wallet. A
-   member who wants balances hidden probably wants it everywhere, and *everywhere* is nine other screens
-   and a plan of its own.
+2. **Whether the hide/reveal preference is per wallet or per app, and whether it persists at all.**
+   *Sharpened by the build:* Phase 3 shipped the toggle without persistence, because the app has no
+   per-group preference store to write it to — `UserPrefs` and `InternalPrefs` are Phoenix's and per
+   wallet. So this is now two questions: where such a store should live, and whether hiding should
+   follow a member across the app's nine other wallet screens, which is a plan of its own.
 3. **The exit's location.** B10 leaves it under *Advanced* and names it on the health screen. The guide's
    Interested-phase question argues for it being answerable before a member commits — which would mean on
    the commitment screen, saying *this is how you leave if the group's devices stop answering*, about a

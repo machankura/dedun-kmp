@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -27,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -41,8 +44,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -69,6 +74,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
+import com.machankura.dedun.compose.ui.composable.widgets.Disclosure
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
@@ -119,8 +125,11 @@ import dedun.composeapp.generated.resources.group_wavelength_history_when_unknow
 import dedun.composeapp.generated.resources.wavelength_entry_s_dot_s
 import dedun.composeapp.generated.resources.group_wavelength_advanced
 import dedun.composeapp.generated.resources.group_wavelength_alarm_title
+import dedun.composeapp.generated.resources.group_wavelength_balance_details
+import dedun.composeapp.generated.resources.group_wavelength_balance_hide
 import dedun.composeapp.generated.resources.group_wavelength_balance_label
 import dedun.composeapp.generated.resources.group_wavelength_balance_none
+import dedun.composeapp.generated.resources.group_wavelength_balance_show
 import dedun.composeapp.generated.resources.group_wavelength_credit_s
 import dedun.composeapp.generated.resources.group_wavelength_deadline_expired
 import dedun.composeapp.generated.resources.group_wavelength_deadline_fine_s
@@ -129,6 +138,7 @@ import dedun.composeapp.generated.resources.group_wavelength_deadline_urgent_s
 import dedun.composeapp.generated.resources.group_wavelength_held_s
 import dedun.composeapp.generated.resources.group_wavelength_no_report
 import dedun.composeapp.generated.resources.group_wavelength_operator_says_s
+import dedun.composeapp.generated.resources.group_wavelength_room_s
 import dedun.composeapp.generated.resources.group_wavelength_payout_approved
 import dedun.composeapp.generated.resources.group_wavelength_pending_s
 import dedun.composeapp.generated.resources.pay_out
@@ -607,39 +617,88 @@ private fun AlarmCard(alarms: List<String>) {
     }
 }
 
-/** This device's own figure first, and the operator's beside it, since only one of them has been checked (U2). */
+/**
+ * A balance, which is what this card now reads as.
+ *
+ * Before this it was six figures of equal weight and no lead: this device's settled total, pending,
+ * held, whoever-runs-the-wallet's total, a credit, and the agreement between the first and the fourth.
+ * Every one of them is still here, and five of them are a tap away (B2 of
+ * `docs/group-wavelength-redesign.md`). What stays on the face of it is the figure this device signed
+ * for, what it is worth today, and **one line saying whether anybody disagrees** -- because the
+ * provenance of this balance is the point of U2 and must not be what a member has to go looking for.
+ *
+ * The disclosure opens itself when the figures disagree or a credit is sitting on the swap server.
+ * Folding those away would make this card a way to hide bad news, and they are exactly the guide's
+ * *things to be aware of*.
+ */
 @Composable
 private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, isPending: Boolean) {
     var isConfirmingLeave by remember { mutableStateOf(false) }
+    // Not persisted. A member who wants balances hidden wants it across visits and across the app's
+    // other nine wallets, and that is question 2 of the plan rather than something this card should
+    // settle by writing a preference nothing else reads.
+    var isHidden by rememberSaveable { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.group_wavelength_balance_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val ledger = state.ledger
+            val snapshot = state.snapshot
             if (ledger.isEmpty) {
                 Text(stringResource(Res.string.group_wavelength_balance_none), style = MaterialTheme.typography.bodyLarge)
             } else {
-                Text(stringResource(Res.string.s_sats, Satoshi(ledger.settledSat).grouped()), style = MaterialTheme.typography.headlineMedium)
-                LocalAmount(Satoshi(ledger.settledSat))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val figure = Satoshi(ledger.settledSat).grouped()
+                    Text(
+                        // One bullet per digit rather than a fixed mask, so the line keeps its length
+                        // and the card does not change size when a member hides it.
+                        stringResource(Res.string.s_sats, if (isHidden) "•".repeat(figure.length) else figure),
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { isHidden = !isHidden }) {
+                        Icon(
+                            if (isHidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = stringResource(if (isHidden) Res.string.group_wavelength_balance_show else Res.string.group_wavelength_balance_hide),
+                        )
+                    }
+                }
+                if (!isHidden) LocalAmount(Satoshi(ledger.settledSat))
             }
-            if (ledger.pendingSat > 0) {
-                Text(stringResource(Res.string.group_wavelength_pending_s, Satoshi(ledger.pendingSat).grouped()), style = MaterialTheme.typography.bodyMedium)
-            }
-            if (ledger.heldSat > 0) {
-                Text(stringResource(Res.string.group_wavelength_held_s, Satoshi(ledger.heldSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val snapshot = state.snapshot
-            if (snapshot == null) {
-                Text(stringResource(Res.string.group_wavelength_no_report), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                Text(stringResource(Res.string.group_wavelength_operator_says_s, Satoshi(snapshot.confirmedSat).grouped()), style = MaterialTheme.typography.bodyMedium)
-                when (state.comparison?.agreement) {
+            // The one line that stays out: who disagrees, or that nobody has said anything yet. It
+            // survives hiding, because hiding is about the digits and not about the warning.
+            when {
+                snapshot == null -> Text(stringResource(Res.string.group_wavelength_no_report), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> when (state.comparison?.agreement) {
                     GroupWavelengthReports.Agreement.MATCHES -> Text(stringResource(Res.string.group_wavelength_report_matches), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     GroupWavelengthReports.Agreement.DIFFERS -> Text(stringResource(Res.string.group_wavelength_report_differs), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     GroupWavelengthReports.Agreement.CANNOT_CONFIRM -> Text(stringResource(Res.string.group_wavelength_report_cannot_confirm), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     null -> Unit
                 }
-                if (snapshot.creditSat > 0) {
-                    Text(stringResource(Res.string.group_wavelength_credit_s, Satoshi(snapshot.creditSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            val roomLeftSat = GroupWavelengthRollout.capFor(chain)?.let { (it.sat - ledger.settledSat - ledger.pendingSat).coerceAtLeast(0) }
+            if (!isHidden) {
+                Disclosure(
+                    label = stringResource(Res.string.group_wavelength_balance_details),
+                    openFor = state.comparison?.agreement == GroupWavelengthReports.Agreement.DIFFERS || (snapshot?.creditSat ?: 0) > 0,
+                ) {
+                    if (ledger.pendingSat > 0) {
+                        Text(stringResource(Res.string.group_wavelength_pending_s, Satoshi(ledger.pendingSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (ledger.heldSat > 0) {
+                        Text(stringResource(Res.string.group_wavelength_held_s, Satoshi(ledger.heldSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (snapshot != null) {
+                        Text(stringResource(Res.string.group_wavelength_operator_says_s, Satoshi(snapshot.confirmedSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+                        LocalAmount(Satoshi(snapshot.confirmedSat))
+                        if (snapshot.creditSat > 0) {
+                            Text(stringResource(Res.string.group_wavelength_credit_s, Satoshi(snapshot.creditSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    // Off the receive screen and in here (B5): how much room is left says what the
+                    // wallet holds, and the receive screen is the one a member holds up to somebody else.
+                    roomLeftSat?.let {
+                        Text(stringResource(Res.string.group_wavelength_room_s, Satoshi(it).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
             // Whoever runs the wallet makes the address, so there's nothing to ask while nobody does.
