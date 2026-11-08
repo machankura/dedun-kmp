@@ -16,6 +16,11 @@ import com.machankura.dedun.compose.wallet.GroupChainClients
 import com.machankura.dedun.compose.wallet.confirmationsOf
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.wallet.standingOf
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.group_wavelength_alert_deadline_s
+import dedun.composeapp.generated.resources.group_wavelength_alert_deadline_title
+import dedun.composeapp.generated.resources.group_wavelength_alert_devices_s
+import dedun.composeapp.generated.resources.group_wavelength_alert_devices_title
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.TxId
@@ -36,6 +41,7 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import org.jetbrains.compose.resources.getString
 
 /**
  * Sees for itself what became of each round this device signed for, on its own connection to the chain and never on the word of
@@ -52,6 +58,11 @@ class GroupArkWatcher(
     private val database: DedunDatabase,
     private val clients: GroupChainClients,
     private val scope: CoroutineScope,
+    /**
+     * Where an urgent fact goes besides the room (B7). [GroupWavelengthAlerts.None] on a platform
+     * without notifications, and in a test, which is what keeps this class drivable without one.
+     */
+    private val alerts: GroupWavelengthAlerts = GroupWavelengthAlerts.None,
 ) {
     private val logger = Logger.withTag("GroupArkWatcher")
     private var job: Job? = null
@@ -87,6 +98,15 @@ class GroupArkWatcher(
      * Says in the room when a coin this device signed for is running out of time, by this device's own count and whatever the operator
      * says: an operator can let renewal slip, or lie about it, and that's when this matters (D11). Each level of each coin's deadline
      * gets one line, and it names who hasn't answered lately, since that's who can do something about it.
+     *
+     * **And interrupts the member for the two of those worth interrupting them for** (B7). Which two is
+     * [GroupWavelengthAlert]'s decision; this pass has had both facts all along -- the tip, the earliest
+     * deadline and who has answered -- and until now did nothing with them but write a line a member
+     * sees if they open the group.
+     *
+     * The alert fires only where the line was **new**, which is what `writeFact` returning false
+     * means. So the de-duplication is the fact key's, `"$key:$earliest:$level"`: once per deadline per
+     * level, and nothing kept anywhere to say what has already been said.
      */
     suspend fun deadlinePass() {
         database.groupArkDao().walletsWithCoins().forEach { key ->
@@ -96,22 +116,65 @@ class GroupArkWatcher(
             val tip = clients.clientFor(chain).startHeaderSubscription().blockHeight.toLong()
             val free = GroupWavelengthTerms.of(chain)?.freeRefreshWindowBlocks ?: 0
             val expiry = WalletExpiry.ofHeight(earliest, tip, free)
-            val level = when (expiry) {
-                is WalletExpiry.Renewing -> "renewing"
-                is WalletExpiry.Urgent -> "urgent"
-                WalletExpiry.Expired -> "expired"
-                else -> return@forEach
-            }
             val reader = database.chatRoomDao().findChatRoomById(roomId)?.chatRoom?.userPublicKey ?: return@forEach
             val left = earliest - tip
             val when_ = if (left > 0) "within ${BlockDuration.describe(left)}" else "now, or the Ark operator can take them back"
             val quiet = quietSigners(roomId, key)
-            GroupLightningLines.writeFact(
-                database, roomId, ChatMessage.TYPE_WAVELENGTH_DEADLINE, "$key:$earliest:$level", reader,
-                "Coins in the Wavelength wallet need renewing $when_." + if (quiet.isEmpty()) "" else " Not heard from lately: ${quiet.joinToString()}.",
-                Clock.System.now(),
-            )
+            val triggers = GroupWavelengthAlert.triggers(expiry, left, readyForARound = readyForARound(roomId, key, quiet.size))
+
+            val level = when (expiry) {
+                is WalletExpiry.Renewing -> "renewing"
+                is WalletExpiry.Urgent -> "urgent"
+                WalletExpiry.Expired -> "expired"
+                else -> null
+            }
+            if (level != null) {
+                val fresh = GroupLightningLines.writeFact(
+                    database, roomId, ChatMessage.TYPE_WAVELENGTH_DEADLINE, "$key:$earliest:$level", reader,
+                    "Coins in the Wavelength wallet need renewing $when_." + if (quiet.isEmpty()) "" else " Not heard from lately: ${quiet.joinToString()}.",
+                    Clock.System.now(),
+                )
+                if (fresh && GroupWavelengthAlert.Trigger.DEADLINE in triggers) {
+                    alerts.post(
+                        key = "$key:$earliest:deadline",
+                        title = getString(Res.string.group_wavelength_alert_deadline_title),
+                        text = getString(Res.string.group_wavelength_alert_deadline_s, when_.replaceFirstChar { it.uppercase() }),
+                    )
+                }
+            }
+
+            // Its own line, because the deadline line above is only written once the coins are inside
+            // the operator's free window -- about four days -- and the lead time before that is the
+            // whole value of this one.
+            if (GroupWavelengthAlert.Trigger.DEVICES in triggers) {
+                val fresh = GroupLightningLines.writeFact(
+                    database, roomId, ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET, "$key:$earliest:devices", reader,
+                    "Too few of the group's devices have answered for a round to work, and the Wavelength wallet's coins need renewing $when_." +
+                        if (quiet.isEmpty()) "" else " Not heard from lately: ${quiet.joinToString()}.",
+                    Clock.System.now(),
+                )
+                if (fresh) {
+                    alerts.post(
+                        key = "$key:$earliest:devices",
+                        title = getString(Res.string.group_wavelength_alert_devices_title),
+                        text = getString(Res.string.group_wavelength_alert_devices_s, when_),
+                    )
+                }
+            }
         }
+    }
+
+    /**
+     * Whether enough of the group's devices have answered for a round: `2t-1` of them have to.
+     *
+     * Counted off [quiet], which is a day's silence rather than the hour the wallet screen reads. A
+     * phone asleep overnight is not a device that has gone quiet, and this is deciding whether to wake
+     * somebody up.
+     */
+    private suspend fun readyForARound(roomId: String, key: String, quiet: Int): Boolean {
+        val (chain, number) = GroupArkCoSigner.parseWalletKey(roomId, key) ?: return true
+        val wallet = GroupWavelengthWalletManager.wallets(database, roomId, chain).firstOrNull { it.statement.wallet == number } ?: return true
+        return wallet.statement.participants.size - quiet >= 2 * wallet.statement.threshold - 1
     }
 
     private suspend fun quietSigners(roomId: String, key: String): List<String> {

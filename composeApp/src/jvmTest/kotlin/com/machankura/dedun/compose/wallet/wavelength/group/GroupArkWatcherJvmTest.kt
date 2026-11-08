@@ -8,8 +8,10 @@ import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkFee
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
+import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.managers.GroupArkCoSigner
 import com.machankura.dedun.compose.managers.GroupLightningFixture
+import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.wallet.GroupChainClients
 import fr.acinq.bitcoin.Block
 import fr.acinq.bitcoin.BlockHeader
@@ -239,12 +241,34 @@ class GroupArkWatcherJvmTest {
         assertTrue(vtxo(newCoin)!!.settled)
     }
 
-    /** A real room, since a line in the transcript needs one. */
-    private fun <T> inARoom(block: suspend (GroupLightningFixture, GroupLightningFixture.Device, GroupArkWatcher) -> T) = runBlocking<Unit> {
+    /** What the platform was asked to say, in order: title and text, as a member would read them. */
+    private val said = mutableListOf<Pair<String, String>>()
+    private val recording = GroupWavelengthAlerts { _, title, text -> said += title to text }
+
+    /**
+     * A real room, since a line in the transcript needs one.
+     *
+     * [withWallet] also opens a Wavelength wallet, which the **devices** trigger needs and the deadline
+     * trigger does not: without a statement this device can read there is no threshold to compare a
+     * quorum against, and `readyForARound` says yes rather than alarming about a wallet it cannot read.
+     */
+    private fun <T> inARoom(
+        withWallet: Boolean = false,
+        block: suspend (GroupLightningFixture, GroupLightningFixture.Device, GroupArkWatcher) -> T,
+    ) = runBlocking<Unit> {
+        said.clear()
         val fixture = GroupLightningFixture()
         try {
-            val device = fixture.group()[0]
-            block(fixture, device, GroupArkWatcher(device.db, GroupChainClients.single(electrum), CoroutineScope(Dispatchers.Default)))
+            val all = fixture.group()
+            if (withWallet) {
+                fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+                val session = GroupWavelengthWalletManager.proposeWallet(
+                    all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, fixture.chain, "02" + "ab".repeat(32),
+                )
+                fixture.signSession(all, all[0], session.id)
+            }
+            val device = all[0]
+            block(fixture, device, GroupArkWatcher(device.db, GroupChainClients.single(electrum), CoroutineScope(Dispatchers.Default), recording))
         } finally {
             fixture.close()
         }
@@ -271,6 +295,104 @@ class GroupArkWatcherJvmTest {
         coinExpiring(fixture, device, CONNECTED_AT + 100_000L)
         watching.deadlinePass()
         assertEquals(0, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE).size)
+    }
+
+
+    // ---------------------------------------------------------------------
+    // The two things worth interrupting a member for (B7).
+    // ---------------------------------------------------------------------
+
+    /**
+     * The deadline trigger, and the de-duplication that comes with it for nothing: the alert fires only
+     * where the room line was **new**, so the fact key is what stops a member being told twice.
+     */
+    @Test
+    fun `a coin near its deadline is said once, out loud as well as in the room`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100L)
+        watching.deadlinePass()
+        watching.deadlinePass()
+        assertEquals(1, said.size, "once per deadline per level, which is the fact key's doing")
+        assertEquals("The group's coins need renewing", said.single().first)
+        assertTrue("depends on the Ark operator" in said.single().second, said.single().second)
+    }
+
+    /** Past the deadline is a second level, and so a second thing to say. */
+    @Test
+    fun `passing the deadline is said again`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100L)
+        watching.deadlinePass()
+        electrum.tip = CONNECTED_AT + 101
+        watching.deadlinePass()
+        assertEquals(2, said.size)
+    }
+
+    /** A wallet in good order interrupts nobody, which is the case that keeps the channel worth reading. */
+    @Test
+    fun `a coin with plenty of time says nothing out loud`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 100_000L)
+        watching.deadlinePass()
+        assertEquals(emptyList(), said)
+    }
+
+    /**
+     * The devices trigger's own line and its own alert.
+     *
+     * The fixture's devices have never answered, so a round cannot be made. At nine days out the
+     * deadline line is not written at all -- the operator's free window is 648 blocks -- which is
+     * exactly why this trigger has a line of its own.
+     */
+    @Test
+    fun `quiet devices with coins inside a fortnight are said, before the deadline line exists`() = inARoom(withWallet = true) { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 1_500L)
+        watching.deadlinePass()
+        assertEquals(0, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEADLINE).size, "nine days out is not a deadline line")
+        val quiet = fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET)
+        assertEquals(1, quiet.size)
+        assertTrue("Too few of the group's devices have answered" in quiet.single().content, quiet.single().content)
+        assertEquals(1, said.size)
+        assertEquals("The group's devices have gone quiet", said.single().first)
+    }
+
+    /** And said once, for the same reason the deadline is. */
+    @Test
+    fun `quiet devices are said once per deadline`() = inARoom(withWallet = true) { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 1_500L)
+        watching.deadlinePass()
+        watching.deadlinePass()
+        assertEquals(1, said.size)
+        assertEquals(1, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET).size)
+    }
+
+    /** Quiet devices with coins a month out are a line on the checklist, not an interruption. */
+    @Test
+    fun `quiet devices with coins well outside a fortnight say nothing`() = inARoom(withWallet = true) { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 5_000L)
+        watching.deadlinePass()
+        assertEquals(emptyList(), said)
+        assertEquals(0, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET).size)
+    }
+
+    /** A wallet holding nothing has no deadline to miss. */
+    @Test
+    fun `a wallet with no coins says nothing`() = inARoom { _, _, watching ->
+        watching.deadlinePass()
+        assertEquals(emptyList(), said)
+    }
+
+
+    /**
+     * A wallet whose statement this device cannot read alarms nobody about its devices.
+     *
+     * There is no threshold to compare a quorum against, so `readyForARound` says yes. Alarming would
+     * mean telling a member their group has gone quiet on the strength of something this device has
+     * never been able to read.
+     */
+    @Test
+    fun `a wallet this device holds no statement for says nothing about its devices`() = inARoom { fixture, device, watching ->
+        coinExpiring(fixture, device, CONNECTED_AT + 1_500L)
+        watching.deadlinePass()
+        assertEquals(emptyList(), said)
+        assertEquals(0, fixture.lines(device, ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET).size)
     }
 
     private suspend fun boardedRound(amountSaid: Long, chatRoom: String = "room") {

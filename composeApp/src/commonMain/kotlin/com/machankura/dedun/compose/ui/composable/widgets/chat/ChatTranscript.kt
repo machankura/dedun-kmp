@@ -988,6 +988,7 @@ private fun RitualNotice(
         ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION -> Icons.Default.Warning
         ChatMessage.TYPE_WAVELENGTH_ROUND_DIED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_WAVELENGTH_DEADLINE -> Icons.Default.Warning
+        ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET -> Icons.Default.Warning
         ChatMessage.TYPE_WAVELENGTH_OPERATOR_STOPPED -> Icons.Default.PowerSettingsNew
         ChatMessage.TYPE_WAVELENGTH_PAID_OUT -> Icons.Default.CallMade
 
@@ -1019,6 +1020,7 @@ private fun RitualNotice(
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_REFUSED ||
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION ||
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEADLINE ||
+            chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET ||
             chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ->
             MaterialTheme.colorScheme.error
         isRequest -> MaterialTheme.colorScheme.primary

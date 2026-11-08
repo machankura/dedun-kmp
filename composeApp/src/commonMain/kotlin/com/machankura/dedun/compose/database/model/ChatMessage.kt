@@ -688,6 +688,17 @@ data class ChatMessage(
         const val TYPE_WAVELENGTH_DEADLINE = "wavelengthDeadline"
         const val TYPE_WAVELENGTH_OPERATOR_STOPPED = "wavelengthOperatorStopped"
 
+        /**
+         * Too few of the group's devices have answered for a round to work, while the coins need
+         * renewing inside a fortnight. Keyed on the deadline, so it is said once per deadline.
+         *
+         * Its own line rather than a clause on the deadline line, because the deadline line is only
+         * written once the coins are inside the operator's free window -- 648 blocks, about four days
+         * -- and the whole value of this one is the lead time before that
+         * (`docs/group-wavelength-redesign.md`, B7).
+         */
+        const val TYPE_WAVELENGTH_DEVICES_QUIET = "wavelengthDevicesQuiet"
+
         /** An onchain payout this device saw leave in a round that confirmed, keyed on the approval's id (docs/group-wavelength-payouts.md). */
         const val TYPE_WAVELENGTH_PAID_OUT = "wavelengthPaidOut"
 
@@ -699,6 +710,7 @@ data class ChatMessage(
             TYPE_WAVELENGTH_DEADLINE,
             TYPE_WAVELENGTH_OPERATOR_STOPPED,
             TYPE_WAVELENGTH_PAID_OUT,
+            TYPE_WAVELENGTH_DEVICES_QUIET,
         )
 
         /** The ones a member should see on the wallet's screen as well. */

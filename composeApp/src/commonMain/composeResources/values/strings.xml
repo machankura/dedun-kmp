@@ -1473,6 +1473,10 @@
     <string name="group_wavelength_commitment_understood">I understand, and the group can open it</string>
     <string name="group_wavelength_commitment_not_yet">Not yet</string>
     <string name="group_wavelength_health_leaving">If the group's devices stop answering, a unilateral exit is what is left: your device publishes the coins to the chain by itself and waits out a delay. It has never been run on any network, and it costs onchain fees.</string>
+    <string name="group_wavelength_alert_deadline_title">The group's coins need renewing</string>
+    <string name="group_wavelength_alert_deadline_s">%1$s. Once they pass their deadline, getting them back depends on the Ark operator rather than on the group.</string>
+    <string name="group_wavelength_alert_devices_title">The group's devices have gone quiet</string>
+    <string name="group_wavelength_alert_devices_s">The coins need renewing %1$s, and too few of the group's devices have answered for a round to work. Ask the group to open Dedun.</string>
     <string name="group_wavelength_health_title">The wallet's health</string>
     <string name="group_wavelength_health_all_fine">Everything is in order</string>
     <string name="group_wavelength_health_coins">The coins' deadline</string>

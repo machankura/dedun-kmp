@@ -62,8 +62,11 @@ internal object GroupLightningLines {
         reportedBy: HexKey,
         content: String,
         createdAt: Instant,
-    ) {
-        if (database.chatMessageDao().getLightningFactLine(chatRoomId, messageType, factKey) != null) return
+    ): Boolean {
+        // The return says whether this was new, which is what lets a caller notify exactly once about
+        // a fact without keeping a second record of what it has notified about. Callers that only
+        // want the line ignore it, as they always have.
+        if (database.chatMessageDao().getLightningFactLine(chatRoomId, messageType, factKey) != null) return false
         val reader = database.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.userPublicKey
         database.chatMessageDao().upsert(
             ChatMessage(
@@ -79,5 +82,6 @@ internal object GroupLightningLines {
                 createdAt = createdAt,
             )
         )
+        return true
     }
 }

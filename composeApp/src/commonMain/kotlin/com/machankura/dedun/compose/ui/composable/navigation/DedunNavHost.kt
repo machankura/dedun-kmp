@@ -234,6 +234,7 @@ import com.machankura.dedun.compose.wallet.IdentityElectrum
 import com.machankura.dedun.compose.wallet.GroupTransactionWatcher
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkWatcher
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthProcess
+import com.machankura.dedun.compose.wallet.wavelength.group.groupWavelengthAlerts
 import fr.acinq.phoenix.managers.NodeParamsManager
 import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposalListRoute
@@ -506,7 +507,7 @@ fun DedunNavHost(
     // same lifetime: without it, a device never spends a group's Wavelength coin.
     val groupArkWatcher = remember(groupChainClients) {
         groupChainClients?.let {
-            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope).also { watcher -> watcher.start() }
+            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope, groupWavelengthAlerts(dedunGlobal.platformContext)).also { watcher -> watcher.start() }
         }
     }
     DisposableEffect(groupArkWatcher) {

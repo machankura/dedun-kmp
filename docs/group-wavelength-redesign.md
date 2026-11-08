@@ -5,11 +5,11 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026 and built on the same day, in the order 1-5, 7, 8, 10, 9, then the store.**
-Nine of the ten phases are complete. **Phase 6's notification is not** — see *What Phase 6 left, and what
-looking properly found*, where the first reason given for that turned out to be wrong twice. It is the
-one piece still waiting on a decision, and the decision is now a choice between three sizes rather than
-a question about whether it can be done at all. Phases 3 and 10 were each completed afterwards by the
+**Planned on 8 November 2026 and built on the same day, in the order 1-5, 7, 8, 10, 9, the store, then
+Phase 6's notification.** All ten phases are complete, and so is Phase 6's notification, which
+was left out at first for a reason that turned out to be wrong twice — *What Phase 6 left, and what
+looking properly found* is the account of that, and is the part of this document most worth reading. The
+notification says nothing on desktop or iOS, which is the one platform gap left. Phases 3 and 10 were each completed afterwards by the
 per-group-wallet store they had both been blocked on, which answered questions 2 and 6 (see *The store,
 afterwards*). Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
@@ -726,11 +726,11 @@ B6. Twenty-five messages, five retries, and one `else` branch deleted.
 **Done** on 8 November 2026: no state on these screens says only what happened, and no two say the same
 thing.
 
-### Phase 6: the wallet's health, said before it is urgent — **the screen is built; the notification is not**
+### Phase 6: the wallet's health, said before it is urgent — **built**
 
-B7's first paragraph is built. Its second is not, and **the reason first written here was wrong**: the
-trigger is already evaluated every thirty minutes, and the app already does background networking twice.
-What is outstanding is delivery. See *What Phase 6 left, and what looking properly found* below.
+B7's first paragraph is the checklist below. Its second — the notification — was left out at first for a
+reason that turned out to be wrong twice, and was built afterwards once the reading was done. **How it
+was got wrong is worth more than the feature:** see *What Phase 6 left, and what looking properly found*.
 
 - `GroupWavelengthHealth` is a pure object in `wallet/wavelength/group/`, not a view model: five items,
   each `FINE`, `ATTENTION` or `PROBLEM`, each with a `Fix`, derived entirely from
@@ -761,7 +761,8 @@ What is outstanding is delivery. See *What Phase 6 left, and what looking proper
 
 #### What Phase 6 left, and what looking properly found
 
-The notification is not built. **The reason first given here was wrong, in the way worth recording:**
+The notification is built now, as options 1 and 2 below. **The reason first given here for leaving it
+out was wrong, in the way worth recording:**
 this section said the trigger *cannot be evaluated in a periodic worker without a background-networking
 decision this plan did not make*. Both halves of that are false, and finding out took one afternoon of
 reading that Phase 6 should have done before writing the paragraph.
@@ -805,11 +806,63 @@ party the warning is about — an operator who wanted the coins to expire need o
 This wallet's whole principle is that the operator's figures are not what a decision reads, and a
 deadline warning is the decision where that matters most.
 
+#### Both options, as built
+
+**Option 1 — `GroupArkWatcher` says it out loud.** The pass that already wrote the room line now also
+posts, and the de-duplication came free: **the alert fires only where `writeFact` returned true**, so
+the fact key `"$walletKey:$earliest:$level"` is what stops a member being told twice, and nothing new is
+stored to remember what has been said. `writeFact` gained a `Boolean` return for that, which callers
+that only want the line ignore.
+
+- `GroupWavelengthAlert.triggers` is the rule, as a pure function, with nine cases. Both triggers are
+  B7's exactly: coins inside `Urgent` or past it, and **too few devices for a round with coins inside a
+  fortnight**.
+- **The devices trigger reads the blocks, not the level,** which the plan did not say and the arithmetic
+  forced: the operator's free-renewal window is 648 blocks and a fortnight is 2016, so most of the lead
+  time this trigger exists for sits at a level of `Fine` — which `deadlinePass` used to return early on.
+- **So it has a room line of its own,** `TYPE_WAVELENGTH_DEVICES_QUIET`, rather than a clause on the
+  deadline line, because the deadline line does not exist yet at nine days out. This app records a fact
+  in the room and then notifies about it; an alert with no line would be the only one a member cannot go
+  back and read.
+- "Ready for a round" is counted off a **day's** silence, not the hour the wallet screen reads. A phone
+  asleep overnight is not a device that has gone quiet, and this is deciding whether to wake somebody.
+- A wallet whose statement this device cannot read alarms nobody: there is no threshold to compare a
+  quorum against, and telling a member their group has gone quiet on the strength of something this
+  device has never read would be worse than silence. Asserted.
+- `GroupWavelengthAlerts` is a `fun interface`, not an `expect` on the watcher, so the watcher stays
+  something a test drives: the test hands it a recording implementation and asserts the words. Android
+  posts on its **own** `IMPORTANCE_HIGH` channel — `GroupWavelengthService`'s is `IMPORTANCE_LOW` and
+  says *this device is running the wallet*, and a member who silences a persistent notification must not
+  thereby silence this one. The notification id is the fact key's hash, so a repeat replaces rather than
+  stacks.
+- **Desktop and iOS say nothing,** and this is the one platform gap left in B7. Desktop has no
+  notification surface this app has built. iOS needs `UNUserNotificationCenter` authorisation, which is
+  a prompt that belongs somewhere a member can see what it is for and not in a watcher — a prompt's
+  worth of work, not a design question. The room line is written on both.
+
+**Option 2 — `GroupWavelengthHealthWorker`, for the member whose app is closed.** Option 1 reaches a
+member whose process is alive, which on the operator's device the foreground service makes always and
+on everybody else's means *while they are using the app* — precisely when they do not need telling.
+
+- **Nothing is reimplemented.** The worker assembles the three things `deadlinePass` needs and lets it
+  run: the aux database (a platform context and nothing else), an Electrum client, and the notifier.
+- **It decrypts nothing and opens no wallet.** The tip is public data, so the client needs only the
+  member's Tor setting and their custom server — two `UserPrefs` flows, exactly as
+  `WavelengthMaintenanceWorker` already reads them. It is the same `StandaloneElectrum` the app's own
+  wallets watch on, so the same server choice and the same refusal of a clearnet server under Tor.
+- **It returns before opening a socket where this device holds no group coins,** which is what makes it
+  honest to schedule on every member's phone. That is the path the device test asserts — twice, because
+  a periodic worker's second run is the one that finds the database already built — rather than the
+  happy one, which `GroupArkWatcherJvmTest` already covers against a fake Electrum and a real room.
+- Twelve hours, beside `ChannelsWatcher`'s 36 and `WavelengthMaintenanceWorker`'s 24. The deadline it
+  watches is two days of blocks, so four looks before a member runs out of time to act on the first. A
+  failed look returns success: a member whose Electrum server is down still wants telling tomorrow.
+
 **What this means for the plan's own claim.** *Order* says the cheapest useful stopping point after 6
 is that *the wallet stops relying on a member opening a screen to learn that its coins are expiring*.
-With the room line it already relies on a member opening the **group** rather than the wallet screen,
-which is less than the claim and more than this section first said. Option 1 makes it true for a member
-whose app is alive; option 2 makes it true.
+That is now true on Android, app open or closed. On desktop and iOS it still relies on a member opening
+the **group**, which is where the room line is — less than the claim, and more than this section first
+said.
 
 ### Phase 7: a history a group can account for — **built**
 
