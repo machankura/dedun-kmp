@@ -4,9 +4,11 @@ How @Bob, last out of the group's Wavelength wallet with 4,036 sats of a 4,048-s
 3,017 sats today instead of being told to deposit 988 more. The wallet keeps the 1,000 sats its
 operator insists on as change, and nobody's money moves but @Bob's.
 
-**Not built. Written on 8 November 2026 against `16a9ed87`,** from the same mainnet room as
-[group-wavelength-closing-payout.md](./group-wavelength-closing-payout.md). Nothing here has run,
-and every file and line it names is as it stood that day.
+**Phases 1 to 3 built on 8 November 2026,** from `16a9ed87`, for the same mainnet room as
+[group-wavelength-closing-payout.md](./group-wavelength-closing-payout.md). `jvmTest` and
+`m3Audit` pass. **Phase 4's run on a real phone against the real operator has not happened**, so
+no payout planned here has yet been paid: every figure below is this device's arithmetic, not a
+transaction. What the build changed from the plan is in *what the build found*.
 
 **What this is, in one line.** A payout is offered for the member's whole balance and refused when
 that would leave the operator too little change. This note offers the *most the wallet can spend*
@@ -20,7 +22,42 @@ live bug, because the branch it deletes offers a sole member a payout that is us
 
 | phase | state |
 |---|---|
-| 0 to 4 | not started |
+| 1 the ceiling | built, `ce683f26` |
+| 2 both offers | built, `2d6e22da` |
+| 3 the screens | built, `325a9d35` |
+| 4 the room, by hand | **not run**: needs a phone, the mainnet operator and the room's own coins |
+
+## What the build found
+
+**B2's bug is real, and a property test is what found it.** The first draft of B1 had a second
+branch letting a member whose balance covers the whole wallet take all of it, to preserve what the
+code did. Walking every wallet up to 5,000 sats against every fee up to a 2,000-sat limit found
+308,000 unsafe offers under that branch and none under the flat ceiling. B2 and the risks table were
+rewritten from the result; the branch is gone and a guard test pins the shape it rejects. **The
+quantifier over fees is the whole value of that test** -- the bug is invisible at `maxFeeSat` alone,
+which is the one fee an example-based test would have picked.
+
+**`changeShortSat` became `operatorTakes` rather than being deleted outright** (B4 said delete). The
+*figure* it returned had one caller, a message telling somebody to deposit into a wallet nobody
+could get money out of, and that is gone. The *rule* it encoded is the operator's and is what every
+test holds the ceiling to, so it stayed as a predicate. A predicate also cannot be mistaken for
+something to offer.
+
+**B6 is right about the reasons and wrong about which one the end state gives.** Where the wallet is
+down to the operator's change and a balance of 988 sats is still on the row, *both* bounds bind: the
+wallet can spare nothing, and 988 sats could not carry a round in any wallet. So the row gives the
+balance's reason, `TooLittle`, which is the one that names a figure somebody could act on. What says
+those sats are the operator's and not theirs is B8's line, and that is why B8 is a separate row
+rather than a wording of B6.
+
+**Phase 2 had to touch the screen.** Deleting `LeavesTooLittle` breaks an exhaustive `when`, so the
+screen's dead branches and the new `WalletTooSmall` string went in with the view model. Phase 3 kept
+the held-back line and the end-state row, which is where the reasoning is.
+
+**The test fixtures assumed a wallet of nothing.** `loaded(...)` and `render(...)` defaulted
+`inWalletSat` to 0 while handing a member a balance of 10,000, which no ledger would produce and
+which the ceiling reads as an empty wallet. Both now default to the balance plus `MIN_CHANGE_SAT`,
+so a test that wants the ceiling to bite says so. Worth knowing before adding a test here.
 
 ## The deadlock, and why it is cheap to break
 
@@ -319,11 +356,13 @@ no button in it. `./gradlew :composeApp:m3Audit` clean.
 - **The refusal that matters:** a device on the build before this one is shown the approval and signs
   it, since it is an ordinary payout. If it refuses, B9's "no gate" is wrong and the note needs one.
 - `group-wavelength-payouts.md`: the last row of its risks table stops saying nothing can take the
-  last of it, and names both this note and the closing payout.
-- `group-wavelength-closing-payout.md`: its deadlock section says the 3,048 sats come out first by
-  this note, so what it is planning for is the last 1,000 and not 4,048. Its question 4 — whether
-  `closesWallet` opens on mainnet early — **loses most of its urgency**, which is worth saying there.
-- The docs README gets this note's row.
+  last of it, and names both this note and the closing payout. **Done.**
+- The docs README gets this note's row. **Done.**
+- `group-wavelength-closing-payout.md`: its deadlock section should say the 3,048 sats come out
+  first by this note, so what it is planning for is the last 1,000 and not 4,048, and its question 4
+  — whether `closesWallet` opens on mainnet early — **loses most of its urgency**. **Not done:** that
+  note is still an uncommitted draft, and editing somebody's draft in place is not this phase's to
+  do. It is a few lines for whoever commits it.
 
 **Done when** the room's wallet holds 1,000 sats, the transaction is linked here, and the two
 sibling notes agree with the code.
