@@ -51,6 +51,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -554,8 +556,15 @@ private fun PayoutPreview(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // The guide asks for feedback through more than one sense on the actions that matter, and
+            // this is the other of the two on these screens a member cannot take back by themselves
+            // (Phase 9). The snackbar that follows it arrives as the screen navigates away.
+            val haptics = LocalHapticFeedback.current
             Button(
-                onClick = onPropose,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onPropose()
+                },
                 enabled = built != null && viewModel.usageProblem(built) == null && !viewModel.isActionPending.value,
             ) { Text(stringResource(Res.string.ask_the_group_to_pay_out)) }
         }

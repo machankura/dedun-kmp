@@ -56,7 +56,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -905,6 +908,7 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
     // other nine wallets, and that is question 2 of the plan rather than something this card should
     // settle by writing a preference nothing else reads.
     var isHidden by rememberSaveable { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.containerPadding), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
             Text(stringResource(Res.string.group_wavelength_balance_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -996,6 +1000,11 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                     confirmButton = {
                         TextButton(onClick = {
                             isConfirmingLeave = false
+                            // The guide asks for feedback through more than one sense on the actions
+                            // that matter. Asking the group to pay you out is one of the two things on
+                            // these screens a member cannot take back by themselves, and a snackbar
+                            // that arrives as the screen navigates away is easy to miss (Phase 9).
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             onLeave()
                         }) { Text(stringResource(Res.string.group_wavelength_leave_ask)) }
                     },
@@ -1097,7 +1106,10 @@ private fun SignersCard(state: GroupWavelengthWalletUIState.Opened) {
                 val name = if (participant == state.userPublicKey.lowercase()) stringResource(Res.string.you)
                 else state.localChatRoom.localParticipants.firstOrNull { it.participant.participantPublicKey.lowercase() == participant }?.profile?.humanReadableNameOrPubkey() ?: participant.take(16)
                 val at = state.seen[participant]
-                Column {
+                // Merged, so a screen reader says "Zanele, seen in the last hour" as one thing. Four
+                // members were eight unrelated strings before this, read in a row with nothing to say
+                // which half belonged to whom (Phase 9).
+                Column(modifier = Modifier.semantics(mergeDescendants = true) {}) {
                     Text(name, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         stringResource(

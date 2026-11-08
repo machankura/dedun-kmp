@@ -5,7 +5,10 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 5, 7 and 8 are built, Phases 6 and 10 in part; Phase 9 is not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026 and built on the same day, in the order 1-5, 7, 8, 10, 9.** Eight of the
+ten phases are complete; **Phase 6's notification and Phase 10's acknowledgement record are not**, each
+for a reason stated in its own section, and each leaving an owner's question open rather than answering
+it by implementation. Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -856,25 +859,48 @@ B9. One control on the entry detail, one new pure file, and nothing else on the 
 **Done** on 8 November 2026: each of the seven kinds' receipts names its provenance, and the one kind
 that can never prove itself says so.
 
-### Phase 9: read aloud, and at twice the size
+### Phase 9: read aloud, and at twice the size — **built**
 
-The guide's accessibility chapter against these seven screens, after the layout has settled. Deliberately
-last: a pass done before Phases 3, 4 and 6 would be redone by them.
+The guide's accessibility chapter against these screens, after the layout settled. Last of the ten, and
+the ordering earned itself: Phase 3 rebuilt the balance card, Phase 4 rebuilt the receive screen and
+Phase 6 added a screen the plan's list of three does not mention.
 
-- Every screen at the system's largest text size, on a 320dp-wide window. The balance card, the
-  commitment screen's six sentences and the advanced screen's terms are the three expected to break.
-- Every screen through TalkBack: reading order, the `SignersCard`'s per-member two-line rows, which read
-  as six unrelated strings today, and the `ExpandableCard`'s state.
-- Multi-sensory feedback where the guide asks for it: the *Copy* confirmations are already a snackbar, and
-  a payout proposal's success is not. One `LocalHapticFeedback` on the two actions that commit the group —
-  proposing a payout, proposing to leave.
-- **Tests:** `androidInstrumentedTest` cases for the three screens at the largest text size; the
-  reading-order fixes asserted in `jvmTest` through semantics, which is where the existing screen tests
-  already read. **This phase owns adding the Compose device-test harness** — `ui-test-junit4` and
-  `ui-test-manifest` — which `androidInstrumentedTest` does not have today, and it inherits Phase 4's
-  one gap with it: the Android brightness `actual`, which is written and unverified.
+- **The font-scale cases are `jvmTest`, not the `androidInstrumentedTest` the plan named.** Font scale
+  is `LocalDensity`, which a desktop test provides as easily as a device does, and a window 320dp wide
+  is `runDesktopComposeUiTest`'s own argument. So what the plan expected to need an emulator needed
+  neither one nor the device harness — and the cases run in the ordinary suite rather than behind an
+  instrumentation flag, which is the difference between a check that runs and one that could.
+- The three the plan expected to break hold at twice the text in 320dp: the balance card with its
+  figure, currency line, status line and disclosure; the commitment screen's six sentences and two
+  choices; the advanced screen's terms. **A fourth was added** — Phase 6's checklist, which did not
+  exist when the three were listed.
+- `SignersCard`'s rows are merged, so a member reads as one thing. Four members were eight unrelated
+  strings read out in a row with nothing to say which half belonged to whom.
+- **What a merged node can and cannot be asserted about, which cost a wrong test first:** a merged node
+  still reports each of its descendants' texts, so *nothing is the seen line alone* is not a thing the
+  semantics tree can be asked. What tells merged from unmerged is **one node matching two texts**, and
+  that is what the test does.
+- A haptic on the two actions that commit the group — asking to be paid out, and asking to leave — and
+  on nothing else, asserted both ways: the committing action is felt, and opening a disclosure is not.
+  A haptic on everything is a haptic on nothing.
+- **The device harness is added and the brightness `actual` is verified on an emulator,** which closes
+  Phase 4's one gap. `compose.uiTest` in place of the plan's `ui-test-junit4`, because this is a Compose
+  Multiplatform project and the multiplatform artifact is the one that versions with the rest of
+  compose; `ui-test-manifest` is needed after all, for the empty `ComponentActivity` the content is
+  hosted in — `MainActivity` calls `setContent` itself, and a test that calls it again gets *has
+  already set content*.
+- **Two things stood between that test and running, neither of them the code under test.** `compose.uiTest`
+  brings espresso 3.5.0 transitively, which calls `InputManager.getInstance` — removed in Android 14 —
+  so on an API 36 emulator every compose device test dies inside `onIdle` with a
+  `NoSuchMethodException`. Espresso is pinned to 3.7.0 in the build file with that written down, because
+  the next person to add a device test here would lose the same hour to it.
+- **Not done: TalkBack itself.** Reading order and the merge are asserted through semantics, which is
+  what a screen reader is handed, and that is not the same as listening to one. Nothing here replaces a
+  person with TalkBack on going through the seven screens, and no test in this plan can.
 
-**Done when** the three dense screens hold at the largest text size and `SignersCard` reads as one list.
+**Done** on 8 November 2026: four dense screens hold at twice the text in 320dp, `SignersCard` reads as
+one row per member, the two committing actions are felt, and the brightness actual is verified on a
+device.
 
 ### Phase 10: the way in, acknowledged — **the two choices and the way out are built; the record is not**
 

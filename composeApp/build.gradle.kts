@@ -166,6 +166,19 @@ kotlin {
             implementation(libs.androidx.testExt.junit)
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutinesTest)
+            // Hosts a composable on a device, which this source set could not do before: its two
+            // worker tests needed no composition. Added by the group Wavelength redesign's phase 9,
+            // for the one thing in that plan a desktop test cannot reach -- a real window's
+            // brightness. `compose.uiTest` is Compose Multiplatform's own, rather than the AndroidX
+            // ui-test pair, so it is versioned with the rest of compose here.
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
+            implementation(libs.androidx.activity.compose)
+            // `compose.uiTest` brings espresso 3.5.0 transitively, which calls
+            // `InputManager.getInstance` -- removed in Android 14. On an API 36 emulator every
+            // compose device test then dies in `onIdle` with a NoSuchMethodException that has nothing
+            // to do with the code under test. Pinned here rather than left to the transitive version.
+            implementation("androidx.test.espresso:espresso-core:3.7.0")
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
@@ -281,6 +294,11 @@ android {
 
 dependencies {
     debugImplementation(libs.compose.uiTooling)
+    // The empty `ComponentActivity` a compose device test hosts its content in. `MainActivity` cannot
+    // be used for that -- it calls `setContent` itself, and a test that calls it again gets "has
+    // already set content". Merged into the debug manifest only, which is where an instrumented test
+    // runs (group Wavelength redesign, phase 9).
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.11.2")
 //    ksp(libs.androidx.room3.compiler)
     add("kspAndroid", libs.androidx.room3.compiler)
     // These configurations only exist when the ios targets are declared, which the kotlin block
