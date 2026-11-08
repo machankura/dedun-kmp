@@ -400,10 +400,15 @@ is that none of these phases waits on a server nobody controls.
    rather than accidental. The alternative is a `max_spend_sat` tag on the authorisation so a signer
    can see the ceiling the proposer used — which buys nothing, since a signer that recomputed it
    would refuse honest payouts whenever its own VTXO set lagged by one coin.
-2. **This note, the closing payout, or both?** They are not alternatives: this one frees 3,017 of
-   4,048 sats in three days with no policy change, and the closing payout frees the last 1,000 in
-   fifteen with one. **Doing this first makes the closing payout less urgent and no harder.** Doing
-   only the closing payout leaves the room wedged for a fortnight.
+2. **This note, the closing payout, or both?** This one frees 3,017 of the 4,048 sats with no policy
+   change. **It does not leave the closing payout where it was, and the first draft of this answer
+   was wrong to say it did.** What is left afterwards is 1,000 sats, and a closing payout pays
+   `everything − fee` where the fee is a round's: `maxRoundFeeSat` is 2,000 and mainnet's operator
+   asked 1,000 as a minimum, so nothing arrives and the closing payout's own floor refuses it. So
+   doing this first does not make that note cheaper to build -- it makes it **unnecessary for this
+   room and still necessary for a wallet whose residue is large**, which is a different and weaker
+   case than the one it was written on. That note's question 5 now asks whether it should be built
+   at all, and the owner should answer that before any of its fifteen days are spent.
 3. **B9, no gate at all?** Every rule a device checks is unchanged and an older device signs one
    correctly, so there is nothing for a gate to protect. Phase 4 tests that claim on a real device
    before the note is closed.
@@ -416,9 +421,10 @@ is that none of these phases waits on a server nobody controls.
 
 ## What this plan does not do
 
-- **Empty the wallet.** The last `MIN_CHANGE_SAT` stays, by construction. That is
-  [group-wavelength-closing-payout.md](./group-wavelength-closing-payout.md)'s subject, and this
-  note's end state is its starting point.
+- **Empty the wallet.** The last `MIN_CHANGE_SAT` stays, by construction, and at this room's sizes
+  it stays for good: 1,000 sats are under what a round costs, so the closing payout's own floor
+  refuses to take them. That note remains the only way a wallet is emptied, for wallets where what
+  is left is worth a round; here it is not. Question 2.
 - **Touch anybody else's sats.** Every sat paid is the member's own, which is why D1 of
   `payouts-only.md` is not in question here and is the closing payout's hardest problem.
 - **Let a member choose an amount.** The offer is the most that can go, as it is today. An amount
