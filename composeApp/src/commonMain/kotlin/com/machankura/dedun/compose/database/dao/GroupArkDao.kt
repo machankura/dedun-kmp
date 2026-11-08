@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Upsert
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -86,6 +87,31 @@ interface GroupArkDao {
 
     @Query("DELETE FROM GroupArkBoarded WHERE wallet = :wallet AND commitment = :commitment AND outpoint = :outpoint")
     suspend fun forgetBoardedCoin(wallet: String, commitment: String, outpoint: String)
+
+    @Upsert
+    suspend fun upsertArriving(row: GroupArkArriving)
+
+    /** Every boarding payment this device has seen on chain and no round has taken in yet, for the history. */
+    @Query("SELECT * FROM GroupArkArriving WHERE wallet = :wallet")
+    suspend fun arriving(wallet: String): List<GroupArkArriving>
+
+    @Query("SELECT * FROM GroupArkArriving WHERE wallet = :wallet")
+    fun observeArriving(wallet: String): Flow<List<GroupArkArriving>>
+
+    @Query("DELETE FROM GroupArkArriving WHERE wallet = :wallet AND outpoint = :outpoint")
+    suspend fun forgetArriving(wallet: String, outpoint: String)
+
+    /** A coin a round this device didn't sign has taken in: kept, so that missing a round is something a member can see (A12). */
+    @Query("UPDATE GroupArkArriving SET spentUnseenAtEpochSeconds = :atEpochSeconds WHERE wallet = :wallet AND outpoint = :outpoint")
+    suspend fun markArrivingSpentUnseen(wallet: String, outpoint: String, atEpochSeconds: Long)
+
+    /** Every wallet the group has been given a boarding address for, including earlier ones, whose addresses can still be paid. */
+    @Query("SELECT DISTINCT wallet FROM GroupArkDepositAddress WHERE script IS NOT NULL")
+    suspend fun walletsWithDepositAddresses(): List<String>
+
+    /** Every wallet with an answered boarding address, so the watch follows one answered while the app is open. */
+    @Query("SELECT DISTINCT wallet FROM GroupArkDepositAddress WHERE script IS NOT NULL")
+    fun observeWalletsWithDepositAddresses(): Flow<List<String>>
 
     @Upsert
     suspend fun upsertSnapshot(row: GroupArkSnapshotRow)
