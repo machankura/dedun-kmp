@@ -6,8 +6,10 @@ were the measure, rather than Material Design 3 — which
 which this plan does not revisit.
 
 **Planned on 8 November 2026 and built on the same day, in the order 1-5, 7, 8, 10, 9, then the store.**
-Nine of the ten phases are complete. **Phase 6's notification is not** — see *What Phase 6 left* — and it
-is the one piece still waiting on a decision. Phases 3 and 10 were each completed afterwards by the
+Nine of the ten phases are complete. **Phase 6's notification is not** — see *What Phase 6 left, and what
+looking properly found*, where the first reason given for that turned out to be wrong twice. It is the
+one piece still waiting on a decision, and the decision is now a choice between three sizes rather than
+a question about whether it can be done at all. Phases 3 and 10 were each completed afterwards by the
 per-group-wallet store they had both been blocked on, which answered questions 2 and 6 (see *The store,
 afterwards*). Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
@@ -726,9 +728,9 @@ thing.
 
 ### Phase 6: the wallet's health, said before it is urgent — **the screen is built; the notification is not**
 
-B7's first paragraph is built. **Its second is not, and the reason is worth more than the feature:**
-the trigger cannot be evaluated in a periodic worker without a decision this plan did not make. See
-*What Phase 6 left* below.
+B7's first paragraph is built. Its second is not, and **the reason first written here was wrong**: the
+trigger is already evaluated every thirty minutes, and the app already does background networking twice.
+What is outstanding is delivery. See *What Phase 6 left, and what looking properly found* below.
 
 - `GroupWavelengthHealth` is a pure object in `wallet/wavelength/group/`, not a view model: five items,
   each `FINE`, `ATTENTION` or `PROBLEM`, each with a `Fix`, derived entirely from
@@ -757,29 +759,57 @@ the trigger cannot be evaluated in a periodic worker without a decision this pla
   the deadline, the row naming the worst, the checklist's five lines with their consequences and fix
   buttons, and the four-line checklist.
 
-#### What Phase 6 left, and why
+#### What Phase 6 left, and what looking properly found
 
-**The notification is not built.** B7 asks for one channel and two triggers, both of which turn on
-`WalletExpiry` — *coins inside `Urgent`*, and *too few devices seen when coins are inside a fortnight*.
-`WalletExpiry` needs the chain tip, and `tipHeight` in `DatabaseGroupWavelengthRepository` is
-`clients()?.clientFor(chain)?.startHeaderSubscription()?.blockHeight` — **a live Electrum
-subscription**, not a stored height. So a periodic worker cannot know whether the coins are near their
-deadline without starting network access of its own, every run, for every group, on every member's
-phone. That is a background-networking decision with a battery and a privacy cost, and this plan did
-not make it.
+The notification is not built. **The reason first given here was wrong, in the way worth recording:**
+this section said the trigger *cannot be evaluated in a periodic worker without a background-networking
+decision this plan did not make*. Both halves of that are false, and finding out took one afternoon of
+reading that Phase 6 should have done before writing the paragraph.
 
-Two smaller things sit behind the same wall. `WavelengthMaintenanceWorker`, which the plan names, is
-the **personal** wallet's: it loads the default profile's words and keeps that wallet open, and knows
-nothing about groups, the aux database or the group repository. And the only way to verify an Android
-worker here is `WavelengthMaintenanceWorkerDeviceTest`, which runs on an instrumentation argument
-against an installed app with a configured profile — so the notification would ship unverified in
-ordinary runs, which is what Phase 4's one gap already costs.
+**The trigger is already evaluated, every thirty minutes.** `GroupArkWatcher.deadlinePass()` walks every
+wallet with coins, takes the earliest `expiresAtHeight` the device holds, reads the tip from Electrum,
+computes `WalletExpiry`, classifies it as *renewing*, *urgent* or *expired*, **and names who has not
+answered in a day** — which is B7's second trigger. It then writes a line into the room,
+`ChatMessage.TYPE_WAVELENGTH_DEADLINE`, which the transcript already draws with a warning icon. So B7's
+two triggers are not a computation this app lacks. They are a computation it has been doing all along
+and delivering to a place a member only sees **if they open the group**.
+
+**And the app already does background networking, twice.** `ChannelsWatcher` is a periodic worker,
+scheduled by dedun's own `schedulePlatformLogic`, that starts a *headless Phoenix business* and waits
+for `electrumWatcher.openUpToDateFlow()` — every 36 hours. `WavelengthMaintenanceWorker` opens the
+personal Wavelength wallet in the background every 24. So a worker that opened an Electrum connection
+would be the third, not the first, and the battery-and-privacy argument this section made is an
+argument against something the app already does.
+
+**The tip needs no identity and no seed.** `IdentityElectrum.standaloneOn` takes an `Identity` for
+exactly two things — `getIsTorEnabled` and `getElectrumServer`, both `UserPrefs` flows — and
+`WavelengthMaintenanceWorker` already loads precisely those, in two lines, without the words. A chain
+tip is public data. Nothing has to be decrypted to read one.
+
+**De-duplication is already solved.** `GroupLightningLines.writeFact` returns early if a line with the
+same `factKey` exists, and the key is `"$walletKey:$earliest:$level"` — so the existing mechanism
+already fires once per coin-deadline per level, which is exactly B7's *one channel, two triggers, both
+urgent, nothing else*.
+
+So what is left is **delivery, not evaluation**, and it is one decision in three sizes:
+
+| | what it is | reaches | what it costs |
+|---|---|---|---|
+| **1** | `GroupArkWatcher` posts a notification where it already writes the room line | any member whose app process is alive — always on the operator's device, which the foreground service keeps up | an `expect`/`actual` notifier and a channel. Android posts; desktop and iOS no-op or their own equivalent. Perhaps 60 lines, no new scheduling, no new networking, de-duplication already there |
+| **2** | 1, plus a periodic Android worker running `deadlinePass` | every member, app open or closed | the worker: the aux database (platform context only), a `StandaloneElectrum` (two `UserPrefs`), and `WorkManager` scheduling. A third periodic network connection per member, on the same footing as the two already there |
+| **3** | 2, but evaluated offline from a stored tip | every member, without networking | a persisted `(height, observedAt)` and an extrapolation at an assumed block interval. **Not recommended:** it is the only option that can be wrong, and it errs in whichever direction the assumed interval does |
+
+**The one option that is actively wrong,** and worth naming so nobody reaches for it: the operator's
+snapshot carries a `tip`, and it is already stored. Using it would make the warning suppressible by the
+party the warning is about — an operator who wanted the coins to expire need only report a stale tip.
+This wallet's whole principle is that the operator's figures are not what a decision reads, and a
+deadline warning is the decision where that matters most.
 
 **What this means for the plan's own claim.** *Order* says the cheapest useful stopping point after 6
 is that *the wallet stops relying on a member opening a screen to learn that its coins are expiring*.
-That is still true of a member who opens the screen and false of one who does not: the checklist tells
-them in one line instead of five cards, and nothing yet tells them while the app is closed. Either a
-stored tip or a worker that may use the network has to be decided first.
+With the room line it already relies on a member opening the **group** rather than the wallet screen,
+which is less than the claim and more than this section first said. Option 1 makes it true for a member
+whose app is alive; option 2 makes it true.
 
 ### Phase 7: a history a group can account for — **built**
 
@@ -979,8 +1009,8 @@ is purely a question of policy.
 The cheapest useful stopping points, if this is not built through: **after 2**, every amount in the wallet
 is in money a member can value, which is the single largest finding; **after 3**, the balance reads as a
 balance and can be hidden; **after 6**, the wallet stops relying on a member opening a screen to learn
-that its coins are expiring — which the build reached only halfway, for the reason under *What Phase 6
-left*.
+that its coins are expiring — which the build reached only halfway, and for a smaller reason than this
+plan first recorded: see *What Phase 6 left, and what looking properly found*.
 
 Nothing here blocks on the real round on phones (the UI note's Phase 4), on a funded wallet, or on the
 unilateral exit. **And nothing here makes any of those less necessary.** Every screen this plan improves
