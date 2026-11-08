@@ -54,6 +54,7 @@ import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.deposit_onchain_instead
 import dedun.composeapp.generated.resources.amount_in_sats
 import dedun.composeapp.generated.resources.ask_for_an_invoice
+import dedun.composeapp.generated.resources.an_expired_invoice_cannot_be_paid_ask_for_another
 import dedun.composeapp.generated.resources.ask_for_another_invoice
 import dedun.composeapp.generated.resources.this_invoice_was_paid_and_should_not_be_paid_again
 import dedun.composeapp.generated.resources.copy_invoice
@@ -79,8 +80,10 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.InvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
+import com.machankura.dedun.compose.ui.composable.widgets.rememberInvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
@@ -251,9 +254,18 @@ fun GroupLightningReceiveScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
                 ) {
-                    // The URI scheme, so a scanning wallet knows what the text is.
-                    QRCodeView("lightning:${state.bolt11}")
-                    Text(stringResource(Res.string.this_invoice_pays_the_group_s_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Expired is as unscannable as paid, and for the same reason: nobody can pay
+                    // it now (`docs/paid-requests.md`, Phase 7).
+                    if (rememberInvoiceExpired(state.bolt11)) {
+                        InvoiceExpired(
+                            note = stringResource(Res.string.an_expired_invoice_cannot_be_paid_ask_for_another),
+                            action = { Button(onClick = viewModel::askAgain) { Text(stringResource(Res.string.ask_for_another_invoice)) } },
+                        )
+                    } else {
+                        // The URI scheme, so a scanning wallet knows what the text is.
+                        QRCodeView("lightning:${state.bolt11}")
+                        Text(stringResource(Res.string.this_invoice_pays_the_group_s_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     SelectionContainer { Text(state.bolt11, style = MaterialTheme.typography.bodySmall) }
                     TextButton(onClick = {
                         clipboardManager.setText(buildAnnotatedString { append(state.bolt11) })

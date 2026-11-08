@@ -52,9 +52,11 @@ import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
 import com.machankura.dedun.compose.ui.composable.widgets.LoadingDataIndicator
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
+import com.machankura.dedun.compose.ui.composable.widgets.InvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.PaymentReceived
 import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
+import com.machankura.dedun.compose.ui.composable.widgets.rememberInvoiceExpired
 import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
@@ -64,6 +66,7 @@ import com.machankura.dedun.compose.wallet.bip21Uri
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.address_copied
+import dedun.composeapp.generated.resources.an_expired_invoice_cannot_be_paid_ask_for_another
 import dedun.composeapp.generated.resources.ask_for_another_address
 import dedun.composeapp.generated.resources.copy_address
 import dedun.composeapp.generated.resources.this_address_was_paid_ask_for_another
@@ -154,6 +157,9 @@ internal fun GroupWavelengthReceiveContent(modifier: Modifier, state: GroupWavel
 @Composable
 private fun Rails(modifier: Modifier, state: GroupWavelengthReceiveUIState.Loaded, chain: Chain, notify: (String) -> Unit, onAsk: () -> Unit, onAskInvoice: (Long) -> Unit) {
     var onLightning by rememberSaveable { mutableStateOf(false) }
+    // Worked out here because `lightningItems` is a LazyListScope extension and cannot remember
+    // anything; it decides which items exist, so it has to be known before they are emitted.
+    val invoiceExpired = rememberInvoiceExpired(state.invoice)
     LazyColumn(
         modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
@@ -168,7 +174,7 @@ private fun Rails(modifier: Modifier, state: GroupWavelengthReceiveUIState.Loade
                 FilterChip(selected = onLightning, onClick = { onLightning = true }, label = { Text(stringResource(Res.string.group_wavelength_receive_lightning)) })
             }
         }
-        if (onLightning) lightningItems(state, notify, onAskInvoice) else onchainItems(state, notify, onAsk)
+        if (onLightning) lightningItems(state, invoiceExpired, notify, onAskInvoice) else onchainItems(state, notify, onAsk)
     }
 }
 
@@ -204,7 +210,7 @@ private fun LazyListScope.onchainItems(state: GroupWavelengthReceiveUIState.Load
 }
 
 /** The one place in this wallet a member takes the operator's word for something, so it says so first. */
-private fun LazyListScope.lightningItems(state: GroupWavelengthReceiveUIState.Loaded, notify: (String) -> Unit, onAskInvoice: (Long) -> Unit) {
+private fun LazyListScope.lightningItems(state: GroupWavelengthReceiveUIState.Loaded, invoiceExpired: Boolean, notify: (String) -> Unit, onAskInvoice: (Long) -> Unit) {
     item { Text(stringResource(Res.string.group_wavelength_invoice_warning), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth()) }
     if (!state.enoughSeen) {
         item { Text(stringResource(Res.string.group_wavelength_invoice_devices_needed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth()) }
@@ -220,6 +226,9 @@ private fun LazyListScope.lightningItems(state: GroupWavelengthReceiveUIState.Lo
                     onTheWordOf = state.operatorName.takeIf { paid.onTheOperatorsWord },
                 )
             }
+        } else if (invoiceExpired) {
+            // The ask below already reads "ask for another", so the panel needs no action.
+            item { InvoiceExpired(note = stringResource(Res.string.an_expired_invoice_cannot_be_paid_ask_for_another)) }
         } else {
             item { Text(stringResource(Res.string.group_wavelength_invoice_checked_s, Satoshi(state.invoiceAmountSat ?: 0).grouped()), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth()) }
             item { QRCodeView(invoice) }

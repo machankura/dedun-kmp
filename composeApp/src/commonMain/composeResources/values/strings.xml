@@ -1434,4 +1434,6 @@
     <string name="this_invoice_was_paid_and_should_not_be_paid_again">This invoice was paid. Paying it again would send money nobody can credit.</string>
     <string name="this_address_was_paid_and_the_next_one_is_below">This address was paid. The one below it is fresh.</string>
     <string name="this_address_was_paid_ask_for_another">This address was paid. Ask for another to keep your deposits apart.</string>
+    <string name="this_invoice_expired">This invoice expired</string>
+    <string name="an_expired_invoice_cannot_be_paid_ask_for_another">Nobody can pay it now. Ask for another to be paid this amount.</string>
 </resources>

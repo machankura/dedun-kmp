@@ -148,9 +148,18 @@ class GroupLightningReceiveViewModel(
         }
     }
 
-    /** Back to the form -- after no reply, or after a payment, to be paid again. */
+    /**
+     * Back to the form -- after no reply, after a payment, or after the invoice expired, to be
+     * paid again. From anything else it does nothing: the screen offers it in those three places
+     * only, and a stray call must not throw away an invoice somebody may be about to pay.
+     */
     fun askAgain() {
-        if (uiState is GroupLightningReceiveUIState.NoReply || uiState is GroupLightningReceiveUIState.Paid) initiate()
+        if (uiState is GroupLightningReceiveUIState.NoReply ||
+            uiState is GroupLightningReceiveUIState.Paid ||
+            uiState is GroupLightningReceiveUIState.Invoice
+        ) {
+            initiate()
+        }
     }
 
     /** How a member of this room is named on screen, falling back to the head of their key. */
