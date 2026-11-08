@@ -57,6 +57,7 @@ silent, or a decision that looked arbitrary and was not.
 | [marmot-v2.md](./marmot-v2.md) | bringing the group layer onto the Marmot current profile after the quartz 1.15.2 bump — the nine rules that reach this app, why the room's id and the routing id have to become two values, nine phases from reading both profiles to publishing before applying, and the one fork the library cannot yet settle |
 | [dedun-rename.md](./dedun-rename.md) | renaming Bennu to Dedun under `com.machankura.dedun`: the twelve `bennu/` hash tags that stay, why a new application id is a new app with an empty sandbox, the history sentences a sweep would falsify, and eight phases that hold the store identities back until the owner decides what happens to existing installs |
 | [paid-requests.md](./paid-requests.md) | an invoice or address ceasing to be a QR code once money arrives against it, built (phases 0-7) — the seven screens that hand out a request, the three that kept showing a paid one and the three that rotated in silence, why first sight rather than confirmation, why paid is stated from the phases that say a payment happened rather than by negating the ones that say nobody has paid, why an Ark boarding address can only be known paid once the group signs for the coin, why an expired invoice is hidden on the same argument and by a timer rather than a poll, and the two request states the tree had been missing |
+| [group-wavelength-unconfirmed-deposits.md](./group-wavelength-unconfirmed-deposits.md) | money on its way into the group's Wavelength wallet -- an onchain payment to a boarding address, from the mempool until the round that takes it in -- planned and not built. Covers the three states of a deposit's life no screen shows today and how long they last on mainnet, why the watch needs nothing from the operator when every device already holds the checked address and has its own connection to the chain, why an arriving coin must never reach the deposit ledger (where one replaceable payment would halve every other member's payable balance), why it is a table rather than memory and keyed so that one id spans all four states, and the first sight of money the receive screen's paid panel was always meant to have |
 
 Start with the ceremony if you are new to this area; the Marmot notes all assume it.
 Read the skipped-keys note before debugging any "the other device never got it"
@@ -183,3 +184,11 @@ The standalone-electrum note is a phased plan that has been built, and is the
 group chain wallet note's *An identity without a node* answered: read that
 paragraph and the nsec sign-in note's *The constraint* first, then its seven
 decisions, and its table of where the build chose differently before the code.
+
+The group Wavelength unconfirmed-deposits note is a phased plan that has not been
+built. It is the paid-requests note's D1 taken to the one surface that could not
+reach it: read that note's D1 and the table row saying a boarding address can only
+be known paid once the group signs for the coin, then this note's *the one thing
+that must not happen* -- `balancesIn` reads the deposit ledger with no filter on
+`confirmedAt`, which is why an arriving coin gets a table of its own -- and then
+its A2 and A3 before any phase.
