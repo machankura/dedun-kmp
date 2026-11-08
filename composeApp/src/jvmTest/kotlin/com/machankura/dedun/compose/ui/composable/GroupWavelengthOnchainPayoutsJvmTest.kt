@@ -46,6 +46,7 @@ import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.secp256k1.Hex
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import kotlin.test.assertIs
@@ -77,7 +78,13 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         wavelength = GroupWavelengthPayouts.Balance(depositedSat = availableSat + openSat, openSat = openSat, availableSat = availableSat),
     )
 
-    private fun loaded(balance: MemberBalances.MemberBalance, paysOnchain: Boolean = true, inWalletSat: Long = 0, paysLightning: Boolean = false) = GroupPayoutsUIState.Loaded(
+    // The wallet holds the balance and the operator's least change unless a test says otherwise, so the ceiling binds only where one asks it to.
+    private fun loaded(
+        balance: MemberBalances.MemberBalance,
+        paysOnchain: Boolean = true,
+        inWalletSat: Long = balance.wavelength.availableSat + GroupWavelengthRollout.MIN_CHANGE_SAT,
+        paysLightning: Boolean = false,
+    ) = GroupPayoutsUIState.Loaded(
         localChatRoom = room,
         balances = MemberBalances.Balances(mapOf(aliceKey to balance), emptyList()),
         walletState = null,
@@ -123,20 +130,95 @@ class GroupWavelengthOnchainPayoutsJvmTest {
     }
 
     @Test
-    fun `a payout that would leave less change than the operator accepts says how much a deposit would let it go`() {
+    fun `what the operator takes is any spend leaving none of the change it asks for, or all of it`() {
         // What failed on mainnet: Bob's 1,214 sats out of a wallet of 1,218, which would have left 12 sats of change.
-        assertEquals(996L, GroupWavelengthRollout.changeShortSat(inWalletSat = 1_218, spendSat = 1_214))
-        assertEquals(0L, GroupWavelengthRollout.changeShortSat(inWalletSat = 1_214, spendSat = 1_214), "no change at all is fine")
-        assertEquals(0L, GroupWavelengthRollout.changeShortSat(inWalletSat = 2_214, spendSat = 1_214), "and change of the operator's least")
-        assertEquals(0L, GroupWavelengthRollout.changeShortSat(inWalletSat = 1_000, spendSat = 1_214), "a wallet too small is the balance's to refuse")
+        assertFalse(GroupWavelengthRollout.operatorTakes(inWalletSat = 1_218, spendSat = 1_214))
+        assertTrue(GroupWavelengthRollout.operatorTakes(inWalletSat = 1_214, spendSat = 1_214), "no change at all is fine")
+        assertTrue(GroupWavelengthRollout.operatorTakes(inWalletSat = 2_214, spendSat = 1_214), "and change of the operator's least")
+        assertTrue(GroupWavelengthRollout.operatorTakes(inWalletSat = 1_000, spendSat = 1_214), "a wallet too small is the balance's to refuse")
+    }
 
+    @Test
+    fun `a payout that used to be refused for leaving too little change is now offered for less`() {
+        // Both of these were WavelengthOnchainOffer.LeavesTooLittle, telling whoever read the row to deposit more into a wallet
+        // nobody could get money out of. The ceiling takes the offer down to a spend the operator accepts instead.
         val balance = balance(10_000)
-        assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.LeavesTooLittle(500), viewModel(loaded(balance, inWalletSat = 10_500)).wavelengthOnchainOffer(balance))
-        assertIs<GroupPayoutsViewModel.WavelengthOnchainOffer.Offer>(viewModel(loaded(balance, inWalletSat = 11_000)).wavelengthOnchainOffer(balance))
+        assertEquals(
+            GroupPayoutsViewModel.WavelengthOnchainOffer.Offer(7_500, 2_000, address),
+            viewModel(loaded(balance, inWalletSat = 10_500)).wavelengthOnchainOffer(balance),
+            "9,500 spendable of a 10,500-sat wallet, less the round's 2,000",
+        )
+        assertEquals(
+            GroupPayoutsViewModel.WavelengthOnchainOffer.Offer(8_000, 2_000, address),
+            viewModel(loaded(balance, inWalletSat = 11_000)).wavelengthOnchainOffer(balance),
+            "and a wallet with room for the change pays the whole balance, as before",
+        )
 
         val bob = balance(1_214)
-        assertTrue(viewModel(loaded(bob, inWalletSat = 1_218, paysLightning = true)).wavelengthChangeShortSat(bob) > 0)
-        assertEquals(0L, viewModel(loaded(bob, inWalletSat = 3_000, paysLightning = true)).wavelengthChangeShortSat(bob))
+        assertIs<Pair<Long, Long>>(viewModel(loaded(bob, inWalletSat = 3_000, paysLightning = true)).wavelengthPayable(bob))
+    }
+
+    @Test
+    fun `the room this came from is offered 3,017 sats over Lightning and 1,048 onchain`() {
+        // @Bob, 4,036 sats of a 4,048-sat wallet. Both rails refused before: spending 4,036 leaves 12 sats of change and the
+        // operator asks for 1,000. The ceiling is 3,048, and what's left in the wallet afterwards is exactly the operator's change.
+        val bob = balance(4_036)
+        val lightning = assertIs<Pair<Long, Long>>(viewModel(loaded(bob, inWalletSat = 4_048, paysLightning = true)).wavelengthPayable(bob))
+        assertEquals(3_017_000L to 30_170L, lightning)
+        assertTrue(GroupWavelengthRollout.operatorTakes(4_048, (lightning.first + lightning.second + 999) / 1000))
+
+        val onchain = assertIs<GroupPayoutsViewModel.WavelengthOnchainOffer.Offer>(viewModel(loaded(bob, inWalletSat = 4_048)).wavelengthOnchainOffer(bob))
+        assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.Offer(1_048, 2_000, address), onchain)
+        assertTrue(GroupWavelengthRollout.operatorTakes(4_048, onchain.amountSat + onchain.maxFeeSat))
+    }
+
+    @Test
+    fun `the ceiling reaches what's proposed and not just what the row says`() {
+        val bob = balance(4_036)
+        val repository = Proposing()
+        val model = viewModel(loaded(bob, inWalletSat = 4_048), repository)
+        model.usage[aliceKey] = UnusedAddressCheck.Usage.Unused
+        model.payOutWavelengthOnchain(aliceKey, {}, {})
+        // The propose runs on Dispatchers.IO, so wait for it rather than racing it.
+        val deadline = System.currentTimeMillis() + 5_000
+        while (repository.proposed.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertEquals(listOf(1_048L to 2_000L), repository.proposed, "the whole balance less the fee, 2,036, would be refused by the daemon")
+    }
+
+    @Test
+    fun `a member whose balance is the whole wallet is offered 1,000 sats less than they hold`() {
+        // Deliberately different from before. Aiming at no change is payable only if the round costs the whole fee limit, so the
+        // ceiling gives up the operator's change rather than offering an amount that works by luck (B2).
+        val whole = balance(4_048)
+        val offer = assertIs<GroupPayoutsViewModel.WavelengthOnchainOffer.Offer>(viewModel(loaded(whole, inWalletSat = 4_048)).wavelengthOnchainOffer(whole))
+        assertEquals(1_048L, offer.amountSat)
+        (0L..offer.maxFeeSat).forEach { feeSat ->
+            assertTrue(GroupWavelengthRollout.operatorTakes(4_048, offer.amountSat + feeSat), "a fee of $feeSat")
+        }
+    }
+
+    @Test
+    fun `a wallet too small to keep the change and pay a round says so, and doesn't blame a balance`() {
+        // The balance would carry a round on its own; the wallet can't spare it. Any deposit helps, so there's no figure to quote (B6).
+        val balance = balance(3_000)
+        assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.WalletTooSmall, viewModel(loaded(balance, inWalletSat = 3_000)).wavelengthOnchainOffer(balance))
+        // A balance that couldn't carry a round in any wallet is still the balance's own shortfall.
+        val little = balance(2_500)
+        assertEquals(GroupPayoutsViewModel.WavelengthOnchainOffer.TooLittle(500), viewModel(loaded(little, inWalletSat = 20_000)).wavelengthOnchainOffer(little))
+    }
+
+    @Test
+    fun `the operator's own least change can't be paid out to anybody`() {
+        // Where this note's work ends: a wallet holding 1,000 sats, 988 of them on a row, and no offer on either rail. Both bounds
+        // bind here -- the wallet can spare nothing and 988 sats couldn't carry a round anyway -- and the balance's reason is the
+        // one that names a figure somebody can act on. What says the 1,000 is the operator's and not theirs is the held-back line.
+        val left = balance(988)
+        assertNull(viewModel(loaded(left, inWalletSat = 1_000, paysLightning = true)).wavelengthPayable(left))
+        assertEquals(
+            GroupPayoutsViewModel.WavelengthOnchainOffer.TooLittle(3_000),
+            viewModel(loaded(left, inWalletSat = 1_000)).wavelengthOnchainOffer(left),
+        )
+        assertEquals(988L, viewModel(loaded(left, inWalletSat = 1_000)).wavelengthHeldBackSat(left), "all of it stays, and the row has to say so")
     }
 
     @Test
@@ -162,10 +244,9 @@ class GroupWavelengthOnchainPayoutsJvmTest {
                     val amountSat = GroupWavelengthRollout.spendableSat(inWalletSat, balanceSat) - maxFeeSat
                     if (amountSat < GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) return@forEach // no offer is made at all
                     for (feeSat in 0L..maxFeeSat) {
-                        val change = inWalletSat - amountSat - feeSat
                         assertTrue(
-                            change == 0L || change >= GroupWavelengthRollout.MIN_CHANGE_SAT,
-                            "a wallet of $inWalletSat paying $amountSat of a $balanceSat balance left $change at a fee of $feeSat",
+                            GroupWavelengthRollout.operatorTakes(inWalletSat, amountSat + feeSat),
+                            "a wallet of $inWalletSat paying $amountSat of a $balanceSat balance, at a fee of $feeSat",
                         )
                     }
                 }
@@ -179,9 +260,9 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         // is only payable if the round costs the whole limit. The ceiling gives up 1,000 sats rather than an amount that works by luck.
         val maxFeeSat = 2_000L
         val aimedAtNoChange = 3_000L - maxFeeSat
-        assertEquals(0L, GroupWavelengthRollout.changeShortSat(3_000, aimedAtNoChange + maxFeeSat), "which is why it looks fine")
-        assertTrue(
-            GroupWavelengthRollout.changeShortSat(3_000, aimedAtNoChange + maxFeeSat - 1) > 0,
+        assertTrue(GroupWavelengthRollout.operatorTakes(3_000, aimedAtNoChange + maxFeeSat), "which is why it looks fine")
+        assertFalse(
+            GroupWavelengthRollout.operatorTakes(3_000, aimedAtNoChange + maxFeeSat - 1),
             "but a round a single sat cheaper leaves 999 sats of change, and the operator refuses it",
         )
 
@@ -189,15 +270,19 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         val atTheCeiling = GroupWavelengthRollout.spendableSat(inWalletSat = 5_000, balanceSat = 5_000) - maxFeeSat
         assertEquals(2_000L, atTheCeiling)
         (0L..maxFeeSat).forEach { feeSat ->
-            assertEquals(0L, GroupWavelengthRollout.changeShortSat(5_000, atTheCeiling + feeSat), "a fee of $feeSat")
+            assertTrue(GroupWavelengthRollout.operatorTakes(5_000, atTheCeiling + feeSat), "a fee of $feeSat")
         }
     }
 
     @Test
-    fun `the Lightning payout that would leave too little change isn't offered, and the row says why`() = render(balance(1_214), UnusedAddressCheck.Usage.Unused, inWalletSat = 1_218, paysLightning = true) {
-        onNodeWithText("Paying @Alice out over Lightning", substring = true).assertIsDisplayed()
-        onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertDoesNotExist()
-    }
+    fun `the Lightning payout that used to be refused for its change is offered for what the wallet can spend`() =
+        render(balance(1_214), UnusedAddressCheck.Usage.Unused, inWalletSat = 1_218, paysLightning = true) {
+            // 1,214 sats of a 1,218-sat wallet: the whole balance leaves 12 sats of change and was refused outright. 218 sats
+            // is what the wallet can spend, and 208 of them arrive once the fee limit is set aside.
+            onNodeWithText("Pays @Alice 208 sats", substring = true).assertIsDisplayed()
+            onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertIsDisplayed()
+            onNodeWithText("would leave less change", substring = true).assertDoesNotExist()
+        }
 
     @Test
     fun `nothing is offered where onchain payouts are off, or the member has nothing in the wallet`() {
@@ -247,10 +332,16 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         val waiting = balance(5_000, openSat = 5_000)
         assertNull(viewModel(loaded(waiting, paysLightning = true)).wavelengthPayable(waiting))
         val free = balance(5_000)
-        assertIs<Pair<Long, Long>>(viewModel(loaded(free, paysLightning = true)).wavelengthPayable(free))
+        assertIs<Pair<Long, Long>>(viewModel(loaded(free, inWalletSat = 6_000, paysLightning = true)).wavelengthPayable(free))
     }
 
-    private fun render(balance: MemberBalances.MemberBalance, usage: UnusedAddressCheck.Usage, inWalletSat: Long = 0, paysLightning: Boolean = false, assertions: ComposeUiTest.() -> Unit) =
+    private fun render(
+        balance: MemberBalances.MemberBalance,
+        usage: UnusedAddressCheck.Usage,
+        inWalletSat: Long = balance.wavelength.availableSat + GroupWavelengthRollout.MIN_CHANGE_SAT,
+        paysLightning: Boolean = false,
+        assertions: ComposeUiTest.() -> Unit,
+    ) =
         runDesktopComposeUiTest(width = 400, height = 2000) {
             val destinations = object : PayoutDestinationRepository by PayoutDestinationRepository.NO_OP {
                 override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector) = usage

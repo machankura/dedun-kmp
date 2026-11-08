@@ -68,14 +68,13 @@ object GroupWavelengthRollout {
     const val MIN_CHANGE_SAT: Long = 1_000
 
     /**
-     * How many sats more the wallet needs before spending [spendSat] of [inWalletSat] leaves change the operator accepts, or 0 when it
-     * already does. The daemon takes coins largest first until the change is none or enough, so the whole wallet is its last try: a spend
-     * fails exactly when that leaves some change and too little. No change at all would do, but a payment can't be sized to the sat, as its
-     * fee is quoted when it's paid. A wallet that can't cover the spend at all is for the balance to refuse, not this.
+     * Whether the operator takes a spend of [spendSat] from a wallet holding [inWalletSat]: the daemon takes coins largest first until
+     * the change is none or enough, so the whole wallet is its last try, and a spend fails exactly when that leaves some change and too
+     * little. [spendableSat] is what to offer rather than this; this says whether an offer would go, and is what the tests hold it to.
      */
-    fun changeShortSat(inWalletSat: Long, spendSat: Long): Long {
+    fun operatorTakes(inWalletSat: Long, spendSat: Long): Boolean {
         val change = inWalletSat - spendSat
-        return if (change <= 0 || change >= MIN_CHANGE_SAT) 0 else MIN_CHANGE_SAT - change
+        return change <= 0 || change >= MIN_CHANGE_SAT
     }
 
     /**

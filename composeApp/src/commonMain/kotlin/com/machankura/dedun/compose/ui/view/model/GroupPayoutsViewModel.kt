@@ -237,18 +237,26 @@ class GroupPayoutsViewModel(
     /**
      * What a Lightning payout from the Wavelength wallet would be, as (amount, fee limit) in msat, or null when nothing can be paid --
      * including while another payout of theirs, on either rail, is approved and waiting to be paid, which every device refuses (W9).
+     *
+     * Bounded by the most the wallet can spend as well as by the balance, so what's offered is a payment the operator will take rather
+     * than the whole balance and a refusal (`docs/group-wavelength-spendable-ceiling.md`, B5). The rest of the balance stays in the
+     * wallet and on their row.
      */
-    fun wavelengthPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? =
-        if (balance.wavelength.openSat > 0) null else LightningBalance.payable(balance.wavelength.availableSat * 1000)
+    fun wavelengthPayable(balance: MemberBalances.MemberBalance): Pair<Long, Long>? {
+        val state = uiState as? GroupPayoutsUIState.Loaded ?: return null
+        if (balance.wavelength.openSat > 0) return null
+        return LightningBalance.payable(GroupWavelengthRollout.spendableSat(state.wavelengthInWalletSat, balance.wavelength.availableSat) * 1000)
+    }
 
     /**
-     * How many sats short the Wavelength wallet is of paying [balance] out over Lightning, or 0 when it isn't: the change it would leave
-     * is under what the operator accepts, so the daemon would refuse it after a quorum had approved it (`GroupWavelengthRollout.MIN_CHANGE_SAT`).
+     * How much of [balance] a Wavelength payout would leave behind in the wallet, because the operator won't let it go: 0 where the
+     * whole balance is being paid. What the row says before anyone proposes, so that being paid less than their row shows is explained
+     * rather than noticed (B7).
      */
-    fun wavelengthChangeShortSat(balance: MemberBalances.MemberBalance): Long {
+    fun wavelengthHeldBackSat(balance: MemberBalances.MemberBalance): Long {
         val state = uiState as? GroupPayoutsUIState.Loaded ?: return 0
-        val (amountMsat, maxFeeMsat) = wavelengthPayable(balance) ?: return 0
-        return GroupWavelengthRollout.changeShortSat(state.wavelengthInWalletSat, (amountMsat + maxFeeMsat + 999) / 1000)
+        val available = balance.wavelength.availableSat
+        return available - GroupWavelengthRollout.spendableSat(state.wavelengthInWalletSat, available)
     }
 
     /**
@@ -294,10 +302,17 @@ class GroupPayoutsViewModel(
         if (wavelength.openSat > 0) return WavelengthOnchainOffer.Waiting
         val address = balance.destination?.onchainAddress ?: return WavelengthOnchainOffer.NoAddress
         val maxFeeSat = wallet.statement.policy.maxRoundFeeSat
-        val amountSat = wavelength.availableSat - maxFeeSat
-        if (amountSat < GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) return WavelengthOnchainOffer.TooLittle(GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT - amountSat)
-        val short = GroupWavelengthRollout.changeShortSat(state.wavelengthInWalletSat, amountSat + maxFeeSat)
-        if (short > 0) return WavelengthOnchainOffer.LeavesTooLittle(short)
+        val amountSat = GroupWavelengthRollout.spendableSat(state.wavelengthInWalletSat, wavelength.availableSat) - maxFeeSat
+        if (amountSat < GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) {
+            val shortSat = GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT - amountSat
+            // Whose shortfall it is decides what can be done about it: a deposit to this member raises their balance, where a wallet
+            // too small to leave the operator's change and pay a round needs any deposit at all (B6).
+            return if (wavelength.availableSat - maxFeeSat >= GroupWavelengthRollout.MIN_ONCHAIN_PAYOUT_SAT) {
+                WavelengthOnchainOffer.WalletTooSmall
+            } else {
+                WavelengthOnchainOffer.TooLittle(shortSat)
+            }
+        }
         return WavelengthOnchainOffer.Offer(amountSat, maxFeeSat, address)
     }
 
@@ -306,9 +321,13 @@ class GroupPayoutsViewModel(
         data object NoAddress : WavelengthOnchainOffer
         /** Another payout of theirs, on either rail, is approved and waiting to be paid (W9). One still being signed shows only once approved. */
         data object Waiting : WavelengthOnchainOffer
+        /** The member's own balance can't carry a round's fee and still arrive worth having. [shortSat] of theirs would. */
         data class TooLittle(val shortSat: Long) : WavelengthOnchainOffer
-        /** What it leaves in the wallet is under the operator's least change, and a deposit of [shortSat] lets it go. */
-        data class LeavesTooLittle(val shortSat: Long) : WavelengthOnchainOffer
+        /**
+         * The balance would do, but the wallet can't both keep the operator's least change and pay for a round. Nobody's balance is
+         * the problem and any deposit helps, which is why this isn't [TooLittle] with a figure on it (B6).
+         */
+        data object WalletTooSmall : WavelengthOnchainOffer
     }
 
     /** Why [member]'s onchain address can't be paid yet by what was found of its use, or null when it can (`docs/payouts-only.md`, D7). */
