@@ -195,6 +195,85 @@ class GroupWavelengthWalletScreenJvmTest {
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
 
     // ---------------------------------------------------------------------
+    // The wallet's health (Phase 6, B7).
+    // ---------------------------------------------------------------------
+
+    /** The group's four devices and whoever runs it, all heard from a minute ago. */
+    private fun allHeard(now: Instant = kotlin.time.Clock.System.now()) =
+        wallet(Chain.Signet).statement.participants.associateWith { now - kotlin.time.Duration.parse("1m") } + (OTHER to now)
+
+    private fun healthy() = opened().copy(expiry = WalletExpiry.Fine(10_000), seen = allHeard())
+
+    /**
+     * A group in good order gets one line and the deadline, which is the only thing on this screen it
+     * needs. The checklist itself is a screen; this row is the answer to *does anything need doing?*
+     */
+    @Test
+    fun `a wallet in good order says so in one row, with the deadline under it`() = runDesktopComposeUiTest(phone, 1600) {
+        var opened = 0
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, healthy(), Chain.Signet, onOpenHealth = { opened++ }) } } }
+        onNodeWithText("Everything is in order").assertIsDisplayed()
+        onNodeWithText("Coins need renewing", substring = true).assertIsDisplayed()
+        onNodeWithText("Everything is in order").performClick()
+        assertEquals(1, opened)
+    }
+
+    /** Something wrong, and the row says which thing rather than that something is wrong. */
+    @Test
+    fun `the row names the worst of the five rather than saying something is wrong`() = runDesktopComposeUiTest(phone, 1600) {
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(Modifier, healthy().copy(departed = listOf("f".repeat(64))), Chain.Signet)
+                }
+            }
+        }
+        onNodeWithText("People who left the group still hold a share of this wallet's key", substring = true).assertIsDisplayed()
+        onAllNodesWithText("Everything is in order").assertCountEquals(0)
+    }
+
+    /**
+     * The checklist itself: five obligations, each with what happens if nobody does anything, and the
+     * thing that fixes it where a member can be sent to it.
+     */
+    @Test
+    fun `the health screen lists the five obligations and where to fix them`() = runDesktopComposeUiTest(phone, 2400) {
+        var advanced = 0
+        var ceremony = 0
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthHealthContent(
+                        Modifier,
+                        healthy().copy(expiry = WalletExpiry.Expired, departed = listOf("f".repeat(64))),
+                        onOpenAdvanced = { advanced++ },
+                        onOpenCeremony = { ceremony++ },
+                    )
+                }
+            }
+        }
+        onNodeWithText("The coins' deadline").assertIsDisplayed()
+        onNodeWithText("Devices answering").assertIsDisplayed()
+        onNodeWithText("Who runs the wallet").assertIsDisplayed()
+        onNodeWithText("This term's fees").assertIsDisplayed()
+        onNodeWithText("Who holds a share").assertIsDisplayed()
+        // What happens if nobody does anything, which is the part the cards never said.
+        onNodeWithText("getting them back depends on the Ark operator rather than on the group", substring = true).assertIsDisplayed()
+        onNodeWithText("Advanced").performClick()
+        assertEquals(1, advanced)
+        onNodeWithText("See the key ceremony").performClick()
+        assertEquals(1, ceremony)
+    }
+
+    /** A wallet holding nothing has no deadline, so the checklist is four lines rather than a green lie. */
+    @Test
+    fun `a wallet with no coins has four lines on the checklist, not five`() = runDesktopComposeUiTest(phone, 2400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthHealthContent(Modifier, opened().copy(seen = allHeard())) } } }
+        onAllNodesWithText("The coins' deadline").assertCountEquals(0)
+        onNodeWithText("Devices answering").assertIsDisplayed()
+    }
+
+    // ---------------------------------------------------------------------
     // Errors that end in an action (Phase 5, B6).
     // ---------------------------------------------------------------------
 

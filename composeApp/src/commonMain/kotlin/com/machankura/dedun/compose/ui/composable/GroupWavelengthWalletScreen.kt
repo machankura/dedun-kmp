@@ -17,11 +17,13 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -70,6 +72,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigning
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthHealthRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
@@ -99,6 +102,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryHeadline
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryIcon
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryStatus
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHealth
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
@@ -114,6 +118,8 @@ import dedun.composeapp.generated.resources.group_wavelength_earlier_empty
 import dedun.composeapp.generated.resources.group_wavelength_earlier_holds_s
 import dedun.composeapp.generated.resources.group_wavelength_earlier_leave
 import dedun.composeapp.generated.resources.group_wavelength_earlier_s
+import dedun.composeapp.generated.resources.group_wavelength_health_all_fine
+import dedun.composeapp.generated.resources.group_wavelength_health_title
 import dedun.composeapp.generated.resources.group_wavelength_leave
 import dedun.composeapp.generated.resources.group_wavelength_open_other_group_s
 import dedun.composeapp.generated.resources.group_wavelength_open_your_wallet
@@ -295,6 +301,7 @@ fun GroupWavelengthWalletScreen(
                 onOpenOtherGroup = { otherRoom ->
                     onNavigateToRoute(GroupWavelengthWalletRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = otherRoom, chain = chainName))
                 },
+                onOpenHealth = { onNavigateToRoute(GroupWavelengthHealthRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
             )
         }
     }
@@ -326,6 +333,7 @@ internal fun GroupWavelengthWalletContent(
     onOpenPersonalWallet: () -> Unit = {},
     /** Another group's Wavelength wallet, which this device is running instead of this one (D13). */
     onOpenOtherGroup: (chatRoomId: String) -> Unit = {},
+    onOpenHealth: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = onRetry)
@@ -388,7 +396,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup, onOpenHealth)
     }
 }
 
@@ -482,13 +490,14 @@ private fun OpenedWallet(
     onOpenEntry: (String) -> Unit,
     onOpenPersonalWallet: () -> Unit,
     onOpenOtherGroup: (chatRoomId: String) -> Unit,
+    onOpenHealth: () -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry)
+                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
@@ -499,19 +508,19 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry)
+            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit, onOpenHealth: () -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
     if (state.departed.isNotEmpty()) item { DepartedCard(state, isPending, onOpenNew, onMakeKey) }
     item { BalanceCard(state, chain, onReceive, onPayOut, onLeave, isPending) }
     if (state.leaveAsked) item { Text(stringResource(Res.string.group_wavelength_leave_asked), style = MaterialTheme.typography.bodyMedium) }
-    item { DeadlineLine(state.expiry) }
+    item { HealthRow(state) { onOpenHealth() } }
     // The way out when whoever runs it has gone: another member takes over, and renewal or leaving carries on from them.
     if (state.isParticipant && !state.isOperator && state.canRunHere && (state.expiry is WalletExpiry.Urgent || state.expiry == WalletExpiry.Expired)) {
         item {
@@ -783,14 +792,49 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
 /** When the coins run out of time, by this device's own count: said only when it has one. */
 @Composable
 private fun DeadlineLine(expiry: WalletExpiry) {
-    val (text, isUrgent) = when (expiry) {
-        WalletExpiry.Nothing -> return
-        is WalletExpiry.Fine -> stringResource(Res.string.group_wavelength_deadline_fine_s, BlockDuration.describe(expiry.blocksLeft)) to false
-        is WalletExpiry.Renewing -> stringResource(Res.string.group_wavelength_deadline_renewing_s, BlockDuration.describe(expiry.blocksLeft)) to false
-        is WalletExpiry.Urgent -> stringResource(Res.string.group_wavelength_deadline_urgent_s, BlockDuration.describe(expiry.blocksLeft)) to true
-        WalletExpiry.Expired -> stringResource(Res.string.group_wavelength_deadline_expired) to true
-    }
+    val text = deadlineText(expiry) ?: return
+    val isUrgent = expiry is WalletExpiry.Urgent || expiry == WalletExpiry.Expired
     Text(text, style = MaterialTheme.typography.bodyMedium, color = if (isUrgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+}
+
+/** The deadline in words, or null where this device has no deadline to give. Shared with the health row. */
+@Composable
+private fun deadlineText(expiry: WalletExpiry): String? = when (expiry) {
+    WalletExpiry.Nothing -> null
+    is WalletExpiry.Fine -> stringResource(Res.string.group_wavelength_deadline_fine_s, BlockDuration.describe(expiry.blocksLeft))
+    is WalletExpiry.Renewing -> stringResource(Res.string.group_wavelength_deadline_renewing_s, BlockDuration.describe(expiry.blocksLeft))
+    is WalletExpiry.Urgent -> stringResource(Res.string.group_wavelength_deadline_urgent_s, BlockDuration.describe(expiry.blocksLeft))
+    WalletExpiry.Expired -> stringResource(Res.string.group_wavelength_deadline_expired)
+}
+
+/**
+ * The worst of the wallet's five obligations, between the balance and the history.
+ *
+ * One row rather than a sixth card: the checklist is a screen (B7), and what belongs here is the
+ * answer a member wants without opening anything -- *is anything wrong, and when do the coins run
+ * out*. All five fine reads "Everything is in order" with the deadline under it, which is the only
+ * line on this screen a group in good order needs.
+ */
+@Composable
+private fun HealthRow(state: GroupWavelengthWalletUIState.Opened, onOpenHealth: () -> Unit) {
+    val worst = GroupWavelengthHealth.worst(GroupWavelengthHealth.of(state)) ?: return
+    val fine = worst.standing == GroupWavelengthHealth.Standing.FINE
+    ListItem(
+        modifier = Modifier.fillMaxWidth().clickable { onOpenHealth() }.minimumInteractiveComponentSize(),
+        leadingContent = {
+            Icon(
+                if (fine) Icons.Default.CheckCircle else if (worst.standing == GroupWavelengthHealth.Standing.ATTENTION) Icons.Default.WarningAmber else Icons.Default.ErrorOutline,
+                contentDescription = stringResource(Res.string.group_wavelength_health_title),
+                tint = when (worst.standing) {
+                    GroupWavelengthHealth.Standing.FINE -> MaterialTheme.colorScheme.primary
+                    GroupWavelengthHealth.Standing.ATTENTION -> MaterialTheme.colorScheme.tertiary
+                    GroupWavelengthHealth.Standing.PROBLEM -> MaterialTheme.colorScheme.error
+                },
+            )
+        },
+        headlineContent = { Text(stringResource(if (fine) Res.string.group_wavelength_health_all_fine else message(worst))) },
+        supportingContent = deadlineText(state.expiry)?.let { deadline -> { Text(deadline) } },
+    )
 }
 
 /**

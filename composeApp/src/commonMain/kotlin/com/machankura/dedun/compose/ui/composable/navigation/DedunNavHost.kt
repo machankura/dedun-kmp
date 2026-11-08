@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.ui.composable.DepositsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DepositsRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupAssignCoinsRoute
 import com.machankura.dedun.compose.ui.composable.GroupAssignCoinsScreen
+import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.repository.DatabasePayoutRepository
 import com.machankura.dedun.compose.database.repository.DatabaseDepositRepository
 import com.machankura.dedun.compose.managers.Depositors
@@ -53,8 +54,10 @@ import com.machankura.dedun.compose.ui.composable.GroupWavelengthEntryScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthEntryRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthExitScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthExitRoute
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthHealthScreen
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthInvoiceScreen
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthHealthRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthInvoiceRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
@@ -1069,6 +1072,52 @@ fun DedunNavHost(
                     chain = chain,
                     chatRepository = databaseChatRepository,
                     repository = databaseGroupWavelengthRepository,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupWavelengthHealthRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthHealthRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthHealthScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    daemonSource = GroupWavelengthProcess,
+                    onOpenAdvanced = {
+                        navController.navigate(
+                            route = GroupWavelengthAdvancedRoute(
+                                activeUserPublicKey = route.activeUserPublicKey,
+                                chatRoomId = route.chatRoomId,
+                                chain = route.chain,
+                            )
+                        )
+                    },
+                    onOpenCeremony = {
+                        navController.navigate(
+                            route = IcebergCeremonyRoute(
+                                activeUserPublicKey = route.activeUserPublicKey,
+                                chatRoomId = route.chatRoomId,
+                                sessionId = null,
+                                purpose = IcebergKeySession.PURPOSE_WAVELENGTH,
+                                chain = route.chain,
+                            )
+                        )
+                    },
+                    onOpenSession = { sessionId ->
+                        navController.navigate(
+                            route = FrostSigningRoute(
+                                activeUserPublicKey = route.activeUserPublicKey,
+                                chatRoomId = route.chatRoomId,
+                                sessionId = sessionId,
+                            )
+                        )
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }

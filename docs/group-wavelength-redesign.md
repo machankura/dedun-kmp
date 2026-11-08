@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 5 are built; Phases 6 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 5 are built, Phase 6 in part; Phases 7 to 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -721,26 +721,62 @@ B6. Twenty-five messages, five retries, and one `else` branch deleted.
 **Done** on 8 November 2026: no state on these screens says only what happened, and no two say the same
 thing.
 
-### Phase 6: the wallet's health, said before it is urgent
+### Phase 6: the wallet's health, said before it is urgent — **the screen is built; the notification is not**
 
-B7. One screen, one notification channel, one worker.
+B7's first paragraph is built. **Its second is not, and the reason is worth more than the feature:**
+the trigger cannot be evaluated in a periodic worker without a decision this plan did not make. See
+*What Phase 6 left* below.
 
-- `GroupWavelengthHealthScreen.kt` and `GroupWavelengthHealthViewModel`: five items, each `Fine`,
-  `Attention` or `Problem`, each with a sentence, a consequence and a route. Derived entirely from
-  `GroupWavelengthWalletUIState.Opened` — nothing new is read, nothing is asked of the operator.
-- A row on the wallet screen, between the balance and the history: the worst item's state and sentence,
-  opening the screen. `Fine` for all five reads *Everything is in order*, plus the deadline, which is the
-  one a member wants without opening anything.
-- `WavelengthMaintenanceWorker` gains the two triggers of B7, posting on a new channel.
-  `GroupWavelengthService`'s channel is the foreground service's and stays separate — one is *this device
-  is running the wallet* and the other is *the group needs to do something*, and merging them would
-  silence the second with the first.
-- **Tests**, `GroupWavelengthHealthJvmTest`: each item's three states from a fixture;
-  the worst-first rule with two problems; all-fine; a wallet with no coins has no deadline item rather
-  than a green one. `WavelengthMaintenanceWorkerDeviceTest` gains the two triggers and, importantly, the
-  cases that must **not** notify — coins fine, devices quiet but coins three weeks out.
+- `GroupWavelengthHealth` is a pure object in `wallet/wavelength/group/`, not a view model: five items,
+  each `FINE`, `ATTENTION` or `PROBLEM`, each with a `Fix`, derived entirely from
+  `GroupWavelengthWalletUIState.Opened`. A `GroupWavelengthHealthViewModel` would have been a second
+  reader of the same state, so the screen uses `GroupWavelengthWalletViewModel` the way the advanced
+  screen does and the logic is a function with a fixture-driven test.
+- The five are B7's: the coins' deadline, devices answering, who runs the wallet, this term's fees, and
+  who holds a share. **Fourteen messages for five items,** because what to do about a fee budget four
+  fifths spent is nothing like what to do about one that is gone — a checklist whose amber and red say
+  the same thing has two colours and one message.
+- **Two items read the deadline to decide how much they matter,** which the plan did not call for and
+  the writing made obvious: too few devices answering is amber at three weeks and a problem at three
+  days, because what it costs depends on whether a renewal is due. `SOON_BLOCKS` is a fortnight, the
+  same threshold B7 gives the second notification trigger.
+- **A wallet holding nothing gets no deadline item at all,** rather than a green one. A tick against a
+  deadline that does not exist reads as *checked and fine* where the truth is *nothing to check*.
+- The row sits between the balance and the history, where `DeadlineLine` was. All five fine reads
+  *Everything is in order* with the deadline under it; anything else reads **the worst item's own
+  sentence** rather than that something is wrong. `DeadlineLine`'s text came out into a shared
+  `deadlineText` so the row could say it.
+- The leading icon has a **real description**, not `Decorative`: green, amber and red are the whole of
+  what it says, and a member who cannot tell them apart would otherwise read five identical rows.
+- **Tests:** ten cases in `GroupWavelengthHealthJvmTest` — each item's own states, the fee budget's
+  three bands, the device that runs it reading its own process rather than the room, worst-first with
+  two problems, all-fine, and the wallet with no coins. Four screen cases: the row in good order with
+  the deadline, the row naming the worst, the checklist's five lines with their consequences and fix
+  buttons, and the four-line checklist.
 
-**Done when** the notification fires on the two triggers on a device and on nothing else in the fixtures.
+#### What Phase 6 left, and why
+
+**The notification is not built.** B7 asks for one channel and two triggers, both of which turn on
+`WalletExpiry` — *coins inside `Urgent`*, and *too few devices seen when coins are inside a fortnight*.
+`WalletExpiry` needs the chain tip, and `tipHeight` in `DatabaseGroupWavelengthRepository` is
+`clients()?.clientFor(chain)?.startHeaderSubscription()?.blockHeight` — **a live Electrum
+subscription**, not a stored height. So a periodic worker cannot know whether the coins are near their
+deadline without starting network access of its own, every run, for every group, on every member's
+phone. That is a background-networking decision with a battery and a privacy cost, and this plan did
+not make it.
+
+Two smaller things sit behind the same wall. `WavelengthMaintenanceWorker`, which the plan names, is
+the **personal** wallet's: it loads the default profile's words and keeps that wallet open, and knows
+nothing about groups, the aux database or the group repository. And the only way to verify an Android
+worker here is `WavelengthMaintenanceWorkerDeviceTest`, which runs on an instrumentation argument
+against an installed app with a configured profile — so the notification would ship unverified in
+ordinary runs, which is what Phase 4's one gap already costs.
+
+**What this means for the plan's own claim.** *Order* says the cheapest useful stopping point after 6
+is that *the wallet stops relying on a member opening a screen to learn that its coins are expiring*.
+That is still true of a member who opens the screen and false of one who does not: the checklist tells
+them in one line instead of five cards, and nothing yet tells them while the app is closed. Either a
+stored tip or a worker that may use the network has to be decided first.
 
 ### Phase 7: a history a group can account for
 
@@ -837,7 +873,8 @@ is purely a question of policy.
 The cheapest useful stopping points, if this is not built through: **after 2**, every amount in the wallet
 is in money a member can value, which is the single largest finding; **after 3**, the balance reads as a
 balance and can be hidden; **after 6**, the wallet stops relying on a member opening a screen to learn
-that its coins are expiring.
+that its coins are expiring — which the build reached only halfway, for the reason under *What Phase 6
+left*.
 
 Nothing here blocks on the real round on phones (the UI note's Phase 4), on a funded wallet, or on the
 unilateral exit. **And nothing here makes any of those less necessary.** Every screen this plan improves
