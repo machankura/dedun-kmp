@@ -172,7 +172,11 @@ them (D16's "nobody pays alone" is a rule members have never seen the working of
 
 **T11. A boarding address is not an entry; an invoice nobody paid is.** An address is one member's for
 good and can be paid any number of times, so a row for one would sit in the history for ever saying
-nothing, and the receive screen already lists addresses. An invoice is asked for once, for an amount, and
+nothing, and the receive screen already lists addresses. (A boarding *transaction* is an entry, and
+always was: this rule is about the address. Since
+[group-wavelength-unconfirmed-deposits.md](./group-wavelength-unconfirmed-deposits.md) there is one
+from first sight of the payment on the chain, keyed by its outpoint like the boarded row and the
+deposit row after it, which is what lets one id carry a coin through all four of its states.) An invoice is asked for once, for an amount, and
 either gets paid or doesn't — so one nobody has paid is a *waiting* row, as it is in the profile's own
 wallet (`isUnpaidRequest`, `WavelengthWalletScreen.kt:360`). A request the operator hasn't answered yet is
 no row either: there is nothing to pay.

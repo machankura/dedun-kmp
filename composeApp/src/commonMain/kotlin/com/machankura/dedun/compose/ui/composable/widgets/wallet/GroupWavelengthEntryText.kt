@@ -13,6 +13,10 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.group_wavelength_activity_line_s_s
+import dedun.composeapp.generated.resources.group_wavelength_arriving_for_a_round
+import dedun.composeapp.generated.resources.group_wavelength_arriving_mempool
+import dedun.composeapp.generated.resources.group_wavelength_arriving_s_of_s
+import dedun.composeapp.generated.resources.group_wavelength_arriving_taken_unseen
 import dedun.composeapp.generated.resources.group_wavelength_coin_pending
 import dedun.composeapp.generated.resources.group_wavelength_coin_settled
 import dedun.composeapp.generated.resources.group_wavelength_history_exit_s
@@ -75,6 +79,7 @@ fun entryHeadline(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, rea
 fun entryStatus(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, reader: HexKey): String = when (entry.kind) {
     GroupWavelengthEntry.Kind.DEPOSIT_ONCHAIN, GroupWavelengthEntry.Kind.DEPOSIT_LIGHTNING -> when (entry.status) {
         GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.wavelength_entry_waiting_for_payment)
+        GroupWavelengthEntry.Status.ARRIVING -> arrivingStatus(entry)
         GroupWavelengthEntry.Status.DONE -> stringResource(Res.string.group_wavelength_coin_settled)
         GroupWavelengthEntry.Status.FAILED -> stringResource(Res.string.wavelength_entry_failed)
         else -> stringResource(Res.string.group_wavelength_coin_pending)
@@ -98,7 +103,10 @@ fun entryStatus(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, reade
         }
         GroupWavelengthEntry.Status.IN_FLIGHT -> stringResource(Res.string.group_wavelength_payout_in_flight)
         GroupWavelengthEntry.Status.EXPIRED -> stringResource(Res.string.group_wavelength_onchain_payout_expired)
-        GroupWavelengthEntry.Status.WAITING -> stringResource(Res.string.group_wavelength_payout_approved)
+        // ARRIVING is money coming in, which a payout never is. Named rather than left to an `else`, so that
+        // adding another status is a compiler error here rather than a wrong word on a screen.
+        GroupWavelengthEntry.Status.WAITING, GroupWavelengthEntry.Status.ARRIVING ->
+            stringResource(Res.string.group_wavelength_payout_approved)
     }
 
     GroupWavelengthEntry.Kind.PAYOUT_ONCHAIN -> when (entry.status) {
@@ -121,6 +129,27 @@ fun entryStatus(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, reade
             append(line?.status?.replaceFirstChar { it.uppercase() }.orEmpty())
             if (line?.failure?.isNotBlank() == true) append(": ").append(line.failure)
         }
+    }
+}
+
+/**
+ * Where a boarding payment on the chain has got to, which is the one thing a member can act on about it:
+ * `docs/group-wavelength-unconfirmed-deposits.md`, A7 and A12.
+ *
+ * Three states in one status, because the answer to all three is *wait* and only the wait differs: a
+ * transaction with no block yet, one confirming towards the depth the operator asks for, and one deep enough
+ * and waiting for a round -- which is also what says the group should nominate somebody if nobody is running
+ * the wallet. The fourth is A12's: a coin a round this device never signed has taken in.
+ */
+@Composable
+private fun arrivingStatus(entry: GroupWavelengthEntry): String {
+    val arriving = (entry.detail as? GroupWavelengthEntry.Detail.OnchainDeposit)?.arriving
+        ?: return stringResource(Res.string.group_wavelength_coin_pending)
+    return when {
+        arriving.row.spentUnseenAtEpochSeconds != null -> stringResource(Res.string.group_wavelength_arriving_taken_unseen)
+        arriving.depth <= 0 -> stringResource(Res.string.group_wavelength_arriving_mempool)
+        arriving.depth < arriving.needed -> stringResource(Res.string.group_wavelength_arriving_s_of_s, arriving.depth, arriving.needed)
+        else -> stringResource(Res.string.group_wavelength_arriving_for_a_round)
     }
 }
 

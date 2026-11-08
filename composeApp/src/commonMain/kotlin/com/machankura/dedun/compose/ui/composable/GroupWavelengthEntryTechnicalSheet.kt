@@ -34,6 +34,11 @@ import dedun.composeapp.generated.resources.group_wavelength_tech_by_group
 import dedun.composeapp.generated.resources.group_wavelength_tech_by_invoice
 import dedun.composeapp.generated.resources.group_wavelength_tech_by_operator
 import dedun.composeapp.generated.resources.group_wavelength_tech_coin
+import dedun.composeapp.generated.resources.group_wavelength_tech_block
+import dedun.composeapp.generated.resources.group_wavelength_tech_confirmations
+import dedun.composeapp.generated.resources.group_wavelength_tech_block_mempool
+import dedun.composeapp.generated.resources.group_wavelength_tech_depth_s_s
+import dedun.composeapp.generated.resources.group_wavelength_tech_spent_unseen
 import dedun.composeapp.generated.resources.group_wavelength_tech_coins_made_s
 import dedun.composeapp.generated.resources.group_wavelength_tech_confirmed_at
 import dedun.composeapp.generated.resources.group_wavelength_tech_deposit_key
@@ -128,8 +133,26 @@ private fun ColumnScope.onchainDeposit(detail: GroupWavelengthEntry.Detail.Oncha
             DetailLine(stringResource(Res.string.group_wavelength_tech_seen), row.seenAt.toFormattedTimeAndDateString())
             row.confirmedAt?.let { DetailLine(stringResource(Res.string.group_wavelength_tech_confirmed_at), it.toFormattedTimeAndDateString()) }
         }
+        detail.arriving?.let { arriving ->
+            val row = arriving.row
+            DetailLine(stringResource(Res.string.group_wavelength_tech_coin), row.outpoint, copyable = true)
+            DetailLine(stringResource(Res.string.wavelength_amount), stringResource(Res.string.s_sats, Satoshi(row.amountSat).grouped()))
+            DetailLine(stringResource(Res.string.group_wavelength_tech_script), row.script, copyable = true)
+            DetailLine(
+                stringResource(Res.string.group_wavelength_tech_block),
+                row.blockHeight?.toString() ?: stringResource(Res.string.group_wavelength_tech_block_mempool),
+            )
+            DetailLine(
+                stringResource(Res.string.group_wavelength_tech_confirmations),
+                stringResource(Res.string.group_wavelength_tech_depth_s_s, arriving.depth, arriving.needed),
+            )
+            seconds(row.firstSeenAtEpochSeconds)?.let { DetailLine(stringResource(Res.string.group_wavelength_tech_seen), it.toFormattedTimeAndDateString()) }
+            seconds(row.spentUnseenAtEpochSeconds)?.let {
+                DetailLine(stringResource(Res.string.group_wavelength_tech_spent_unseen), it.toFormattedTimeAndDateString())
+            }
+        }
         coin(detail.coin)
-        if (detail.boarded == null && detail.deposit == null && detail.coin == null) {
+        if (detail.boarded == null && detail.deposit == null && detail.coin == null && detail.arriving == null) {
             Text(stringResource(Res.string.group_wavelength_tech_nothing), style = MaterialTheme.typography.bodyMedium)
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemon
 import com.machankura.dedun.compose.managers.GroupWavelengthDaemonStatus
@@ -362,6 +363,50 @@ class GroupWavelengthWalletScreenJvmTest {
     fun `renewals in a term fold into one row that says what they cost between them`() = history(accountable()) {
         onNodeWithText("Renewals in term 3").assertIsDisplayed()
         onNodeWithText("3 renewals, 1,200 sats in fees between them").assertIsDisplayed()
+    }
+
+    private fun arriving(amountSat: Long, outpoint: String = "b:0", spentUnseen: Long? = null) =
+        GroupArkArriving("w", outpoint, amountSat, "0014aa", OTHER, firstSeenAtEpochSeconds = 1, spentUnseenAtEpochSeconds = spentUnseen)
+
+    @Test
+    fun `money on its way in sits beside the balance, and says it is not in the wallet yet`() = runDesktopComposeUiTest(phone, 1400) {
+        val state = money(null, listOf(settledCoin)).copy(arriving = listOf(arriving(30_000)), chainReached = true)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
+        onNodeWithText("10,000 sats").assertIsDisplayed()
+        onNodeWithText("30,000 sats are on their way in. They aren't in the wallet until a round takes them in.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `with nothing on its way the line is not drawn at all`() = runDesktopComposeUiTest(phone, 1400) {
+        val state = money(null, listOf(settledCoin)).copy(chainReached = true)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
+        onNodeWithText("on their way in", substring = true).assertDoesNotExist()
+        onNodeWithText("hasn't reached the chain", substring = true).assertDoesNotExist()
+    }
+
+    /** A15: no connection is *cannot say*, which is a different thing from nothing being on its way. */
+    @Test
+    fun `no chain connection says so rather than drawing a zero`() = runDesktopComposeUiTest(phone, 1400) {
+        val state = money(null, listOf(settledCoin)).copy(chainReached = false)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
+        onNodeWithText("Your device hasn't reached the chain, so it can't say what's on its way in.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in is off the figure`() = runDesktopComposeUiTest(phone, 1400) {
+        val state = money(null, listOf(settledCoin)).copy(arriving = listOf(arriving(30_000, spentUnseen = 2)), chainReached = true)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
+        onNodeWithText("on their way in", substring = true).assertDoesNotExist()
+    }
+
+    /** A14: the operator's own figure for money arriving, read for the first time, named rather than agreed with. */
+    @Test
+    fun `the operator's own pending figure is shown, and named as theirs`() = runDesktopComposeUiTest(phone, 1600) {
+        val snapshot = said(10_000).copy(pendingInSat = 25_000)
+        val state = money(snapshot, listOf(settledCoin)).copy(arriving = listOf(arriving(30_000)), chainReached = true)
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
+        onNodeWithText("30,000 sats are on their way in. They aren't in the wallet until a round takes them in.").assertIsDisplayed()
+        onNodeWithText("Whoever runs the wallet says 25,000 sats are pending.").assertIsDisplayed()
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -67,6 +68,14 @@ data class GroupWavelengthEntry(
         /** Asked for, approved, or sitting at an address: nothing has moved. */
         WAITING,
 
+        /**
+         * Money this device has seen on the chain, paying a script it checked, that nothing has signed for yet
+         * (`docs/group-wavelength-unconfirmed-deposits.md`, A5). Not [WAITING], because money has moved, and not
+         * [IN_FLIGHT], because nothing has been signed. The one state whose answer to a member is *wait, and here
+         * is how long*.
+         */
+        ARRIVING,
+
         /** Signed for, and this device hasn't seen it take effect. */
         IN_FLIGHT,
         DONE,
@@ -103,7 +112,21 @@ data class GroupWavelengthEntry(
             val deposit: DepositRow? = null,
             /** The coin the round made from it, where this device holds one. */
             val coin: GroupArkVtxo? = null,
+            /** Null once a round has it: a boarding payment this device has seen on chain and nothing has signed for. */
+            val arriving: Arriving? = null,
         ) : Detail
+
+        /**
+         * A boarding payment on the chain, with how far along it is worked out against the tip rather than stored
+         * (`docs/group-wavelength-unconfirmed-deposits.md`, A6), so that nothing is re-queried to show one.
+         */
+        data class Arriving(
+            val row: GroupArkArriving,
+            /** 0 in the mempool, 1 in the block it is in, and 1 where the tip isn't known. */
+            val depth: Int,
+            /** How deep the operator needs it before it can join a round: six blocks on mainnet. */
+            val needed: Int,
+        )
 
         data class LightningDeposit(
             val request: GroupArkDepositAddress? = null,
@@ -175,6 +198,12 @@ object GroupWavelengthHistory {
         val coins: List<GroupArkVtxo> = emptyList(),
         /** Boarding coins signed into a round this device hasn't seen happen. */
         val boarded: List<GroupArkBoarded> = emptyList(),
+        /** Boarding payments this device has seen on chain that no round has taken in: `GroupArkBoardingWatch`. */
+        val arriving: List<GroupArkArriving> = emptyList(),
+        /** The chain's tip, for how deep an arriving payment is. Null where this device hasn't reached a server. */
+        val tip: Long? = null,
+        /** How deep the operator needs a boarding payment before it can join a round, from its own terms. */
+        val boardingConfirmations: Int = 1,
         /** Lightning claims signed and not seen settle. */
         val claims: List<GroupArkClaim> = emptyList(),
         val payments: List<GroupArkPayment> = emptyList(),
@@ -280,6 +309,32 @@ object GroupWavelengthHistory {
                 member = rows.addresses.firstOrNull { it.script?.lowercase() == coin.script.lowercase() }?.requester,
                 direction = GroupWavelengthEntry.Direction.IN,
                 detail = GroupWavelengthEntry.Detail.OnchainDeposit(boarded = coin),
+            )
+        }
+
+        // Boarding payments this device has seen on chain that no round has taken in. Three tables can hold one
+        // outpoint at once, so the order is the strength of the record: a landed deposit, then a boarding coin
+        // this device signed for, then this (A11). The id is the same string in all three, so a row moving from
+        // one to the next keeps its place and its detail route (A4).
+        val boardedOutpoints = rows.boarded.map { it.outpoint.lowercase() }.toSet()
+        rows.arriving.filter { it.outpoint.lowercase() !in keys && it.outpoint.lowercase() !in boardedOutpoints }.forEach { coin ->
+            entries += GroupWavelengthEntry(
+                id = "$DEPOSIT:${coin.outpoint.lowercase()}",
+                kind = GroupWavelengthEntry.Kind.DEPOSIT_ONCHAIN,
+                status = GroupWavelengthEntry.Status.ARRIVING,
+                source = GroupWavelengthEntry.Source.THIS_DEVICE,
+                amountSat = coin.amountSat,
+                feeSat = 0,
+                at = coin.firstSeenAtEpochSeconds,
+                member = coin.member,
+                direction = GroupWavelengthEntry.Direction.IN,
+                detail = GroupWavelengthEntry.Detail.OnchainDeposit(
+                    arriving = GroupWavelengthEntry.Detail.Arriving(
+                        row = coin,
+                        depth = GroupArkBoardingWatch.depthOf(coin, rows.tip),
+                        needed = rows.boardingConfirmations,
+                    ),
+                ),
             )
         }
 

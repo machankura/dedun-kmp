@@ -26,6 +26,7 @@ import com.machankura.dedun.compose.database.model.GroupArkMark
 import com.machankura.dedun.compose.database.model.GroupArkCheckpoint
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -178,6 +179,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GroupArkPayment::class,
         GroupArkLeave::class,
         GroupArkBoarded::class,
+        GroupArkArriving::class,
         GroupArkClaim::class,
         GroupArkDepositAddress::class,
         GroupArkPendingRound::class,
@@ -227,7 +229,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 44,
+    version = 45,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -495,6 +497,11 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // rather than in the order the operator says they did (docs/group-wavelength-transaction-details.md, T3). Nullable
         // columns: null is this device not knowing when, which a history shows rather than guessing.
         AutoMigration(from = 43, to = 44),
+        // v45 adds GroupArkArriving: a transaction paying one of a group Wavelength wallet's boarding addresses, as this
+        // device's own Electrum connection has seen it, before any round has taken it in
+        // (docs/group-wavelength-unconfirmed-deposits.md, Phase 1). A new table, which Room migrates itself, and nothing
+        // can be in it yet. Deliberately not a DepositRow: a row there is a payable balance the moment it exists.
+        AutoMigration(from = 44, to = 45),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

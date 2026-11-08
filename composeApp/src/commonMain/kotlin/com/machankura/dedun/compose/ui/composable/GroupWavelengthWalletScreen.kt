@@ -177,8 +177,11 @@ import dedun.composeapp.generated.resources.group_wavelength_history_when_unknow
 import dedun.composeapp.generated.resources.wavelength_entry_s_dot_s
 import dedun.composeapp.generated.resources.group_wavelength_advanced
 import dedun.composeapp.generated.resources.group_wavelength_alarm_title
+import dedun.composeapp.generated.resources.group_wavelength_arriving_sum_s
 import dedun.composeapp.generated.resources.group_wavelength_balance_details
 import dedun.composeapp.generated.resources.group_wavelength_balance_hide
+import dedun.composeapp.generated.resources.group_wavelength_chain_not_reached
+import dedun.composeapp.generated.resources.group_wavelength_operator_pending_s
 import dedun.composeapp.generated.resources.group_wavelength_balance_label
 import dedun.composeapp.generated.resources.group_wavelength_balance_none
 import dedun.composeapp.generated.resources.group_wavelength_balance_show
@@ -1017,11 +1020,25 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                     null -> Unit
                 }
             }
-            val roomLeftSat = GroupWavelengthRollout.capFor(chain)?.let { (it.sat - ledger.settledSat - ledger.pendingSat).coerceAtLeast(0) }
+            // A9: an arriving coin takes room under the cap that no co-signer will sign past, so it
+            // comes off what is left the same way pending does.
+            val roomLeftSat = GroupWavelengthRollout.capFor(chain)?.let {
+                (it.sat - ledger.settledSat - ledger.pendingSat - state.arrivingSat).coerceAtLeast(0)
+            }
             if (!isHidden) {
                 Disclosure(
                     label = stringResource(Res.string.group_wavelength_balance_details),
-                    openFor = state.comparison?.agreement == GroupWavelengthReports.Agreement.DIFFERS || (snapshot?.creditSat ?: 0) > 0,
+                    // A15's case belongs here too: *cannot say* must never read as *nothing on its
+                    // way*, and a caveat folded away would read as exactly that. So the fold opens
+                    // itself precisely when the figure under it would mislead -- and money on its way
+                    // in is the same shape of thing. A8 asks for it beside the balance; a member who
+                    // has just paid in should not have to open anything to find out it arrived, so the
+                    // fold is beside the balance by opening itself rather than by moving the line onto
+                    // the face, which is the one figure Phase 1 cleared.
+                    openFor = state.comparison?.agreement == GroupWavelengthReports.Agreement.DIFFERS ||
+                        (snapshot?.creditSat ?: 0) > 0 ||
+                        state.chainReached == false ||
+                        state.arrivingSat > 0,
                 ) {
                     if (ledger.pendingSat > 0) {
                         Text(stringResource(Res.string.group_wavelength_pending_s, Satoshi(ledger.pendingSat).grouped()), style = MaterialTheme.typography.bodyMedium)
@@ -1029,9 +1046,29 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                     if (ledger.heldSat > 0) {
                         Text(stringResource(Res.string.group_wavelength_held_s, Satoshi(ledger.heldSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    // Beside the balance and never in it: a boarding coin can't be spent through the
+                    // wallet until a round takes it in, and how deep each one is is on its own row in
+                    // the history (A8). A8 asks for "a third line under pending and held", which is
+                    // where those two went when B2 folded them, so this is where it goes.
+                    if (state.arrivingSat > 0) {
+                        Text(stringResource(Res.string.group_wavelength_arriving_sum_s, Satoshi(state.arrivingSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+                        LocalAmount(Satoshi(state.arrivingSat))
+                    }
+                    // Not the same as nothing on its way, which is why it is said rather than drawn as
+                    // a zero (A15). Next to the figure it qualifies, and it opens the fold itself.
+                    if (state.chainReached == false) {
+                        Text(stringResource(Res.string.group_wavelength_chain_not_reached), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if (snapshot != null) {
                         Text(stringResource(Res.string.group_wavelength_operator_says_s, Satoshi(snapshot.confirmedSat).grouped()), style = MaterialTheme.typography.bodyMedium)
                         LocalAmount(Satoshi(snapshot.confirmedSat))
+                        // The operator's own figure for money arriving, named rather than agreed with:
+                        // it is a different count from this device's -- the daemon's pending covers
+                        // outgoing states too -- so U2's rule applies and the device's line above
+                        // leads (A14). Still above it after the fold, which is what A14 asks.
+                        if (snapshot.pendingInSat > 0) {
+                            Text(stringResource(Res.string.group_wavelength_operator_pending_s, Satoshi(snapshot.pendingInSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         if (snapshot.creditSat > 0) {
                             Text(stringResource(Res.string.group_wavelength_credit_s, Satoshi(snapshot.creditSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }

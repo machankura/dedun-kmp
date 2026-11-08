@@ -328,6 +328,17 @@ reads as the answer to *whose figure is this* rather than as the card's title. U
 untouched — the device's figure is still the one shown large, and the operator's is still only ever shown
 beside it, inside the disclosure, with its agreement line.
 
+**What merging `dedun` found in B2.** The unconfirmed-deposits work asks for money on its way in to be
+shown beside the balance and never added to it (A8), as a third line under `pending` and `held` -- and
+B2 had just moved those two off the face and into the disclosure, so the line goes with them. Its own
+tests, written where those lines were still on the face, then failed: the figure was in a fold nobody had
+opened. The answer was not to move the line onto the face, which is the one figure B2 exists to clear,
+and not to teach the tests to click. The disclosure already opens itself when the figure under it would
+otherwise mislead -- a differing report, a credit, A15's *cannot say* -- and money arriving is the same
+shape of thing: news, with a window, that a member who has just paid in should not have to open anything
+to learn. So `openFor` gained it. *Beside the balance* is satisfied by the fold being open, not by the
+card growing a second headline.
+
 **B3. One name per party, and a glossary for the terms that have to stay.** *Daemon* leaves the UI — four
 strings, each of which is about what a device is doing and should say so. The **elected member** is
 *whoever runs the wallet* everywhere, which 18 strings already say, so the four that say bare *the
@@ -390,6 +401,15 @@ with the provenance line in it and a line saying what proof the group does and d
 no notes, tags or contacts anywhere, and T9's reasoning against actions on this screen holds. Tags on one
 wallet's history would be the first of a feature the whole app lacks, and that is a decision for the
 owner, not a phase here (Question 4).
+
+**What merging `dedun` found in B9.** The proof line was written over the four states a deposit had then,
+and the unconfirmed-deposits work added a fifth: a boarding payment this device has watched arrive on the
+chain and nothing has signed for. Its `boarded` row is null until a round takes it, so the branch answered
+*Unsaid* -- nothing on any chain to point at -- for the one entry whose money is demonstrably on a chain,
+and whose outpoint this device read off the chain itself rather than taking the operator's word for it. It
+now falls back to the sighting's outpoint. That is also the only place in this wallet where `Held` is the
+honest answer for money nobody has signed for yet: U2's question is *whose word is this*, and here the
+answer is the chain's.
 
 **B10. The way out is named on the wallet screen, and the commitment screen is acknowledged.** The exit
 keeps its warnings and its location, and gains a line in B7's health screen — *if the group's devices

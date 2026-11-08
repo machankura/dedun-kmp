@@ -165,6 +165,39 @@ data class GroupArkBoarded(
 )
 
 /**
+ * A transaction paying one of this wallet's boarding addresses, as this device's own connection to the chain has seen it, before any
+ * round has taken it in: `docs/group-wavelength-unconfirmed-deposits.md`.
+ *
+ * **Not a deposit** (A2). It becomes one when a round this device signed for happens, and until then it is money on the chain that the
+ * wallet cannot spend: `GroupWavelengthPayouts.balancesIn` reads the deposit ledger with no filter on confirmation, so a row filed
+ * there would pay a member for a transaction that can still be replaced -- and would cut every other member's share while it stood.
+ *
+ * A table rather than memory, because a history needs a time that survives a restart, and because the receive screen's QR has to stay
+ * down after one or somebody pays the address twice (A3).
+ */
+@Entity(primaryKeys = ["wallet", "outpoint"])
+data class GroupArkArriving(
+    val wallet: String,
+    /** `DepositKey.Onchain(txid, vout).text`, the same string a boarded row and a deposit row use, so one id spans all four states (A4). */
+    val outpoint: String,
+    val amountSat: Long,
+    /** The boarding script it paid, which this device had already recomputed as the group's before the address was shown. */
+    val script: HexKey,
+    /** Whose address it paid, from the answered request; null for a script no request of this device's claims. */
+    val member: HexKey? = null,
+    /** When this device first saw it. The only time a transaction in the mempool has, and the reason this is a table (A3). */
+    val firstSeenAtEpochSeconds: Long,
+    /** The block it is in, or null while it is in the mempool. The depth is worked out against the tip, never stored (A6). */
+    val blockHeight: Long? = null,
+    /**
+     * When this device saw the output spent with no round of its own behind it: the coin was boarded by a round this device didn't
+     * sign, so it will never file a deposit for it (A12). Kept rather than dropped, because that is the one fact this wallet's
+     * co-signing exists to make visible.
+     */
+    val spentUnseenAtEpochSeconds: Long? = null,
+)
+
+/**
  * A Lightning payment this device has signed the claim of and not seen settle. [amountSat] is what the claim itself keeps,
  * and [atEpochSeconds] when it signed; null on a row from before it was kept.
  */

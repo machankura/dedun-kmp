@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.database.model.GroupArkPayment
 import com.machankura.dedun.compose.database.model.GroupArkSnapshotRow
@@ -101,6 +102,39 @@ class GroupWavelengthPayoutsJvmTest {
         fixture.payable(all, all[1], wallet, 10_000)
         val poorer = fixture.payable(all, all[2], wallet, 1_000)
         assertTrue("more than" in refused(all[0], payment(5_000, poorer)).orEmpty())
+    }
+
+    /**
+     * The guard that keeps `docs/group-wavelength-unconfirmed-deposits.md`'s A2 from being undone.
+     *
+     * A boarding payment this device has seen on the chain is not a deposit, and the thing that would make
+     * it one is a single helpful call to `DepositLedger.merge`. `balancesIn` reads the deposit ledger with
+     * no filter on confirmation, so such a row is a payable balance the moment it exists -- and because the
+     * share each member can take is scaled by `inTheWallet / totalNet`, one 50,000-sat payment that is
+     * replaced before it confirms would halve every other member's payable balance, for free, and for ever,
+     * since the ledger is kept rather than derived.
+     *
+     * So: the arriving table may hold anything at all, and every member's figures must not move.
+     */
+    @Test
+    fun `a payment on its way in changes nobody's payable balance`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        fixture.payable(all, all[1], wallet, 30_000)
+        fixture.payable(all, all[2], wallet, 10_000)
+        val db = all[0].db
+        val before = GroupWavelengthPayouts.balancesIn(db, fixture.roomId, fixture.chain, 1_800_000_000)
+        val talliedBefore = DepositLedger.tallies(db, fixture.roomId, fixture.chain)
+
+        // One member's 50,000 sats in the mempool, another's confirmed, and a third coin in a round this
+        // device never signed: every shape the watch can write.
+        val dao = db.groupArkDao()
+        dao.upsertArriving(GroupArkArriving(key, "mempool:0", 50_000, "0014aa", all[1].publicKey.lowercase(), firstSeenAtEpochSeconds = 1))
+        dao.upsertArriving(GroupArkArriving(key, "confirmed:0", 25_000, "0014bb", all[2].publicKey.lowercase(), firstSeenAtEpochSeconds = 2, blockHeight = 900))
+        dao.upsertArriving(GroupArkArriving(key, "gone:0", 90_000, "0014cc", all[1].publicKey.lowercase(), firstSeenAtEpochSeconds = 3, blockHeight = 890, spentUnseenAtEpochSeconds = 4))
+
+        assertEquals(before, GroupWavelengthPayouts.balancesIn(db, fixture.roomId, fixture.chain, 1_800_000_000))
+        assertEquals(talliedBefore, DepositLedger.tallies(db, fixture.roomId, fixture.chain))
+        assertEquals(3, dao.arriving(key).size, "and the rows really were there while that was checked")
     }
 
     @Test

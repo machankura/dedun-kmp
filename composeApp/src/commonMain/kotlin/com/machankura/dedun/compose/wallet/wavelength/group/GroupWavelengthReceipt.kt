@@ -18,7 +18,10 @@ object GroupWavelengthReceipt {
 
     /** What the group can actually show for an entry. */
     sealed interface Proof {
-        /** An identifier this device holds and signed for: a coin, a round, a transfer. */
+        /**
+         * An identifier this device has of its own: a coin, a round or a transfer it signed for, or a
+         * boarding payment it has watched arrive on the chain.
+         */
         data class Held(val id: String) : Proof
 
         /**
@@ -82,8 +85,14 @@ object GroupWavelengthReceipt {
      * commitment is what a member can take to the chain, so the commitment is what the receipt names.
      */
     fun proof(entry: GroupWavelengthEntry): Proof = when (val detail = entry.detail) {
-        // The coin on the chain that the group's key signed over: what a payer can be shown.
-        is GroupWavelengthEntry.Detail.OnchainDeposit -> detail.boarded?.outpoint?.let(Proof::Held) ?: Proof.Unsaid
+        // The coin on the chain that the group's key signed over: what a payer can be shown. Before a
+        // round signs for it there is still an outpoint to name -- the payment is on the chain already,
+        // in the mempool or in a block -- and it is this device's own sighting rather than the
+        // operator's word, which is the one case where `Held` is the honest answer for money nobody has
+        // signed for yet. Saying `Unsaid` here would tell a payer there is nothing to check at exactly
+        // the moment they most want to check something.
+        is GroupWavelengthEntry.Detail.OnchainDeposit ->
+            (detail.boarded?.outpoint ?: detail.arriving?.row?.outpoint)?.let(Proof::Held) ?: Proof.Unsaid
         // The transfer the claim went into. Not the payment hash: a hash shows a payment was asked for.
         is GroupWavelengthEntry.Detail.LightningDeposit -> detail.claim?.ark?.let(Proof::Held) ?: Proof.Unsaid
         is GroupWavelengthEntry.Detail.LightningPayout -> Proof.NoneForLightning

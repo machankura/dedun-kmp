@@ -32,7 +32,7 @@ written, and the table below says where the build chose differently.
 | `GroupLightningReceiveUIState.Invoice` gains `paymentHash` and `amountMsat` | it gains neither: the view model holds the invoice row, and the amount comes from the payment rather than from the invoice. `Paid` carries the operator's name instead, which the plan did not foresee needing |
 | `PaymentReceived(amount, note, onTheWordOf, action)` | that, and it prints nothing for a zero amount -- a deposit's amount is zero until the chain says otherwise, and a zero is as uninformative as no figure. `note` is a parameter the plan's signature left out |
 | the group Wavelength invoice falls back to the operator's snapshot | only on `status == "complete"`. A `"pending"` line exists from the moment the invoice is made, so pending can never mean paid |
-| the group Wavelength address falls back to the operator's snapshot too | it cannot: the snapshot's activity lines carry a payment hash and nothing that names an address. That rail is this device's own `GroupArkBoarded` rows alone, so the panel comes when the group signs for the coin rather than at first sight of it in the mempool -- and those rows are deleted when the round confirms, so it is the window between the two |
+| the group Wavelength address falls back to the operator's snapshot too | it cannot: the snapshot's activity lines carry a payment hash and nothing that names an address. That rail was this device's own `GroupArkBoarded` rows alone, so the panel came when the group signed for the coin rather than at first sight of it in the mempool. **Since fixed, and not by a fallback:** the device checked that address when the operator answered it, so it can watch it on its own Electrum connection, and `GroupArkArriving` is what it sees there ([group-wavelength-unconfirmed-deposits.md](./group-wavelength-unconfirmed-deposits.md), Phase 5). The conclusion here was right about the operator and wrong to stop at the operator |
 | the cap is recomputed on every emission | the limits are; the `AtTheCap` gate is left one-shot, so a member whose deposit filled the cap sees the payment rather than the cap |
 | each of the three rotating view models grows a `justPaid` | one `PaidAddressWatch`, because all three turned out to have the same shape -- a current address and a list with a `USED` status -- with `GroupWalletState` serving two of them |
 | `DepositCard` takes the just-paid address | it takes the amount. `GroupWalletDerivation.Derived` needs real keys and a tweak cache, which is an expensive fixture for a card that only prints a figure |
@@ -139,7 +139,12 @@ bare address, "confirmed or in the mempool".
 
 **D1 — Paid means seen, not final.** The request stops being a QR code at first
 sight of money: a mempool transaction, an in-flight HTLC, a `PENDING` entry past
-`WAITING_FOR_PAYMENT`. Not at confirmation, not at settlement. The reason is D1's
+`WAITING_FOR_PAYMENT`. Not at confirmation, not at settlement. (This now holds on
+all four surfaces. The group's boarding address was the one that could not reach it,
+and the reason was taken to be the operator's snapshot having nothing that names an
+address -- which is true, and beside the point: the device does not need the
+operator to watch an address it checked itself. See
+[group-wavelength-unconfirmed-deposits.md](./group-wavelength-unconfirmed-deposits.md).) The reason is D1's
 only reason: the payer has already paid, so the code has already done its job,
 and every second it stays up is a second somebody can pay it again. Confirmation
 depth belongs to the wallet screen, which already says it, and the paid panel

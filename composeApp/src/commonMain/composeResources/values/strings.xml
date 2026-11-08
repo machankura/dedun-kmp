@@ -1219,6 +1219,9 @@
     <string name="group_wavelength_balance_none">Your device hasn't signed for any coins of this wallet yet.</string>
     <string name="group_wavelength_pending_s">%1$s sats in a round your device hasn't seen finish</string>
     <string name="group_wavelength_held_s">%1$s sats of that are held for something your device signed and hasn't seen happen. An election frees them if it never does.</string>
+    <string name="group_wavelength_arriving_sum_s">%1$s sats are on their way in. They aren't in the wallet until a round takes them in.</string>
+    <string name="group_wavelength_chain_not_reached">Your device hasn't reached the chain, so it can't say what's on its way in.</string>
+    <string name="group_wavelength_operator_pending_s">Whoever runs the wallet says %1$s sats are pending.</string>
     <string name="group_wavelength_operator_says_s">Whoever runs the wallet says %1$s sats, as of their last report</string>
     <string name="group_wavelength_no_report">Whoever runs the wallet hasn't reported it yet.</string>
     <string name="group_wavelength_report_matches">Matches what your device signed</string>
@@ -1287,6 +1290,11 @@
     <string name="group_wavelength_tech_by_operator">Whoever runs the wallet says so, and nothing checks it</string>
     <string name="group_wavelength_tech_by_group">The group signed whose it is</string>
     <string name="group_wavelength_tech_seen">Your device first saw it</string>
+    <string name="group_wavelength_tech_confirmations">How deep</string>
+    <string name="group_wavelength_tech_block">Block</string>
+    <string name="group_wavelength_tech_block_mempool">In the mempool</string>
+    <string name="group_wavelength_tech_depth_s_s">%1$s of the %2$s confirmations it needs</string>
+    <string name="group_wavelength_tech_spent_unseen">Spent by a round your device never signed</string>
     <string name="group_wavelength_tech_term">Term</string>
     <string name="group_wavelength_tech_request">Request</string>
     <string name="group_wavelength_tech_asked_for_s">An invoice for %1$s sats</string>
@@ -1312,6 +1320,10 @@
     <string name="group_wavelength_coin_s_sats">%1$s sats</string>
     <string name="group_wavelength_coin_pending">Waiting to see its round finish</string>
     <string name="group_wavelength_coin_settled">Settled</string>
+    <string name="group_wavelength_arriving_mempool">On its way: waiting for its first confirmation</string>
+    <string name="group_wavelength_arriving_s_of_s">On its way: %1$s of the %2$s confirmations it needs to join a round</string>
+    <string name="group_wavelength_arriving_for_a_round">Confirmed, and waiting for whoever runs the wallet to take it into a round</string>
+    <string name="group_wavelength_arriving_taken_unseen">Taken into a round your device didn't sign, so it won't count it as a deposit</string>
     <string name="group_wavelength_coin_held">Held for something signed</string>
     <string name="group_wavelength_coin_spent">Spent</string>
     <string name="group_wavelength_coin_expires_s">Can be swept from block %1$s</string>
@@ -1516,6 +1528,8 @@
     <string name="this_invoice_was_paid_and_should_not_be_paid_again">This invoice was paid. Paying it again would send money nobody can credit.</string>
     <string name="this_address_was_paid_and_the_next_one_is_below">This address was paid. The one below it is fresh.</string>
     <string name="this_address_was_paid_ask_for_another">This address was paid. Ask for another to keep your deposits apart.</string>
+    <string name="group_wavelength_address_paid_in_mempool">Your device has seen this on the chain and is waiting for it to confirm. Ask for another address to keep your deposits apart.</string>
+    <string name="group_wavelength_address_paid_confirming">On the chain and confirming. It joins the wallet in a round once it is deep enough and enough of the group's devices are online. Ask for another address to keep your deposits apart.</string>
     <string name="this_invoice_expired">This invoice expired</string>
     <string name="an_expired_invoice_cannot_be_paid_ask_for_another">Nobody can pay it now. Ask for another to be paid this amount.</string>
 </resources>

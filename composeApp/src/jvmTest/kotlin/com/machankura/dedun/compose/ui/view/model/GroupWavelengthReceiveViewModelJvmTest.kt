@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.view.model
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -15,6 +16,7 @@ import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
+import com.machankura.dedun.compose.wallet.wavelength.group.PaidRequest
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Satoshi
@@ -70,30 +72,33 @@ class GroupWavelengthReceiveViewModelJvmTest {
     private class Wavelength(
         val wallet: GroupWavelengthWalletManager.Wallet,
         val operator: GroupWavelengthOperatorManager.Operator,
+        val termsChain: Chain = Chain.Signet,
     ) : GroupWavelengthRepository by GroupWavelengthRepository.NO_OP {
         val rows = MutableStateFlow<List<GroupArkDepositAddress>>(emptyList())
         val boarded = MutableStateFlow<List<GroupArkBoarded>>(emptyList())
         val claims = MutableStateFlow<List<GroupArkClaim>>(emptyList())
         val snapshot = MutableStateFlow<GroupWavelengthSnapshot?>(null)
+        val arriving = MutableStateFlow<List<GroupArkArriving>>(emptyList())
 
         override suspend fun wallets(chatRoomId: String, chain: Chain) = listOf(wallet)
         override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey) = true
         override suspend fun operator(chatRoomId: String, chain: Chain, wallet: Long) = operator
-        override fun terms(chain: Chain): GroupWavelengthTerms.Terms? = GroupWavelengthTerms.of(Chain.Signet)
+        override fun terms(chain: Chain): GroupWavelengthTerms.Terms? = GroupWavelengthTerms.of(termsChain)
         override suspend fun seen(chatRoomId: String): Map<HexKey, Instant> = emptyMap()
         override fun observeDepositAddresses(chatRoomId: String, chain: Chain, wallet: Long, member: HexKey): Flow<List<GroupArkDepositAddress>> = rows
         override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = MutableStateFlow(emptyList())
         override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> = boarded
         override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> = claims
         override fun observeSnapshot(chatRoomId: String, chain: Chain, wallet: Long): Flow<GroupWavelengthSnapshot?> = snapshot
+        override fun observeArriving(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkArriving>> = arriving
     }
 
     private val chat = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
         override suspend fun getChatRoomByIdentifier(identifier: String): LocalChatRoom? = GroupWavelengthUiFixtures.localChatRoom
     }
 
-    private fun receiving(repository: Wavelength): GroupWavelengthReceiveViewModel {
-        val viewModel = keep(GroupWavelengthReceiveViewModel(me, GroupWavelengthUiFixtures.chatRoomId, Chain.Signet, chat, repository))
+    private fun receiving(repository: Wavelength, chain: Chain = Chain.Signet): GroupWavelengthReceiveViewModel {
+        val viewModel = keep(GroupWavelengthReceiveViewModel(me, GroupWavelengthUiFixtures.chatRoomId, chain, chat, repository))
         viewModel.initiate()
         runBlocking { withTimeout(5_000) { while (viewModel.uiState !is GroupWavelengthReceiveUIState.Loaded) delay(10) } }
         return viewModel
@@ -119,6 +124,49 @@ class GroupWavelengthReceiveViewModelJvmTest {
         invoiceAmountSat = 5_000, invoice = "lnbcrt5000", paymentHash = hash,
     )
 
+    private fun onMainnet() = Wavelength(
+        wallet = GroupWavelengthUiFixtures.wallet(Chain.Mainnet),
+        operator = GroupWavelengthUiFixtures.operator(operatorKey),
+        termsChain = Chain.Mainnet,
+    )
+
+    private fun arrivingRow(amountSat: Long, outpoint: String = "tx:0", spentUnseen: Long? = null) = GroupArkArriving(
+        wallet = "w", outpoint = outpoint, amountSat = amountSat, script = script, member = me,
+        firstSeenAtEpochSeconds = 1, spentUnseenAtEpochSeconds = spentUnseen,
+    )
+
+    /**
+     * A2 and A9: a boarding payment already on its way takes room under the cap, and an invoice offered for
+     * sats it has taken would be a coin no co-signer signs for.
+     */
+    @Test
+    fun `room under the cap counts what is already on its way in`() {
+        val repository = onMainnet()
+        val viewModel = receiving(repository, Chain.Mainnet)
+        assertEquals(100_000, loaded(viewModel).roomLeftSat, "the whole mainnet cap, with nothing in the wallet")
+
+        repository.arriving.value = listOf(arrivingRow(30_000))
+        settle()
+        assertEquals(70_000, loaded(viewModel).roomLeftSat)
+        // A coin's most is 50,000 on mainnet, so the room left is what binds once it drops below that.
+        assertEquals(50_000, loaded(viewModel).maxInvoiceSat)
+
+        repository.arriving.value = listOf(arrivingRow(30_000), arrivingRow(60_000, outpoint = "tx:1"))
+        settle()
+        assertEquals(10_000, loaded(viewModel).roomLeftSat)
+        assertEquals(10_000, loaded(viewModel).maxInvoiceSat, "and an invoice can't be asked for more than fits")
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in takes no room`() {
+        val repository = onMainnet()
+        val viewModel = receiving(repository, Chain.Mainnet)
+
+        repository.arriving.value = listOf(arrivingRow(30_000, spentUnseen = 2))
+        settle()
+        assertEquals(100_000, loaded(viewModel).roomLeftSat, "it is in a round now, not on its way")
+    }
+
     /**
      * A boarding coin this device signed into a round is how it knows the address was paid. There
      * is no operator fallback on this rail, so it is always the device's own word.
@@ -135,6 +183,88 @@ class GroupWavelengthReceiveViewModelJvmTest {
         val paid = loaded(viewModel).addressPaid
         assertEquals(Satoshi(7_000), paid?.amount)
         assertEquals(false, paid?.onTheOperatorsWord)
+    }
+
+    /**
+     * `docs/paid-requests.md`'s D1, finally kept on this rail: the request stops being a QR code at first
+     * sight of the money, not when the group signs for it an hour later.
+     */
+    @Test
+    fun `a payment in the mempool takes the QR code down at first sight`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+        assertNull(loaded(viewModel).addressPaid)
+
+        repository.arriving.value = listOf(arrivingRow(7_000))
+        settle()
+        val paid = loaded(viewModel).addressPaid
+        assertEquals(Satoshi(7_000), paid?.amount)
+        assertEquals(false, paid?.onTheOperatorsWord)
+        assertEquals(PaidRequest.OnTheWay.MEMPOOL, paid?.onTheWay)
+    }
+
+    @Test
+    fun `once it confirms the panel says so, and the round is what it waits for`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000).copy(blockHeight = 900))
+        settle()
+        assertEquals(PaidRequest.OnTheWay.CONFIRMED, loaded(viewModel).addressPaid?.onTheWay)
+    }
+
+    @Test
+    fun `a boarding coin this device signed for outranks what it saw on the chain`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000))
+        repository.boarded.value = listOf(GroupArkBoarded("w", "tx:0", "c1", 7_000, script))
+        settle()
+        val paid = loaded(viewModel).addressPaid
+        assertEquals(Satoshi(7_000), paid?.amount)
+        assertNull(paid?.onTheWay, "a round has it now, so it is no longer on its way to the wallet")
+    }
+
+    @Test
+    fun `a payment at another member's address says nothing about this one`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000).copy(script = "51" + "bb".repeat(32)))
+        settle()
+        assertNull(loaded(viewModel).addressPaid)
+    }
+
+    @Test
+    fun `a payment replaced before it confirmed puts the QR code back up, because nobody paid`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000))
+        settle()
+        assertEquals(Satoshi(7_000), loaded(viewModel).addressPaid?.amount)
+
+        // The watch forgets a row whose transaction has left the address's history.
+        repository.arriving.value = emptyList()
+        settle()
+        assertNull(loaded(viewModel).addressPaid, "nobody has paid this address, so it goes back to a QR code")
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in is not an arriving payment`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000, spentUnseen = 2))
+        settle()
+        assertNull(loaded(viewModel).addressPaid, "it has gone where this device can't follow it")
     }
 
     @Test

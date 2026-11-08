@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkFee
@@ -170,5 +171,40 @@ class GroupWavelengthReceiptJvmTest {
         assertTrue(bare.lines().none { it.isBlank() }, "no empty lines:\n$bare")
         assertTrue("Fee" !in bare)
         assertTrue("Whose" !in bare)
+    }
+
+    /**
+     * The state `dedun`'s unconfirmed-deposits work brought in, which this branch's proof line predated.
+     * A boarding payment seen on the chain has no `boarded` row until a round takes it, so the branch as
+     * written answered `Unsaid` -- *nothing on any chain to point at* -- for the one entry whose money is
+     * demonstrably on a chain and whose outpoint this device read off the chain itself.
+     */
+    @Test
+    fun `a payment still arriving names the outpoint this device saw`() {
+        val seen = GroupArkArriving(wallet, "deadbeef:0", 50_000, "0014aa", alice, firstSeenAtEpochSeconds = 1_799_999_000)
+        val entry = entry(
+            Kind.DEPOSIT_ONCHAIN,
+            GroupWavelengthEntry.Detail.OnchainDeposit(
+                arriving = GroupWavelengthEntry.Detail.Arriving(row = seen, depth = 0, needed = 6),
+            ),
+        ).copy(status = GroupWavelengthEntry.Status.ARRIVING, direction = GroupWavelengthEntry.Direction.IN)
+        assertEquals(Proof.Held("deadbeef:0"), GroupWavelengthReceipt.proof(entry))
+        assertTrue(words.holds!!("deadbeef:0") in GroupWavelengthReceipt.of(entry, words).lines())
+    }
+
+    /** Once a round has it the receipt names what the group signed, not what one device watched. */
+    @Test
+    fun `a boarded coin outranks the sighting it grew from`() {
+        val entry = entry(
+            Kind.DEPOSIT_ONCHAIN,
+            GroupWavelengthEntry.Detail.OnchainDeposit(
+                boarded = GroupArkBoarded(wallet, "abc:0", "the-round", 50_000, "0014aa"),
+                arriving = GroupWavelengthEntry.Detail.Arriving(
+                    row = GroupArkArriving(wallet, "deadbeef:0", 50_000, "0014aa", alice, firstSeenAtEpochSeconds = 1),
+                    depth = 6, needed = 6,
+                ),
+            ),
+        )
+        assertEquals(Proof.Held("abc:0"), GroupWavelengthReceipt.proof(entry), "the signed coin, not the sighting")
     }
 }

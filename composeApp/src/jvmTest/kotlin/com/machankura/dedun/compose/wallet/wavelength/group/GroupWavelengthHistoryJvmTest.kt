@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -29,6 +30,7 @@ import fr.acinq.lightning.utils.msat
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -60,6 +62,15 @@ class GroupWavelengthHistoryJvmTest {
 
     private fun onchainPayout(amountSat: Long = 3_000, expiresAt: Long = now + 3_600, askedAt: Long = now - 60) =
         GroupWavelengthOnchainPayoutEvent.Payout(Chain.Regtest, 0, bob, "destination", "tb1qexample", amountSat, 200, expiresAt, askedAt)
+
+    private fun arriving(
+        outpoint: String,
+        amountSat: Long,
+        member: String? = alice,
+        firstSeen: Long = now - 300,
+        height: Long? = null,
+        spentUnseen: Long? = null,
+    ) = GroupArkArriving(wallet, outpoint, amountSat, "0014aa", member, firstSeen, height, spentUnseen)
 
     private fun deposit(key: String, amountSat: Long, member: String? = alice, seen: Long = now - 600, confirmed: Long? = now - 500) =
         DepositRow(
@@ -165,6 +176,96 @@ class GroupWavelengthHistoryJvmTest {
         assertEquals(claimed.id, settled.id)
         assertEquals(Status.DONE, settled.status)
         assertEquals(Kind.DEPOSIT_LIGHTNING, settled.kind)
+    }
+
+    @Test
+    fun `a payment in the mempool is an arriving entry, with the id it will keep`() {
+        val rows = GroupWavelengthHistory.Rows(arriving = listOf(arriving("$txid:0", 50_000)), tip = 900)
+        val entry = assertNotNull(of(rows).singleOrNull())
+        assertEquals("deposit:$txid:0", entry.id)
+        assertEquals(Kind.DEPOSIT_ONCHAIN, entry.kind)
+        assertEquals(Status.ARRIVING, entry.status)
+        assertEquals(Source.THIS_DEVICE, entry.source)
+        assertEquals(50_000, entry.amountSat)
+        assertEquals(0, entry.feeSat)
+        assertEquals(alice, entry.member)
+        assertEquals(GroupWavelengthEntry.Direction.IN, entry.direction)
+        assertEquals(now - 300, entry.at, "its own first sight, which is the only time it has")
+        assertFalse(entry.isSettled)
+        val detail = assertIs<GroupWavelengthEntry.Detail.OnchainDeposit>(entry.detail)
+        val coin = assertNotNull(detail.arriving)
+        assertEquals(0, coin.depth, "nothing in the mempool is any blocks deep")
+        assertEquals(1, coin.needed)
+    }
+
+    @Test
+    fun `how deep an arriving payment is is worked out against the tip`() {
+        val rows = GroupWavelengthHistory.Rows(
+            arriving = listOf(arriving("$txid:0", 50_000, height = 895)),
+            tip = 900,
+            boardingConfirmations = 6,
+        )
+        val coin = assertNotNull(assertIs<GroupWavelengthEntry.Detail.OnchainDeposit>(of(rows).single().detail).arriving)
+        assertEquals(6, coin.depth, "confirmed at 895 with the tip at 900 is six deep")
+        assertEquals(6, coin.needed)
+    }
+
+    @Test
+    fun `with no tip it is one deep rather than nothing, because it is in a block`() {
+        val rows = GroupWavelengthHistory.Rows(arriving = listOf(arriving("$txid:0", 50_000, height = 895)), tip = null)
+        val coin = assertNotNull(assertIs<GroupWavelengthEntry.Detail.OnchainDeposit>(of(rows).single().detail).arriving)
+        assertEquals(1, coin.depth)
+    }
+
+    @Test
+    fun `one coin, one entry, however many tables hold it`() {
+        val coin = arriving("$txid:0", 50_000, height = 895)
+        val boarded = GroupArkBoarded(wallet, "$txid:0", "commitment", 50_000, "0014aa")
+        val landed = deposit("$txid:0", 50_000)
+
+        // Arriving alone, then arriving beside the round it was signed into, then all three.
+        assertEquals(Status.ARRIVING, of(GroupWavelengthHistory.Rows(arriving = listOf(coin))).single().status)
+
+        val signed = of(GroupWavelengthHistory.Rows(arriving = listOf(coin), boarded = listOf(boarded)))
+        assertEquals(1, signed.size, "a boarding coin this device signed for outranks what it saw on the chain")
+        assertEquals(Status.IN_FLIGHT, signed.single().status)
+
+        val all = of(GroupWavelengthHistory.Rows(arriving = listOf(coin), boarded = listOf(boarded), deposits = listOf(landed)))
+        assertEquals(1, all.size, "a landed deposit outranks both")
+        assertEquals(Status.DONE, all.single().status)
+        assertEquals(signed.single().id, all.single().id, "and the id never changes under the reader")
+    }
+
+    @Test
+    fun `an arriving payment at a member's address is theirs, and one nobody claims is nobody's`() {
+        val mine = GroupWavelengthHistory.Rows(arriving = listOf(arriving("$txid:0", 7_000, member = bob)))
+        assertEquals(bob, of(mine).single().member)
+
+        val nobody = GroupWavelengthHistory.Rows(arriving = listOf(arriving("$txid:0", 7_000, member = null)))
+        val entry = of(nobody).single()
+        assertNull(entry.member, "a script no request of this device's claims is nobody's")
+        assertEquals(Status.ARRIVING, entry.status, "and it is still shown")
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in keeps its row and its mark`() {
+        val rows = GroupWavelengthHistory.Rows(
+            arriving = listOf(arriving("$txid:0", 50_000, height = 895, spentUnseen = now - 100)),
+            tip = 900,
+        )
+        val entry = of(rows).single()
+        assertEquals(Status.ARRIVING, entry.status)
+        val coin = assertNotNull(assertIs<GroupWavelengthEntry.Detail.OnchainDeposit>(entry.detail).arriving)
+        assertEquals(now - 100, coin.row.spentUnseenAtEpochSeconds)
+    }
+
+    @Test
+    fun `an arriving payment is newer than a deposit that landed an hour ago`() {
+        val rows = GroupWavelengthHistory.Rows(
+            arriving = listOf(arriving("$other:0", 7_000)),
+            deposits = listOf(deposit("$txid:0", 50_000, seen = now - 7_200, confirmed = now - 3_600)),
+        )
+        assertEquals(listOf("deposit:$other:0", "deposit:$txid:0"), of(rows).map { it.id })
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.repository
 
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -125,6 +126,15 @@ interface GroupWavelengthRepository {
      */
     fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>>
 
+    /** Boarding payments this device has seen on the chain that no round has taken in: `GroupArkBoardingWatch`. */
+    fun observeArriving(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkArriving>>
+
+    /**
+     * Whether this device has a chain connection for [chain] right now. Read without asking the server, since
+     * the real client holds a request until it has one, and never read as "nothing has arrived" (A15).
+     */
+    suspend fun chainReached(chain: Chain): Boolean
+
     /** Lightning claims this device has signed: the amount it believes arrived, per payment hash. */
     fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>>
 
@@ -165,6 +175,8 @@ interface GroupWavelengthRepository {
             override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(emptyList())
             override suspend fun historyRows(chatRoomId: String, chain: Chain, wallet: Long): GroupWavelengthHistory.Rows = GroupWavelengthHistory.Rows()
             override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> = flowOf(emptyList())
+            override fun observeArriving(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkArriving>> = flowOf(emptyList())
+            override suspend fun chainReached(chain: Chain): Boolean = false
             override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> = flowOf(emptyList())
         }
     }

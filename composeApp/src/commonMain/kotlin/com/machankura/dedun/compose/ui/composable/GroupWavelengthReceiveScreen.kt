@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
+import com.machankura.dedun.compose.wallet.wavelength.group.PaidRequest
 import com.machankura.dedun.compose.text.grouped
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
@@ -62,6 +63,8 @@ import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.address_copied
 import dedun.composeapp.generated.resources.an_expired_invoice_cannot_be_paid_ask_for_another
 import dedun.composeapp.generated.resources.ask_for_another_address
+import dedun.composeapp.generated.resources.group_wavelength_address_paid_confirming
+import dedun.composeapp.generated.resources.group_wavelength_address_paid_in_mempool
 import dedun.composeapp.generated.resources.copy_address
 import dedun.composeapp.generated.resources.group_wavelength_invoice_route
 import dedun.composeapp.generated.resources.group_wavelength_invoice_route_why
@@ -194,11 +197,17 @@ private fun LazyListScope.onchainItems(state: GroupWavelengthReceiveUIState.Load
     item { Text(stringResource(Res.string.group_wavelength_receive_address), style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth()) }
     val paid = state.addressPaid
     if (paid != null) {
-        // No operator fallback on this rail, so this is always the device's own word.
+        // No operator fallback on this rail, so this is always the device's own word -- and since this
+        // device checked the address and watches it itself, the panel comes at first sight of the money
+        // rather than when the group signs for it (`docs/group-wavelength-unconfirmed-deposits.md`, Phase 5).
         item {
             PaymentReceived(
                 amount = paid.amount,
-                note = stringResource(Res.string.this_address_was_paid_ask_for_another),
+                note = when (paid.onTheWay) {
+                    PaidRequest.OnTheWay.MEMPOOL -> stringResource(Res.string.group_wavelength_address_paid_in_mempool)
+                    PaidRequest.OnTheWay.CONFIRMED -> stringResource(Res.string.group_wavelength_address_paid_confirming)
+                    null -> stringResource(Res.string.this_address_was_paid_ask_for_another)
+                },
                 action = { Button(onClick = onAsk) { Text(stringResource(Res.string.ask_for_another_address)) } },
             )
         }
