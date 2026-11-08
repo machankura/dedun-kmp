@@ -36,9 +36,15 @@ import kotlin.test.assertEquals
  * place.
  *
  * Asserted against what the screen actually draws rather than against the source, because
- * [com.machankura.dedun.compose.ui.composable.widgets.QRCodeView] gives its image the request as
- * a content description -- so "is this scannable?" is a question the semantics tree answers.
- * A new rail that forgets the rule fails here rather than passing a scan of its imports.
+ * [com.machankura.dedun.compose.ui.composable.widgets.QRCodeView] gives its image a content
+ * description -- so "is this scannable?" is a question the semantics tree answers. A new rail that
+ * forgets the rule fails here rather than passing a scan of its imports.
+ *
+ * That description used to **be the request**, which is what Phase 4 of the redesign changed: a
+ * screen reader spoke a bech32 address one character at a time. It is a label now, naming what the
+ * code is for, so these assertions name the label. They are no weaker for it -- each of these screens
+ * draws at most one code -- and the assertion that the description is *not* the payload lives in
+ * `QRCodeViewJvmTest`.
  *
  * Each screen's default rail is the one tested: the profile's own invoice, and the group's
  * boarding address. Between them that is both rails and two of the three one-shot screens; the
@@ -47,6 +53,11 @@ import kotlin.test.assertEquals
  */
 @OptIn(ExperimentalTestApi::class)
 class PaidRequestsNoQrJvmTest {
+
+    // What each code is called now: a label rather than the payload, which is the point of the change.
+    private val yourInvoiceCode = "QR code for your Wavelength invoice"
+    private val groupAddressCode = "QR code for your address in the group's Wavelength wallet"
+    private val groupInvoiceCode = "QR code for the group's Wavelength invoice"
 
     /** Unreadable on purpose: an invoice whose expiry is unknown keeps its QR code. */
     private val invoice = "lnbcrt1250n1fakeinvoice"
@@ -97,11 +108,24 @@ class PaidRequestsNoQrJvmTest {
             assertions()
         }
 
+    /** The group's Lightning rail is a screen of its own since Phase 4 (B4), so it is rendered as one. */
+    private fun groupInvoice(state: GroupWavelengthReceiveUIState, assertions: androidx.compose.ui.test.ComposeUiTest.() -> Unit) =
+        runDesktopComposeUiTest(width = 400, height = 1600) {
+            setContent {
+                DedunTheme {
+                    ProvideSnackbarHost {
+                        GroupWavelengthInvoiceContent(Modifier, state)
+                    }
+                }
+            }
+            assertions()
+        }
+
     @Test
     fun `an unpaid invoice is scannable`() = wavelength(
         WavelengthReceiveUIState(hasWallet = true, amount = "1250", invoice = invoice)
     ) {
-        assertEquals(1, onAllNodesWithContentDescription(invoice).fetchSemanticsNodes().size)
+        assertEquals(1, onAllNodesWithContentDescription(yourInvoiceCode).fetchSemanticsNodes().size)
         assertEquals(0, onAllNodesWithText("Payment received").fetchSemanticsNodes().size)
     }
 
@@ -109,7 +133,7 @@ class PaidRequestsNoQrJvmTest {
     fun `a paid invoice is not scannable, and says what arrived`() = wavelength(
         WavelengthReceiveUIState(hasWallet = true, amount = "1250", invoice = invoice, invoicePaid = Satoshi(1_250))
     ) {
-        assertEquals(0, onAllNodesWithContentDescription(invoice).fetchSemanticsNodes().size, "a paid invoice must not be paid again")
+        assertEquals(0, onAllNodesWithContentDescription(yourInvoiceCode).fetchSemanticsNodes().size, "a paid invoice must not be paid again")
         onNodeWithText("Payment received").assertIsDisplayed()
         onNodeWithText("1,250 sats").assertIsDisplayed()
         // Still readable, so a member can check it against what the payer says they paid.
@@ -120,7 +144,7 @@ class PaidRequestsNoQrJvmTest {
     fun `an unpaid group address is scannable`() = group(
         GroupWavelengthReceiveUIState.Loaded(address = address, addressAsked = true)
     ) {
-        assertEquals(1, onAllNodesWithContentDescription(bip21Uri(address)).fetchSemanticsNodes().size)
+        assertEquals(1, onAllNodesWithContentDescription(groupAddressCode).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -131,7 +155,7 @@ class PaidRequestsNoQrJvmTest {
             addressPaid = PaidRequest(Satoshi(7_000), onTheOperatorsWord = false),
         )
     ) {
-        assertEquals(0, onAllNodesWithContentDescription(bip21Uri(address)).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodesWithContentDescription(groupAddressCode).fetchSemanticsNodes().size)
         onNodeWithText("Payment received").assertIsDisplayed()
         onNodeWithText("7,000 sats").assertIsDisplayed()
         onNodeWithText("Ask for another address").assertIsDisplayed()
@@ -140,7 +164,7 @@ class PaidRequestsNoQrJvmTest {
 
     /** Where only the operator says a payment happened, the panel names the operator (D4). */
     @Test
-    fun `a payment only the operator claims says whose word it is`() = group(
+    fun `a payment only the operator claims says whose word it is`() = groupInvoice(
         GroupWavelengthReceiveUIState.Loaded(
             invoice = invoice,
             invoiceAmountSat = 1_250,
@@ -148,19 +172,16 @@ class PaidRequestsNoQrJvmTest {
             operatorName = "zanele",
         )
     ) {
-        // The screen opens on its onchain rail; the invoice is behind the Lightning chip.
-        onNodeWithText("Lightning").performClick()
-        assertEquals(0, onAllNodesWithContentDescription(invoice).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodesWithContentDescription(groupInvoiceCode).fetchSemanticsNodes().size)
         onNodeWithText("Payment received").assertIsDisplayed()
         onNodeWithText("zanele says a payment arrived").assertIsDisplayed()
     }
 
     @Test
-    fun `an unpaid group invoice is scannable`() = group(
+    fun `an unpaid group invoice is scannable`() = groupInvoice(
         GroupWavelengthReceiveUIState.Loaded(invoice = invoice, invoiceAmountSat = 1_250)
     ) {
-        onNodeWithText("Lightning").performClick()
-        assertEquals(1, onAllNodesWithContentDescription(invoice).fetchSemanticsNodes().size)
+        assertEquals(1, onAllNodesWithContentDescription(groupInvoiceCode).fetchSemanticsNodes().size)
         assertEquals(0, onAllNodesWithText("Payment received").fetchSemanticsNodes().size)
     }
 
@@ -170,7 +191,7 @@ class PaidRequestsNoQrJvmTest {
     fun `an invoice inside its window is scannable`() = wavelength(
         WavelengthReceiveUIState(hasWallet = true, amount = "1250", invoice = liveInvoice)
     ) {
-        assertEquals(1, onAllNodesWithContentDescription(liveInvoice).fetchSemanticsNodes().size)
+        assertEquals(1, onAllNodesWithContentDescription(yourInvoiceCode).fetchSemanticsNodes().size)
         assertEquals(0, onAllNodesWithText("This invoice expired").fetchSemanticsNodes().size)
     }
 
@@ -178,7 +199,7 @@ class PaidRequestsNoQrJvmTest {
     fun `an expired invoice is not scannable, and says to ask for another`() = wavelength(
         WavelengthReceiveUIState(hasWallet = true, amount = "1250", invoice = expiredInvoice)
     ) {
-        assertEquals(0, onAllNodesWithContentDescription(expiredInvoice).fetchSemanticsNodes().size, "nobody can pay it now")
+        assertEquals(0, onAllNodesWithContentDescription(yourInvoiceCode).fetchSemanticsNodes().size, "nobody can pay it now")
         onNodeWithText("This invoice expired").assertIsDisplayed()
         onNodeWithText("Nobody can pay it now. Ask for another to be paid this amount.").assertIsDisplayed()
         onNodeWithText("Ask for another invoice").assertIsDisplayed()
@@ -194,15 +215,14 @@ class PaidRequestsNoQrJvmTest {
         onNodeWithText("Payment received").assertIsDisplayed()
         onNodeWithText("1,250 sats").assertIsDisplayed()
         assertEquals(0, onAllNodesWithText("This invoice expired").fetchSemanticsNodes().size)
-        assertEquals(0, onAllNodesWithContentDescription(expiredInvoice).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodesWithContentDescription(yourInvoiceCode).fetchSemanticsNodes().size)
     }
 
     @Test
-    fun `an expired group invoice is not scannable either`() = group(
+    fun `an expired group invoice is not scannable either`() = groupInvoice(
         GroupWavelengthReceiveUIState.Loaded(invoice = expiredInvoice, invoiceAmountSat = 1_250)
     ) {
-        onNodeWithText("Lightning").performClick()
-        assertEquals(0, onAllNodesWithContentDescription(expiredInvoice).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodesWithContentDescription(groupInvoiceCode).fetchSemanticsNodes().size)
         onNodeWithText("This invoice expired").assertIsDisplayed()
     }
 }

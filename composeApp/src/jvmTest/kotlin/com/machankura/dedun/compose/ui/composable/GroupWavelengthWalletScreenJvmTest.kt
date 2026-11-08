@@ -645,11 +645,55 @@ class GroupWavelengthWalletScreenJvmTest {
 
     private val lightningTerms = GroupWavelengthTerms.of(Chain.Mainnet)
 
+    // ---------------------------------------------------------------------
+    // One way in (Phase 4, B4).
+    // ---------------------------------------------------------------------
+
+    /**
+     * No chip pair. The two rails differ in **who has to be trusted** -- an address this device
+     * recomputed from the group's key, against an invoice whoever runs the wallet made and no device
+     * here can check -- and a `FilterChip` pair made that read as a preference between equals.
+     */
     @Test
-    fun `Lightning says first that the operator makes the invoice, and asks for an amount`() = runDesktopComposeUiTest(phone, 1400) {
+    fun `the receive screen is the address, and the invoice is a labelled way off it`() = runDesktopComposeUiTest(phone, 1600) {
+        var opened = 0
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthReceiveContent(
+                        Modifier,
+                        GroupWavelengthReceiveUIState.Loaded(address = "bc1paddress", terms = GroupWavelengthTerms.of(Chain.Mainnet), maxRoundFeeSat = 2_000),
+                        Chain.Mainnet,
+                        onOpenInvoice = { opened++ },
+                    )
+                }
+            }
+        }
+        onNodeWithText("bc1paddress").assertIsDisplayed()
+        // The chips are gone, and with them the toggle that looked like a choice of rail.
+        onAllNodesWithText("Onchain").assertCountEquals(0)
+        onAllNodesWithText("Lightning").assertCountEquals(0)
+        // The route says what it costs on the button, not behind it.
+        onNodeWithText("Faster, and your device can't check where it pays. The address above is the one your device can check for itself.").assertIsDisplayed()
+        // And no invoice is reachable without leaving this screen.
+        onAllNodesWithText("Whoever runs the wallet makes this invoice", substring = true).assertCountEquals(0)
+        onAllNodesWithText("Get an invoice").assertCountEquals(0)
+        onNodeWithText("Ask for a Lightning invoice instead").performClick()
+        assertEquals(1, opened)
+    }
+
+    /** The warning is the first thing on the invoice screen, and there is no way past it. */
+    @Test
+    fun `the invoice screen cannot be reached past its warning`() = runDesktopComposeUiTest(phone, 1400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthInvoiceContent(Modifier, GroupWavelengthReceiveUIState.Loaded(terms = lightningTerms)) } } }
+        onNodeWithText("Whoever runs the wallet makes this invoice, and your device can't confirm where it pays. Only use it if you trust them with this amount.").assertIsDisplayed()
+        onNodeWithText("Get an invoice").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the invoice screen says first that whoever runs it makes the invoice, and asks for an amount`() = runDesktopComposeUiTest(phone, 1400) {
         var asked: Long? = null
-        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(terms = lightningTerms, roomLeftSat = 30_000), Chain.Mainnet, onAskInvoice = { asked = it }) } } }
-        onNodeWithText("Lightning").performClick()
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthInvoiceContent(Modifier, GroupWavelengthReceiveUIState.Loaded(terms = lightningTerms, roomLeftSat = 30_000), onAskInvoice = { asked = it }) } } }
         onNodeWithText("Whoever runs the wallet makes this invoice, and your device can't confirm where it pays. Only use it if you trust them with this amount.").assertIsDisplayed()
         onNodeWithText("At least 1,000 sats, and no more than 30,000.").assertIsDisplayed()
         onNodeWithText("Amount in sats").performTextInput("2500")
@@ -659,8 +703,7 @@ class GroupWavelengthWalletScreenJvmTest {
 
     @Test
     fun `an invoice is shown with what was checked of it, and too few devices is said`() = runDesktopComposeUiTest(phone, 1600) {
-        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(invoice = "lnbc1theinvoice", invoiceAmountSat = 2_500, terms = lightningTerms, enoughSeen = false), Chain.Mainnet) } } }
-        onNodeWithText("Lightning").performClick()
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthInvoiceContent(Modifier, GroupWavelengthReceiveUIState.Loaded(invoice = "lnbc1theinvoice", invoiceAmountSat = 2_500, terms = lightningTerms, enoughSeen = false)) } } }
         onNodeWithText("lnbc1theinvoice").assertIsDisplayed()
         onNodeWithText("Your device checked that this invoice is for 2,500 sats. What's paid counts as yours once the group has claimed it.").assertIsDisplayed()
         onNodeWithText("Enough of the group's devices have to be online to claim a payment", substring = true).assertIsDisplayed()
@@ -669,8 +712,7 @@ class GroupWavelengthWalletScreenJvmTest {
 
     @Test
     fun `asking for an invoice says it's waiting on whoever runs the wallet`() = runDesktopComposeUiTest(phone, 1200) {
-        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthReceiveContent(Modifier, GroupWavelengthReceiveUIState.Loaded(invoiceAsked = true, terms = lightningTerms), Chain.Mainnet) } } }
-        onNodeWithText("Lightning").performClick()
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthInvoiceContent(Modifier, GroupWavelengthReceiveUIState.Loaded(invoiceAsked = true, terms = lightningTerms)) } } }
         onNodeWithText("Asked. The invoice comes from whoever runs the wallet", substring = true).assertIsDisplayed()
         assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Get an invoice")).fetchSemanticsNodes().size)
     }

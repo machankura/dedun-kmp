@@ -59,6 +59,7 @@ import com.machankura.dedun.compose.wallet.bip21Uri
 import com.machankura.dedun.compose.wallet.lightning.GroupSwapInWallet
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.qr_group_swap_in_address
 import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group_to_refund
 import dedun.composeapp.generated.resources.the_group_was_asked_to_refund
@@ -215,7 +216,7 @@ private fun SwapInList(state: GroupSwapInUIState.Loaded, notify: (String) -> Uni
                     modifier = Modifier.fillMaxWidth(),
                 )
                 // BIP21, so a scanning wallet knows what the text is.
-                QRCodeView(bip21Uri(state.current.address))
+                QRCodeView(bip21Uri(state.current.address), stringResource(Res.string.qr_group_swap_in_address))
                 SelectionContainer {
                     Text(text = state.current.address, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                 }

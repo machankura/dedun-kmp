@@ -56,6 +56,8 @@ import dedun.composeapp.generated.resources.ask_for_another_address
 import dedun.composeapp.generated.resources.ask_for_another_invoice
 import dedun.composeapp.generated.resources.copied
 import dedun.composeapp.generated.resources.copy
+import dedun.composeapp.generated.resources.qr_your_wavelength_address
+import dedun.composeapp.generated.resources.qr_your_wavelength_invoice
 import dedun.composeapp.generated.resources.receive
 import dedun.composeapp.generated.resources.this_address_was_paid_ask_for_another
 import dedun.composeapp.generated.resources.this_invoice_was_paid_and_should_not_be_paid_again
@@ -173,7 +175,7 @@ private fun LightningTab(state: WavelengthReceiveUIState, onAmountChange: (Strin
                 RequestText(invoice)
             }
             else -> {
-                RequestCode(invoice)
+                RequestCode(invoice, stringResource(Res.string.qr_your_wavelength_invoice))
                 if (state.invoiceIsCredit) Text(stringResource(Res.string.wavelength_receive_credit), style = MaterialTheme.typography.bodyMedium)
                 Text(stringResource(Res.string.wavelength_receive_keep_open), style = MaterialTheme.typography.bodyMedium)
             }
@@ -200,13 +202,18 @@ private fun OnchainTab(state: WavelengthReceiveUIState, onMakeAddress: () -> Uni
         )
         RequestText(address)
     } else {
-        RequestCode(address)
+        RequestCode(address, stringResource(Res.string.qr_your_wavelength_address))
     }
 }
 
+/**
+ * [description] rather than one label for both: this draws an invoice on one branch and an address on
+ * the other, and a blind member holding up the phone needs to know which of the two they have. One
+ * shared default is how five different absences all came to say "No events were found".
+ */
 @Composable
-private fun RequestCode(text: String) {
-    QRCodeView(text)
+private fun RequestCode(text: String, description: String) {
+    QRCodeView(text, description)
     RequestText(text)
 }
 

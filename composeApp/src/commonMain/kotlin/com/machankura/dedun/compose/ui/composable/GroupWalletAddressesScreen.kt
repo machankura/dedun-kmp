@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.composable
 
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import dedun.composeapp.generated.resources.before_deposits_were_attributed
+import dedun.composeapp.generated.resources.qr_group_address
 import dedun.composeapp.generated.resources.s_deposit_addresses
 import dedun.composeapp.generated.resources.you_have_no_deposit_addresses_yet
 import dedun.composeapp.generated.resources.your_deposit_addresses
@@ -324,7 +325,7 @@ private fun AddressSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             // BIP21, so a scanning wallet knows what the text is.
-            QRCodeView(bip21Uri(address.address))
+            QRCodeView(bip21Uri(address.address), stringResource(Res.string.qr_group_address))
             SelectionContainer {
                 Text(text = address.address, style = MaterialTheme.typography.bodyMedium)
             }

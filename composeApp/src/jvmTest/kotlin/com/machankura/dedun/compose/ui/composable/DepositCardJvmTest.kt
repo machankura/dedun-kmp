@@ -115,7 +115,9 @@ class DepositCardJvmTest {
             onNodeWithText("Payment received").assertIsDisplayed()
             onNodeWithText("12,000 sats").assertIsDisplayed()
             onNodeWithText("This address was paid. The one below it is fresh.").assertIsDisplayed()
-            assertEquals(1, onAllNodesWithContentDescription(bip21Uri(address)).fetchSemanticsNodes().size, "the fresh address is still a QR code")
+            // The code's description is a label rather than the payload since Phase 4 of the
+            // Wavelength redesign, so "is this scannable?" asks for the label.
+            assertEquals(1, onAllNodesWithContentDescription("QR code for the group's onchain address").fetchSemanticsNodes().size, "the fresh address is still a QR code")
         }
 
     @Test

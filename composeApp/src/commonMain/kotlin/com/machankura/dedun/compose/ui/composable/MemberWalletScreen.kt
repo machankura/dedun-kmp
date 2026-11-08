@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
 import com.machankura.dedun.compose.managers.MemberWalletManager
+import dedun.composeapp.generated.resources.qr_member_wallet_address
 import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.s_has_stopped_guarding_members_wallets_discard
 import dedun.composeapp.generated.resources.s_has_changed_its_delay_since_you_asked
@@ -281,7 +282,7 @@ fun MemberWalletScreen(
                                                             note = stringResource(Res.string.this_address_was_paid_and_the_next_one_is_below),
                                                         )
                                                     }
-                                                    QRCodeView(bip21Uri(address))
+                                                    QRCodeView(bip21Uri(address), stringResource(Res.string.qr_member_wallet_address))
                                                     SelectionContainer { Text(text = address, style = MaterialTheme.typography.bodyMedium) }
                                                     TextButton(onClick = {
                                                         clipboardManager.setText(buildAnnotatedString { append(address) })

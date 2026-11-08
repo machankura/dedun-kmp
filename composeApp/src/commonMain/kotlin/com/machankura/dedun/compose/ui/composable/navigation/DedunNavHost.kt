@@ -53,7 +53,9 @@ import com.machankura.dedun.compose.ui.composable.GroupWavelengthEntryScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthEntryRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthExitScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthExitRoute
+import com.machankura.dedun.compose.ui.composable.GroupWavelengthInvoiceScreen
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthReceiveScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthInvoiceRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthReceiveRoute
 import com.machankura.dedun.compose.ui.composable.GroupWavelengthWalletScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthAdvancedRoute
@@ -1038,6 +1040,30 @@ fun DedunNavHost(
                 val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
 
                 GroupWavelengthReceiveScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = chain,
+                    chatRepository = databaseChatRepository,
+                    repository = databaseGroupWavelengthRepository,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    onOpenInvoice = {
+                        navController.navigate(
+                            route = GroupWavelengthInvoiceRoute(
+                                activeUserPublicKey = route.activeUserPublicKey,
+                                chatRoomId = route.chatRoomId,
+                                chain = route.chain,
+                            )
+                        )
+                    },
+                )
+            }
+            composable<GroupWavelengthInvoiceRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupWavelengthInvoiceRoute>()
+                val chain = GroupWalletStatementEvent.chainNamed(route.chain) ?: return@composable
+
+                GroupWavelengthInvoiceScreen(
                     activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     chain = chain,

@@ -61,9 +61,19 @@ class QRCodeBackgroundPainter(
 
 }
 
+/**
+ * A QR code, and a name for it that is not the thing it encodes.
+ *
+ * [contentDescription] has no default on purpose, the same argument [com.machankura.dedun.compose.ui.composable.widgets.ErrorState]'s
+ * `onRetry` makes: every one of the nine call sites has to decide. Before this, every one of them
+ * passed [data], so a screen reader spoke a bech32 address or a bolt11 invoice one character at a
+ * time -- a minute of letters that tells a blind member nothing about which code they are holding up,
+ * and the longest thing on the screen. Say what it is for.
+ */
 @Composable
 fun QRCodeView(
     data: String,
+    contentDescription: String,
 ) {
     // m3-color-exempt: a QR code is read by a camera, not a person. Scanners need
     // maximum luminance contrast between the modules and their background, so these
@@ -85,7 +95,7 @@ fun QRCodeView(
     )
 
     val painter = rememberQrCodePainter(
-        data = data,
+        data = scannable(data),
     ) {
         logo {
             painter = logoPainter
@@ -106,7 +116,24 @@ fun QRCodeView(
         Image(
             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
             painter = painter,
-            contentDescription = data,
+            contentDescription = contentDescription,
         )
     }
 }
+
+/**
+ * The payload a scanner reads, which is not always the string a member reads.
+ *
+ * bech32 is defined over one case, so an all-lowercase address or invoice means the same thing
+ * uppercased -- and uppercase is what lets the encoder use QR's alphanumeric mode, which fits the
+ * same payload into a smaller, denser symbol that scans from further away and in worse light. The
+ * guide asks for the smaller symbol; what a member reads and copies is the `Copyable` beside this
+ * one, untouched, in the case it was given.
+ *
+ * Only where it is certainly safe: every character in the bech32 alphabet, plus the `:` of a
+ * `bitcoin:` or `lightning:` scheme, which URI schemes are case-insensitive over. Anything else --
+ * a BIP 21 `?label=`, whose text means its own case, or a payload that is already mixed case, which
+ * is not bech32 at all -- is encoded exactly as given.
+ */
+internal fun scannable(data: String): String =
+    if (data.isNotEmpty() && data.all { it in 'a'..'z' || it in '0'..'9' || it == ':' }) data.uppercase() else data

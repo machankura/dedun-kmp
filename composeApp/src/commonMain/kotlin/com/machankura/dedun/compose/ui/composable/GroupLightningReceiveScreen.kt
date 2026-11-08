@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.ui.composable
 import dedun.composeapp.generated.resources.ask_again
 import dedun.composeapp.generated.resources.no_reply_from_the_operator_s_device_yet
 import dedun.composeapp.generated.resources.a_member_who_holds_a_share_of_the_group_s_key_can_open_your_deposits
+import dedun.composeapp.generated.resources.qr_group_lightning_invoice
 import dedun.composeapp.generated.resources.start_depositing
 import dedun.composeapp.generated.resources.the_group_opens_your_deposits_once_signing_a_branch_of_its_wallet_that_is_yours
 import dedun.composeapp.generated.resources.set_where_this_group_pays_you_first
@@ -263,7 +264,7 @@ fun GroupLightningReceiveScreen(
                         )
                     } else {
                         // The URI scheme, so a scanning wallet knows what the text is.
-                        QRCodeView("lightning:${state.bolt11}")
+                        QRCodeView("lightning:${state.bolt11}", stringResource(Res.string.qr_group_lightning_invoice))
                         Text(stringResource(Res.string.this_invoice_pays_the_group_s_node), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     SelectionContainer { Text(state.bolt11, style = MaterialTheme.typography.bodySmall) }

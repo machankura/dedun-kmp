@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 3 are built; Phases 4 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 4 are built; Phases 5 to 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -630,35 +630,51 @@ Layout within `BalanceCard`, one new widget, and B5 done early. B2.
 **Done** on 8 November 2026: the five cases pass, and the card's collapsed height is one figure, one
 currency line and one sentence.
 
-### Phase 4: one way in
+### Phase 4: one way in — **built**
 
 The receive screen, restructured. B4, B5, and finding 9's three items.
 
-- `Rails` loses the `FilterChip` pair. The onchain items become the screen; the Lightning route becomes a
-  `TextButton` with a two-line supporting label, navigating to a new `GroupWavelengthInvoiceRoute` whose
-  screen is today's `lightningItems` with the warning first and `InvoiceAsk` under it.
+- `Rails` is `TheWayIn`, and the `FilterChip` pair is gone. The onchain items are the screen; the
+  Lightning route is a `TextButton` with the reason under it, to a new `GroupWavelengthInvoiceRoute`
+  whose `GroupWavelengthInvoiceScreen` is the old `lightningItems` with the warning first and
+  `InvoiceAsk` under it. The invoice is not reachable without leaving the receive screen.
 - ~~`group_wavelength_receive_room_s` moves to the wallet screen's disclosure (Phase 3's card) and
   leaves this screen.~~ **Done in Phase 3,** which built the disclosure: the string is deleted rather
   than moved, and the disclosure has a shorter `group_wavelength_room_s` of its own.
-- `QRCodeView` gains `contentDescription: String` as a required parameter — required, so every one of its
-  call sites has to decide, which is the same argument `ScreenState.kt:60` makes for `onRetry`. Its **nine
-  call sites across eight screens** each pass a label of the guide's form, so this one item reaches the
-  personal Wavelength wallet, both group wallets, the member wallet, the swap-in screen and the profile
-  share screen. `data` stops being the description. It is the only item in this plan that touches a screen
-  outside the seven, and it is listed in *What this plan does not do* as the exception.
-- Brightness while a QR is on screen: `WavelengthPlatform`-style `expect`/`actual` in
-  `ui/composable/widgets/`, Android raising the window's brightness and restoring it in
-  `DisposableEffect`, JVM and iOS no-ops with a comment. The guide asks for it on in-person requests and
-  this is the screen a member holds up.
-- bech32 uppercased before encoding, lowercase on screen and on the clipboard. The guide's note is that a
-  case-insensitive payload encodes more efficiently; the member-visible string must not change.
-- **Tests**, `GroupWavelengthReceiveContentJvmTest`: no chip pair; the Lightning route's label present and
-  the invoice absent until navigated; room-remaining absent; `QRCodeViewJvmTest` asserting the
-  description is not the payload. The brightness `actual` is checked on a device in
-  `androidInstrumentedTest`, beside `WavelengthMaintenanceWorkerDeviceTest`.
+- `QRCodeView`'s `contentDescription` is a required parameter, the same argument `ScreenState.kt:60`
+  makes for `onRetry`. **Ten call sites, not nine:** `WavelengthReceiveScreen`'s `RequestCode` draws an
+  invoice on one branch and an address on the other, so one label for that file would have been the
+  shared default CLAUDE.md warns about, and it takes the description as a parameter now. Ten strings,
+  each naming what its code is for. `data` stops being the description.
+- **The description being the payload was load-bearing in a test.** `PaidRequestsNoQrJvmTest` asks "is
+  this scannable?" by looking for a node whose description *is* the request — it says so in its own
+  KDoc — so the whole class moved onto the labels. It is no weaker for it: each of those screens draws
+  at most one code, and the assertion that a description is **not** its payload is now its own test.
+- Brightness: `RaiseBrightnessWhileVisible`, an `expect` in `ui/composable/widgets/` with three
+  `actual`s. Android sets the window's own `screenBrightness` and hands it back with
+  `BRIGHTNESS_OVERRIDE_NONE`; desktop has no per-window brightness; **iOS is a deliberate no-op**,
+  because `UIScreen.brightness` is the device setting rather than a window override — raising it there
+  would change what a member finds after they leave the app, which is worse than a dim QR code. Called
+  by the two Wavelength receive screens rather than by `QRCodeView`, so the profile share and the
+  group's other wallets keep the behaviour they had.
+- bech32 uppercased **inside `QRCodeView`**, so what a member reads and copies is untouched — the
+  display string is the `Copyable` beside the code. Only where it is certainly safe: every character in
+  the bech32 alphabet plus the `:` of a scheme. A BIP 21 `?label=` means its own case and a mixed-case
+  payload is not bech32, so both are encoded exactly as given.
+- **Tests:** the receive screen has no chip pair, says the route's reason on the button, reaches no
+  invoice, and calls back when the route is tapped; the invoice screen's warning is the first thing on
+  it; `QRCodeViewJvmTest` asserts the description is not the payload and covers the uppercasing's four
+  safe and four unsafe cases. `PaidRequestsNoQrJvmTest` gained a `groupInvoice` host for the rail that
+  is now its own screen.
+- **The Android brightness `actual` has no test, which is the one thing this phase did not deliver.**
+  `androidInstrumentedTest` has no Compose UI test dependency — it holds two worker tests and nothing
+  that hosts a composable — so covering it means adding `ui-test-junit4` and `ui-test-manifest` to the
+  build. That is Phase 9's work, which needs the same harness for three screens at the largest text
+  size, and doing it here would have been build-configuration work in a phase that planned none. The
+  code is 20 lines and reviewable; it is **not** verified on a device.
 
-**Done when** a member on the receive screen cannot reach a Lightning invoice without passing its
-warning, and no screen test finds the balance on it.
+**Done** on 8 November 2026: a member on the receive screen cannot reach a Lightning invoice without
+passing its warning, and no screen test finds the balance or the room remaining on it.
 
 ### Phase 5: errors that end in an action
 
@@ -770,7 +786,9 @@ last: a pass done before Phases 3, 4 and 6 would be redone by them.
   proposing a payout, proposing to leave.
 - **Tests:** `androidInstrumentedTest` cases for the three screens at the largest text size; the
   reading-order fixes asserted in `jvmTest` through semantics, which is where the existing screen tests
-  already read.
+  already read. **This phase owns adding the Compose device-test harness** — `ui-test-junit4` and
+  `ui-test-manifest` — which `androidInstrumentedTest` does not have today, and it inherits Phase 4's
+  one gap with it: the Android brightness `actual`, which is written and unverified.
 
 **Done when** the three dense screens hold at the largest text size and `SignersCard` reads as one list.
 
@@ -886,7 +904,7 @@ phones will.
 - It adds no action to the entry detail beyond sharing a receipt. T9 holds.
 - It does not touch the personal Wavelength wallet's screens, the group's Lightning wallet, the onchain
   wallet or a member's guarded wallet, **with one deliberate exception**: Phase 4 makes
-  `QRCodeView`'s `contentDescription` a required parameter, which reaches its nine call sites across eight
+  `QRCodeView`'s `contentDescription` a required parameter, which reaches its ten call sites across eight
   screens. Every one of them reads its payload aloud today, and fixing it on one screen while leaving it
   on seven would be the wrong half of an accessibility finding. The three widgets Phases 3, 4 and 7 add
   to `ui/composable/widgets/` are available to those screens and used by none of them.

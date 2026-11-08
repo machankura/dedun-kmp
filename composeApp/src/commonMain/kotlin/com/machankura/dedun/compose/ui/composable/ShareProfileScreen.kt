@@ -46,6 +46,7 @@ import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.profile
+import dedun.composeapp.generated.resources.qr_your_profile
 import dedun.composeapp.generated.resources.re_broadcast
 import dedun.composeapp.generated.resources.something_went_wrong
 import dedun.composeapp.generated.resources.we_couldn_t_find_the_local_profile_please
@@ -138,7 +139,8 @@ fun ShareProfileScreen(
                                     modifier = Modifier.padding(MaterialTheme.spacing.space500)
                                 ) {
                                     QRCodeView(
-                                        activeUserPublicKey.hexToNpubHrp()
+                                        activeUserPublicKey.hexToNpubHrp(),
+                                        stringResource(Res.string.qr_your_profile),
                                     )
                                 }
                             }

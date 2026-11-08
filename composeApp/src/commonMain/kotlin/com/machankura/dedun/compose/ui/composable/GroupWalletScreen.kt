@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.qr_group_onchain_address
 import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.your_device_signs_only_payouts
 import dedun.composeapp.generated.resources.pay_out
@@ -1111,7 +1112,7 @@ internal fun DepositCard(
                         )
                     }
                     // BIP21, so a scanning wallet knows what the text is.
-                    QRCodeView(bip21Uri(address))
+                    QRCodeView(bip21Uri(address), stringResource(Res.string.qr_group_onchain_address))
                     SelectionContainer {
                         Text(text = address, style = MaterialTheme.typography.bodyMedium)
                     }
