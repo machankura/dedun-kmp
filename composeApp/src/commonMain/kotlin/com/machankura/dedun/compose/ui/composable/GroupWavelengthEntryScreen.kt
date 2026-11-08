@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.composable
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,8 +22,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.identity.Identity
@@ -40,6 +44,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.LocalAmount
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
+import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.DetailLine
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryHeadline
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryProgressIsTheirs
@@ -51,8 +56,10 @@ import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthReceipt
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.group_wavelength_activity_fee_s
 import dedun.composeapp.generated.resources.group_wavelength_advanced_untested_refund
 import dedun.composeapp.generated.resources.group_wavelength_entry_from_address
 import dedun.composeapp.generated.resources.group_wavelength_entry_fee_theirs
@@ -70,6 +77,10 @@ import dedun.composeapp.generated.resources.group_wavelength_entry_when
 import dedun.composeapp.generated.resources.group_wavelength_entry_whose
 import dedun.composeapp.generated.resources.group_wavelength_history_when_unknown
 import dedun.composeapp.generated.resources.group_wavelength_invoice_warning
+import dedun.composeapp.generated.resources.group_wavelength_receipt
+import dedun.composeapp.generated.resources.group_wavelength_receipt_copied
+import dedun.composeapp.generated.resources.group_wavelength_receipt_holds_s
+import dedun.composeapp.generated.resources.group_wavelength_tech_no_proof
 import dedun.composeapp.generated.resources.group_wavelength_tech_their_time
 import dedun.composeapp.generated.resources.group_wavelength_tech_open
 import dedun.composeapp.generated.resources.s_sats
@@ -120,6 +131,7 @@ fun GroupWavelengthEntryScreen(
         )
     )
     LaunchedEffect(true) { viewModel.initiate() }
+    val notify = rememberNotifier(rememberCoroutineScope())
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
         topBar = {
@@ -136,6 +148,7 @@ fun GroupWavelengthEntryScreen(
                     localChatRoom = state.localChatRoom,
                     reader = state.userPublicKey,
                     modifier = Modifier.padding(padding),
+                    notify = notify,
                 )
                 is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = { viewModel.initiate() })
                 else -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
@@ -151,6 +164,8 @@ internal fun GroupWavelengthEntryDetail(
     localChatRoom: LocalChatRoom,
     reader: HexKey,
     modifier: Modifier = Modifier,
+    /** The one outcome this screen reports: the receipt went to the clipboard (B9). */
+    notify: (String) -> Unit = {},
 ) {
     if (entry == null) {
         EmptyState(
@@ -204,10 +219,14 @@ internal fun GroupWavelengthEntryDetail(
         Text(sourceLine(entry.source), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         warning(entry)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
-        // The one control on the screen (T9). Everything technical is behind it rather than on the
-        // summary, because the summary is for the question "what was this" and the sheet for "prove it".
+        // Two controls now (T9, widened by B9). Everything technical is behind the first rather than on
+        // the summary, because the summary is for the question "what was this" and the sheet for "prove
+        // it". The second takes the summary out of the app, provenance and all.
         var showingTechnical by remember { mutableStateOf(false) }
-        TextButton(onClick = { showingTechnical = true }) { Text(stringResource(Res.string.group_wavelength_tech_open)) }
+        Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+            TextButton(onClick = { showingTechnical = true }) { Text(stringResource(Res.string.group_wavelength_tech_open)) }
+            Receipt(entry, localChatRoom, reader, notify)
+        }
         if (showingTechnical) {
             GroupWavelengthEntryTechnicalSheet(entry, onDismiss = { showingTechnical = false })
         }
@@ -230,6 +249,59 @@ private fun signedAmount(entry: GroupWavelengthEntry): String {
         else -> stringResource(Res.string.s_sats, amount)
     }
 }
+
+
+/**
+ * The entry as something a member can keep, and show to somebody who does not have this app.
+ *
+ * B9. A member paid by the group has nothing to show for it but a row on a screen, and the record this
+ * copies carries the provenance with it -- what it was, how much, whose, when, what it cost, **and
+ * whose word each of those is**. The last line says what the group can actually show: an outpoint or a
+ * round for the kinds that have one, and for a Lightning payout the sentence the technical sheet
+ * already uses, because the group holds no proof of one and never will.
+ *
+ * **To the clipboard rather than a share sheet,** as Phase 7's export is: a share sheet means an
+ * `expect`/`actual` whose Android half wants a `FileProvider` in the manifest, and a receipt is a
+ * paragraph somebody pastes into a message.
+ *
+ * No tag, no note, no contact. The guide asks for all three on an activity screen and this app has them
+ * nowhere; question 4 of the plan puts that to the owner rather than starting it on one screen.
+ */
+@Composable
+private fun Receipt(entry: GroupWavelengthEntry, localChatRoom: LocalChatRoom, reader: HexKey, notify: (String) -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    // All of these are read above the handler because all of them are composable and an onClick lambda
+    // is not -- the rule CLAUDE.md gives for `rememberNotifier` and `stringResource`.
+    val copied = stringResource(Res.string.group_wavelength_receipt_copied)
+    val holds = stringResource(Res.string.group_wavelength_receipt_holds_s, PLACEHOLDER)
+    val whose = stringResource(Res.string.group_wavelength_entry_whose)
+    val words = GroupWavelengthReceipt.Words(
+        headline = entryHeadline(entry, localChatRoom, reader),
+        status = entryStatus(entry, localChatRoom, reader),
+        at = entry.at?.let { Instant.fromEpochSeconds(it).toFormattedTimeAndDateString() }
+            ?: stringResource(Res.string.group_wavelength_history_when_unknown),
+        amount = stringResource(Res.string.s_sats, Satoshi(entry.amountSat).grouped()),
+        source = sourceLine(entry.source),
+        fee = entry.feeSat.takeIf { it > 0 }?.let { stringResource(Res.string.group_wavelength_activity_fee_s, Satoshi(it).grouped()) },
+        whose = entry.member?.let { "$whose: " + memberName(localChatRoom, it, reader) },
+        holds = { id -> holds.replace(PLACEHOLDER, id) },
+        noProof = stringResource(Res.string.group_wavelength_tech_no_proof),
+    )
+    val receipt = GroupWavelengthReceipt.of(entry, words)
+    TextButton(onClick = {
+        clipboard.setText(AnnotatedString(receipt))
+        notify(copied)
+    }) { Text(stringResource(Res.string.group_wavelength_receipt)) }
+}
+
+/**
+ * Stands in for the identifier while the sentence around it is being looked up.
+ *
+ * `stringResource` formats its arguments, and the identifier is not known until [GroupWavelengthReceipt]
+ * has decided whether there is one -- which is not a composable context. So the sentence is formatted
+ * once with this in the hole, and the hole is filled where the answer is.
+ */
+private const val PLACEHOLDER = "\u0000id\u0000"
 
 /** Which rail, where an entry has one. A round and an exit are the wallet's own doing and have none. */
 @Composable

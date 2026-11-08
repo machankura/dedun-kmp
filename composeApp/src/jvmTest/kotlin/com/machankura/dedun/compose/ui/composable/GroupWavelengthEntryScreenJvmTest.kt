@@ -25,6 +25,7 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistory
 import fr.acinq.bitcoin.Chain
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.time.Instant
 
@@ -97,6 +98,28 @@ class GroupWavelengthEntryScreenJvmTest {
         onNodeWithText(address).assertIsDisplayed()
         onNodeWithText("Paid, with 400 sats in fees").assertIsDisplayed()
         onNodeWithText("Your device's own record, from start to finish.").assertIsDisplayed()
+    }
+
+    /**
+     * The one control B9 adds, and the thing it reports. Asserted on what the screen hands its `notify`
+     * rather than on a snackbar: the notifier takes the caller's scope on purpose, and what this screen
+     * owns is the message and when it is sent.
+     */
+    @Test
+    fun `the entry screen offers a receipt beside the technical details, and says when it is copied`() = runDesktopComposeUiTest(phone, 2400) {
+        var said: String? = null
+        val rows = GroupWavelengthHistory.Rows(onchainPayouts = listOf(onchainPayout()))
+        val entry = assertNotNull(of(rows).singleOrNull())
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthEntryDetail(entry, localChatRoom, ME, notify = { said = it })
+                }
+            }
+        }
+        onNodeWithText("Technical details").assertIsDisplayed()
+        onNodeWithText("Copy this as a receipt").performClick()
+        assertEquals("Receipt copied", said)
     }
 
     @Test

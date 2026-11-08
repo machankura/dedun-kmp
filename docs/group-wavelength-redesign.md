@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 5 and 7 are built, Phase 6 in part; Phases 8 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 5, 7 and 8 are built, Phase 6 in part; Phases 9 and 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -821,28 +821,40 @@ B8. Two new pure files, and the wallet screen's history section rewritten.
 **Done** on 8 November 2026: a group with a year of renewals and one payout finds the payout by typing
 three letters of it, and the file it exports says whose word every row is.
 
-### Phase 8: a receipt
+### Phase 8: a receipt — **built**
 
-B9. One addition to the entry detail, and nothing else on it.
+B9. One control on the entry detail, one new pure file, and nothing else on the screen.
 
-- A `TextButton` beside *Technical details*: builds a plain-text summary of what the screen already
-  shows — what it was, how much, whose, when, what it cost, whose word each of those is — and shares it.
-  The last line says what proof the group holds: for an onchain payout, the txid; for a Lightning payout,
-  that the group holds none.
-- **That last line is not new, and the receipt must reuse it rather than write a second one.**
-  `group_wavelength_tech_no_proof` already exists and is already shown at
-  `GroupWavelengthEntryTechnicalSheet.kt:197` — so the transaction-details plan's Question 4 was answered
-  in the build, as *say it plainly*, and this phase inherits that answer. Phase 1 rewords that string to
-  drop *daemon*; this phase puts it in the receipt. Two strings saying the same thing in two voices is
-  exactly what the shared `entryHeadline`/`entryStatus` helpers exist to prevent.
-- No tag, no note, no contact. The guide asks for them; the app has them nowhere, and Question 4 below
-  puts that to the owner rather than starting it on one screen.
-- **Tests**, `GroupWavelengthEntryScreenJvmTest`: the receipt's text for each of `Kind`'s seven values,
-  including `OPERATOR`, whose receipt is the one most likely to be read as the group's own record; the
-  no-proof line on a Lightning payout and the txid on an onchain one; a receipt for an entry whose source
-  is `THE_OPERATOR` says so in its first line.
+- A `TextButton` beside *Technical details* copies a plain-text record of what the screen already shows:
+  what it was, how it went and when, how much, what it cost, whose it is, **whose word each of those
+  is**, and what the group can show for it. `GroupWavelengthReceipt` assembles it; the screen resolves
+  the words, since every one of them is a string lookup or a member's name.
+- **The source line sits above the proof line, not at the end.** A reader who gets no further than it
+  has still been told the one thing that qualifies everything above it, which is the whole of U2 in one
+  sentence.
+- **There is no txid, which this plan expected.** `GroupArkLeave` — an onchain payout's own row — holds
+  the round's `commitment` and the destination `script`, and no transaction id at all: a payout leaves
+  **in a round**, and the round is the thing this device put a signature on. So the receipt names the
+  commitment, which is what a member can take to the chain.
+- The other kinds name what this device actually holds: a boarding deposit names the coin's outpoint, a
+  Lightning deposit names the **transfer** its claim went into and not the payment hash (a hash shows a
+  payment was asked for, not that one happened), and a round names its commitment. An exit and a line of
+  the operator's alone name nothing, and the source line above has already said why.
+- A Lightning payout gets `group_wavelength_tech_no_proof`, reused exactly as the plan insists — the one
+  line in this app that says *we cannot prove this*, and the reason it is worth a test of its own.
+- **To the clipboard, not a share sheet,** for Phase 7's reason: a share sheet wants a `FileProvider` in
+  the manifest, and a receipt is a paragraph somebody pastes into a message.
+- No tag, no note, no contact. Question 4 still stands.
+- **Tests:** eight in a new `GroupWavelengthReceiptJvmTest` — all seven kinds have a receipt and every
+  one of them says whose word it is; the no-proof line is the last line of a Lightning payout's; the
+  onchain payout names its round; each kind that holds something names it; an exit and a line of theirs
+  name nothing; a payout with no round yet names nothing rather than an empty id; and the lines nobody
+  holds are left out rather than left blank. One screen case for the control and what it reports.
+  **The tests are a file of their own rather than in `GroupWavelengthEntryScreenJvmTest`,** because what
+  is worth asserting is the assembly and the proof rule, and both are a pure function.
 
-**Done when** each kind's receipt names its provenance.
+**Done** on 8 November 2026: each of the seven kinds' receipts names its provenance, and the one kind
+that can never prove itself says so.
 
 ### Phase 9: read aloud, and at twice the size
 

@@ -1466,6 +1466,9 @@
     <string name="group_wavelength_source_both">Your device, filled in by theirs</string>
     <string name="group_wavelength_source_mismatch">The two disagree</string>
     <string name="group_wavelength_source_operator">Their word alone</string>
+    <string name="group_wavelength_receipt">Copy this as a receipt</string>
+    <string name="group_wavelength_receipt_copied">Receipt copied</string>
+    <string name="group_wavelength_receipt_holds_s">What the group can show for it: %1$s</string>
     <string name="group_wavelength_health_title">The wallet's health</string>
     <string name="group_wavelength_health_all_fine">Everything is in order</string>
     <string name="group_wavelength_health_coins">The coins' deadline</string>
