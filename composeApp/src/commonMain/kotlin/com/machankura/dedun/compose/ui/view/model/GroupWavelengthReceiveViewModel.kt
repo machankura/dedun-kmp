@@ -113,7 +113,7 @@ class GroupWavelengthReceiveViewModel(
                     maxRoundFeeSat = found.statement.policy.maxRoundFeeSat,
                     roomLeftSat = cap?.let { (it - live.settledSat - live.pendingSat - GroupArkBoardingWatch.arrivingSat(arrivingRows)).coerceAtLeast(0) },
                     enoughSeen = enoughSeen,
-                    addressPaid = shownAddress?.let { GroupWavelengthRequests.paidOnAddress(it, boarded) },
+                    addressPaid = shownAddress?.let { GroupWavelengthRequests.paidOnAddress(it, boarded, arrivingRows) },
                     invoicePaid = newest?.let { GroupWavelengthRequests.paidOnInvoice(it, claims, snapshot) },
                     operatorName = operatorName,
                 )

@@ -16,6 +16,7 @@ import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.GroupWavelengthUiFixtures
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
+import com.machankura.dedun.compose.wallet.wavelength.group.PaidRequest
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Satoshi
@@ -182,6 +183,88 @@ class GroupWavelengthReceiveViewModelJvmTest {
         val paid = loaded(viewModel).addressPaid
         assertEquals(Satoshi(7_000), paid?.amount)
         assertEquals(false, paid?.onTheOperatorsWord)
+    }
+
+    /**
+     * `docs/paid-requests.md`'s D1, finally kept on this rail: the request stops being a QR code at first
+     * sight of the money, not when the group signs for it an hour later.
+     */
+    @Test
+    fun `a payment in the mempool takes the QR code down at first sight`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+        assertNull(loaded(viewModel).addressPaid)
+
+        repository.arriving.value = listOf(arrivingRow(7_000))
+        settle()
+        val paid = loaded(viewModel).addressPaid
+        assertEquals(Satoshi(7_000), paid?.amount)
+        assertEquals(false, paid?.onTheOperatorsWord)
+        assertEquals(PaidRequest.OnTheWay.MEMPOOL, paid?.onTheWay)
+    }
+
+    @Test
+    fun `once it confirms the panel says so, and the round is what it waits for`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000).copy(blockHeight = 900))
+        settle()
+        assertEquals(PaidRequest.OnTheWay.CONFIRMED, loaded(viewModel).addressPaid?.onTheWay)
+    }
+
+    @Test
+    fun `a boarding coin this device signed for outranks what it saw on the chain`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000))
+        repository.boarded.value = listOf(GroupArkBoarded("w", "tx:0", "c1", 7_000, script))
+        settle()
+        val paid = loaded(viewModel).addressPaid
+        assertEquals(Satoshi(7_000), paid?.amount)
+        assertNull(paid?.onTheWay, "a round has it now, so it is no longer on its way to the wallet")
+    }
+
+    @Test
+    fun `a payment at another member's address says nothing about this one`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000).copy(script = "51" + "bb".repeat(32)))
+        settle()
+        assertNull(loaded(viewModel).addressPaid)
+    }
+
+    @Test
+    fun `a payment replaced before it confirmed puts the QR code back up, because nobody paid`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000))
+        settle()
+        assertEquals(Satoshi(7_000), loaded(viewModel).addressPaid?.amount)
+
+        // The watch forgets a row whose transaction has left the address's history.
+        repository.arriving.value = emptyList()
+        settle()
+        assertNull(loaded(viewModel).addressPaid, "nobody has paid this address, so it goes back to a QR code")
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in is not an arriving payment`() {
+        val repository = repository()
+        repository.rows.value = listOf(addressRow())
+        val viewModel = receiving(repository)
+
+        repository.arriving.value = listOf(arrivingRow(7_000, spentUnseen = 2))
+        settle()
+        assertNull(loaded(viewModel).addressPaid, "it has gone where this device can't follow it")
     }
 
     @Test

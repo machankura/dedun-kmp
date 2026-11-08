@@ -138,6 +138,36 @@ class PaidRequestsNoQrJvmTest {
         onNodeWithText(address).assertIsDisplayed()
     }
 
+    /**
+     * D1 on the one surface that could never reach it: the QR code goes at **first sight** of the money,
+     * before any confirmation and long before the group signs for it
+     * (`docs/group-wavelength-unconfirmed-deposits.md`, Phase 5).
+     */
+    @Test
+    fun `a group address paid in the mempool is not scannable, and says the money is still arriving`() = group(
+        GroupWavelengthReceiveUIState.Loaded(
+            address = address,
+            addressAsked = true,
+            addressPaid = PaidRequest(Satoshi(7_000), onTheOperatorsWord = false, onTheWay = PaidRequest.OnTheWay.MEMPOOL),
+        )
+    ) {
+        assertEquals(0, onAllNodesWithContentDescription(bip21Uri(address)).fetchSemanticsNodes().size, "a paid address must not be paid again")
+        onNodeWithText("Payment received").assertIsDisplayed()
+        onNodeWithText("7,000 sats").assertIsDisplayed()
+        onNodeWithText("Your device has seen this on the chain and is waiting for it to confirm. Ask for another address to keep your deposits apart.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `once it has confirmed the panel says what it is waiting for`() = group(
+        GroupWavelengthReceiveUIState.Loaded(
+            address = address,
+            addressAsked = true,
+            addressPaid = PaidRequest(Satoshi(7_000), onTheOperatorsWord = false, onTheWay = PaidRequest.OnTheWay.CONFIRMED),
+        )
+    ) {
+        onNodeWithText("On the chain and confirming. It joins the wallet in a round once it is deep enough and enough of the group's devices are online. Ask for another address to keep your deposits apart.").assertIsDisplayed()
+    }
+
     /** Where only the operator says a payment happened, the panel names the operator (D4). */
     @Test
     fun `a payment only the operator claims says whose word it is`() = group(
