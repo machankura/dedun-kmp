@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -45,10 +46,12 @@ import com.machankura.dedun.compose.ui.view.model.GroupWavelengthWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
 import com.machankura.dedun.compose.wallet.wavelength.WavelengthPlatform
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHealth
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.couldn_t_propose_this
 import dedun.composeapp.generated.resources.group_wavelength_advanced
+import dedun.composeapp.generated.resources.group_wavelength_exit_title
 import dedun.composeapp.generated.resources.group_wavelength_health_coins
 import dedun.composeapp.generated.resources.group_wavelength_health_coins_attention
 import dedun.composeapp.generated.resources.group_wavelength_health_coins_fine
@@ -64,6 +67,7 @@ import dedun.composeapp.generated.resources.group_wavelength_health_fees
 import dedun.composeapp.generated.resources.group_wavelength_health_fees_attention
 import dedun.composeapp.generated.resources.group_wavelength_health_fees_fine
 import dedun.composeapp.generated.resources.group_wavelength_health_fees_problem
+import dedun.composeapp.generated.resources.group_wavelength_health_leaving
 import dedun.composeapp.generated.resources.group_wavelength_health_title
 import dedun.composeapp.generated.resources.group_wavelength_health_who_runs_it
 import dedun.composeapp.generated.resources.group_wavelength_health_who_runs_it_attention
@@ -99,6 +103,7 @@ fun GroupWavelengthHealthScreen(
     onOpenCeremony: () -> Unit = {},
     /** Volunteering to run the wallet is a proposal the group signs, so it ends in a signing session. */
     onOpenSession: (sessionId: String) -> Unit = {},
+    onOpenExit: () -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupWavelengthWalletViewModel = viewModel(
@@ -126,6 +131,7 @@ fun GroupWavelengthHealthScreen(
                     onOpenAdvanced = onOpenAdvanced,
                     onOpenCeremony = onOpenCeremony,
                     onNominate = { viewModel.nominateSelf(onSession = onOpenSession, onFailure = { notify(couldNotPropose) }) },
+                    onOpenExit = onOpenExit,
                 )
                 is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = { viewModel.initiate() })
                 else -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
@@ -141,6 +147,7 @@ internal fun GroupWavelengthHealthContent(
     onOpenAdvanced: () -> Unit = {},
     onOpenCeremony: () -> Unit = {},
     onNominate: () -> Unit = {},
+    onOpenExit: () -> Unit = {},
 ) {
     val items = GroupWavelengthHealth.of(state)
     LazyColumn(
@@ -159,6 +166,19 @@ internal fun GroupWavelengthHealthContent(
                 supportingContent = { Text(stringResource(message(item))) },
                 trailingContent = fix(item.fix, onOpenAdvanced, onOpenCeremony, onNominate),
             )
+        }
+        // The way out, named here rather than only under *Advanced* (B10). "Can I get out?" is a
+        // question about this wallet's health, and a member should not have to guess that the answer is
+        // behind a word that means "things you probably should not touch".
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                Text(stringResource(Res.string.group_wavelength_health_leaving), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // The link only where the exit is actually offered: a button to a screen that refuses
+                // is worse than a sentence that says what would happen.
+                if (GroupWavelengthRollout.offersUnilateralExit(state.wallet.statement.chain) && state.isOperator) {
+                    TextButton(onClick = onOpenExit) { Text(stringResource(Res.string.group_wavelength_exit_title)) }
+                }
+            }
         }
     }
 }

@@ -110,7 +110,7 @@ class GroupWavelengthWalletScreenJvmTest {
         setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, GroupWavelengthWalletUIState.NotOpened(localChatRoom, key, null, null), Chain.Signet, onOpenWallet = { opened++ }) } } }
         assertCommitmentSaid()
         onNodeWithText("A test wallet on signet: its coins have no value").assertIsDisplayed()
-        onNodeWithText("Open a Wavelength wallet").performClick()
+        onNodeWithText("I understand, and the group can open it").performClick()
         assertEquals(1, opened)
     }
 
@@ -136,7 +136,7 @@ class GroupWavelengthWalletScreenJvmTest {
         state = GroupWavelengthWalletUIState.NotOpened(localChatRoom, key, null, GroupWavelengthWalletUIState.Blocked.TERMS_CHANGED)
         waitForIdle()
         onNodeWithText("The Ark operator's terms have changed since this version of Dedun was made, so a wallet opened now wouldn't work. Update Dedun first.").assertIsDisplayed()
-        assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("Open a Wavelength wallet")).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodes(androidx.compose.ui.test.hasText("I understand, and the group can open it")).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -193,6 +193,67 @@ class GroupWavelengthWalletScreenJvmTest {
 
     private val settledCoin = GroupArkVtxo("w", "a:0", 10_000, settled = true)
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
+
+    // ---------------------------------------------------------------------
+    // The way in, acknowledged (Phase 10, B10).
+    // ---------------------------------------------------------------------
+
+    /**
+     * Two choices rather than one button, which is the guide's last step for a screen that asks
+     * somebody to commit. One button made reading the six sentences optional and opening the wallet the
+     * only thing on the screen to do.
+     */
+    @Test
+    fun `the commitment screen offers two choices, and the second proposes nothing`() = runDesktopComposeUiTest(phone, 1600) {
+        var opened = 0
+        var notYet = 0
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthWalletContent(
+                        Modifier,
+                        GroupWavelengthWalletUIState.NotOpened(localChatRoom, key, null, null),
+                        Chain.Signet,
+                        onOpenWallet = { opened++ },
+                        onNotYet = { notYet++ },
+                    )
+                }
+            }
+        }
+        assertCommitmentSaid()
+        onNodeWithText("Not yet").performClick()
+        assertEquals(1, notYet)
+        assertEquals(0, opened, "the second choice proposes nothing")
+        onNodeWithText("I understand, and the group can open it").performClick()
+        assertEquals(1, opened)
+    }
+
+    /**
+     * B10's other half: *can I get out* is a question about this wallet's health, and the answer should
+     * not be behind a word that means "things you probably should not touch".
+     */
+    @Test
+    fun `the health screen names the way out, and links to it where it is offered`() = runDesktopComposeUiTest(phone, 2400) {
+        var exit = 0
+        setContent {
+            DedunTheme {
+                ProvideSnackbarHost {
+                    GroupWavelengthHealthContent(Modifier, healthy().copy(isOperator = true, operator = GroupWavelengthUiFixtures.operator(ME)), onOpenExit = { exit++ })
+                }
+            }
+        }
+        onNodeWithText("If the group's devices stop answering, a unilateral exit is what is left", substring = true).assertIsDisplayed()
+        onNodeWithText("Leave without the Ark operator").performClick()
+        assertEquals(1, exit)
+    }
+
+    /** A member who is not running it cannot start an exit, so they get the sentence and no button. */
+    @Test
+    fun `a member who does not run the wallet is told what the way out is and offered no button`() = runDesktopComposeUiTest(phone, 2400) {
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthHealthContent(Modifier, healthy()) } } }
+        onNodeWithText("If the group's devices stop answering, a unilateral exit is what is left", substring = true).assertIsDisplayed()
+        onAllNodesWithText("Leave without the Ark operator").assertCountEquals(0)
+    }
 
     // ---------------------------------------------------------------------
     // A history a group can account for (Phase 7, B8).

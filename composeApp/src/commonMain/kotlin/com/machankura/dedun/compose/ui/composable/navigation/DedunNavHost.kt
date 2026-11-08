@@ -1118,6 +1118,15 @@ fun DedunNavHost(
                             )
                         )
                     },
+                    onOpenExit = {
+                        navController.navigate(
+                            route = GroupWavelengthExitRoute(
+                                activeUserPublicKey = route.activeUserPublicKey,
+                                chatRoomId = route.chatRoomId,
+                                chain = route.chain,
+                            )
+                        )
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }

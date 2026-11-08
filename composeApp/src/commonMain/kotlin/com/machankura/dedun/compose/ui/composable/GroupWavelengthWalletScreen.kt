@@ -202,6 +202,8 @@ import dedun.composeapp.generated.resources.group_wavelength_signers
 import dedun.composeapp.generated.resources.s_sats
 import dedun.composeapp.generated.resources.group_wavelength_cap_s
 import dedun.composeapp.generated.resources.group_wavelength_commitment_cap_s
+import dedun.composeapp.generated.resources.group_wavelength_commitment_not_yet
+import dedun.composeapp.generated.resources.group_wavelength_commitment_understood
 import dedun.composeapp.generated.resources.group_wavelength_commitment_devices
 import dedun.composeapp.generated.resources.group_wavelength_commitment_fees
 import dedun.composeapp.generated.resources.group_wavelength_commitment_operator
@@ -334,6 +336,7 @@ fun GroupWavelengthWalletScreen(
                 },
                 onOpenHealth = { onNavigateToRoute(GroupWavelengthHealthRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
                 notify = notify,
+                onNotYet = onNavigateBack,
             )
         }
     }
@@ -368,6 +371,8 @@ internal fun GroupWavelengthWalletContent(
     onOpenHealth: () -> Unit = {},
     /** The snackbar, for the one thing on this screen that reports an outcome rather than navigating. */
     notify: (String) -> Unit = {},
+    /** The commitment screen's second choice: leave, and be shown the six sentences again (B10). */
+    onNotYet: () -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = onRetry)
@@ -398,7 +403,7 @@ internal fun GroupWavelengthWalletContent(
             } else null,
         )
 
-        is GroupWavelengthWalletUIState.NotOpened -> Commitment(modifier, state, chain, isPending, onOpenWallet, onOpenSession)
+        is GroupWavelengthWalletUIState.NotOpened -> Commitment(modifier, state, chain, isPending, onOpenWallet, onOpenSession, onNotYet)
 
         is GroupWavelengthWalletUIState.WaitingForSeed -> EmptyState(
             modifier = modifier.readableContent(),
@@ -443,6 +448,7 @@ private fun Commitment(
     isPending: Boolean,
     onOpenWallet: () -> Unit,
     onOpenSession: (String) -> Unit,
+    onNotYet: () -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
@@ -482,10 +488,20 @@ private fun Commitment(
                 if (session != null) {
                     OutlinedButton(onClick = { onOpenSession(session) }) { Text(stringResource(Res.string.see_the_proposal)) }
                 } else {
-                    Button(onClick = onOpenWallet, enabled = !isPending) {
-                        Icon(Icons.Default.Waves, contentDescription = Decorative)
-                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
-                        Text(stringResource(Res.string.open_a_wavelength_wallet))
+                    // Two choices rather than one button (B10), which is the guide's last step for a
+                    // screen that asks somebody to commit: the member picks the one that says they
+                    // understand, and "Not yet" is a decision the screen takes rather than a way out
+                    // they have to find. The single button made reading the six sentences optional and
+                    // opening the wallet the only thing to do.
+                    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                        Button(onClick = onOpenWallet, enabled = !isPending) {
+                            Icon(Icons.Default.Waves, contentDescription = Decorative)
+                            Spacer(modifier = Modifier.width(MaterialTheme.spacing.relatedGap))
+                            Text(stringResource(Res.string.group_wavelength_commitment_understood))
+                        }
+                        // Records nothing: there is nowhere local to record it (see the plan's question
+                        // 6), so this leaves the screen and the six sentences are there again next time.
+                        TextButton(onClick = onNotYet) { Text(stringResource(Res.string.group_wavelength_commitment_not_yet)) }
                     }
                 }
             }

@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 5, 7 and 8 are built, Phase 6 in part; Phases 9 and 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 5, 7 and 8 are built, Phases 6 and 10 in part; Phase 9 is not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -876,25 +876,42 @@ last: a pass done before Phases 3, 4 and 6 would be redone by them.
 
 **Done when** the three dense screens hold at the largest text size and `SignersCard` reads as one list.
 
-### Phase 10: the way in, acknowledged
+### Phase 10: the way in, acknowledged — **the two choices and the way out are built; the record is not**
 
-B10. The commitment screen, last because it is the screen most likely to be argued about and least likely
-to block anything else.
+B10. Built out of order, before Phase 9, because the plan requires Phase 9 to be last.
 
-- `Commitment` keeps its six sentences and loses its single `Button`. Two choices, as the guide's worked
-  screen has: *I understand, and the group can open it* and *Not yet — show me this again*. The first
-  proposes; the second records nothing and leaves the screen.
-- The acknowledgement is one row per member and wallet, local, never on the wire. A member whose device
-  co-signs a round for a wallet they have not acknowledged sees the commitment screen above the wallet,
-  once, with the same two choices — and **their device keeps signing either way** (B10's limit).
-- A line in Phase 6's health screen for the way out, with its link, so *can I get out* is answerable
-  without the word *Advanced*.
-- **Tests**, `GroupWavelengthWalletScreenJvmTest`: the two choices; the second proposes nothing; an
-  unacknowledged member on an open wallet sees the screen; an acknowledged one does not; a test asserting
-  the acknowledgement row's absence does not change what the co-signer does, which belongs in
-  `GroupWavelengthWalletJvmTest` beside the signing rules.
+- `Commitment` keeps its six sentences and has two choices in place of its single `Button`: *I
+  understand, and the group can open it*, and *Not yet*. The first proposes; the second leaves the
+  screen. One button made reading the six sentences optional and opening the wallet the only thing on
+  the screen to do.
+- The second choice's label is **two words, not the plan's *Not yet — show me this again***. A button
+  says what it does in as few words as will carry it, and what it does is on the screen it returns to:
+  the six sentences are there again next time, because nothing was recorded.
+- The way out is named on the health screen with its link, and **the link appears only where the exit is
+  actually offered** — `offersUnilateralExit` and the device that runs the wallet. A button to a screen
+  that would refuse is worse than a sentence saying what would happen. A member who cannot start one
+  still gets the sentence.
+- **The acknowledgement record is not built,** which leaves question 6 open rather than answering it by
+  writing a migration. It needs one row per member and wallet, and the app has nowhere local to put it:
+  `UserPrefs` and `InternalPrefs` are Phoenix's and per wallet, there is no dedun-side preference store
+  (the same wall Phase 3's hide/reveal hit), and the aux database means a Room schema migration — which
+  `composeApp/schemas` tracks and which is a decision about the shape of the group's data rather than
+  about a screen. The plan's own question 6 says *if that is not worth a table, Phase 10 shrinks to the
+  two choices and no record, which is most of its value*; this is that shrink, taken deliberately.
+- **What is lost by that, exactly:** a member who reaches a wallet somebody else opened is not shown the
+  six sentences before their device co-signs its first round. They can read them nowhere, because the
+  commitment screen is the `NotOpened` state and their wallet is open. That is the gap, and it is the
+  half of B10 worth the table.
+- **Nothing was gated on anything,** which is B10's own limit and the one part of this phase that could
+  have done harm. A device that refuses to sign because its owner has not tapped a screen loses the
+  group money on a deadline.
+- **Tests:** the two choices, and that the second proposes nothing; the health screen names the way out
+  and links to it for the device that runs the wallet; a member who does not run it gets the sentence
+  and no button.
 
-**Done when** acknowledgement changes what a member is shown and nothing about what their device signs.
+**Done** on 8 November 2026 for the part that is built: the commitment screen asks rather than tells,
+and the way out is answerable without the word *Advanced*. **Not done:** a member who joined after the
+wallet was opened still never sees the six sentences.
 
 ## Order
 
@@ -970,9 +987,12 @@ phones will.
 5. **Who may export.** Phase 7 lets any member export every member's deposits and payouts to a file. The
    same is true of the screen today, and a file is different. Every member, the operator only, or a
    per-member export of their own rows?
-6. **Whether acknowledgement is worth a row.** Phase 10's record changes nothing a device does, by B10's
-   own limit. It is there so a member who never read the six sentences is shown them. If that is not worth
-   a table, Phase 10 shrinks to the two choices and no record, which is most of its value.
+6. **Whether acknowledgement is worth a row.** *Still open, and Phase 10 shrank rather than decide it.*
+   The record changes nothing a device does, by B10's own limit — it is there so a member who never read
+   the six sentences is shown them. It needs a per-member-per-wallet row, which means either a
+   dedun-side preference store the app does not have (the same gap as question 2) or a Room migration in
+   `composeApp/schemas`. Phase 10 built the two choices and no record. What that costs is exact: a
+   member who reaches a wallet somebody else opened never sees the six sentences at all.
 
 ## What this plan does not do
 
