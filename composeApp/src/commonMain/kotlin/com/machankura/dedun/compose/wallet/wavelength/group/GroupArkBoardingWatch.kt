@@ -206,6 +206,13 @@ class GroupArkBoardingWatch(
          */
         fun confirmationsNeeded(chain: Chain): Int = GroupWavelengthTerms.of(chain)?.boardingConfirmations ?: 1
 
+        /**
+         * What is on its way in, in sats. A coin a round this device never signed has taken in is not on its
+         * way any more and is left out, of this and of everything the cap is measured against (A12).
+         */
+        fun arrivingSat(rows: List<GroupArkArriving>): Long =
+            rows.filter { it.spentUnseenAtEpochSeconds == null }.sumOf { it.amountSat }
+
         /** How deep [row] is against [tip], as `Standing` counts it: 0 in the mempool, and 1 in the block it is in. */
         fun depthOf(row: GroupArkArriving, tip: Long?): Int {
             val height = row.blockHeight ?: return 0

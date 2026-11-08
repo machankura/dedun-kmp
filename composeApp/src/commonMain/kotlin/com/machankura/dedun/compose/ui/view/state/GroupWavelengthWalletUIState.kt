@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -10,6 +11,7 @@ import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
 import com.machankura.dedun.compose.wallet.wavelength.WalletExpiry
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkBoardingWatch
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlin.time.Clock
@@ -70,6 +72,19 @@ sealed class GroupWavelengthWalletUIState {
         val daemon: GroupWavelengthDaemonStatus = GroupWavelengthDaemonStatus.NotOnThisDevice,
         /** The rows [ledger] sums, for the advanced screen. */
         val coins: List<GroupArkVtxo> = emptyList(),
+        /**
+         * Boarding payments this device has seen on the chain that no round has taken in
+         * (`docs/group-wavelength-unconfirmed-deposits.md`). Beside the balance and never in it: a boarding
+         * coin cannot be spent through the wallet until a round takes it in (A8).
+         */
+        val arriving: List<GroupArkArriving> = emptyList(),
+        /**
+         * Whether this device has reached a chain server at all, or null before it has tried. False is
+         * *cannot say what is on its way*, which is a different thing from nothing being on its way (A15):
+         * a failed Electrum call answers with an empty list, and read as zero it would take the receive
+         * screen's QR code back up.
+         */
+        val chainReached: Boolean? = null,
         /** What the operator last said it holds, or null before it has said anything. */
         val snapshot: GroupWavelengthSnapshot? = null,
         val comparison: GroupWavelengthReports.Comparison? = null,
@@ -102,6 +117,12 @@ sealed class GroupWavelengthWalletUIState {
          */
         val entries: List<GroupWavelengthEntry> = emptyList(),
     ) : GroupWavelengthWalletUIState() {
+        /**
+         * What is on its way in, in sats. A coin a round this device never signed has taken in is not on its
+         * way any more, so it is left out -- of this and of the cap (A12).
+         */
+        val arrivingSat: Long get() = GroupArkBoardingWatch.arrivingSat(arriving)
+
         /** Whether enough signers have answered lately for a round to be likely to work: `2t-1` of them have to. */
         val enoughSeen: Boolean get() = seenRecently() >= 2 * wallet.statement.threshold - 1
 

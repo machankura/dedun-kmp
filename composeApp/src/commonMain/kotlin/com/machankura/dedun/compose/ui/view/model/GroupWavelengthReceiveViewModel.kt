@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthReceiveUIState
 import com.machankura.dedun.compose.ui.view.state.GroupWavelengthWalletUIState
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkBoardingWatch
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthLedger
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRequests
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
@@ -67,7 +68,11 @@ class GroupWavelengthReceiveViewModel(
                 ?.profile?.humanReadableNameOrPubkey() ?: operator.take(8)
             val ledger = GroupWavelengthLedger.of(repository.observeCoins(chatRoomId, chain, number).first())
             val cap = GroupWavelengthRollout.capFor(chain)?.sat
-            val roomLeft = cap?.let { (it - ledger.settledSat - ledger.pendingSat).coerceAtLeast(0) }
+            // A boarding payment already on its way takes room under the cap that no co-signer will sign
+            // past, so the room left counts it: otherwise an invoice is offered for sats that no longer fit
+            // (`docs/group-wavelength-unconfirmed-deposits.md`, A9).
+            val arriving = GroupArkBoardingWatch.arrivingSat(repository.observeArriving(chatRoomId, chain, number).first())
+            val roomLeft = cap?.let { (it - ledger.settledSat - ledger.pendingSat - arriving).coerceAtLeast(0) }
             if (roomLeft == 0L) {
                 uiState = GroupWavelengthReceiveUIState.AtTheCap
                 return@launch
@@ -80,13 +85,19 @@ class GroupWavelengthReceiveViewModel(
             // The coins are followed rather than read once: a deposit that lands while the screen
             // is open takes room under the cap, and "ask for another" must not offer an amount
             // that no longer fits.
+            // The coins and what is on its way in are read as one, because the cap is measured against both
+            // and `combine` takes five flows.
+            val inTheWallet = combine(
+                repository.observeCoins(chatRoomId, chain, number),
+                repository.observeArriving(chatRoomId, chain, number),
+            ) { coins, arriving -> coins to arriving }
             combine(
                 repository.observeDepositAddresses(chatRoomId, chain, number, activeUserPublicKey),
-                repository.observeCoins(chatRoomId, chain, number),
+                inTheWallet,
                 repository.observeBoarded(chatRoomId, chain, number),
                 repository.observeClaims(chatRoomId, chain, number),
                 repository.observeSnapshot(chatRoomId, chain, number),
-            ) { rows, coins, boarded, claims, snapshot ->
+            ) { rows, (coins, arrivingRows), boarded, claims, snapshot ->
                 val addresses = rows.filter { it.invoiceAmountSat == null }
                 val invoices = rows.filter { it.invoiceAmountSat != null }.sortedBy { it.requestedAt }
                 val newest = invoices.lastOrNull()
@@ -100,7 +111,7 @@ class GroupWavelengthReceiveViewModel(
                     invoiceAsked = newest != null && newest.invoice == null,
                     terms = terms,
                     maxRoundFeeSat = found.statement.policy.maxRoundFeeSat,
-                    roomLeftSat = cap?.let { (it - live.settledSat - live.pendingSat).coerceAtLeast(0) },
+                    roomLeftSat = cap?.let { (it - live.settledSat - live.pendingSat - GroupArkBoardingWatch.arrivingSat(arrivingRows)).coerceAtLeast(0) },
                     enoughSeen = enoughSeen,
                     addressPaid = shownAddress?.let { GroupWavelengthRequests.paidOnAddress(it, boarded) },
                     invoicePaid = newest?.let { GroupWavelengthRequests.paidOnInvoice(it, claims, snapshot) },

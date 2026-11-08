@@ -130,14 +130,19 @@ class GroupWavelengthWalletViewModel(
         watching = viewModelScope.launch(Dispatchers.IO) {
             val number = opened.wallet.statement.wallet
             launch {
-                combine(repository.observeCoins(chatRoomId, chain, number), repository.observeSnapshot(chatRoomId, chain, number)) { coins, snapshot -> coins to snapshot }
-                    .collect { (coins, snapshot) ->
+                combine(
+                    repository.observeCoins(chatRoomId, chain, number),
+                    repository.observeSnapshot(chatRoomId, chain, number),
+                    repository.observeArriving(chatRoomId, chain, number),
+                ) { coins, snapshot, arriving -> Triple(coins, snapshot, arriving) }
+                    .collect { (coins, snapshot, arriving) ->
                         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
                             uiState = it.copy(
                                 coins = coins,
                                 ledger = GroupWavelengthLedger.of(coins),
                                 snapshot = snapshot,
                                 comparison = snapshot?.let { said -> GroupWavelengthReports.compare(said, coins) },
+                                arriving = arriving,
                             )
                             refreshFacts()
                         }
@@ -174,6 +179,9 @@ class GroupWavelengthWalletViewModel(
         val historyRows = repository.historyRows(chatRoomId, chain, number)
         val wentNowhere = repository.wentNowhere(chatRoomId, chain, number)
         val leaveAsked = repository.leaveAsked(chatRoomId, chain, number)
+        // Asked rather than inferred from the tip: a tip this device last read an hour ago is no answer
+        // about now, and "cannot say what is on its way" must never render as "nothing is" (A15).
+        val reached = repository.chainReached(chain)
         (uiState as? GroupWavelengthWalletUIState.Opened)?.let {
             uiState = it.copy(
                 expiry = if (tip != null) WalletExpiry.ofHeight(GroupWavelengthLedger.earliestExpiry(it.coins, it.snapshot?.coins.orEmpty().filter { c -> c.batchExpiry > 0 }.associate { c -> c.outpoint to c.batchExpiry }), tip, free) else it.expiry,
@@ -184,6 +192,7 @@ class GroupWavelengthWalletViewModel(
                 // Built here rather than stored, from the rows read a moment ago and the report held now.
                 // The tip and the operator's boarding depth are the history's, not the rows': how deep an
                 // arriving boarding payment is is worked out against the tip rather than stored (A6).
+                chainReached = reached,
                 entries = GroupWavelengthHistory.of(
                     historyRows.copy(
                         payoutsWentNowhere = wentNowhere,

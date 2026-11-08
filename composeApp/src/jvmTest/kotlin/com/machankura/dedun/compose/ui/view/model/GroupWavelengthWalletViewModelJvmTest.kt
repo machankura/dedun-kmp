@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -58,6 +59,8 @@ class GroupWavelengthWalletViewModelJvmTest {
         val live: GroupWavelengthTerms.Terms? = null,
         val opening: String? = null,
         val coins: List<GroupArkVtxo> = emptyList(),
+        val arriving: List<GroupArkArriving> = emptyList(),
+        val reached: Boolean = true,
     ) : GroupWavelengthRepository by GroupWavelengthRepository.NO_OP {
         override suspend fun hasOnchainWallet(chatRoomId: String, chain: Chain) = onchain
         override suspend fun ceremonyThresholds(chatRoomId: String) = thresholds
@@ -70,6 +73,8 @@ class GroupWavelengthWalletViewModelJvmTest {
         override fun terms(chain: Chain) = pinned
         override suspend fun liveTerms(chain: Chain) = live
         override fun observeCoins(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkVtxo>> = flowOf(coins)
+        override fun observeArriving(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkArriving>> = flowOf(arriving)
+        override suspend fun chainReached(chain: Chain) = reached
     }
 
     private val chat = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
@@ -128,6 +133,40 @@ class GroupWavelengthWalletViewModelJvmTest {
         assertTrue(!assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet(), operator = GroupWavelengthUiFixtures.operator(OTHER)))).isOperator)
         assertTrue(!assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet()), me = "e".repeat(64))).isParticipant)
         assertTrue(!assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet()), canRunHere = false)).canRunHere)
+    }
+
+    @Test
+    fun `what is on its way in is beside the balance and never in it`() {
+        val coins = listOf(GroupArkVtxo("w", "a:0", 12_000, settled = true))
+        val arriving = listOf(
+            GroupArkArriving("w", "b:0", 30_000, "0014aa", OTHER, firstSeenAtEpochSeconds = 1),
+            GroupArkArriving("w", "c:0", 5_000, "0014bb", ME, firstSeenAtEpochSeconds = 2, blockHeight = 900),
+        )
+        val state = assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet(), coins = coins, arriving = arriving)))
+        assertEquals(12_000, state.ledger.settledSat, "a boarding coin can't be spent through the wallet")
+        assertEquals(0, state.ledger.pendingSat, "and it is not a coin this device has signed for either")
+        assertEquals(35_000, state.arrivingSat)
+        assertEquals(2, state.arriving.size)
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in is no longer on its way`() {
+        val arriving = listOf(
+            GroupArkArriving("w", "b:0", 30_000, "0014aa", OTHER, firstSeenAtEpochSeconds = 1),
+            GroupArkArriving("w", "c:0", 5_000, "0014bb", ME, firstSeenAtEpochSeconds = 2, blockHeight = 900, spentUnseenAtEpochSeconds = 3),
+        )
+        val state = assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet(), arriving = arriving)))
+        assertEquals(30_000, state.arrivingSat, "the marked one is gone into a round, not arriving")
+        assertEquals(2, state.arriving.size, "and it is still shown, because that is the point of marking it")
+    }
+
+    @Test
+    fun `no chain connection is cannot say, not nothing on its way`() {
+        val unreached = assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet(), reached = false)))
+        assertEquals(false, unreached.chainReached)
+        assertEquals(0, unreached.arrivingSat, "which is why the figure alone can't be trusted to say it")
+        val reached = assertIs<GroupWavelengthWalletUIState.Opened>(settled(Wavelength(wallet = wallet(), reached = true)))
+        assertEquals(true, reached.chainReached)
     }
 
     @Test

@@ -117,6 +117,9 @@ import dedun.composeapp.generated.resources.group_wavelength_history_when_unknow
 import dedun.composeapp.generated.resources.wavelength_entry_s_dot_s
 import dedun.composeapp.generated.resources.group_wavelength_advanced
 import dedun.composeapp.generated.resources.group_wavelength_alarm_title
+import dedun.composeapp.generated.resources.group_wavelength_arriving_sum_s
+import dedun.composeapp.generated.resources.group_wavelength_chain_not_reached
+import dedun.composeapp.generated.resources.group_wavelength_operator_pending_s
 import dedun.composeapp.generated.resources.group_wavelength_balance_label
 import dedun.composeapp.generated.resources.group_wavelength_balance_none
 import dedun.composeapp.generated.resources.group_wavelength_credit_s
@@ -608,6 +611,15 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
             if (ledger.heldSat > 0) {
                 Text(stringResource(Res.string.group_wavelength_held_s, Satoshi(ledger.heldSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            // Beside the balance and never in it: a boarding coin can't be spent through the wallet until a
+            // round takes it in, and how deep each one is is on its own row in the history (A8).
+            if (state.arrivingSat > 0) {
+                Text(stringResource(Res.string.group_wavelength_arriving_sum_s, Satoshi(state.arrivingSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+            }
+            // Not the same as nothing on its way, which is why it is said rather than drawn as a zero (A15).
+            if (state.chainReached == false) {
+                Text(stringResource(Res.string.group_wavelength_chain_not_reached), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             val snapshot = state.snapshot
             if (snapshot == null) {
                 Text(stringResource(Res.string.group_wavelength_no_report), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -618,6 +630,12 @@ private fun BalanceCard(state: GroupWavelengthWalletUIState.Opened, chain: Chain
                     GroupWavelengthReports.Agreement.DIFFERS -> Text(stringResource(Res.string.group_wavelength_report_differs), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     GroupWavelengthReports.Agreement.CANNOT_CONFIRM -> Text(stringResource(Res.string.group_wavelength_report_cannot_confirm), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     null -> Unit
+                }
+                // The operator's own figure for money arriving, named rather than agreed with: it is a
+                // different count from this device's -- the daemon's pending covers outgoing states too -- so
+                // U2's rule applies and the device's line above leads (A14).
+                if (snapshot.pendingInSat > 0) {
+                    Text(stringResource(Res.string.group_wavelength_operator_pending_s, Satoshi(snapshot.pendingInSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (snapshot.creditSat > 0) {
                     Text(stringResource(Res.string.group_wavelength_credit_s, Satoshi(snapshot.creditSat).grouped()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)

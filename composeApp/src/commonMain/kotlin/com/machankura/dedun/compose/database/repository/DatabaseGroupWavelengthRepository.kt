@@ -7,6 +7,7 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayou
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -34,6 +35,7 @@ import com.machankura.dedun.compose.repository.GroupWavelengthRepository
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthTerms
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.Chain
+import fr.acinq.lightning.blockchain.electrum.ElectrumConnectionStatus
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -146,6 +148,14 @@ class DatabaseGroupWavelengthRepository(
 
     override fun observeBoarded(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkBoarded>> =
         database.groupArkDao().observeBoarded(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
+
+    override fun observeArriving(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkArriving>> =
+        database.groupArkDao().observeArriving(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))
+
+    // The status rather than a call: the real client holds a request until it has a connection, so asking
+    // the server whether the server can be reached is the one question that cannot answer itself.
+    override suspend fun chainReached(chain: Chain): Boolean =
+        clients()?.clientFor(chain)?.connectionStatus?.value is ElectrumConnectionStatus.Connected
 
     override fun observeClaims(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupArkClaim>> =
         database.groupArkDao().observeClaims(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet))

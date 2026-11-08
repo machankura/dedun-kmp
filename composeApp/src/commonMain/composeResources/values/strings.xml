@@ -1215,6 +1215,9 @@
     <string name="group_wavelength_balance_none">Your device hasn't signed for any coins of this wallet yet.</string>
     <string name="group_wavelength_pending_s">%1$s sats in a round your device hasn't seen finish</string>
     <string name="group_wavelength_held_s">%1$s sats of that are held for something your device signed and hasn't seen happen. An election frees them if it never does.</string>
+    <string name="group_wavelength_arriving_sum_s">%1$s sats are on their way in. They aren't in the wallet until a round takes them in.</string>
+    <string name="group_wavelength_chain_not_reached">Your device hasn't reached the chain, so it can't say what's on its way in.</string>
+    <string name="group_wavelength_operator_pending_s">Whoever runs the wallet says %1$s sats are pending.</string>
     <string name="group_wavelength_operator_says_s">The operator says %1$s sats, as of its last report</string>
     <string name="group_wavelength_no_report">The operator hasn't reported the wallet yet.</string>
     <string name="group_wavelength_report_matches">Matches what your device signed</string>
