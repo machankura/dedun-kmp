@@ -195,6 +195,97 @@ class GroupWavelengthWalletScreenJvmTest {
     private fun said(vararg sats: Long) = GroupWavelengthSnapshot("w", 3, 100, 500, sats.sum(), coins = sats.mapIndexed { i, sat -> GroupWavelengthSnapshot.Coin(if (i == 0) "a:0" else "b$i:0", sat, "live") })
 
     // ---------------------------------------------------------------------
+    // A history a group can account for (Phase 7, B8).
+    // ---------------------------------------------------------------------
+
+    /** A payout to a member, three renewals in one term, and a deposit: the shape B8 is about. */
+    private fun accountable(): GroupWavelengthWalletUIState.Opened {
+        fun round(id: String, feeSat: Long, term: Long) = GroupWavelengthEntry(
+            id = id, kind = GroupWavelengthEntry.Kind.ROUND, status = GroupWavelengthEntry.Status.DONE,
+            source = GroupWavelengthEntry.Source.THIS_DEVICE, amountSat = 0, feeSat = feeSat, at = 1_799_990_000,
+            direction = GroupWavelengthEntry.Direction.NONE,
+            detail = GroupWavelengthEntry.Detail.Round(fee = com.machankura.dedun.compose.database.model.GroupArkFee("w", id, feeSat, term, 1_799_990_000)),
+        )
+        val payout = GroupWavelengthEntry(
+            id = "payout:1", kind = GroupWavelengthEntry.Kind.PAYOUT_ONCHAIN, status = GroupWavelengthEntry.Status.DONE,
+            source = GroupWavelengthEntry.Source.THIS_DEVICE, amountSat = 50_000, feeSat = 0, at = 1_799_999_000,
+            member = ME, direction = GroupWavelengthEntry.Direction.OUT,
+            detail = GroupWavelengthEntry.Detail.Exit(com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent.Exit(Chain.Signet, 0, 2_000, 1_000)),
+        )
+        return opened().copy(entries = listOf(payout, round("round:1", 300, 3), round("round:2", 400, 3), round("round:3", 500, 3)))
+    }
+
+    private fun history(state: GroupWavelengthWalletUIState.Opened, assertions: androidx.compose.ui.test.ComposeUiTest.() -> Unit) =
+        runDesktopComposeUiTest(phone, 2400) {
+            setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, state, Chain.Signet) } } }
+            assertions()
+        }
+
+    /**
+     * A year of renewals and one payout: *done when a group of four with 200 renewal rows can find one
+     * payout*. The fold is what makes the list readable and the search is what makes it searchable.
+     */
+    @Test
+    fun `renewals in a term fold into one row that says what they cost between them`() = history(accountable()) {
+        onNodeWithText("Renewals in term 3").assertIsDisplayed()
+        onNodeWithText("3 renewals, 1,200 sats in fees between them").assertIsDisplayed()
+    }
+
+    @Test
+    fun `typing narrows the history to the rows whose own words match`() = history(accountable()) {
+        // "Wallet upkeep" is what a renewal's row says; "Renewals" is the chip's word for the kind.
+        onNodeWithText("Search the history").performTextInput("upkeep")
+        onNodeWithText("Renewals in term 3").assertIsDisplayed()
+        onAllNodesWithText("sats onchain to", substring = true).assertCountEquals(0)
+    }
+
+    /** And the other way: the payout's own words leave the renewals out. */
+    @Test
+    fun `typing a payout's words leaves the renewals out`() = history(accountable()) {
+        onNodeWithText("Search the history").performTextInput("onchain to")
+        onNodeWithText("sats onchain to", substring = true).assertIsDisplayed()
+        onAllNodesWithText("Renewals in term 3").assertCountEquals(0)
+        onAllNodesWithText("Wallet upkeep").assertCountEquals(0)
+    }
+
+    /** A search that matches nothing says so in its own words, not the history's empty state. */
+    @Test
+    fun `a search that matches nothing says so, and not that the history is empty`() = history(accountable()) {
+        onNodeWithText("Search the history").performTextInput("zzzzz")
+        onNodeWithText("Nothing in this wallet's history matches what you have typed or chosen", substring = true).assertIsDisplayed()
+        onAllNodesWithText("Nothing has happened in this wallet yet").assertCountEquals(0)
+    }
+
+    /** A chip narrows to its dimension, and tapping it again clears it. */
+    @Test
+    fun `a chip narrows the history and tapping it again clears it`() = history(accountable()) {
+        onNodeWithText("Payouts onchain").performClick()
+        onAllNodesWithText("Renewals in term 3").assertCountEquals(0)
+        onNodeWithText("Payouts onchain").performClick()
+        onNodeWithText("Renewals in term 3").assertIsDisplayed()
+    }
+
+    /** The export is the one thing on this screen that reports an outcome rather than navigating. */
+    /**
+     * Asserted on what the content hands its `notify` rather than on a snackbar: the notifier takes the
+     * caller's scope on purpose, and what this screen owns is the message and when it is sent.
+     */
+    @Test
+    fun `the export says how many rows it copied, and that it says whose word each is`() = runDesktopComposeUiTest(phone, 2400) {
+        var said: String? = null
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthWalletContent(Modifier, accountable(), Chain.Signet, notify = { said = it }) } } }
+        onNodeWithText("Copy the history as a spreadsheet").performClick()
+        assertEquals("4 rows copied, with a column saying whose word each is", said)
+    }
+
+    /** A wallet that has done nothing has no search box to offer: there is nothing to search. */
+    @Test
+    fun `an empty history offers no search box`() = history(opened()) {
+        onNodeWithText("Nothing has happened in this wallet yet").assertIsDisplayed()
+        onAllNodesWithText("Search the history").assertCountEquals(0)
+    }
+
+    // ---------------------------------------------------------------------
     // The wallet's health (Phase 6, B7).
     // ---------------------------------------------------------------------
 

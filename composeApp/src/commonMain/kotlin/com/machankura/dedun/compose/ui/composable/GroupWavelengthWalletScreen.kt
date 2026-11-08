@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WarningAmber
@@ -30,10 +33,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -51,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -101,8 +108,11 @@ import com.machankura.dedun.compose.ui.composable.widgets.wallet.GroupWavelength
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryHeadline
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryIcon
 import com.machankura.dedun.compose.ui.composable.widgets.wallet.entryStatus
+import com.machankura.dedun.compose.ui.composable.widgets.wallet.memberName
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthEntry
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthExport
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHealth
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthHistoryView
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
@@ -120,6 +130,22 @@ import dedun.composeapp.generated.resources.group_wavelength_earlier_leave
 import dedun.composeapp.generated.resources.group_wavelength_earlier_s
 import dedun.composeapp.generated.resources.group_wavelength_health_all_fine
 import dedun.composeapp.generated.resources.group_wavelength_health_title
+import dedun.composeapp.generated.resources.group_wavelength_history_export
+import dedun.composeapp.generated.resources.group_wavelength_history_exported_s
+import dedun.composeapp.generated.resources.group_wavelength_history_filter_kind
+import dedun.composeapp.generated.resources.group_wavelength_history_filter_member
+import dedun.composeapp.generated.resources.group_wavelength_history_filter_source
+import dedun.composeapp.generated.resources.group_wavelength_history_no_match
+import dedun.composeapp.generated.resources.group_wavelength_history_search
+import dedun.composeapp.generated.resources.group_wavelength_history_term_s
+import dedun.composeapp.generated.resources.group_wavelength_history_term_s_s
+import dedun.composeapp.generated.resources.group_wavelength_kind_deposit_lightning
+import dedun.composeapp.generated.resources.group_wavelength_kind_deposit_onchain
+import dedun.composeapp.generated.resources.group_wavelength_kind_exit
+import dedun.composeapp.generated.resources.group_wavelength_kind_operator
+import dedun.composeapp.generated.resources.group_wavelength_kind_payout_lightning
+import dedun.composeapp.generated.resources.group_wavelength_kind_payout_onchain
+import dedun.composeapp.generated.resources.group_wavelength_kind_round
 import dedun.composeapp.generated.resources.group_wavelength_leave
 import dedun.composeapp.generated.resources.group_wavelength_open_other_group_s
 import dedun.composeapp.generated.resources.group_wavelength_open_your_wallet
@@ -128,6 +154,10 @@ import dedun.composeapp.generated.resources.group_wavelength_refused_no_key
 import dedun.composeapp.generated.resources.group_wavelength_refused_no_onchain
 import dedun.composeapp.generated.resources.group_wavelength_refused_unreadable
 import dedun.composeapp.generated.resources.group_wavelength_refused_waiting_seed
+import dedun.composeapp.generated.resources.group_wavelength_source_both
+import dedun.composeapp.generated.resources.group_wavelength_source_mismatch
+import dedun.composeapp.generated.resources.group_wavelength_source_operator
+import dedun.composeapp.generated.resources.group_wavelength_source_this_device
 import dedun.composeapp.generated.resources.open_a_new_wavelength_wallet
 import dedun.composeapp.generated.resources.group_wavelength_leave_ask
 import dedun.composeapp.generated.resources.group_wavelength_leave_asked
@@ -221,6 +251,7 @@ import dedun.composeapp.generated.resources.your_share_of_this_key_is_stored_une
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.Satoshi
 import kotlinx.coroutines.flow.StateFlow
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -302,6 +333,7 @@ fun GroupWavelengthWalletScreen(
                     onNavigateToRoute(GroupWavelengthWalletRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = otherRoom, chain = chainName))
                 },
                 onOpenHealth = { onNavigateToRoute(GroupWavelengthHealthRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = chainName)) },
+                notify = notify,
             )
         }
     }
@@ -334,6 +366,8 @@ internal fun GroupWavelengthWalletContent(
     /** Another group's Wavelength wallet, which this device is running instead of this one (D13). */
     onOpenOtherGroup: (chatRoomId: String) -> Unit = {},
     onOpenHealth: () -> Unit = {},
+    /** The snackbar, for the one thing on this screen that reports an outcome rather than navigating. */
+    notify: (String) -> Unit = {},
 ) {
     when (state) {
         is GroupWavelengthWalletUIState.Error -> ErrorState(modifier = modifier, message = state.message, onRetry = onRetry)
@@ -396,7 +430,7 @@ internal fun GroupWavelengthWalletContent(
             icon = Icons.Default.ErrorOutline,
         )
 
-        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup, onOpenHealth)
+        is GroupWavelengthWalletUIState.Opened -> OpenedWallet(modifier, state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onReceive, onPayOut, onLeave, onOpenWallet, { onOpenCeremony(null) }, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenPersonalWallet, onOpenOtherGroup, onOpenHealth, notify)
     }
 }
 
@@ -491,13 +525,14 @@ private fun OpenedWallet(
     onOpenPersonalWallet: () -> Unit,
     onOpenOtherGroup: (chatRoomId: String) -> Unit,
     onOpenHealth: () -> Unit,
+    notify: (String) -> Unit,
 ) {
     val paneWidth = listPaneWidthFor(MaterialTheme.breakpoint)
     if (paneWidth != null) {
         // What the money is doing on the left, and what the group is doing on the right.
         Row(modifier = modifier.fillMaxSize().padding(MaterialTheme.spacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.paneGap)) {
             LazyColumn(modifier = Modifier.width(paneWidth), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
-                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth)
+                moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth, notify)
             }
             LazyColumn(modifier = Modifier.weight(1f).readableContent(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
                 groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
@@ -508,13 +543,13 @@ private fun OpenedWallet(
             modifier = modifier.readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
         ) {
-            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth)
+            moneyItems(state, chain, onReceive, onPayOut, onLeave, onNominate, isPending, onOpenNew, onMakeKey, onLeaveEarlier, onRunEarlier, onOpenEntry, onOpenHealth, notify)
             groupItems(state, chain, isPending, onNominate, onStepDown, onOpenAdvanced, onMakeKey, onOpenPersonalWallet, onOpenOtherGroup)
         }
     }
 }
 
-private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit, onOpenHealth: () -> Unit) {
+private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened, chain: Chain, onReceive: () -> Unit, onPayOut: () -> Unit, onLeave: () -> Unit, onNominate: () -> Unit, isPending: Boolean, onOpenNew: () -> Unit, onMakeKey: () -> Unit, onLeaveEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onRunEarlier: (GroupWavelengthWalletUIState.Earlier) -> Unit, onOpenEntry: (String) -> Unit, onOpenHealth: () -> Unit, notify: (String) -> Unit) {
     item { NetworkNote(chain) }
     if (state.alarms.isNotEmpty()) item { AlarmCard(state.alarms) }
     if (state.departed.isNotEmpty()) item { DepartedCard(state, isPending, onOpenNew, onMakeKey) }
@@ -530,7 +565,7 @@ private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened,
             }
         }
     }
-    historyItems(state, onOpenEntry)
+    historyItems(state, onOpenEntry, notify)
     items(state.earlier, key = { "earlier:${it.wallet.statement.wallet}" }) { earlier -> EarlierWallet(earlier, state, isPending, onLeaveEarlier, onRunEarlier) }
 }
 
@@ -542,8 +577,7 @@ private fun LazyListScope.moneyItems(state: GroupWavelengthWalletUIState.Opened,
  * (T12). A line carries no outpoint, so a boarding deposit's can't be joined to the device's record of
  * one; interleaved, a single deposit would read as two transactions.
  */
-private fun LazyListScope.historyItems(state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit) {
-    val (theirs, mine) = state.entries.partition { it.source == GroupWavelengthEntry.Source.THE_OPERATOR }
+private fun LazyListScope.historyItems(state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit, notify: (String) -> Unit) {
     item { Text(stringResource(Res.string.group_wavelength_history), style = MaterialTheme.typography.titleSmall) }
     // The deposit ledger counts a deposit for the group, not for one of its wallets, and a landed boarding
     // coin leaves nothing wallet-scoped behind to tell them apart. Said where a group has more than one
@@ -557,7 +591,7 @@ private fun LazyListScope.historyItems(state: GroupWavelengthWalletUIState.Opene
             )
         }
     }
-    if (mine.isEmpty() && theirs.isEmpty()) {
+    if (state.entries.isEmpty()) {
         item {
             EmptyState(
                 modifier = Modifier.fillMaxWidth(),
@@ -565,18 +599,185 @@ private fun LazyListScope.historyItems(state: GroupWavelengthWalletUIState.Opene
                 icon = Icons.AutoMirrored.Filled.ReceiptLong,
             )
         }
+        return
     }
-    items(mine, key = { it.id }) { HistoryRow(it, state, onOpenEntry) }
-    if (theirs.isNotEmpty()) {
-        item {
+    item { HistoryControls(state, onOpenEntry, notify) }
+}
+
+/**
+ * The history, searched and filtered, with renewals folded (B8).
+ *
+ * One `item` rather than a stretch of them, because the rows depend on what has been typed: a
+ * `LazyListScope` cannot remember anything, and the query has to be known before the rows exist. The
+ * cost is that a long history is one lazy item -- it scrolls with the screen rather than lazily -- and
+ * the thing that makes that bearable is the search above it, which is the point of the phase.
+ *
+ * The query and the chips live here in `rememberSaveable` rather than in the view model the plan named.
+ * The plan's reason for the view model was that the composable should not filter inside its item
+ * lambdas, and [GroupWavelengthHistoryView] satisfies that; keeping the typing here is what lets a
+ * screen test drive the search box without a view model.
+ */
+@Composable
+private fun HistoryControls(state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit, notify: (String) -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var kind: GroupWavelengthEntry.Kind? by rememberSaveable { mutableStateOf(null) }
+    var member: String? by rememberSaveable { mutableStateOf(null) }
+    var source: GroupWavelengthEntry.Source? by rememberSaveable { mutableStateOf(null) }
+
+    // Resolved once for the whole list rather than per keystroke per row: both of these are string
+    // lookups, and a search over 200 rows would otherwise do 400 of them on every letter typed.
+    val words = state.entries.associate { entry ->
+        entry.id to listOf(
+            entryHeadline(entry, state.localChatRoom, state.userPublicKey),
+            entryStatus(entry, state.localChatRoom, state.userPublicKey),
+            memberName(state.localChatRoom, entry.member, state.userPublicKey),
+        ).joinToString(" ")
+    }
+    val filters = GroupWavelengthHistoryView.Filters(kind, member, source)
+    // Still two sections, searched and filtered separately. The heading over the operator-only rows is
+    // where this screen says whose word they are, and the new "whose word" chip is a way to narrow to
+    // them rather than a replacement for saying so: a member who has typed nothing must still be able
+    // to see which rows nothing of theirs supports.
+    val (theirs, mine) = state.entries.partition { it.source == GroupWavelengthEntry.Source.THE_OPERATOR }
+    val ours = GroupWavelengthHistoryView.rows(mine, query, filters) { words[it.id].orEmpty() }
+    val onTheirWord = GroupWavelengthHistoryView.rows(theirs, query, filters) { words[it.id].orEmpty() }
+
+    val clipboard = LocalClipboardManager.current
+    val csvRows = stringResource(Res.string.group_wavelength_history_exported_s, state.entries.size.toString())
+    // Both of these are read above the handler because both are composable and an onClick lambda is
+    // not -- the same reason `rememberNotifier` and `stringResource` are read above one. Remembered on
+    // the entries, so a 200-row export is not rebuilt on every letter typed into the search box.
+    val names = state.entries.mapNotNull { it.member }.distinct()
+        .associateWith { memberName(state.localChatRoom, it, state.userPublicKey) }
+    val csv = remember(state.entries, names) { GroupWavelengthExport.toCsv(state.entries) { names[it] } }
+
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text(stringResource(Res.string.group_wavelength_history_search)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = Decorative) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // A dimension with one value filters nothing, so it is not offered.
+        val kinds = GroupWavelengthHistoryView.kinds(state.entries)
+        if (kinds.size > 1) {
+            ChipRow(stringResource(Res.string.group_wavelength_history_filter_kind)) {
+                kinds.forEach { option ->
+                    FilterChip(
+                        selected = kind == option,
+                        onClick = { kind = option.takeIf { kind != option } },
+                        label = { Text(stringResource(kindLabel(option))) },
+                    )
+                }
+            }
+        }
+        val members = GroupWavelengthHistoryView.members(state.entries)
+        if (members.size > 1) {
+            ChipRow(stringResource(Res.string.group_wavelength_history_filter_member)) {
+                members.forEach { option ->
+                    FilterChip(
+                        selected = member == option,
+                        onClick = { member = option.takeIf { member != option } },
+                        label = { Text(memberName(state.localChatRoom, option, state.userPublicKey)) },
+                    )
+                }
+            }
+        }
+        val sources = GroupWavelengthHistoryView.sources(state.entries)
+        if (sources.size > 1) {
+            ChipRow(stringResource(Res.string.group_wavelength_history_filter_source)) {
+                sources.forEach { option ->
+                    FilterChip(
+                        selected = source == option,
+                        onClick = { source = option.takeIf { source != option } },
+                        label = { Text(stringResource(sourceLabel(option))) },
+                    )
+                }
+            }
+        }
+        if (ours.isEmpty() && onTheirWord.isEmpty()) {
+            // Its own message, not the "nothing has happened yet" one: a history that is empty and a
+            // search that found nothing are different absences with different ways out.
+            EmptyState(
+                modifier = Modifier.fillMaxWidth(),
+                message = stringResource(Res.string.group_wavelength_history_no_match),
+                icon = Icons.Default.Search,
+            )
+        }
+        ours.forEach { Rows(it, state, onOpenEntry) }
+        if (onTheirWord.isNotEmpty()) {
             Text(
                 stringResource(Res.string.group_wavelength_history_operator_only),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            onTheirWord.forEach { Rows(it, state, onOpenEntry) }
         }
-        items(theirs, key = { it.id }) { HistoryRow(it, state, onOpenEntry) }
+        TextButton(onClick = {
+            clipboard.setText(AnnotatedString(csv))
+            notify(csvRows)
+        }) { Text(stringResource(Res.string.group_wavelength_history_export)) }
     }
+}
+
+/** One row of the history: an entry, or a term's renewals folded into one. */
+@Composable
+private fun Rows(row: GroupWavelengthHistoryView.Row, state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit) {
+    when (row) {
+        is GroupWavelengthHistoryView.Row.One -> HistoryRow(row.entry, state, onOpenEntry)
+        is GroupWavelengthHistoryView.Row.Term -> TermRow(row, state, onOpenEntry)
+    }
+}
+
+/** A label and the chips under it, so a row of chips says which dimension it narrows. */
+@Composable
+private fun ChipRow(label: String, chips: @Composable () -> Unit) {
+    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+    ) { chips() }
+}
+
+/**
+ * One term's renewals, folded.
+ *
+ * The total is the sum of the rows it hides, and the rows are carried whole, so expanding it shows
+ * exactly the list that was there before the fold -- which is what makes B8's answer to T10 reversible.
+ */
+@Composable
+private fun TermRow(row: GroupWavelengthHistoryView.Row.Term, state: GroupWavelengthWalletUIState.Opened, onOpenEntry: (String) -> Unit) {
+    Column {
+        Disclosure(
+            label = stringResource(Res.string.group_wavelength_history_term_s, row.term.toString()),
+        ) {
+            row.entries.forEach { HistoryRow(it, state, onOpenEntry) }
+        }
+        Text(
+            stringResource(Res.string.group_wavelength_history_term_s_s, row.entries.size.toString(), Satoshi(row.feeSat).grouped()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun kindLabel(kind: GroupWavelengthEntry.Kind): StringResource = when (kind) {
+    GroupWavelengthEntry.Kind.DEPOSIT_ONCHAIN -> Res.string.group_wavelength_kind_deposit_onchain
+    GroupWavelengthEntry.Kind.DEPOSIT_LIGHTNING -> Res.string.group_wavelength_kind_deposit_lightning
+    GroupWavelengthEntry.Kind.PAYOUT_LIGHTNING -> Res.string.group_wavelength_kind_payout_lightning
+    GroupWavelengthEntry.Kind.PAYOUT_ONCHAIN -> Res.string.group_wavelength_kind_payout_onchain
+    GroupWavelengthEntry.Kind.ROUND -> Res.string.group_wavelength_kind_round
+    GroupWavelengthEntry.Kind.EXIT -> Res.string.group_wavelength_kind_exit
+    GroupWavelengthEntry.Kind.OPERATOR -> Res.string.group_wavelength_kind_operator
+}
+
+private fun sourceLabel(source: GroupWavelengthEntry.Source): StringResource = when (source) {
+    GroupWavelengthEntry.Source.THIS_DEVICE -> Res.string.group_wavelength_source_this_device
+    GroupWavelengthEntry.Source.BOTH -> Res.string.group_wavelength_source_both
+    GroupWavelengthEntry.Source.MISMATCH -> Res.string.group_wavelength_source_mismatch
+    GroupWavelengthEntry.Source.THE_OPERATOR -> Res.string.group_wavelength_source_operator
 }
 
 private fun LazyListScope.groupItems(

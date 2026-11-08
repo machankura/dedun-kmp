@@ -5,7 +5,7 @@ were the measure, rather than Material Design 3 — which
 [material-design-conformance.md](./material-design-conformance.md) already settled for all 43 screens, and
 which this plan does not revisit.
 
-**Planned on 8 November 2026. Phases 1 to 5 are built, Phase 6 in part; Phases 7 to 10 are not.** Written against `9d22a7c0`,
+**Planned on 8 November 2026. Phases 1 to 5 and 7 are built, Phase 6 in part; Phases 8 to 10 are not.** Written against `9d22a7c0`,
 and every file and line named below was as it stood at that commit, except where a built phase says what
 the build found. It takes the seven screens listed under *What exists* as they are,
 and changes nothing a device signs: no `ArkPolicy` rule, no refusal, no event's wire shape. The wallet
@@ -778,27 +778,48 @@ That is still true of a member who opens the screen and false of one who does no
 them in one line instead of five cards, and nothing yet tells them while the app is closed. Either a
 stored tip or a worker that may use the network has to be decided first.
 
-### Phase 7: a history a group can account for
+### Phase 7: a history a group can account for — **built**
 
-B8. The wallet screen's `historyItems`, and one new file.
+B8. Two new pure files, and the wallet screen's history section rewritten.
 
-- A search field above the filters, matching the member's name and the entry's headline and status words.
-  Three filter chips: kind, member, whose word. Filtering is over `state.entries`, in the view model, so
-  the composable stays a list.
-- Renewal entries fold: one row per term, headed with the term and the total fee, expanding to the rows.
-  `GroupWavelengthHistory` already produces them; the folding is a view-model grouping, reversible by
-  deleting it.
-- `GroupWavelengthExport.kt`: the entries as CSV, one column per field the entry carries, including a
-  `source` column with `THIS_DEVICE`, `THE_OPERATOR`, `BOTH` or `MISMATCH` — the whole point, and the one
-  column a reader of the file cannot reconstruct. Written through the platform's share sheet, so
-  `expect`/`actual` beside Phase 4's brightness.
-- **Tests**, `GroupWavelengthHistoryJvmTest` and a new `GroupWavelengthExportJvmTest`: search over a name
-  and over a status word; each filter alone and two together; the fold's total equals the sum of its rows;
-  the CSV round-trips every `Source` and quotes a member name containing a comma; an empty filter result
-  shows `EmptyState` with a message of its own, not the *no history* one (the CLAUDE.md rule about five
-  absences saying the same thing).
+- `GroupWavelengthHistoryView` holds the search, the three filters and the fold — **a pure object, not
+  the view model the plan named.** The plan's reason for the view model was that the composable should
+  not filter inside its item lambdas, which this satisfies, and a function with a fixture has a test
+  where a view model would have needed a harness. The *typing* stays in the composable in
+  `rememberSaveable`, which is what lets a screen test drive the search box.
+- Two things it cannot know for itself are passed in: an entry's **words** and a member's **name** both
+  come from composable lookups, so the caller resolves them once for the whole list and this searches
+  what it is given. Resolved once rather than per row per keystroke: a 200-row search would otherwise do
+  400 string lookups on every letter typed.
+- **Folding happens after searching,** which the plan did not say and the writing forced: a term row
+  standing for the one renewal a search matched would be a heading over a single line. A term of one
+  renewal is left alone for the same reason.
+- **A round whose term this device does not hold is never folded.** The term comes from the fee row, and
+  a round inside the free refresh window leaves none — so guessing which term it belonged to would put
+  a figure into a total that nothing supports.
+- **The operator-only heading stays, which the first cut of this dropped.** The partition that puts
+  *only whoever runs the wallet says these happened* over the rows nothing of this device's supports is
+  where the screen says whose word they are; the new *whose word* chip is a way to narrow to them, not a
+  replacement for saying so. Two tests caught it, which is what they were written for.
+- `GroupWavelengthExport.toCsv` is ten columns, every field quoted rather than only the ones that need
+  it: a member name is free text somebody typed, and the first one with a comma in it is how a file like
+  this quietly becomes one column short on every row below.
+- **The export goes to the clipboard, not a share sheet,** which is the one place this phase is thinner
+  than the plan. A share sheet means an `expect`/`actual` whose Android half wants a `FileProvider` in
+  the manifest and whose desktop half wants a file picker — build and platform work in a phase that
+  planned none, and unverifiable here for the same reason Phase 4's brightness is. The clipboard works
+  on all three platforms today with no platform code, and **B8's reason for this feature is the `source`
+  column rather than the delivery.** A file is the better delivery and is not built.
+- **Tests:** thirteen in `GroupWavelengthHistoryViewJvmTest` — search by a member's name and by a status
+  word, each filter alone, two together, a filter with a search, the fold's total against the sum of its
+  rows, the term of one, the round with no term, and the dimensions offered. Seven in
+  `GroupWavelengthExportJvmTest`, including a name with a comma and a name with a quote, read back
+  through a CSV parser rather than compared as a string. Seven screen cases: the fold and its total,
+  typing each way, the no-match empty state in **its own words**, a chip narrowing and clearing, the
+  export's report, and a wallet with nothing in it offering no search box.
 
-**Done when** a group of four with 200 renewal rows can find one payout.
+**Done** on 8 November 2026: a group with a year of renewals and one payout finds the payout by typing
+three letters of it, and the file it exports says whose word every row is.
 
 ### Phase 8: a receipt
 
