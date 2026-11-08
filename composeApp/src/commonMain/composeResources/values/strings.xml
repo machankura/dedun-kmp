@@ -1283,6 +1283,11 @@
     <string name="group_wavelength_tech_by_operator">Whoever runs the wallet says so, and nothing checks it</string>
     <string name="group_wavelength_tech_by_group">The group signed whose it is</string>
     <string name="group_wavelength_tech_seen">Your device first saw it</string>
+    <string name="group_wavelength_tech_confirmations">How deep</string>
+    <string name="group_wavelength_tech_block">Block</string>
+    <string name="group_wavelength_tech_block_mempool">In the mempool</string>
+    <string name="group_wavelength_tech_depth_s_s">%1$s of the %2$s confirmations it needs</string>
+    <string name="group_wavelength_tech_spent_unseen">Spent by a round your device never signed</string>
     <string name="group_wavelength_tech_term">Term</string>
     <string name="group_wavelength_tech_request">Request</string>
     <string name="group_wavelength_tech_asked_for_s">An invoice for %1$s sats</string>
@@ -1307,6 +1312,10 @@
     <string name="group_wavelength_coin_s_sats">%1$s sats</string>
     <string name="group_wavelength_coin_pending">Waiting to see its round finish</string>
     <string name="group_wavelength_coin_settled">Settled</string>
+    <string name="group_wavelength_arriving_mempool">On its way: waiting for its first confirmation</string>
+    <string name="group_wavelength_arriving_s_of_s">On its way: %1$s of the %2$s confirmations it needs to join a round</string>
+    <string name="group_wavelength_arriving_for_a_round">Confirmed, and waiting for whoever runs the wallet to take it into a round</string>
+    <string name="group_wavelength_arriving_taken_unseen">Taken into a round your device didn't sign, so it won't count it as a deposit</string>
     <string name="group_wavelength_coin_held">Held for something signed</string>
     <string name="group_wavelength_coin_spent">Spent</string>
     <string name="group_wavelength_coin_expires_s">Can be swept from block %1$s</string>

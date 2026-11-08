@@ -182,7 +182,16 @@ class GroupWavelengthWalletViewModel(
                 feesSat = fees,
                 labelsLeft = labels,
                 // Built here rather than stored, from the rows read a moment ago and the report held now.
-                entries = GroupWavelengthHistory.of(historyRows.copy(payoutsWentNowhere = wentNowhere), it.snapshot),
+                // The tip and the operator's boarding depth are the history's, not the rows': how deep an
+                // arriving boarding payment is is worked out against the tip rather than stored (A6).
+                entries = GroupWavelengthHistory.of(
+                    historyRows.copy(
+                        payoutsWentNowhere = wentNowhere,
+                        tip = tip,
+                        boardingConfirmations = repository.terms(chain)?.boardingConfirmations ?: 1,
+                    ),
+                    it.snapshot,
+                ),
                 leaveAsked = leaveAsked,
             )
         }

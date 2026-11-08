@@ -183,6 +183,7 @@ class DatabaseGroupWavelengthRepository(
         return GroupWavelengthHistory.Rows(
             coins = dao.vtxos(key),
             boarded = dao.boarded(key),
+            arriving = dao.arriving(key),
             claims = dao.claims(key),
             payments = dao.payments(key),
             leaves = dao.leaves(key),

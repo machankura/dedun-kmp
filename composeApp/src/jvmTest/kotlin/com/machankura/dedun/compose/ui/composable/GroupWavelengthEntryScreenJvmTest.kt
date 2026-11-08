@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
 import com.machankura.dedun.compose.database.model.GroupArkClaim
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -59,6 +60,18 @@ class GroupWavelengthEntryScreenJvmTest {
         confirmedAt = Instant.fromEpochSeconds(now - 500),
     )
 
+    private fun arriving(member: String? = OTHER, height: Long? = null, spentUnseen: Long? = null) =
+        GroupArkArriving(
+            wallet = "w",
+            outpoint = "$txid:0",
+            amountSat = 50_000,
+            script = "0014aa",
+            member = member,
+            firstSeenAtEpochSeconds = now - 300,
+            blockHeight = height,
+            spentUnseenAtEpochSeconds = spentUnseen,
+        )
+
     private fun onchainPayout() = GroupWavelengthOnchainPayoutEvent.Payout(Chain.Regtest, 0, OTHER, "d", address, 8_000, 2_000, now + 3_600, now - 60)
 
     private fun lightningPayout() = GroupWavelengthPaymentEvent.Payment(Chain.Regtest, 0, "lnbcrt-not-an-invoice", 50, 500, now + 3_600, GroupWavelengthPaymentEvent.Payout(OTHER, "d"))
@@ -73,6 +86,41 @@ class GroupWavelengthEntryScreenJvmTest {
         onNodeWithText("Whose").assertIsDisplayed()
         onNodeWithText("Your device's own record, from start to finish.").assertIsDisplayed()
         onNodeWithText("Paid to an address your device worked out as theirs").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a payment in the mempool says it is on its way, not that it has settled`() = runDesktopComposeUiTest(phone, 1200) {
+        val rows = GroupWavelengthHistory.Rows(arriving = listOf(arriving()), tip = 900, boardingConfirmations = 6)
+        val entry = assertNotNull(of(rows).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+        onNodeWithText("+50,000 sats").assertIsDisplayed()
+        onNodeWithText("On its way: waiting for its first confirmation").assertIsDisplayed()
+        onNodeWithText("Onchain").assertIsDisplayed()
+        onNodeWithText("Your device's own record, from start to finish.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a confirming payment counts towards the depth the operator asks for`() = runDesktopComposeUiTest(phone, 1200) {
+        val rows = GroupWavelengthHistory.Rows(arriving = listOf(arriving(height = 898)), tip = 900, boardingConfirmations = 6)
+        val entry = assertNotNull(of(rows).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+        onNodeWithText("On its way: 3 of the 6 confirmations it needs to join a round").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a payment deep enough says what it is waiting for, which is somebody running the wallet`() = runDesktopComposeUiTest(phone, 1200) {
+        val rows = GroupWavelengthHistory.Rows(arriving = listOf(arriving(height = 880)), tip = 900, boardingConfirmations = 6)
+        val entry = assertNotNull(of(rows).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+        onNodeWithText("Confirmed, and waiting for whoever runs the wallet to take it into a round").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a coin a round this device never signed took in says so`() = runDesktopComposeUiTest(phone, 1200) {
+        val rows = GroupWavelengthHistory.Rows(arriving = listOf(arriving(height = 880, spentUnseen = now - 50)), tip = 900)
+        val entry = assertNotNull(of(rows).singleOrNull())
+        setContent { DedunTheme { ProvideSnackbarHost { GroupWavelengthEntryDetail(entry, localChatRoom, ME, Modifier) } } }
+        onNodeWithText("Taken into a round your device didn't sign, so it won't count it as a deposit").assertIsDisplayed()
     }
 
     @Test

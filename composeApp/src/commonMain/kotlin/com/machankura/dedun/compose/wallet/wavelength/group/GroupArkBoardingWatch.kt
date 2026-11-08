@@ -15,8 +15,11 @@ import fr.acinq.lightning.blockchain.electrum.ElectrumMiniWallet
 import fr.acinq.lightning.blockchain.electrum.IElectrumClient
 import fr.acinq.lightning.blockchain.electrum.WalletState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -43,19 +46,26 @@ class GroupArkBoardingWatch(
     private val scope: CoroutineScope,
 ) {
     private val logger = Logger.withTag("GroupArkBoardingWatch")
-    private var job: Job? = null
-    private val watching = HashMap<String, Watching>()
 
-    private class Watching(val mini: ElectrumMiniWallet, val jobs: Job)
+    /**
+     * A scope of its own under [scope], supervised and with a handler, so that one wallet's chain connection
+     * failing takes neither the other wallets nor the identity's scope with it. The mini-wallets run in it too,
+     * so cancelling it stops them.
+     */
+    private var own: CoroutineScope? = null
+    private val watching = HashMap<String, ElectrumMiniWallet>()
 
     /** Starts watching every wallet the group has been given a boarding address for, and any answered later. */
     fun start() {
-        job?.cancel()
-        job = scope.launch {
+        stop()
+        val handler = CoroutineExceptionHandler { _, e -> logger.e("The boarding watch stopped unexpectedly", e) }
+        val mine = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]) + handler)
+        own = mine
+        mine.launch {
             database.groupArkDao().observeWalletsWithDepositAddresses().collect { keys ->
                 keys.filterNot { it in watching }.forEach { key ->
                     try {
-                        watch(key)
+                        watch(mine, key)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
@@ -67,43 +77,44 @@ class GroupArkBoardingWatch(
     }
 
     fun stop() {
-        job?.cancel()
-        job = null
-        watching.values.forEach {
-            it.jobs.cancel()
-            it.mini.stop()
-        }
+        own?.cancel()
+        own = null
+        watching.values.forEach { it.stop() }
         watching.clear()
     }
 
-    private suspend fun watch(key: String) {
+    private suspend fun watch(mine: CoroutineScope, key: String) {
         val roomId = key.split(":").getOrNull(1) ?: return
         val (chain, _) = GroupArkCoSigner.parseWalletKey(roomId, key) ?: return
         val client = clients.clientFor(chain)
         // One mini-wallet per wallet, each address added singly: these are not an HD branch with a gap limit, they are the
         // addresses the group was handed, and the other 512 of the window are ones nobody can pay.
-        val mini = ElectrumMiniWallet(chain.chainHash, client, scope, logger)
-        val jobs = scope.launch {
-            launch {
-                // Addresses as they are answered, so one given out while the app is open is watched without a restart.
-                // `addAddress` ignores a script hash it already holds, so repeating the whole list is free.
+        val mini = ElectrumMiniWallet(chain.chainHash, client, mine, logger)
+        mine.launch {
+            // Addresses as they are answered, so one given out while the app is open is watched without a restart.
+            // `addAddress` ignores a script hash it already holds, so repeating the whole list is free.
+            try {
                 database.groupArkDao().observeDepositAddresses(key).collect { rows ->
                     rows.forEach { row -> if (row.script != null) row.address?.let(mini::addAddress) }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logger.e("Could not follow $key's boarding addresses", e)
             }
-            launch {
-                mini.walletStateFlow.collectLatest { state ->
-                    try {
-                        reconcile(key, roomId, client, state)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        logger.e("Could not read what has arrived at $key's boarding addresses", e)
-                    }
+        }
+        mine.launch {
+            mini.walletStateFlow.collectLatest { state ->
+                try {
+                    reconcile(key, roomId, client, state)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    logger.e("Could not read what has arrived at $key's boarding addresses", e)
                 }
             }
         }
-        watching[key] = Watching(mini, jobs)
+        watching[key] = mini
     }
 
     /**

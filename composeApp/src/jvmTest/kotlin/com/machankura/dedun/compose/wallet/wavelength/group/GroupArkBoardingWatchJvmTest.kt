@@ -36,6 +36,7 @@ import fr.acinq.lightning.blockchain.fee.FeeratePerKw
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,9 +120,12 @@ class GroupArkBoardingWatchJvmTest {
     private val bobAddress = Boarding("22")
 
     @AfterTest
-    fun close() {
+    fun close() = runBlocking {
         watch.stop()
         scope.cancel()
+        // Waited for rather than just cancelled: a collector still inside a query would otherwise meet a
+        // closed database, and that exception lands on whichever test runs next.
+        scope.coroutineContext.job.join()
         db.close()
     }
 
