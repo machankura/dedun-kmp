@@ -7,6 +7,8 @@ import dedun.composeapp.generated.resources.pay_out_onchain_from_wavelength
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_pays_s_s_s_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_needs_s_more
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_wallet_too_small
+import dedun.composeapp.generated.resources.wavelength_payout_all_held_back_s_s
+import dedun.composeapp.generated.resources.wavelength_payout_holds_back_s_s_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_waiting_s
 import dedun.composeapp.generated.resources.wavelength_onchain_payout_no_address_s
 import dedun.composeapp.generated.resources.wavelength_s_sats
@@ -77,6 +79,7 @@ import com.machankura.dedun.compose.ui.view.model.GroupPayoutsViewModel
 import com.machankura.dedun.compose.ui.view.state.GroupPayoutsUIState
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.PayoutBuilder
+import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.a_payout_pays_each_member_everything_they_own
@@ -214,12 +217,14 @@ fun GroupPayoutsScreen(
                                 lightningOffer = if (state.canSign && state.lightningWallet != null && balance.destination != null) {
                                     viewModel.lightningPayable(balance)
                                 } else null,
-                                // The whole Wavelength balance, through the group's Wavelength wallet.
+                                // As much of the Wavelength balance as the wallet can spend, through the group's Wavelength wallet.
                                 wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && state.wavelengthPaysLightning && balance.destination != null) {
                                     viewModel.wavelengthPayable(balance)
                                 } else null,
-                                // The same balance, onchain, as a leave in the wallet's next round (docs/group-wavelength-payouts.md).
+                                // The same, onchain, as a leave in the wallet's next round (docs/group-wavelength-payouts.md).
                                 wavelengthOnchain = if (state.canSign && balance.destination != null) viewModel.wavelengthOnchainOffer(balance) else null,
+                                // What the operator's least change holds back of their balance, which the row says either way.
+                                wavelengthHeldBackSat = viewModel.wavelengthHeldBackSat(balance),
                                 wavelengthOnchainProblem = viewModel.usageProblemOf(balance.member),
                                 onCheckOnchainAddress = { viewModel.checkUsage(listOf(balance.member)) },
                                 onPayWavelengthOnchain = if (!viewModel.isActionPending.value) {
@@ -314,10 +319,15 @@ private fun MemberPayoutRow(
     /** The Lightning payout this member's balance makes, as (amount, fee limit) in msat, or null where there is none to offer. */
     lightningOffer: Pair<Long, Long>?,
     onPayLightning: (() -> Unit)?,
-    /** The same from the Wavelength wallet. */
+    /** The same from the Wavelength wallet, bounded by what that wallet can spend as well as by the balance. */
     wavelengthOffer: Pair<Long, Long>? = null,
-    /** How many sats more the wallet needs before that payout leaves change the operator accepts, or 0 when it does. */
     onPayWavelength: (() -> Unit)? = null,
+    /**
+     * How much of their Wavelength balance the operator's least change keeps in the wallet, or 0 where the whole balance is being
+     * paid. Said on the row either way: beside an offer, because being paid less than the row shows needs explaining, and on its own
+     * where nothing can go at all (`docs/group-wavelength-spendable-ceiling.md`, B7 and B8).
+     */
+    wavelengthHeldBackSat: Long = 0,
     /** The Wavelength balance paid out onchain, or why it can't be: null where there's nothing to say. */
     wavelengthOnchain: GroupPayoutsViewModel.WavelengthOnchainOffer? = null,
     /** What was found of the address's use, which an onchain payout waits on (`docs/payouts-only.md`, D7). */
@@ -404,6 +414,31 @@ private fun MemberPayoutRow(
             }
         }
         WavelengthOnchainOffer(name, wavelengthOnchain, wavelengthOnchainProblem, onCheckOnchainAddress, onPayWavelengthOnchain)
+        // Someone's own sats are staying in the wallet, so the row says so rather than leaving them to notice. Under both rails,
+        // because it is a footnote to whichever of them was offered, and the same sats whether one was or neither.
+        if (wavelengthHeldBackSat > 0) {
+            val canGo = wavelengthOffer != null || wavelengthOnchain is GroupPayoutsViewModel.WavelengthOnchainOffer.Offer
+            val stuck = wavelengthOnchain.let {
+                it is GroupPayoutsViewModel.WavelengthOnchainOffer.TooLittle || it is GroupPayoutsViewModel.WavelengthOnchainOffer.WalletTooSmall
+            }
+            if (canGo) {
+                Text(
+                    stringResource(
+                        Res.string.wavelength_payout_holds_back_s_s_s,
+                        Satoshi(wavelengthHeldBackSat).grouped(), name, Satoshi(GroupWavelengthRollout.MIN_CHANGE_SAT).grouped(),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (stuck) {
+                // Nothing here works, and there is no button to offer: emptying the wallet is a different thing and its own note's.
+                Text(
+                    stringResource(Res.string.wavelength_payout_all_held_back_s_s, Satoshi(wavelengthHeldBackSat).grouped(), name),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

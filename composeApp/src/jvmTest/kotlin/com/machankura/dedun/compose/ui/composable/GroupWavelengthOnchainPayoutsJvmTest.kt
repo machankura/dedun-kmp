@@ -328,6 +328,45 @@ class GroupWavelengthOnchainPayoutsJvmTest {
     }
 
     @Test
+    fun `the row says what the operator's change keeps of their balance, beside what it pays`() =
+        render(balance(4_036), UnusedAddressCheck.Usage.Unused, inWalletSat = 4_048, paysLightning = true) {
+            onNodeWithText("Pays @Alice 3,017 sats", substring = true).assertIsDisplayed()
+            onNodeWithText("988 sats of @Alice's balance stays behind", substring = true).assertIsDisplayed()
+            onNodeWithText("less than 1,000 sats of change", substring = true).assertIsDisplayed()
+        }
+
+    @Test
+    fun `the same row at a wide window says the same thing`() =
+        render(balance(4_036), UnusedAddressCheck.Usage.Unused, inWalletSat = 4_048, paysLightning = true, width = 1_280) {
+            onNodeWithText("Pays @Alice 3,017 sats", substring = true).assertIsDisplayed()
+            onNodeWithText("988 sats of @Alice's balance stays behind", substring = true).assertIsDisplayed()
+        }
+
+    @Test
+    fun `a balance paid in full says nothing about anything staying behind`() =
+        render(balance(10_000), UnusedAddressCheck.Usage.Unused, paysLightning = true) {
+            onNodeWithText("stays behind", substring = true).assertDoesNotExist()
+            onNodeWithText("can't leave the Wavelength wallet", substring = true).assertDoesNotExist()
+        }
+
+    @Test
+    fun `where the operator's change is all that's left, the row says so and offers no button`() =
+        render(balance(988), UnusedAddressCheck.Usage.Unused, inWalletSat = 1_000, paysLightning = true) {
+            onNodeWithText("988 sats of @Alice's balance can't leave the Wavelength wallet", substring = true).assertIsDisplayed()
+            onNodeWithText("Only emptying the wallet moves them", substring = true).assertIsDisplayed()
+            onNodeWithText("Pay out over Lightning from the Wavelength wallet").assertDoesNotExist()
+            onNodeWithText("Pay out onchain from the Wavelength wallet").assertDoesNotExist()
+            onNodeWithText("stays behind", substring = true).assertDoesNotExist()
+        }
+
+    @Test
+    fun `a wallet that can't spare a round's fee says it's the wallet, not the balance`() =
+        render(balance(3_000), UnusedAddressCheck.Usage.Unused, inWalletSat = 3_000) {
+            onNodeWithText("The Wavelength wallet can't both pay for a round", substring = true).assertIsDisplayed()
+            onNodeWithText("Any deposit into it helps", substring = true).assertIsDisplayed()
+        }
+
+    @Test
     fun `a payout waiting on either rail holds the Lightning one back too`() {
         val waiting = balance(5_000, openSat = 5_000)
         assertNull(viewModel(loaded(waiting, paysLightning = true)).wavelengthPayable(waiting))
@@ -340,9 +379,10 @@ class GroupWavelengthOnchainPayoutsJvmTest {
         usage: UnusedAddressCheck.Usage,
         inWalletSat: Long = balance.wavelength.availableSat + GroupWavelengthRollout.MIN_CHANGE_SAT,
         paysLightning: Boolean = false,
+        width: Int = 400,
         assertions: ComposeUiTest.() -> Unit,
     ) =
-        runDesktopComposeUiTest(width = 400, height = 2000) {
+        runDesktopComposeUiTest(width = width, height = 2000) {
             val destinations = object : PayoutDestinationRepository by PayoutDestinationRepository.NO_OP {
                 override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector) = usage
             }

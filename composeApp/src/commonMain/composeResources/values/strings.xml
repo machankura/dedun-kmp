@@ -1346,6 +1346,8 @@
     <string name="wavelength_onchain_payout_no_address_s">%1$s hasn't given an onchain address, so their Wavelength balance can only be paid over Lightning.</string>
     <string name="wavelength_onchain_payout_waiting_s">A payout to %1$s from the Wavelength wallet is waiting for signatures or a round.</string>
     <string name="wavelength_onchain_payout_wallet_too_small">The Wavelength wallet can't both pay for a round and keep the least change its operator accepts. Any deposit into it helps.</string>
+    <string name="wavelength_payout_holds_back_s_s_s">%1$s sats of %2$s's balance stays behind: the Wavelength wallet's operator won't take a spend that leaves it less than %3$s sats of change.</string>
+    <string name="wavelength_payout_all_held_back_s_s">%1$s sats of %2$s's balance can't leave the Wavelength wallet, because what's in it is the least change its operator accepts. Only emptying the wallet moves them.</string>
     <string name="wavelength_onchain_payout_needs_s_more">%1$s sats more and the Wavelength balance is worth paying out onchain.</string>
     <string name="group_wavelength_payout_s_s">%1$s sats to %2$s</string>
     <string name="group_wavelength_payout_approved">Approved. Waiting for whoever runs the wallet</string>
