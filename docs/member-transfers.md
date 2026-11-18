@@ -363,11 +363,30 @@ fixes the transfer half and leaves the payout half wrong. **Decide here whether
 Phase 2 also adds 30379 to the chronicle.** Its apply order would go after 30343,
 since the payout refusal counts transfers.
 
+**Result, 18 November 2026, from the code: a late joiner never receives a 30379.**
+`ChronicleEvent.KINDS` doesn't carry it. No other path forwards one either: the only
+reads of the kind are `GroupWavelengthPayouts`' own and the runner's count, and the
+key notice's answer carries no authorisation. So a member added after a Wavelength
+payout already counts that member as never paid. **30379 is not added here.**
+Replaying an authorisation is a co-signing question, not a ledger one. A late joiner
+holds no leave or payment rows, so it can't tell an approval the group has already
+paid from one it hasn't. Making 30379 safe to replay is a plan of its own, and is
+listed under *What this does not do*. Phase 2 adds 30343 alone. Only the first
+transfer signed for a request counts, and a transfer moves no money, so replaying an
+old copy changes nothing. It is as safe as replaying a 30339.
+
 ### Spike S2: what an older build does with 30342 and 30343
 
 Expected answer, from the code: it shows the carried 30342 as an unknown inner event,
 shows a 30343 proposal as raw JSON, and signs it on approval. Confirm it on two JVM
 devices, one on `f4752156`. The answer fixes what T11's release note says.
+
+**Result, from the code, as `payouts-only.md`'s Spike A found for 30341.**
+`acceptProposal` runs a hook only for the kinds it knows, and a 30343 falls through to
+a session that the member approves by hand. A carried 30342 has no transcript arm, so
+it is filed as an unknown inner event and shows nothing. An older device can therefore
+sign a transfer, and its balances will still ignore it. That is T11's case, and it is
+why Phase 2 ships first.
 
 ### Spike S3: the Wavelength scaling ratio on a real wallet
 
@@ -376,12 +395,21 @@ Pull `aux.db` off the emulators (see the emulator-inspection memory note). Compu
 the ratio is 1 in practice outside a wedged wallet, the form's *what arrives* line can
 stay in the disclosure. If it often isn't, the line goes on the face of the form.
 
+**Not run:** no emulator was up on 18 November 2026. The form puts the line on its
+face whenever the ratio is below 1 and omits it otherwise. That is right either way,
+and it costs one string. Phase 7's run measures the ratio.
+
 ### Spike S4: who can sign a request
 
 `GroupPayoutDestinationEvent.build` takes the member's `PrivateKey`. List which
 sign-in types give the profile one (seed, nsec) and which don't (npub, and any
 external signer). The transfer form is offered only where a request can be signed,
 and elsewhere the row says why.
+
+**Result, from the code.** `DatabasePayoutDestinationRepository.set` signs with
+`Identity.nostrPrivateKey` and offers the form on `Identity.canSign`. A seed or nsec
+profile has the key, and an npub profile doesn't. The app has no external-signer
+identity. The transfer request uses the same two.
 
 **Done when** the four spikes are written up here, and T1-T14 are confirmed or rewritten.
 
@@ -671,6 +699,11 @@ devices, and a quorum of devices that missed or ignore a transfer can still pay 
 giver what they gave away (T11, T12).
 
 **It doesn't touch members' guarded wallets.** They have one owner already.
+
+**It doesn't hand a late joiner the Wavelength payouts.** S1 found that a member added
+after a payout never receives its 30379, so their balances count that member as
+unpaid. Carrying 30379 safely needs a co-signer that can tell a replayed approval it
+has never seen paid from one nobody has paid. That is a separate plan.
 
 ## Questions for the owner
 
