@@ -61,6 +61,7 @@ silent, or a decision that looked arbitrary and was not.
 | [giza-into-dedun.md](./giza-into-dedun.md) | taking Giza's work into Dedun, planned and not started: why it comes through Bennu's port rather than straight from Giza, the kinds that collide (Dedun's deposit, coin, transfer and Wavelength kinds against Giza's refresh, repair and governance) and why Dedun moves its own to 30390–30393 and 30400–30412, reading the old numbers for good because a signed event's id covers its kind, in three releases before any of Giza's kinds ship; the schema at Giza + 9; and the Dedun-only work in each phase: the Wavelength wallet's Iceberg holders, what a rotation waits for, the leave payouts in a governed room, and wavelength-kmp's place in the toolchain bump |
 | [paid-requests.md](./paid-requests.md) | an invoice or address ceasing to be a QR code once money arrives against it, built (phases 0-7) — the seven screens that hand out a request, the three that kept showing a paid one and the three that rotated in silence, why first sight rather than confirmation, why paid is stated from the phases that say a payment happened rather than by negating the ones that say nobody has paid, why an Ark boarding address can only be known paid once the group signs for the coin, why an expired invoice is hidden on the same argument and by a timer rather than a poll, and the two request states the tree had been missing |
 | [group-wavelength-unconfirmed-deposits.md](./group-wavelength-unconfirmed-deposits.md) | money on its way into the group's Wavelength wallet -- an onchain payment to a boarding address, from the mempool until the round that takes it in -- built (phases 1-5; the spikes and the real deposit, 0 and 7, not run). Covers the three states of a deposit's life no screen showed and how long they last on mainnet, why the watch needs nothing from the operator when every device already holds the checked address and has its own connection to the chain, why an arriving coin must never reach the deposit ledger (where one replaceable payment would halve every other member's payable balance), why it is a table rather than memory and keyed so that one id spans all four states, and the first sight of money the receive screen's paid panel was always meant to have |
+| [marmot-kmp.md](./marmot-kmp.md) | moving the group layer off quartz's engine and onto marmot-kmp, mls-kmp and crypto-kmp — why staying on quartz 1.15.2 is staying on an engine that left, the 228 import lines and the one rule that places all but two of them, the group state on a device that must still open afterwards, and eight phases that put the swap in one commit and the evidence around it |
 
 Start with the ceremony if you are new to this area; the Marmot notes all assume it.
 Read the skipped-keys note before debugging any "the other device never got it"
@@ -155,6 +156,12 @@ The group send-an-amount note is a phased plan that has been built, and reads
 as the third gate of the group chain wallet note's Phase 10: why that gate
 could not lift as written, and what stands in for it now that it is gone. Read
 its list of what the gated code got wrong before its phases.
+The marmot-kmp note is a phased plan that has not been built, and reads as the
+Marmot v2 note's Phase 0 come round again: quartz took the engine out, so the
+version the v2 work was built on is the last one that has it. Read the v2 note
+first — this plan happens entirely on the current-profile side of its first row —
+and read this one's two constraints before any phase: the group state already on
+devices is what decides whether the move can ship at all.
 The ceremony-creation note is a phased plan that has been built. It reads as
 the subgroups note's Phase 10 followed through to the screens: read it after
 that phase, and its table of findings before any phase. Its second half
