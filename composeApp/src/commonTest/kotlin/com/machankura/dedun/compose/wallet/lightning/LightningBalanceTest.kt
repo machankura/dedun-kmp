@@ -38,6 +38,16 @@ class LightningBalanceTest {
     }
 
     @Test
+    fun `what members transferred is added or taken off, never a deposit`() {
+        val received = LightningBalance.of(alice, 10_000_000, listOf(pay("01", 2_000_000, 100_000, alice)), emptyMap(), now, transferredMsat = 5_000_000)
+        assertEquals(10_000_000, received.depositedMsat)
+        assertEquals(12_900_000, received.availableMsat)
+        val given = LightningBalance.of(alice, 10_000_000, emptyList(), emptyMap(), now, transferredMsat = -4_000_000)
+        assertEquals(6_000_000, given.availableMsat)
+        assertEquals(0, LightningBalance.of(alice, 1_000_000, emptyList(), emptyMap(), now, transferredMsat = -4_000_000).availableMsat)
+    }
+
+    @Test
     fun `another member's payout, an unlabelled payment, and an expired authorisation don't count`() {
         val balance = LightningBalance.of(
             member = alice,

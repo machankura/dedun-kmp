@@ -38,6 +38,8 @@ import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.managers.GroupPayoutDestinations
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestinationRemoved
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
@@ -593,6 +595,12 @@ data class ChatMessage(
         /** The group signed whose some of its coins are. See `docs/payouts-only.md`. */
         const val TYPE_COINS_ASSIGNED = "coinsAssigned"
 
+        /** A member asked the group to record a transfer of part of their balance, or took one back. See `docs/member-transfers.md`. */
+        const val TYPE_MEMBER_TRANSFER_ASKED = "memberTransferAsked"
+
+        /** The group signed a member's transfer: one balance down, another up, and nothing moved. */
+        const val TYPE_MEMBER_TRANSFER_RECORDED = "memberTransferRecorded"
+
         /**
          * Every line the group signed, for the one check the transcript
          * dispatches on. A type missing from here renders as a chat bubble,
@@ -622,6 +630,8 @@ data class ChatMessage(
             TYPE_DEPOSITS_OPENED,
             TYPE_DEPOSITS_ATTRIBUTED,
             TYPE_COINS_ASSIGNED,
+            TYPE_MEMBER_TRANSFER_ASKED,
+            TYPE_MEMBER_TRANSFER_RECORDED,
         )
 
         /** The lines in [GROUP_IDENTITY_TYPES] about the Lightning wallet, which open its screen. */
@@ -1395,6 +1405,13 @@ data class ChatMessage(
         internal suspend fun memberName(database: DedunDatabase, publicKey: HexKey): String =
             database.profileDao().getProfileByPublicKey(publicKey)?.humanReadableNameOrPubkey() ?: publicKey.take(8)
 
+        /** Which of the group's wallets a transfer's balance is in, as a line names it. */
+        private fun railName(rail: TransferRequestEvent.Rail): String = when (rail) {
+            TransferRequestEvent.Rail.WAVELENGTH -> "Wavelength"
+            TransferRequestEvent.Rail.LIGHTNING -> "Lightning"
+            TransferRequestEvent.Rail.ONCHAIN -> "onchain"
+        }
+
         internal suspend fun applyInnerEvent(
             database: DedunDatabase,
             groupId: String,
@@ -1733,6 +1750,51 @@ data class ChatMessage(
                         chatRoomId = groupId,
                         createdAt = createdAt,
                         content = "The group said whose $count deposit${if (count == 1) " is" else "s are"}",
+                    )
+                }
+
+                // A member asking the group to record a transfer of part of their balance, or
+                // taking one back. The inner event carries the giver's signed request whole; only
+                // one the giver put here, about this room, gets a line. docs/member-transfers.md.
+                TransferRequestEvent.KIND -> {
+                    val signed = TransferRequestEvent.carried(event) ?: return null
+                    val statement = TransferRequestEvent.verified(signed) ?: return null
+                    if (!statement.chatRoomId.equals(groupId, ignoreCase = true)) return null
+                    val giver = memberName(database, statement.giver)
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_MEMBER_TRANSFER_ASKED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = when (statement) {
+                            is TransferRequestEvent.Request ->
+                                "@$giver asks to transfer ${Satoshi(statement.amountSat).grouped()} sats of their " +
+                                    "${railName(statement.rail)} balance to @${memberName(database, statement.receiver)}"
+                            is TransferRequestEvent.Withdrawal -> "@$giver took back a transfer they asked for"
+                        },
+                    )
+                }
+
+                // The group recording a member's transfer: checked as the room's signature over
+                // the giver's own, embedded whole. Nothing moved. docs/member-transfers.md.
+                MemberTransferEvent.KIND -> {
+                    val transfer = MemberTransferEvent.verify(event, groupId) ?: return null
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_MEMBER_TRANSFER_RECORDED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group recorded @${memberName(database, transfer.from)}'s transfer of " +
+                            "${Satoshi(transfer.amountSat).grouped()} sats of their ${railName(transfer.rail)} balance " +
+                            "to @${memberName(database, transfer.to)}. Nothing left the wallet.",
                     )
                 }
 

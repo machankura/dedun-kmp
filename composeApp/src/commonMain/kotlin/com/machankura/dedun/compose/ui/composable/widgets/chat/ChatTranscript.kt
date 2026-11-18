@@ -48,6 +48,7 @@ import dedun.composeapp.generated.resources.open_the_lightning_wallet
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.RequestQuote
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -960,6 +961,7 @@ private fun RitualNotice(
         ChatMessage.TYPE_MEMBER_WALLET_REQUESTED, ChatMessage.TYPE_MEMBER_WALLET_GUARDED -> Icons.Default.AccountBalanceWallet
         ChatMessage.TYPE_PAYOUT_DESTINATION_SET, ChatMessage.TYPE_PAYOUT_DESTINATION_REMOVED -> Icons.Default.Payments
         ChatMessage.TYPE_DEPOSITS_OPENED, ChatMessage.TYPE_DEPOSITS_ATTRIBUTED, ChatMessage.TYPE_COINS_ASSIGNED -> Icons.Default.Savings
+        ChatMessage.TYPE_MEMBER_TRANSFER_ASKED, ChatMessage.TYPE_MEMBER_TRANSFER_RECORDED -> Icons.Default.SwapHoriz
         ChatMessage.TYPE_MEMBER_INVITED -> Icons.Default.PersonAdd
         ChatMessage.TYPE_MEMBER_INVITE_SENT -> Icons.Default.Upload
         ChatMessage.TYPE_MEMBER_INVITE_FAILED -> Icons.Default.ErrorOutline

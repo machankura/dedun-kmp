@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.nostr.chronicle
 
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import androidx.compose.runtime.Immutable
@@ -163,8 +164,15 @@ class ChronicleEvent(
          * A third for `docs/payouts-only.md`: every coin assignment, or a late joiner can't tell
          * whose a legacy or change coin is, and refuses a payout everybody else signs. Newest-wins
          * as an attribution is, so as safe to replay; after the statements, whose depositors it names.
+         *
+         * A fourth for `docs/member-transfers.md`: every transfer, or a late joiner counts a giver as still holding what they
+         * gave and approves paying it out a second time. Safe to replay: only the first transfer the group signed for a
+         * request counts, it embeds the giver's own signature, and it moves no money. Last, since an onchain transfer's coin
+         * shares are applied on top of whose the coin was by the three before it.
          */
-        val KINDS: ChronicleKinds = ChronicleKinds(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, CoinAssignmentEvent.KIND))
+        val KINDS: ChronicleKinds = ChronicleKinds(
+            listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, CoinAssignmentEvent.KIND, MemberTransferEvent.KIND)
+        )
 
         /** Every kind a chronicle may carry in this app. */
         val CHRONICLABLE_KINDS: Set<Kind> = KINDS.all

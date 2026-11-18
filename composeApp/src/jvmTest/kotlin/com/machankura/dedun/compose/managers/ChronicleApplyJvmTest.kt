@@ -861,11 +861,13 @@ class ChronicleApplyJvmTest {
      * The decision itself, pinned. Adding a kind back is meant to be made on
      * purpose, with the reason it is safe to replay, and this is the line that
      * has to change when it is. It changed for docs/member-deposits.md: the
-     * depositor statement and the deposit attribution, in that order.
+     * depositor statement and the deposit attribution, in that order. Then for
+     * docs/payouts-only.md (the coin assignment) and docs/member-transfers.md (the
+     * group's record of a member's transfer, applied last).
      */
     @Test
-    fun `the app's own list carries the two deposit kinds, and nothing else`() {
-        assertEquals(setOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND), ChronicleEvent.CHRONICLABLE_KINDS)
+    fun `the app's own list carries the deposit, assignment and transfer kinds, and nothing else`() {
+        assertEquals(setOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND, com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent.KIND), ChronicleEvent.CHRONICLABLE_KINDS)
         assertTrue(ChronicleEvent.KINDS.applyRank(DepositorStatementEvent.KIND)!! < ChronicleEvent.KINDS.applyRank(DepositAttributionEvent.KIND)!!)
     }
 

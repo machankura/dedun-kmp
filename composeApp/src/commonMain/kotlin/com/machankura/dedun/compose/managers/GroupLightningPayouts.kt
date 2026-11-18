@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.managers
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent.Rail
 import com.machankura.dedun.compose.wallet.lightning.LightningBalance
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import fr.acinq.bitcoin.Crypto
@@ -55,6 +56,11 @@ object GroupLightningPayouts {
             }
         }
 
+        // One outflow at a time: a transfer the member is giving on this rail and a payout could each fit one balance
+        // (`docs/member-transfers.md`, T8).
+        if (MemberTransfers.isGiving(database, chatRoomId, pay.chain, Rail.LIGHTNING, payout.member)) {
+            return "pays a member who is transferring part of their balance"
+        }
         val available = balanceOf(database, chatRoomId, pay, nowSeconds).availableMsat
         if (pay.budgetMsat > available) {
             return "pays ${pay.budgetMsat / 1000} sats with its fee limit, more than the ${available / 1000} sats of the member's Lightning balance"
@@ -72,7 +78,8 @@ object GroupLightningPayouts {
         val sentFees = signed.map { it.wallet }.distinct()
             .flatMap { DepositLedger.sentFees(database, chatRoomId, pay.chain, it).entries }
             .associate { it.key to it.value }
-        return LightningBalance.of(member, deposited, signed, sentFees, nowSeconds)
+        val transferred = (MemberTransfers.netsIn(database, chatRoomId, pay.chain, Rail.LIGHTNING)[member.lowercase()]?.sat ?: 0) * 1000
+        return LightningBalance.of(member, deposited, signed, sentFees, nowSeconds, transferred)
     }
 
     /** Whether LUD-06 [metadata] names [address] as its `text/identifier` or `text/email`, as LUD-16 asks. */

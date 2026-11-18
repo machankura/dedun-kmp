@@ -7,6 +7,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
  *
  * ```
  * available = their Lightning deposits (net of the LSP's fee)
+ *           + what members transferred to them − what they transferred away
  *           − payouts to them the node reports sent (amount + the fee it reports)
  *           − their authorised payouts not yet sent or expired (amount + maxfee)
  * ```
@@ -23,8 +24,10 @@ object LightningBalance {
         val sentMsat: Long,
         /** Authorised for them and not yet settled or expired, at the most each may cost. */
         val openMsat: Long,
+        /** What other members transferred to them less what they transferred away (`docs/member-transfers.md`, T1). Never a deposit. */
+        val transferredMsat: Long = 0,
     ) {
-        val availableMsat: Long get() = (depositedMsat - sentMsat - openMsat).coerceAtLeast(0)
+        val availableMsat: Long get() = (depositedMsat + transferredMsat - sentMsat - openMsat).coerceAtLeast(0)
     }
 
     /**
@@ -38,11 +41,12 @@ object LightningBalance {
         authorisations: List<GroupLightningAuthorisationEvent.Pay>,
         sentFees: Map<String, Long>,
         nowSeconds: Long,
+        transferredMsat: Long = 0,
     ): Balance {
         val theirs = authorisations.filter { it.payout?.member.equals(member, ignoreCase = true) }.distinctBy { it.paymentHash.lowercase() }
         val sent = theirs.mapNotNull { pay -> sentFees[pay.paymentHash.lowercase()]?.let { pay.amountMsat + it } }.sum()
         val open = theirs.filter { it.paymentHash.lowercase() !in sentFees && it.expiresAt > nowSeconds }.sumOf { it.budgetMsat }
-        return Balance(depositedMsat, sent, open)
+        return Balance(depositedMsat, sent, open, transferredMsat)
     }
 
     /** The least a payout's fee limit is: what the send form defaults to, ten sats. */

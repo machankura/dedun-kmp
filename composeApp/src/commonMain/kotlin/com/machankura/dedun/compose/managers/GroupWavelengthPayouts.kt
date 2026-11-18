@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthSnapshot
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent.Rail
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkPolicy
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -38,7 +39,14 @@ object GroupWavelengthPayouts {
         val availableSat: Long = 0,
         /** Their share of what's in the wallet before anything approved and unpaid is taken off: what every open payout of theirs has to fit. */
         val heldSat: Long = 0,
+        /** What other members have transferred to them, in ledger sats, before the wallet's shortfall is shared out (`docs/member-transfers.md`, T5). */
+        val receivedSat: Long = 0,
+        /** What they have transferred to other members, in ledger sats. */
+        val givenSat: Long = 0,
     ) {
+        /** What they hold on the ledger before the shortfall is shared out: what a transfer of theirs has to fit (T5). */
+        val netSat: Long get() = (depositedSat - paidSat + receivedSat - givenSat).coerceAtLeast(0)
+
         /** Whether everything approved for them and not yet paid fits what they hold, by this device's own count. */
         val bearsWhatsOpen: Boolean get() = heldSat >= openSat
 
@@ -141,7 +149,11 @@ object GroupWavelengthPayouts {
         return database.groupArkDao().leaves(key).firstOrNull { it.authorisation == payout.id }?.let { it.amountSat + it.feeSat }
     }
 
-    /** Every member with a Wavelength deposit or payout on [chain], and what they can be paid. */
+    /**
+     * Every member with a Wavelength deposit, payout or transfer on [chain], and what they can be paid. A transfer the group
+     * signed comes off its giver's ledger and onto its receiver's before the shortfall is shared out, so it moves a claim and
+     * no device's ratio changes (`docs/member-transfers.md`, T5). It is never a deposit (T7).
+     */
     suspend fun balancesIn(database: DedunDatabase, chatRoomId: String, chain: Chain, nowSeconds: Long = Clock.System.now().epochSeconds): Map<HexKey, Balance> {
         val deposited = DepositLedger.depositsIn(database, chatRoomId, chain)
             .filter { it.source == DepositRow.WAVELENGTH && it.member != null }
@@ -166,14 +178,25 @@ object GroupWavelengthPayouts {
                 payout.expiresAt > nowSeconds -> open[member] = (open[member] ?: 0) + payout.maxSat
             }
         }
-        val net = (deposited.keys + paid.keys + open.keys).associateWith { ((deposited[it] ?: 0) - (paid[it] ?: 0)).coerceAtLeast(0) }
+        val transfers = MemberTransfers.netsIn(database, chatRoomId, chain, Rail.WAVELENGTH)
+        val net = (deposited.keys + paid.keys + open.keys + transfers.keys).associateWith {
+            ((deposited[it] ?: 0) - (paid[it] ?: 0) + (transfers[it]?.sat ?: 0)).coerceAtLeast(0)
+        }
         val totalNet = net.values.sum()
         val inTheWallet = GroupWavelengthWalletManager.wallets(database, chatRoomId, chain).sumOf { wallet ->
             database.groupArkDao().vtxos(GroupArkCoSigner.walletKey(chatRoomId, chain, wallet.statement.wallet)).filter { it.settled && !it.spent }.sumOf { it.amountSat }
         }
         return net.mapValues { (member, sat) ->
             val share = if (totalNet == 0L || inTheWallet >= totalNet) sat else sat * inTheWallet / totalNet
-            Balance(deposited[member] ?: 0, paid[member] ?: 0, open[member] ?: 0, (share - (open[member] ?: 0)).coerceAtLeast(0), share)
+            Balance(
+                depositedSat = deposited[member] ?: 0,
+                paidSat = paid[member] ?: 0,
+                openSat = open[member] ?: 0,
+                availableSat = (share - (open[member] ?: 0)).coerceAtLeast(0),
+                heldSat = share,
+                receivedSat = transfers[member]?.receivedSat ?: 0,
+                givenSat = transfers[member]?.givenSat ?: 0,
+            )
         }
     }
 
@@ -245,12 +268,14 @@ object GroupWavelengthPayouts {
 
     /**
      * Whether [member]'s balance bears [cost], with whatever else of theirs is being signed, and they have no other payout waiting, on either
-     * rail: one at a time, or several could each pass against one balance (W9). [itself] is the hash or id of the payout being checked.
+     * rail: one at a time, or several could each pass against one balance (W9). A transfer they are giving on this wallet's rail counts as
+     * one (`docs/member-transfers.md`, T8). [itself] is the hash or id of the payout being checked.
      */
     private suspend fun refuseAgainstBalance(database: DedunDatabase, chatRoomId: String, chain: Chain, member: HexKey, cost: Long, itself: String, nowSeconds: Long): String? {
         val balance = balancesIn(database, chatRoomId, chain, nowSeconds)[member.lowercase()] ?: Balance.NONE
         val pending = proposedFor(database, chatRoomId, chain, member, itself)
         if (balance.openSat > 0 || pending.isNotEmpty()) return "pays a member who already has a payout waiting"
+        if (MemberTransfers.isGiving(database, chatRoomId, chain, Rail.WAVELENGTH, member)) return "pays a member who is transferring part of their balance"
         if (cost > balance.availableSat) return "pays $cost sats with its fee limit, more than the ${balance.availableSat} sats of the member's balance in this wallet"
         return null
     }

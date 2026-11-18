@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent.Rail
 import com.machankura.dedun.compose.wallet.CoinOwnership
 import com.machankura.dedun.compose.wallet.GroupUtxo
 import com.machankura.dedun.compose.wallet.GroupWalletState
@@ -116,14 +117,15 @@ object MemberBalances {
         val destinations = GroupPayoutDestinations.payoutDestinationsIn(database, chatRoomId, chain)
         val current = database.participantDao().findParticipantsByChatRoomId(chatRoomId).map { it.participantPublicKey.lowercase() }.toSet()
         val wavelength = GroupWavelengthPayouts.balancesIn(database, chatRoomId, chain, nowSeconds)
-        val everybody = coins.keys + lightningDeposits.keys + records.branches.values + destinations.keys + wavelength.keys
+        val lightningTransfers = MemberTransfers.netsIn(database, chatRoomId, chain, Rail.LIGHTNING)
+        val everybody = coins.keys + lightningDeposits.keys + records.branches.values + destinations.keys + wavelength.keys + lightningTransfers.keys
         val members = everybody.associateWith { member ->
             MemberBalance(
                 member = member,
                 destination = destinations[member],
                 isFormerMember = member !in current,
                 coins = coins[member].orEmpty(),
-                lightning = LightningBalance.of(member, lightningDeposits[member] ?: 0, payouts, sentFees, nowSeconds),
+                lightning = LightningBalance.of(member, lightningDeposits[member] ?: 0, payouts, sentFees, nowSeconds, (lightningTransfers[member]?.sat ?: 0) * 1000),
                 wavelength = wavelength[member] ?: GroupWavelengthPayouts.Balance.NONE,
             )
         }
