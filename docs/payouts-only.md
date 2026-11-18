@@ -55,6 +55,15 @@ to end, since change is no longer something the wallet makes.
 
 Still to do by hand: Phase 7's four-emulator walkthrough.
 
+**Since [member-transfers.md](./member-transfers.md):** D2 has a last step. After the
+first matching rule says whose a coin is, every member's onchain transfer naming it
+moves part of it from its giver to its receiver, in the group's order. A transfer whose
+giver doesn't hold that much of the coin at that point is void. A coin a transfer splits
+is shared, and D4 pays both its owners at once. A correction (30340 or 30341) is never
+refused for a transfer: it wins, and voids a transfer of what turns out not to have been
+the giver's. D8's Lightning balance adds what a member received and takes off what they
+gave.
+
 ---
 
 ## What is already there

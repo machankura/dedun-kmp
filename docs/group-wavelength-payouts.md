@@ -159,6 +159,10 @@ how much more the member needs, as a Lightning payout's floor does.
 **W9. One open payout per member per wallet, across both rails.** A Lightning proposal being signed blocks an onchain
 one, and the reverse. `proposedFor` and `balancesIn`'s `open` count both kinds.
 
+*Since [member-transfers.md](./member-transfers.md):* one open *outflow*. A transfer the member is giving on this wallet,
+while it is being signed, blocks a payout too, and the reverse (T8). `balancesIn` adds what a member received and takes off
+what they gave, on the ledger before the shortfall is shared out (T5), counting only transfers the signed records cover (T15).
+
 **W10. Mixed versions fail closed.** An older device refuses to sign the new 30379 and refuses the leave, since its
 budget is empty. A payout then needs `t` upgraded people to approve and `2t−1` upgraded devices to co-sign the round.
 The approval screen says when this device can see older ones in the room, as `payouts-only.md` D12 does.

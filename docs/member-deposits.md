@@ -43,6 +43,12 @@ the coin assignment (30341), for coins on the receive and change branches. A 303
 no tally. The ledger's paid-out column now matches every address a member ever signed,
 reads only authorisations the room signed, and reads only this room's wallet.
 
+**Since [member-transfers.md](./member-transfers.md):** a member can transfer part of
+their balance to another, signed by them and then by the group (30343). A transfer is
+**never a deposit**: it writes no `DepositRow` and moves no tally, so *you've put in*
+stays what the member put in. It moves balances only, and onchain it moves coin
+ownership on top of the owner rule.
+
 **The lightning-kmp change** is the fork commit `3ae9302a`, on
 `dedun/answer-offer-requests` in `kngako/lightning-kmp`, bumped by `5478993` on the
 same branch name in `kngako/lightning-kmp-app`. Phase 7 moves this repository's

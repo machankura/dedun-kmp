@@ -28,8 +28,15 @@ its review findings. Every balance rule here is one of those, with a new term ad
 read [group-payout-destination.md](./group-payout-destination.md) on why a member-signed
 statement is carried whole. The transfer request is built the same way.
 
-**Planned, not built.** Written on 18 November 2026 against `f4752156`, database
-schema v45. The file and line references below are as they stood then.
+**Built, Phases 0-6, one commit each; Phase 7's emulator run not done.** Written on
+18 November 2026 against `f4752156`, database schema v45, with no schema change. The
+file and line references below are as they stood then. `TransferRequestEvent`,
+`MemberTransferEvent`, `TransferLedger`, `MemberTransfers`, `MemberTransferRollout` and
+`GroupTransferScreen` are the entry points. Phases 3 and 5 each had an adversarial
+review before their commit. Between them the reviews added T15 and T16 and revised T6.
+The phases below are kept as written, and the tables under *Where the build stands* say
+where the build went another way. **Transfers are offered on regtest and signet only.**
+No transfer has been made on a phone, and mainnet is question 1.
 
 ### Where the build stands
 
@@ -42,6 +49,7 @@ schema v45. The file and line references below are as they stood then.
 | 4 | done: `GroupTransferScreen`, the payouts screen's offers and *Transfers waiting*, the approval summary |
 | 5 | done, after a second review that added T16 and revised T6: onchain transfers move coin ownership on every device, with signing off for that release |
 | 6 | done: signing on, the onchain form with its coins and the shared-coin line, the payouts row's offer; offered on regtest and signet |
+| 7 | docs done: this note, the README row, and a pointer in each note this one changes. **The emulator run is not done**: no emulator was up. Every step of it except the signet coins is covered in `jvmTest` by `MemberTransfersJvmTest`, `MemberTransferBalancesJvmTest` and `GroupTransferScreenJvmTest`, between two and four devices |
 
 **Where the build chose differently from the plan:**
 
