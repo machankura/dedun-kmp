@@ -156,12 +156,15 @@ The group send-an-amount note is a phased plan that has been built, and reads
 as the third gate of the group chain wallet note's Phase 10: why that gate
 could not lift as written, and what stands in for it now that it is gone. Read
 its list of what the gated code got wrong before its phases.
-The marmot-kmp note is a phased plan that has not been built, and reads as the
-Marmot v2 note's Phase 0 come round again: quartz took the engine out, so the
-version the v2 work was built on is the last one that has it. Read the v2 note
+The marmot-kmp note is a phased plan that has been built, phases 0 to 7, and reads
+as the Marmot v2 note's Phase 0 come round again: quartz took the engine out, so
+the version the v2 work was built on is the last one that has it. Read the v2 note
 first — this plan happens entirely on the current-profile side of its first row —
 and read this one's two constraints before any phase: the group state already on
-devices is what decides whether the move can ship at all.
+devices is what decides whether the move can ship at all, and Phase 4 is where it
+is measured rather than argued. What it does not claim is in its status note: no
+manual upgrade of a profile with real rooms has been done, and that is the last
+check before a release.
 The ceremony-creation note is a phased plan that has been built. It reads as
 the subgroups note's Phase 10 followed through to the screens: read it after
 that phase, and its table of findings before any phase. Its second half

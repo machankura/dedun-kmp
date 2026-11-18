@@ -20,8 +20,30 @@ everything here happens on the current-profile side of that branch.
 [mls-skipped-keys.md](./mls-skipped-keys.md) second — it is the gap this move closes, and
 the only one it closes for free.
 
-**Not built.** This is a plan. Written against the code at `8b066795`, marmot-kmp
-`2.2.1`, mls-kmp `1.3.0`, crypto-kmp `2.1.0` and quartz `2.7.3`.
+**Built**, phases 0 to 7, one commit each but for 5 and 6, which share one because the
+fork probe produced no code. Written against the code as it stood at `8b066795`, against
+marmot-kmp `2.2.1`, mls-kmp `1.3.0`, crypto-kmp `2.1.0` and quartz `2.7.3`. The phases are
+kept as they were written, with what each one turned out to be recorded under it, because
+the reasoning is the point and the code reads better against the argument it came from.
+
+Three things it does not claim. **The manual upgrade has not been done** — Phase 4 proves
+a real version-4 blob opens, and a profile with real rooms in it is still the last check
+before a release. **The sender ratchet record and the receive-side write are deferred**,
+both deliberately and for the same reason: they are one decision about how often this app
+persists a group, they want a schema change, and Phase 7 says why that is its own piece of
+work rather than this one's tail. **And the authored fork is still not settled** — Phase 6
+probed it and the gap is the library's, unchanged.
+
+| phase | what it was |
+|---|---|
+| 0 | the rule table, as a reversible script: 187 lines move, 42 stay |
+| 1 | the swap — and the policy, which is the one behavioural change in it |
+| 2 | the six renames quartz 2.x kept deprecated typealiases for |
+| 3 | a second stand-in, on the library's own client, and the three tests it unlocks |
+| 4 | C1 measured against a real blob from the old engine, six ways |
+| 5 | the skipped keys: the format carries them, the app's row does not yet |
+| 6 | the authored fork, probed: still open, and the fix now visible |
+| 7 | the guard, so the engine cannot come back from quartz |
 
 ## Where the engine went
 
