@@ -346,6 +346,34 @@ actually ships, which is a stronger claim than the one those tests make today.
 **Check:** `./gradlew :composeApp:jvmTest`. `ForkCompatibilityTest` and
 `SignedGroupKeyStateTest` are in the same run and are the fork's own pins.
 
+**Built, and both stand-ins are kept.** `MarmotStandIn` moved to marmot-kmp's managers in
+Phase 1 with nothing but its imports changing, and replacing it with a `MarmotManager`
+would have cost the convergence and lifecycle tests the thing they need, which is a
+processor they can reach into: `recordLocalCommit` with a state snapshot of their own,
+`buildAppEvent` with a payload they wrote. So the second one is additive —
+`MarmotClientStandIn`, a `MarmotManager` over `InMemoryMlsGroupStateStore` and a publisher
+that says yes, with `messageStore` and `keyPackageStore` left null because both are
+nullable and a client that persists nothing is all these tests want — and
+`MarmotClientInteropJvmTest` is the three tests it unlocks.
+
+They are not redundant, and the difference is worth stating because it is the difference
+between the two questions this migration has to answer. In
+`CurrentProfileInteropJvmTest` the test's own code decides how the Welcome is sealed and
+what an application payload looks like, and asks whether two engines agree. In the new one
+the library decides: `addMemberInvites` picks the commit's shape and `MarmotWelcomeSender`
+wraps the Welcome, and the question is whether the app's own orchestration —
+`MarmotEngine`, the DAOs, the outbound queue — reaches the same group as the orchestration
+Amethyst drives. It does: the app joins a group `MarmotManager` created and invited it to,
+under the routing id the client minted; it files and attributes a `buildTextMessage` from
+it; and the client decrypts and decodes what the app's outbound path sends as a canonical
+payload. Three tests, green on the first run, which is the strongest statement available
+that the move did not change what goes on the wire.
+
+One carve-out rides along unchanged: the app's rumor still carries `"sig":""`, so the
+assertion strips it before decoding, exactly as the older interop test does.
+docs/marmot-v2.md's Phase 2 is where that is recorded as unfinished, and this note does
+not change it.
+
 ## Phase 4 — C1, measured
 
 The phase that decides whether this ships. Everything before it is a build; this is the
