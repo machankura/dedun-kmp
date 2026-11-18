@@ -353,6 +353,35 @@ group*, and it has its own `source` value in the CSV export. In the Wavelength
 history, transfer entries are never folded into a term, and the wallet's own activity
 total ignores them, because they move nothing in the wallet.
 
+### T15. Every device voids a transfer the signed records don't cover *(added by the Phase 3 review)*
+
+T4's checks bind the signers. They didn't bind what the other devices count, and the
+review of Phase 3 showed that this mattered twice:
+
+- **A signed transfer was counted whatever it said.** A quorum that signed one for more
+  than its giver held credited the receiver in full. The giver was clamped at zero, and
+  the overdraft fell on everyone else's pro-rata share. Two ways in were an old request
+  the giver had signed and never had sponsored, and a quorum that signs anything.
+- **A Wavelength payout's expiry looked like "never paid" on a device that didn't
+  co-sign its round.** A giver who had been paid out could wait for the approval to
+  lapse. They could then transfer the same money with a quorum of `t`, which a transfer
+  needs, rather than the `2t−1` co-signers a payout's round needs.
+
+So every rail's count applies transfers in the group's order against a **capacity
+computed from signed records alone**: the member's deposits, less **every payout the
+group signed for them, charged at its most**, whether paid, open, expired, refunded or
+gone nowhere. Received transfers are added and given ones taken off as the count goes
+(`TransferLedger.netsOf`, `MemberTransfers.capacityIn`). A transfer its giver can't
+cover at that point is **void on every device**. So is one the group signed before the
+request's `created_at` or after its `expires_at`. Signers check against the same figure
+(T4.6), so an honest transfer is never one that some device voids.
+
+The cost is that a payout whose approval ran out unpaid still holds its amount against its
+member's *transfers*. It no longer holds it against their next *payout*: the balance
+shows that money back, and the member can be paid it, but can't give it away. Treating an
+unpaid approval as paid on transfers alone is the price of devices agreeing without
+knowing which rounds the others co-signed.
+
 ### Spike S1: what a late joiner can count on the Wavelength rail
 
 `ChronicleEvent.KINDS` carries 30339, 30340 and 30341, and not the Wavelength
@@ -509,6 +538,24 @@ pushed, as the Wavelength payouts' review had. Proposing is behind
   - a request withdrawn while being signed is declined at approval;
   - a payout and a transfer racing for one balance: whichever was proposed second
     is refused.
+
+**What the review found.** The review was an adversarial reading of the Phase 3 code,
+by a reviewer given the code rather than this note, before the commit. Each finding is
+fixed and has a test:
+
+| found | what it would have let happen | now |
+|---|---|---|
+| **a signed transfer was counted whatever it said** | a quorum signing an old or overdrawn request credits the receiver in full, and the overdraft is shared out over every other member's balance | T15: a transfer the signed records don't cover is void on every device, and so is one signed outside its request's window |
+| **a payout's expiry read as "never paid" on a device outside its round** | a member paid out lets the approval lapse, then transfers the same money with `t` signers, where a payout needs `2t−1` co-signers | T15: capacity charges every signed payout at its most, so signers and counters agree without knowing who co-signed what |
+| a request could be dated a year ahead and stand that long | an old consent kept alive | refused more than ten minutes ahead of the signer's clock |
+| a transfer batched with a second outflow passed the arrival check | a proposal shown that approval would then decline | a batch holding a transfer and anything else is dropped on arrival |
+| a withdrawal didn't touch a session already open | the giver's share still counted towards a quorum over it | the withdrawal declines a session somebody else put to the group, on the giver's device |
+| an amount up to `Long.MAX_VALUE` was readable | an overflow in the pro-rata share | at most 21 million bitcoin in sats |
+
+**What it left open:** a session the giver proposed already counts their approval, and
+nothing here can take that back. A withdrawal stops it only through the other signers
+refusing it at approval. If enough of them approved before the withdrawal reached them,
+it completes.
 
 ## Phase 4: the screens
 

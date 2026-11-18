@@ -71,6 +71,9 @@ object TransferRequestEvent {
      */
     const val MIN_TRANSFER_SAT: Long = 546
 
+    /** The most a transfer can name: every bitcoin there will ever be, so no sum of transfers overflows a balance. */
+    const val MAX_TRANSFER_SAT: Long = 2_100_000_000_000_000
+
     /** Which of the group's wallets a balance is in. A transfer stays on one. */
     enum class Rail(val wire: String) {
         WAVELENGTH("wavelength"),
@@ -124,7 +127,7 @@ object TransferRequestEvent {
         note: String? = null,
         createdAt: Long = Clock.System.now().epochSeconds,
     ): Event {
-        require(amountSat >= MIN_TRANSFER_SAT) { "less than a transfer may move" }
+        require(amountSat in MIN_TRANSFER_SAT..MAX_TRANSFER_SAT) { "not an amount a transfer may move" }
         require(expiresAt > createdAt) { "expires before it is asked" }
         val written = note?.trim()?.takeIf { it.isNotEmpty() }
         require(written == null || written.length <= MAX_NOTE_CHARS) { "a note longer than $MAX_NOTE_CHARS characters" }
@@ -201,7 +204,7 @@ object TransferRequestEvent {
         val rail = single(RAIL_TAG)?.let(Rail::named) ?: return null
         val receiver = single(RECEIVER_TAG)?.takeIf { HEX64.matches(it) && it != giver } ?: return null
         val amount = single(AMOUNT_TAG)?.let { written -> written.toLongOrNull()?.takeIf { it.toString() == written } }
-            ?.takeIf { it >= MIN_TRANSFER_SAT } ?: return null
+            ?.takeIf { it in MIN_TRANSFER_SAT..MAX_TRANSFER_SAT } ?: return null
         val expiresAt = single(EXPIRES_TAG)?.toLongOrNull()?.takeIf { it > event.createdAt } ?: return null
         val notes = all(NOTE_TAG)
         if (notes.size > 1) return null

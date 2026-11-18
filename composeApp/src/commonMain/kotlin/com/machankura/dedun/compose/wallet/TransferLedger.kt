@@ -27,16 +27,41 @@ object TransferLedger {
         }
     }
 
-    /** Every member's [Net] from [transfers] on [chain] and [rail]. */
-    fun netsOf(transfers: List<MemberTransferEvent.Transfer>, chain: Chain, rail: Rail): Map<HexKey, Net> {
+    /**
+     * Every member's [Net] from [transfers] on [chain] and [rail], applied in order, each against what its giver can cover at
+     * that point: [capacity], keyed by lowercase key -- what they hold by the group's signed records alone, every payout charged at its most -- plus what
+     * they have received less what they have given so far (`docs/member-transfers.md`, T15). **A transfer its giver can't cover
+     * is void**, and so is one the group signed outside its request's window, before the giver asked or after the request ran
+     * out. Every device that holds the same signed records voids the same ones, so a quorum that signs an overdraft, or an old
+     * request, moves nothing: the money is not there to move, and nobody else's share pays for it.
+     */
+    fun netsOf(transfers: List<MemberTransferEvent.Transfer>, chain: Chain, rail: Rail, capacity: Map<HexKey, Long>): Map<HexKey, Net> {
         val received = HashMap<HexKey, Long>()
         val given = HashMap<HexKey, Long>()
-        transfers.filter { it.chain == chain && it.rail == rail }.forEach { transfer ->
+        counted(transfers, chain, rail, capacity).forEach { transfer ->
             received[transfer.to.lowercase()] = (received[transfer.to.lowercase()] ?: 0) + transfer.amountSat
             given[transfer.from.lowercase()] = (given[transfer.from.lowercase()] ?: 0) + transfer.amountSat
         }
         return (received.keys + given.keys).associateWith { Net(received[it] ?: 0, given[it] ?: 0) }
     }
+
+    /** The transfers among [transfers] on [chain] and [rail] that count, in order: [netsOf]'s rule. */
+    fun counted(transfers: List<MemberTransferEvent.Transfer>, chain: Chain, rail: Rail, capacity: Map<HexKey, Long>): List<MemberTransferEvent.Transfer> {
+        val held = capacity.toMutableMap()
+        return transfers.filter { it.chain == chain && it.rail == rail }.sortedWith(MemberTransferEvent.ORDER).filter { transfer ->
+            if (transfer.createdAt < transfer.request.createdAt || transfer.createdAt > transfer.request.expiresAt) return@filter false
+            val from = transfer.from.lowercase()
+            val to = transfer.to.lowercase()
+            if ((held[from] ?: 0) < transfer.amountSat) return@filter false
+            held[from] = (held[from] ?: 0) - transfer.amountSat
+            held[to] = (held[to] ?: 0) + transfer.amountSat
+            true
+        }
+    }
+
+    /** What [member] can still give on top of [capacity] after [transfers]: what a new transfer of theirs has to fit. */
+    fun capacityAfter(transfers: List<MemberTransferEvent.Transfer>, chain: Chain, rail: Rail, capacity: Map<HexKey, Long>, member: HexKey): Long =
+        (capacity[member.lowercase()] ?: 0) + (netsOf(transfers, chain, rail, capacity)[member.lowercase()]?.sat ?: 0)
 
     /**
      * Whose [key] is after [transfers], starting from [base] -- the owner rule's shares of it, by member. Each transfer naming

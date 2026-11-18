@@ -280,6 +280,14 @@ object GroupWavelengthPayouts {
         return null
     }
 
+    /**
+     * Whether [member] has a Wavelength payout approved and not yet paid or expired, or one being signed: an outflow open, which a
+     * transfer of theirs on this rail waits for (`docs/member-transfers.md`, T8).
+     */
+    suspend fun hasPayoutOpen(database: DedunDatabase, chatRoomId: String, chain: Chain, member: HexKey, nowSeconds: Long = Clock.System.now().epochSeconds): Boolean =
+        (balancesIn(database, chatRoomId, chain, nowSeconds)[member.lowercase()]?.openSat ?: 0) > 0 ||
+            proposedFor(database, chatRoomId, chain, member, itself = "").isNotEmpty()
+
     /** What the member's other payouts being signed in the room just now would take, on either rail, by hash or id. */
     private suspend fun proposedFor(database: DedunDatabase, chatRoomId: String, chain: Chain, member: HexKey, itself: String): Map<String, Long> =
         database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId).first()

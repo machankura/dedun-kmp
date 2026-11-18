@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.wallet.PayoutRule
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.allows
@@ -656,6 +657,23 @@ object FrostSigningManager {
             if (rebuilt.kind != CoinAssignmentEvent.KIND) return@forEach
             CoinAssignments.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
                 logger.w("Signing proposal $sessionId carries a coin assignment that $reason; dropping")
+                return null
+            }
+        }
+
+        // A transfer moves one member's balance to another, so it has to carry the giver's own
+        // signature and fit what they have by this device's count, with nothing else of theirs
+        // going out on that rail. docs/member-transfers.md, T4.
+        // Alone, too: each check reads what is already being signed, so a second outflow of the giver's in
+        // the same batch would get past it here and be caught only at approval, after it was shown.
+        if (unsignedEvents.size > 1 && unsignedEvents.any { it.kind == MemberTransferEvent.KIND }) {
+            logger.w("Signing proposal $sessionId batches a transfer with other events; dropping")
+            return null
+        }
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind != MemberTransferEvent.KIND) return@forEach
+            MemberTransfers.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a transfer that $reason; dropping")
                 return null
             }
         }
@@ -2964,6 +2982,16 @@ object FrostSigningManager {
         items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }.filter { it.kind == GroupWavelengthPaymentEvent.KIND }.forEach { payment ->
             GroupWavelengthPayouts.refuse(database, session.chatRoomId, payment)?.let { reason ->
                 logger.w("Session $sessionId carries a Wavelength payment that $reason; declining instead of signing")
+                decline(database, localChatRoom, sessionId)
+                return
+            }
+        }
+
+        // And a transfer: the giver's balance, a payout of theirs, or their own withdrawal may have
+        // come in since. docs/member-transfers.md, T4.
+        items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }.filter { it.kind == MemberTransferEvent.KIND }.forEach { transfer ->
+            MemberTransfers.refuse(database, session.chatRoomId, transfer)?.let { reason ->
+                logger.w("Session $sessionId carries a transfer that $reason; declining instead of signing")
                 decline(database, localChatRoom, sessionId)
                 return
             }

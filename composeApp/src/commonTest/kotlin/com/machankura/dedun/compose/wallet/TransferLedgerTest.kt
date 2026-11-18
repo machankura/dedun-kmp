@@ -26,10 +26,18 @@ class TransferLedgerTest {
 
     private var counter = 0
 
-    private fun transfer(from: String, to: String, amount: Long, rail: Rail = Rail.WAVELENGTH, coins: List<CoinShare> = emptyList(), on: Chain = chain): MemberTransferEvent.Transfer {
+    /** Enough for every transfer below to be covered, unless a test says otherwise. */
+    private val plenty = mapOf(alice to 1_000_000L, bob to 1_000_000L, carol to 1_000_000L)
+
+    private fun transfer(
+        from: String, to: String, amount: Long, rail: Rail = Rail.WAVELENGTH, coins: List<CoinShare> = emptyList(), on: Chain = chain,
+        askedAt: Long? = null, signedAt: Long? = null,
+    ): MemberTransferEvent.Transfer {
         val n = counter++
-        val event = Event(n.toString(16).padStart(64, '0'), from, 1_700_000_000L + n, TransferRequestEvent.KIND, emptyArray(), "", "")
-        val request = TransferRequestEvent.Request(from, "00".repeat(32), on, rail, to, amount, 1_800_000_000, null, event)
+        val asked = askedAt ?: (1_700_000_000L + n)
+        val requestEvent = Event(n.toString(16).padStart(64, '0'), from, asked, TransferRequestEvent.KIND, emptyArray(), "", "")
+        val request = TransferRequestEvent.Request(from, "00".repeat(32), on, rail, to, amount, asked + 86_400, null, requestEvent)
+        val event = Event((n + 1000).toString(16).padStart(64, '0'), "00".repeat(32), signedAt ?: asked, MemberTransferEvent.KIND, emptyArray(), "", "")
         return MemberTransferEvent.Transfer(on, rail, from, to, amount, request, coins, event)
     }
 
@@ -41,19 +49,50 @@ class TransferLedgerTest {
             transfer(alice, bob, 1_000, rail = Rail.LIGHTNING),
             transfer(alice, bob, 9_000, on = Chain.Signet),
         )
-        val nets = TransferLedger.netsOf(transfers, chain, Rail.WAVELENGTH)
+        val nets = TransferLedger.netsOf(transfers, chain, Rail.WAVELENGTH, plenty)
         assertEquals(-20_000, nets[alice]?.sat)
         assertEquals(TransferLedger.Net(20_000, 5_000), nets[bob])
         assertEquals(5_000, nets[carol]?.sat)
         assertEquals(0, nets.values.sumOf { it.sat })
-        assertEquals(TransferLedger.Net(1_000, 0), TransferLedger.netsOf(transfers, chain, Rail.LIGHTNING)[bob])
+        assertEquals(TransferLedger.Net(1_000, 0), TransferLedger.netsOf(transfers, chain, Rail.LIGHTNING, plenty)[bob])
     }
 
     @Test
     fun `two transfers give the same nets whichever came first`() {
         val one = transfer(alice, bob, 3_000)
         val two = transfer(carol, alice, 7_000)
-        assertEquals(TransferLedger.netsOf(listOf(one, two), chain, Rail.WAVELENGTH), TransferLedger.netsOf(listOf(two, one), chain, Rail.WAVELENGTH))
+        assertEquals(TransferLedger.netsOf(listOf(one, two), chain, Rail.WAVELENGTH, plenty), TransferLedger.netsOf(listOf(two, one), chain, Rail.WAVELENGTH, plenty))
+    }
+
+    @Test
+    fun `a transfer its giver can't cover counts for nothing, and nobody else pays for it`() {
+        val capacity = mapOf(alice to 10_000L)
+        val over = transfer(alice, bob, 10_001)
+        assertEquals(emptyMap(), TransferLedger.netsOf(listOf(over), chain, Rail.WAVELENGTH, capacity))
+        // Two that each fit, and together don't: the first the group signed counts, the second is void.
+        val first = transfer(alice, bob, 7_000)
+        val second = transfer(alice, carol, 7_000)
+        val nets = TransferLedger.netsOf(listOf(second, first), chain, Rail.WAVELENGTH, capacity)
+        assertEquals(-7_000, nets[alice]?.sat)
+        assertNull(nets[carol])
+    }
+
+    @Test
+    fun `what a member was given can be given on, in order`() {
+        val capacity = mapOf(alice to 10_000L)
+        val ab = transfer(alice, bob, 10_000)
+        val bc = transfer(bob, carol, 4_000)
+        assertEquals(4_000, TransferLedger.netsOf(listOf(ab, bc), chain, Rail.WAVELENGTH, capacity)[carol]?.sat)
+        assertEquals(6_000, TransferLedger.capacityAfter(listOf(ab, bc), chain, Rail.WAVELENGTH, capacity, bob))
+        assertEquals(0, TransferLedger.capacityAfter(listOf(ab, bc), chain, Rail.WAVELENGTH, capacity, alice))
+    }
+
+    @Test
+    fun `a transfer the group signed before its giver asked, or after the request ran out, counts for nothing`() {
+        val early = transfer(alice, bob, 1_000, askedAt = 1_700_000_000, signedAt = 1_699_999_999)
+        val late = transfer(alice, bob, 1_000, askedAt = 1_700_000_000, signedAt = 1_700_000_000 + 86_401)
+        val inTime = transfer(alice, bob, 1_000, askedAt = 1_700_000_000, signedAt = 1_700_000_000 + 86_400)
+        assertEquals(1_000, TransferLedger.netsOf(listOf(early, late, inTime), chain, Rail.WAVELENGTH, plenty)[bob]?.sat)
     }
 
     @Test

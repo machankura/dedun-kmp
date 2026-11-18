@@ -150,9 +150,55 @@ class MemberTransferBalancesJvmTest {
     fun `a transfer on another rail leaves the Wavelength balance alone`() = runBlocking<Unit> {
         val (all, wallet) = opened()
         fixture.payable(all, all[1], wallet, 30_000)
+        lightningDeposit(all, all[1], 5_000)
         transferred(all, all[1], all[2], 5_000, request(all[1], all[2], 5_000, Rail.LIGHTNING))
         assertEquals(30_000, GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain).getValue(all[1].publicKey.lowercase()).availableSat)
         assertEquals(5_000, MemberTransfers.netsIn(all[0].db, fixture.roomId, fixture.chain, Rail.LIGHTNING).getValue(all[2].publicKey.lowercase()).sat)
+    }
+
+    /** [sat] of Lightning deposits for [member] on every device. */
+    private suspend fun lightningDeposit(all: List<GroupLightningFixture.Device>, member: GroupLightningFixture.Device, sat: Long) = all.forEach { d ->
+        d.db.depositDao().upsert(
+            com.machankura.dedun.compose.database.model.DepositRow(
+                chatRoomId = fixture.roomId, chain = com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent.chainName(fixture.chain),
+                depositKey = "ln:" + randomBytes32().toHex(), source = com.machankura.dedun.compose.database.model.DepositRow.LIGHTNING,
+                amountMsat = sat * 1000, member = member.publicKey.lowercase(), attributedBy = com.machankura.dedun.compose.database.model.DepositRow.BY_INVOICE,
+            )
+        )
+    }
+
+    /**
+     * The review's first finding: a quorum signs a transfer of more than the giver has -- an old request, or one signed after
+     * the giver was paid out. It counts on no device, so the receiver gains nothing and nobody's share pays for it.
+     */
+    @Test
+    fun `a signed transfer its giver can't cover moves nothing on any device`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        fixture.payable(all, all[1], wallet, 10_000)
+        fixture.payable(all, all[2], wallet, 10_000)
+        transferred(all, all[1], all[3], 50_000)
+        all.forEach { device ->
+            val balances = GroupWavelengthPayouts.balancesIn(device.db, fixture.roomId, fixture.chain)
+            assertEquals(10_000, balances.getValue(all[1].publicKey.lowercase()).availableSat)
+            assertEquals(10_000, balances.getValue(all[2].publicKey.lowercase()).availableSat)
+            assertNull(balances[all[3].publicKey.lowercase()])
+        }
+    }
+
+    @Test
+    fun `money paid out to its member, approved and expired here or not, can't then be transferred`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        val alice = fixture.payable(all, all[1], wallet, 30_000)
+        // The group approved paying Alice 29,000 and its approval ran out on this device without a round it signed: it may
+        // have been paid in a round other devices co-signed.
+        val metadata = fixture.metadataOf(all, alice.member)
+        val payment = GroupWavelengthPaymentEvent.Payment(fixture.chain, 0, invoice(28_500, metadata), 500, 500, now - 1, alice, metadata)
+        val template = GroupWavelengthPaymentEvent.template(payment)
+        fixture.fileSignedAsRoom(all, template.kind, template.tags, template.content, createdAt = now - 3_600)
+        assertEquals(1_000, MemberTransfers.capacityIn(all[0].db, fixture.roomId, fixture.chain, Rail.WAVELENGTH)[all[1].publicKey.lowercase()])
+
+        transferred(all, all[1], all[2], 20_000)
+        assertNull(GroupWavelengthPayouts.balancesIn(all[0].db, fixture.roomId, fixture.chain)[all[2].publicKey.lowercase()], "the transfer counts nowhere")
     }
 
     @Test
