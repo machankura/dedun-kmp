@@ -22,7 +22,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import kotlin.io.encoding.Base64
 import kotlin.test.AfterTest
@@ -186,9 +186,9 @@ class CurrentProfileKeyPackageJvmTest {
             nostrGroupId = routingId.toHexKey(),
         )
         val rumor = RumorAssembler.assembleRumor<WelcomeEvent>(pubKey = inviterHex, ev = welcomeTemplate)
-        val seal = inviterSigner.signNormal<SealedRumorEvent>(
+        val seal = inviterSigner.signNormal<SealEvent>(
             createdAt = rumor.createdAt,
-            kind = SealedRumorEvent.KIND,
+            kind = SealEvent.KIND,
             tags = emptyArray(),
             content = inviterSigner.nip44Encrypt(rumor.toJson(), userHex),
         )

@@ -20,7 +20,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import kotlin.io.encoding.Base64
 import kotlin.test.assertNotNull
@@ -124,8 +124,8 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
         )
         val sync = NostrSignerSync(keyPair)
         val rumor = RumorAssembler.assembleRumor<WelcomeEvent>(pubKey = hex, ev = welcomeTemplate)
-        val seal = sync.signNormal<SealedRumorEvent>(
-            createdAt = rumor.createdAt, kind = SealedRumorEvent.KIND, tags = emptyArray(),
+        val seal = sync.signNormal<SealEvent>(
+            createdAt = rumor.createdAt, kind = SealEvent.KIND, tags = emptyArray(),
             content = sync.nip44Encrypt(rumor.toJson(), userHex),
         )
         val wrap = GiftWrapEvent.create(event = seal, recipientPubKey = userHex, createdAt = rumor.createdAt)

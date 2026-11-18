@@ -2,6 +2,13 @@ package com.machankura.dedun.compose.database.dao
 
 import androidx.room3.Dao
 import androidx.room3.Transaction
+import co.touchlab.kermit.Logger
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
+import kotlin.time.Instant
 import com.machankura.dedun.compose.database.GENESIS_AT
 import com.machankura.dedun.compose.database.model.BroadcastNostrEventRequest
 import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEventRequestRelation
@@ -14,13 +21,6 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.Relays
-import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
-import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import kotlin.time.Instant
 
 
 @Dao
@@ -139,7 +139,7 @@ abstract class NostrNip17Dao(
     @Transaction
     open suspend fun persistAndBroadcastGiftWrap(
         giftWrapPayload: GiftWrapPayload,
-        sealedRumorEvent: SealedRumorEvent,
+        sealedRumorEvent: SealEvent,
         giftWrapEvent: GiftWrapEvent,
         receiverPublicKey: PTag
     ) {
@@ -168,9 +168,9 @@ abstract class NostrNip17Dao(
             )
         }
 
-        // Get ChatMessageRelayListEvent.KIND for receiverPublicKey.pubkey
+        // Get DmRelayListEvent.KIND for receiverPublicKey.pubkey
         val chatMessageRelayListEvents = database.nostrEventDao().getAuthoredNostrEvents(
-            kinds = arrayOf(ChatMessageRelayListEvent.KIND),
+            kinds = arrayOf(DmRelayListEvent.KIND),
             authors = arrayOf(
                 receiverPublicKey.pubKey
             ),
@@ -180,7 +180,7 @@ abstract class NostrNip17Dao(
         logger.d("Found messageRelayLists: $chatMessageRelayListEvents")
 
 //        chatMessageRelayListEvents.firstOrNull()?.let { chatMessageRelayListNostrEvent ->
-//            val chatMessageRelayListEvent = ChatMessageRelayListEvent(
+//            val chatMessageRelayListEvent = DmRelayListEvent(
 //                id = chatMessageRelayListNostrEvent.id,
 //                pubKey = chatMessageRelayListNostrEvent.pubKey,
 //                tags = chatMessageRelayListNostrEvent.tags,

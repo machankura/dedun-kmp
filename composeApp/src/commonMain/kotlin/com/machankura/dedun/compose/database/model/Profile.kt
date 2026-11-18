@@ -19,15 +19,15 @@ import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
-import com.vitorpamplona.quartz.nip51Lists.relayLists.RelayFeedsListEvent
+import com.vitorpamplona.quartz.nip51Lists.relayLists.FavoriteRelayListEvent
+import kotlin.time.Clock
+import kotlin.time.Instant
+import com.machankura.dedun.compose.database.GENESIS_AT
 import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrEventDetailRoute
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileAvatar
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileColor
-import com.machankura.dedun.compose.ui.theme.DedunTheme
-import com.machankura.dedun.compose.database.GENESIS_AT
-import kotlin.time.Clock
-import kotlin.time.Instant
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.ui.theme.DedunTheme
 
 @Entity(
     foreignKeys = [
@@ -112,9 +112,9 @@ data class Profile(
     ): List<NormalizedRelayUrl>? {
         val relays = nostrRepository.getNostrEvent(
             publicKey,
-            kind = RelayFeedsListEvent.KIND
+            kind = FavoriteRelayListEvent.KIND
         )?.let { relayFeedNostrEvent ->
-            val relayFeedEvent = RelayFeedsListEvent(
+            val relayFeedEvent = FavoriteRelayListEvent(
                 id = relayFeedNostrEvent.id,
                 pubKey = relayFeedNostrEvent.pubKey,
                 content = relayFeedNostrEvent.content,

@@ -26,7 +26,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
 import kotlin.time.Clock
@@ -220,7 +220,7 @@ object MarmotInboundManager {
                 ),
                 kinds = arrayOf(
                     MetadataEvent.KIND,
-                    ChatMessageRelayListEvent.KIND,
+                    DmRelayListEvent.KIND,
                     KeyPackageEvent.KIND,
                     // Where a current-profile peer publishes their KeyPackages: the
                     // NIP-65 write set, per transports/nostr.md. Kind 10051 stays as

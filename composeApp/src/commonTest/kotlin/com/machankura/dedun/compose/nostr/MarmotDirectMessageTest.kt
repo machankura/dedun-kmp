@@ -10,7 +10,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.verify
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -94,7 +94,7 @@ class MarmotDirectMessageTest {
     fun `the seal is what binds the words to their author`() {
         val opened = assertNotNull(MarmotDirectMessage.open(aliceWrapsForBob(), bob))
 
-        assertEquals(SealedRumorEvent.KIND, opened.seal.kind)
+        assertEquals(SealEvent.KIND, opened.seal.kind)
         // The inbound path checks exactly this pair against the MLS sender identity. It
         // is what replaces the MIP-03 pubkey check for kind:1059, so if the seal stops
         // being signed by the sender, the carve-out becomes a hole.
@@ -226,7 +226,7 @@ class MarmotDirectMessageTest {
         val sealInside = Event(
             id = "3".repeat(64), pubKey = alice.pubKey, createdAt = at,
             kind = MarmotDirectMessage.ENVELOPE_KIND, tags = emptyArray(),
-            content = alice.signNormal<Event>(createdAt = at, kind = SealedRumorEvent.KIND, tags = emptyArray(), content = "").toJson(),
+            content = alice.signNormal<Event>(createdAt = at, kind = SealEvent.KIND, tags = emptyArray(), content = "").toJson(),
             sig = "",
         )
 

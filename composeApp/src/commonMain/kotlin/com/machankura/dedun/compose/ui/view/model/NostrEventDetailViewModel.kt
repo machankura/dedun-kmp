@@ -12,7 +12,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.vitorpamplona.quartz.nip18Reposts.RepostEvent
 import com.vitorpamplona.quartz.nip25Reactions.ReactionEvent
-import com.vitorpamplona.quartz.nip57Zaps.LnZapEvent
+import com.vitorpamplona.quartz.nip57Zaps.ZapReceiptEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.collectLatest
@@ -45,7 +45,7 @@ class NostrEventDetailViewModel(
                                     TextNoteEvent.KIND,
                                     RepostEvent.KIND,
                                     ReactionEvent.KIND,
-                                    LnZapEvent.KIND,
+                                    ZapReceiptEvent.KIND,
                                 ),
                                 tags = mapOf(
                                     Pair(

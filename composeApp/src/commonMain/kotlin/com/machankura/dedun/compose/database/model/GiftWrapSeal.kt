@@ -9,7 +9,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -73,8 +73,8 @@ data class GiftWrapSeal(
     suspend fun decryptGiftWrapPayload(
         privateKey: ByteArray
     ): GiftWrapPayload? {
-        if (kind == SealedRumorEvent.KIND) {
-            val sealedRumorEvent = SealedRumorEvent(
+        if (kind == SealEvent.KIND) {
+            val sealedRumorEvent = SealEvent(
                 id = id,
                 pubKey = publicKey,
                 tags = tags,

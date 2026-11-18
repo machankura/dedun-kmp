@@ -3,7 +3,7 @@ package com.machankura.dedun.compose.nostr
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.SynchronizeNostrEventRequest
@@ -49,7 +49,7 @@ object DirectMessagePeerSync {
     val KINDS = arrayOf(
         MetadataEvent.KIND,
         KeyPackageEvent.KIND,
-        ChatMessageRelayListEvent.KIND,
+        DmRelayListEvent.KIND,
         AdvertisedRelayListEvent.KIND,
     )
 

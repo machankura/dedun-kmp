@@ -1,18 +1,18 @@
 package com.machankura.dedun.compose.repository
 
-import com.machankura.dedun.compose.cryptography.signOrThrow
-import com.machankura.dedun.compose.network.asClientTag
 import com.vitorpamplona.quartz.nip19Bech32.toNsec
-import com.vitorpamplona.quartz.nip51Lists.relayLists.RelayFeedsListEvent
-import kotlinx.coroutines.flow.StateFlow
-import com.machankura.dedun.compose.identity.Identity
+import com.vitorpamplona.quartz.nip51Lists.relayLists.FavoriteRelayListEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.machankura.dedun.compose.cryptography.signOrThrow
+import com.machankura.dedun.compose.identity.Identity
+import com.machankura.dedun.compose.network.asClientTag
 
 /**
  * As seen in Primal
@@ -88,7 +88,7 @@ class NostrNotaryRepository(
             unsignedNostrEvent = com.machankura.dedun.compose.database.model.UnsignedNostrEvent(
                 pubKey = userId,
                 content = "",
-                kind = RelayFeedsListEvent.KIND,
+                kind = FavoriteRelayListEvent.KIND,
                 tags = relays.map {
                     arrayOf(
                         "r",

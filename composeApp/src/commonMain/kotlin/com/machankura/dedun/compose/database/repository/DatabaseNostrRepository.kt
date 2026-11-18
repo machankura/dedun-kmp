@@ -1,19 +1,5 @@
 package com.machankura.dedun.compose.database.repository
 
-import com.machankura.dedun.compose.database.model.MarmotCommitResult
-import com.machankura.dedun.compose.database.GENESIS_AT
-import com.machankura.dedun.compose.database.model.BroadcastNostrEventRequest
-import com.machankura.dedun.compose.database.model.BroadcastStatus
-import com.machankura.dedun.compose.database.model.NostrEvent
-import com.machankura.dedun.compose.database.model.Profile
-import com.machankura.dedun.compose.database.model.UnsignedNostrEvent
-import com.machankura.dedun.compose.database.model.intermdiate.LocalAccount
-import com.machankura.dedun.compose.database.model.intermdiate.LocalBroadcastNostrEventRequest
-import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
-import com.machankura.dedun.compose.database.dao.NostrEventDao
-import com.machankura.dedun.compose.database.query.NostrEventFilterQuery
-import com.machankura.dedun.compose.extensions.toHex
-import com.machankura.dedun.compose.nostr.Relays
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRelayListEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
@@ -35,7 +21,7 @@ import com.vitorpamplona.quartz.nip10Notes.content.findURLs
 import com.vitorpamplona.quartz.nip10Notes.tags.markedETags
 import com.vitorpamplona.quartz.nip10Notes.tags.notify
 import com.vitorpamplona.quartz.nip10Notes.tags.prepareETagsAsReplyTo
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip18Reposts.RepostEvent
 import com.vitorpamplona.quartz.nip18Reposts.quotes.QEventTag
 import com.vitorpamplona.quartz.nip18Reposts.quotes.quotes
@@ -43,12 +29,28 @@ import com.vitorpamplona.quartz.nip21UriScheme.toNostrUri
 import com.vitorpamplona.quartz.nip25Reactions.ReactionEvent
 import com.vitorpamplona.quartz.nip31Alts.AltTag
 import com.vitorpamplona.quartz.nip50Search.SearchRelayListEvent
-import com.vitorpamplona.quartz.nip51Lists.relayLists.RelayFeedsListEvent
+import com.vitorpamplona.quartz.nip51Lists.relayLists.FavoriteRelayListEvent
+import com.machankura.dedun.compose.database.GENESIS_AT
+import com.machankura.dedun.compose.database.dao.NostrEventDao
+import com.machankura.dedun.compose.database.model.BroadcastNostrEventRequest
+import com.machankura.dedun.compose.database.model.BroadcastStatus
+import com.machankura.dedun.compose.database.model.MarmotCommitResult
+import com.machankura.dedun.compose.database.model.NostrEvent
+import com.machankura.dedun.compose.database.model.Profile
+import com.machankura.dedun.compose.database.model.UnsignedNostrEvent
+import com.machankura.dedun.compose.database.model.intermdiate.LocalAccount
+import com.machankura.dedun.compose.database.model.intermdiate.LocalBroadcastNostrEventRequest
+import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
+import com.machankura.dedun.compose.database.query.NostrEventFilterQuery
+import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.nostr.Relays
 // NIP-51 has two RelayTag classes with identical `assemble` signatures: the generic list one
 // uses "r", while the relay-list events (kind 10007 search, kind 10012 feeds) parse "relay".
 // Importing the wrong one compiled cleanly and produced lists nothing could read back.
 import com.vitorpamplona.quartz.nip51Lists.relayLists.tags.RelayTag
-import com.vitorpamplona.quartz.nip57Zaps.LnZapEvent
+import com.vitorpamplona.quartz.nip57Zaps.ZapReceiptEvent
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -57,8 +59,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.identity.Identity
-import kotlin.time.Clock
-import kotlin.time.Instant
 
 /**
  * @param activeIdentity whose requests the two fetch queues are stamped with. Every
@@ -222,8 +222,8 @@ class DatabaseNostrRepository(
         unsignedNostrEvents.add(
             UnsignedNostrEvent(
                 pubKey = publicKey,
-                kind = ChatMessageRelayListEvent.KIND,
-                tags = ChatMessageRelayListEvent.createTagArray(
+                kind = DmRelayListEvent.KIND,
+                tags = DmRelayListEvent.createTagArray(
                     Relays.DefaultDMRelayList
                 ),
                 content = ""
@@ -259,9 +259,9 @@ class DatabaseNostrRepository(
         unsignedNostrEvents.add(
             UnsignedNostrEvent(
                 pubKey = publicKey,
-                kind = RelayFeedsListEvent.KIND,
+                kind = FavoriteRelayListEvent.KIND,
                 tags = arrayOf(
-//                    AltTag.assemble(RelayFeedsListEvent.ALT)
+//                    AltTag.assemble(FavoriteRelayListEvent.ALT)
                 ),
                 privateTags = Relays.DefaultDMRelayList.map {
                     RelayTag.assemble(
@@ -780,7 +780,7 @@ class DatabaseNostrRepository(
                 TextNoteEvent.KIND,
                 RepostEvent.KIND,
                 ReactionEvent.KIND,
-                LnZapEvent.KIND
+                ZapReceiptEvent.KIND
             )
         )
     }

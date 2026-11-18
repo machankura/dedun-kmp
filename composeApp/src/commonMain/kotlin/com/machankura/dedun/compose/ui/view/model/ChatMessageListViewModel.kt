@@ -15,9 +15,19 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import co.touchlab.kermit.Logger
+import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
 import com.machankura.dedun.compose.extensions.shortened
 import com.machankura.dedun.compose.managers.FrostSigningManager
@@ -25,8 +35,6 @@ import com.machankura.dedun.compose.nostr.MemberProfileSync
 import com.machankura.dedun.compose.nostr.Nip17Filters
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.repository.ChatRepository
-import com.machankura.dedun.compose.database.model.types.DkgRitualStage
-import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.repository.GroupLightningRepository
 import com.machankura.dedun.compose.database.model.types.IcebergApprovalStep
@@ -40,14 +48,6 @@ import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.text.ProposedEvent
 import com.machankura.dedun.compose.ui.view.state.ChatMessageListUIState
-import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.nip01Core.core.Event
-import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 
 class ChatMessageListViewModel(
     initialChatMessageListUIState: ChatMessageListUIState,
@@ -486,7 +486,7 @@ class ChatMessageListViewModel(
 
                     val chatMessageRelayListFilter = SynchronizationFilter(
                         kinds = arrayOf(
-                            ChatMessageRelayListEvent.KIND,
+                            DmRelayListEvent.KIND,
                         ),
                         authors = arrayOf(
                             recipients.participant.participantPublicKey

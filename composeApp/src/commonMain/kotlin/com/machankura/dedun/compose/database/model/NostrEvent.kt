@@ -21,17 +21,17 @@ import com.vitorpamplona.quartz.nip18Reposts.quotes.QAddressableTag
 import com.vitorpamplona.quartz.nip18Reposts.quotes.QEventTag
 import com.vitorpamplona.quartz.nip18Reposts.quotes.firstTaggedQuote
 import com.vitorpamplona.quartz.nip25Reactions.ReactionEvent
-import com.vitorpamplona.quartz.nip57Zaps.LnZapEvent
+import com.vitorpamplona.quartz.nip57Zaps.ZapReceiptEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import com.vitorpamplona.quartz.utils.EventFactory
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlin.time.Clock
-import kotlin.time.Instant
 
 @Entity(
     indices = [
@@ -437,8 +437,8 @@ data class NostrEvent(
     }
 
     fun toZap(): Zap? = try {
-        if (kind == LnZapEvent.KIND) {
-            EventFactory.create<LnZapEvent>(
+        if (kind == ZapReceiptEvent.KIND) {
+            EventFactory.create<ZapReceiptEvent>(
                 id = id,
                 pubKey = pubKey,
                 createdAt = createdAt.epochSeconds,

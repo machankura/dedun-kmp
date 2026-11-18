@@ -7,27 +7,27 @@ import com.machankura.dedun.compose.managers.GroupWalletDerivation
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.vitorpamplona.quartz.nip01Core.core.Kind
+import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
+import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
-import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.database.model.MarmotKeyPackage
-import com.machankura.dedun.compose.nostr.MarmotProfile
-import com.machankura.dedun.compose.managers.SharedKeyDerivation
-import com.machankura.dedun.compose.managers.MarmotGroupCreation
-import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
-import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.nip01Core.core.Kind
-import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
-import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import com.machankura.dedun.compose.managers.MarmotGroupCreation
+import com.machankura.dedun.compose.managers.SharedKeyDerivation
+import com.machankura.dedun.compose.managers.SubgroupManager
+import com.machankura.dedun.compose.nostr.MarmotProfile
 
 interface ChatRepository {
     suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>>
@@ -196,7 +196,7 @@ interface ChatRepository {
         mlsGroupState: String?
     ): LocalChatRoom?
 
-    suspend fun getChatMessageRelayForPublicKey(publicKey: HexKey): ChatMessageRelayListEvent?
+    suspend fun getChatMessageRelayForPublicKey(publicKey: HexKey): DmRelayListEvent?
 
     /**
      * A peer's usable KeyPackage for a room on [roomProfile].
@@ -454,7 +454,7 @@ interface ChatRepository {
                 return null
             }
 
-            override suspend fun getChatMessageRelayForPublicKey(publicKey: HexKey): ChatMessageRelayListEvent? {
+            override suspend fun getChatMessageRelayForPublicKey(publicKey: HexKey): DmRelayListEvent? {
                 return null
             }
 

@@ -37,7 +37,7 @@ import com.vitorpamplona.quartz.nip01Core.tags.events.taggedEvents
 import com.vitorpamplona.quartz.nip01Core.tags.people.taggedUsers
 import com.vitorpamplona.quartz.nip02FollowList.ContactListEvent
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip40Expiration.expiration
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import kotlin.io.encoding.Base64
@@ -99,14 +99,14 @@ abstract class NostrDao(
     val profileEventKinds = arrayOf(
         MetadataEvent.KIND,
 //        ContactListEvent.KIND, // TODO: Might want to get contacts for the social graph...
-        ChatMessageRelayListEvent.KIND,
+        DmRelayListEvent.KIND,
         KeyPackageEvent.KIND,
         KeyPackageRelayListEvent.KIND,
 //        AdvertisedRelayListEvent.KIND,
 //        SearchRelayListEvent.KIND,
 //        IndexerRelayListEvent.KIND,
-//        ChannelListEvent.KIND,
-//        RelayFeedsListEvent.KIND
+//        PublicChatListEvent.KIND,
+//        FavoriteRelayListEvent.KIND
     )
 
     open suspend fun publishNostrEvent(
@@ -670,7 +670,7 @@ abstract class NostrDao(
                                                 database.nostrEventDao()
                                                     .getAuthoredNostrEvents(
                                                         kinds = arrayOf(
-                                                            ChatMessageRelayListEvent.KIND
+                                                            DmRelayListEvent.KIND
                                                         ),
                                                         authors = arrayOf(
                                                             publicKey
@@ -678,11 +678,11 @@ abstract class NostrDao(
                                                         since = GENESIS_AT,
                                                         limit = 5
                                                     ).firstOrNull()?.let { nostrEvent ->
-                                                        if (nostrEvent.kind != ChatMessageRelayListEvent.KIND) {
-                                                            logger.e("getAuthoredNostrEvents returned invalid ChatMessageRelayListEvent for ${publicKey}: $nostrEvent")
+                                                        if (nostrEvent.kind != DmRelayListEvent.KIND) {
+                                                            logger.e("getAuthoredNostrEvents returned invalid DmRelayListEvent for ${publicKey}: $nostrEvent")
                                                             null
                                                         } else {
-                                                            ChatMessageRelayListEvent(
+                                                            DmRelayListEvent(
                                                                 id = nostrEvent.id,
                                                                 tags = nostrEvent.tags,
                                                                 pubKey = nostrEvent.pubKey,
@@ -703,7 +703,7 @@ abstract class NostrDao(
                                             if (chatMessageRelayListEvent == null) {
                                                 logger.w("We don't have a chatMessageRelayListEvent for the pubkey $publicKey")
 
-                                                // Sync ChatMessageRelayListEvent publicKey...
+                                                // Sync DmRelayListEvent publicKey...
                                                 // TODO: Get relayHint form participant...
                                                 // Inverted test: this created the set only when
                                                 // one already existed (wiping it), and left the
@@ -913,7 +913,7 @@ abstract class NostrDao(
 
                                         val chatMessageRelayListEvent = database.nostrEventDao().getAuthoredNostrEvents(
                                             kinds = arrayOf(
-                                                ChatMessageRelayListEvent.KIND
+                                                DmRelayListEvent.KIND
                                             ),
                                             authors = arrayOf(
                                                 publicKey
@@ -921,11 +921,11 @@ abstract class NostrDao(
                                             since = GENESIS_AT,
                                             limit = 5
                                         ).firstOrNull()?.let { nostrEvent ->
-                                            if (nostrEvent.kind != ChatMessageRelayListEvent.KIND) {
-                                                logger.e("getAuthoredNostrEvents returned invalid ChatMessageRelayListEvent for ${publicKey}: $nostrEvent")
+                                            if (nostrEvent.kind != DmRelayListEvent.KIND) {
+                                                logger.e("getAuthoredNostrEvents returned invalid DmRelayListEvent for ${publicKey}: $nostrEvent")
                                                 null
                                             } else {
-                                                ChatMessageRelayListEvent(
+                                                DmRelayListEvent(
                                                     id = nostrEvent.id,
                                                     tags = nostrEvent.tags,
                                                     pubKey = nostrEvent.pubKey,
@@ -941,7 +941,7 @@ abstract class NostrDao(
                                         if (chatMessageRelayListEvent == null) {
                                             logger.w("We don't have a chatMessageRelayListEvent for the pubkey $publicKey")
 
-                                            // Sync ChatMessageRelayListEvent publicKey...
+                                            // Sync DmRelayListEvent publicKey...
                                             // TODO: Get relayHint form participant...
                                             // Inverted test — see the identical block above.
                                             if (!profilePublicKeysToSync.containsKey(relayURL)) {

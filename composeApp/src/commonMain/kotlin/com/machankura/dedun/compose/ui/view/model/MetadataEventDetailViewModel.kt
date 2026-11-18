@@ -22,13 +22,13 @@ import com.vitorpamplona.quartz.nip02FollowList.RelaySet
 import com.vitorpamplona.quartz.nip02FollowList.tags.ContactTag
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.vitorpamplona.quartz.nip18Reposts.RepostEvent
-import com.vitorpamplona.quartz.nip23LongContent.LongTextNoteEvent
+import com.vitorpamplona.quartz.nip23LongContent.LongFormContentEvent
 import com.vitorpamplona.quartz.nip25Reactions.ReactionEvent
 import com.vitorpamplona.quartz.nip31Alts.AltTag
 import com.vitorpamplona.quartz.nip51Lists.bookmarkList.BookmarkListEvent
-import com.vitorpamplona.quartz.nip51Lists.relayLists.RelayFeedsListEvent
+import com.vitorpamplona.quartz.nip51Lists.relayLists.FavoriteRelayListEvent
 import com.vitorpamplona.quartz.nip56Reports.ReportEvent
-import com.vitorpamplona.quartz.nip57Zaps.LnZapEvent
+import com.vitorpamplona.quartz.nip57Zaps.ZapReceiptEvent
 import com.vitorpamplona.quartz.nip68Picture.PictureEvent
 import com.vitorpamplona.quartz.nip71Video.VideoNormalEvent
 import com.vitorpamplona.quartz.nip71Video.VideoShortEvent
@@ -157,7 +157,7 @@ class MetadataEventDetailViewModel(
                     eventPublicKey
                 ),
                 kinds = arrayOf(
-                    LongTextNoteEvent.KIND,
+                    LongFormContentEvent.KIND,
                 ),
                 limit = 50
             )
@@ -191,7 +191,7 @@ class MetadataEventDetailViewModel(
                     eventPublicKey
                 ),
                 kinds = arrayOf(
-                    LnZapEvent.KIND,
+                    ZapReceiptEvent.KIND,
                 ),
                 // TODO: Zaps user has received...
                 limit = 50
@@ -258,7 +258,7 @@ class MetadataEventDetailViewModel(
                     eventPublicKey
                 ),
                 kinds = arrayOf(
-                    RelayFeedsListEvent.KIND,
+                    FavoriteRelayListEvent.KIND,
                 ),
                 limit = 50
             )

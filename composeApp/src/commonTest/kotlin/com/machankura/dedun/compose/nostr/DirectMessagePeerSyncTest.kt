@@ -2,12 +2,12 @@ package com.machankura.dedun.compose.nostr
 
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
-import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 
 /**
  * What a direct message with one person asks the relays for, and whom it asks.
@@ -34,7 +34,7 @@ class DirectMessagePeerSyncTest {
             // Level 0: somebody is waiting on this one.
             assertEquals(0, request.level)
             assertEquals(
-                listOf(MetadataEvent.KIND, KeyPackageEvent.KIND, ChatMessageRelayListEvent.KIND, AdvertisedRelayListEvent.KIND),
+                listOf(MetadataEvent.KIND, KeyPackageEvent.KIND, DmRelayListEvent.KIND, AdvertisedRelayListEvent.KIND),
                 request.synchronizationFilter.kinds?.toList(),
             )
             assertEquals(listOf(alice), request.synchronizationFilter.authors?.toList())

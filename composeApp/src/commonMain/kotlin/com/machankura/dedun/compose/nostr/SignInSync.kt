@@ -5,11 +5,11 @@ import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.RelayUrlNormalizer
 import com.vitorpamplona.quartz.nip02FollowList.ContactListEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
-import com.vitorpamplona.quartz.nip28PublicChat.list.ChannelListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
+import com.vitorpamplona.quartz.nip28PublicChat.list.PublicChatListEvent
 import com.vitorpamplona.quartz.nip50Search.SearchRelayListEvent
+import com.vitorpamplona.quartz.nip51Lists.relayLists.FavoriteRelayListEvent
 import com.vitorpamplona.quartz.nip51Lists.relayLists.IndexerRelayListEvent
-import com.vitorpamplona.quartz.nip51Lists.relayLists.RelayFeedsListEvent
 import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
 import com.machankura.dedun.compose.database.model.SynchronizeNostrEventRequest
 import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
@@ -36,11 +36,11 @@ object SignInSync {
         MetadataEvent.KIND,
         ContactListEvent.KIND,
         AdvertisedRelayListEvent.KIND,
-        ChatMessageRelayListEvent.KIND,
+        DmRelayListEvent.KIND,
         SearchRelayListEvent.KIND,
         IndexerRelayListEvent.KIND,
-        ChannelListEvent.KIND,
-        RelayFeedsListEvent.KIND,
+        PublicChatListEvent.KIND,
+        FavoriteRelayListEvent.KIND,
     )
 
     /**

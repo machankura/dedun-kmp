@@ -14,7 +14,7 @@ import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
 import com.vitorpamplona.quartz.nip44Encryption.Nip44
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 
 /**
@@ -155,7 +155,7 @@ object MarmotDirectMessage {
      *
      * [createdAt] is used unfuzzed on all three layers. NIP-59 randomises the wrap and
      * the seal by up to two days to frustrate correlation at a relay, and both
-     * `GiftWrapEvent.create` and `SealedRumorEvent.create` default to that; there is no
+     * `GiftWrapEvent.create` and `SealEvent.create` default to that; there is no
      * relay at this layer, the kind:445 around it already carries the true time, and
      * fuzzing would only scatter the "sent a private message" line up to two days out of
      * position in every other member's transcript.
@@ -178,13 +178,13 @@ object MarmotDirectMessage {
         // The only layer that names the sender, and the only one they sign. Everything
         // the recipient believes about who wrote this rests on this signature.
         //
-        // Built by hand rather than through SealedRumorEvent.create, which is suspend,
+        // Built by hand rather than through SealEvent.create, which is suspend,
         // takes a NostrSigner rather than the sync signer the outbound path holds, and
         // defaults createdAt to the two-day fuzz.
         val seal =
-            signer.signNormal<SealedRumorEvent>(
+            signer.signNormal<SealEvent>(
                 createdAt = createdAt,
-                kind = SealedRumorEvent.KIND,
+                kind = SealEvent.KIND,
                 tags = emptyArray(),
                 content = signer.nip44Encrypt(rumor.toJson(), recipientPublicKey),
             )
@@ -286,7 +286,7 @@ object MarmotDirectMessage {
         val privateKey = me.privKey ?: return null
 
         val seal = decryptEvent(wrap.content, privateKey, wrap.pubKey) ?: return null
-        if (seal.kind != SealedRumorEvent.KIND) return null
+        if (seal.kind != SealEvent.KIND) return null
 
         val rumor = decryptEvent(seal.content, privateKey, seal.pubKey) ?: return null
 

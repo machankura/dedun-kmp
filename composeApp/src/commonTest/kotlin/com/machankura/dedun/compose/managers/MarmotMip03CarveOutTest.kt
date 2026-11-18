@@ -1,14 +1,14 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import com.vitorpamplona.quartz.nipC7Chats.ChatEvent
-import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 
 /**
  * The one hole deliberately left in the author check, and its edges.
@@ -85,7 +85,7 @@ class MarmotMip03CarveOutTest {
         val kinds = listOf(
             ChatEvent.KIND,
             ChatMessageEvent.KIND,
-            SealedRumorEvent.KIND,
+            SealEvent.KIND,
             MarmotDirectMessage.ENVELOPE_KIND,
             GiftWrapEvent.KIND - 1,
             GiftWrapEvent.KIND + 1,

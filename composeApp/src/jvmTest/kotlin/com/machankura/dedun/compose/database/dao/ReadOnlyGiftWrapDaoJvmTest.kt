@@ -4,17 +4,17 @@ import androidx.room3.Room
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import kotlinx.coroutines.runBlocking
-import com.machankura.dedun.compose.database.DedunDatabase
-import com.machankura.dedun.compose.database.builder.getRoomDatabase
-import com.machankura.dedun.compose.database.model.NostrEvent
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.time.Instant
+import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.builder.getRoomDatabase
+import com.machankura.dedun.compose.database.model.NostrEvent
 
 /**
  * A gift wrap addressed to a read-only identity is kept and not opened -- and, since
@@ -48,9 +48,9 @@ class ReadOnlyGiftWrapDaoJvmTest {
 
     private fun wrapTo(recipient: KeyPair): NostrEvent {
         val signer = NostrSignerSync(peer)
-        val seal = signer.signNormal<SealedRumorEvent>(
+        val seal = signer.signNormal<SealEvent>(
             createdAt = 1_700_000_000,
-            kind = SealedRumorEvent.KIND,
+            kind = SealEvent.KIND,
             tags = emptyArray(),
             content = signer.nip44Encrypt(
                 plaintext = """{"kind":14,"content":"dumela"}""",

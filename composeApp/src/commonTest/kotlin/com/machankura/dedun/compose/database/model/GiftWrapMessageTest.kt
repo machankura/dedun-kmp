@@ -3,9 +3,8 @@ package com.machankura.dedun.compose.database.model
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,6 +12,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import kotlinx.coroutines.test.runTest
 
 /**
  * Who can open a gift wrap, and what becomes of everyone else's.
@@ -46,9 +46,9 @@ class GiftWrapMessageTest {
     ): GiftWrapMessage {
         val signer = NostrSignerSync(sender)
 
-        val seal = signer.signNormal<SealedRumorEvent>(
+        val seal = signer.signNormal<SealEvent>(
             createdAt = SEALED_AT,
-            kind = SealedRumorEvent.KIND,
+            kind = SealEvent.KIND,
             tags = emptyArray(),
             content = signer.nip44Encrypt(
                 plaintext = """{"kind":14,"content":"dumela"}""",

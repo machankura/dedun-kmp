@@ -37,8 +37,8 @@ import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.Kind
+import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
@@ -46,16 +46,16 @@ import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import com.vitorpamplona.quartz.nipC7Chats.ChatEvent
 import com.vitorpamplona.quartz.utils.TimeUtils
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlin.time.Clock
 import kotlin.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 
 /**
  * @param activeIdentity the identity the app runs as. Read by the one write here that
@@ -297,11 +297,11 @@ class DatabaseChatRepository(
         return null
     }
 
-    override suspend fun getChatMessageRelayForPublicKey(publicKey: HexKey): ChatMessageRelayListEvent? {
+    override suspend fun getChatMessageRelayForPublicKey(publicKey: HexKey): DmRelayListEvent? {
         // TODO: Implement a UserChatMessageRelayList model
         return database.nostrEventDao().getAuthoredNostrEvents(
             kinds = arrayOf(
-                ChatMessageRelayListEvent.KIND
+                DmRelayListEvent.KIND
             ),
             authors = arrayOf(
                 publicKey
@@ -309,11 +309,11 @@ class DatabaseChatRepository(
             since = GENESIS_AT,
             limit = 5
         ).firstOrNull()?.let { nostrEvent ->
-            if (nostrEvent.kind != ChatMessageRelayListEvent.KIND) {
-                logger.e("getAuthoredNostrEvents returned invalid ChatMessageRelayListEvent for ${publicKey}: $nostrEvent")
+            if (nostrEvent.kind != DmRelayListEvent.KIND) {
+                logger.e("getAuthoredNostrEvents returned invalid DmRelayListEvent for ${publicKey}: $nostrEvent")
                 null
             } else {
-                ChatMessageRelayListEvent(
+                DmRelayListEvent(
                     id = nostrEvent.id,
                     tags = nostrEvent.tags,
                     pubKey = nostrEvent.pubKey,
@@ -653,16 +653,16 @@ class DatabaseChatRepository(
             logger.d("Seal to $participant")
             val payload = giftWrapPayloadRumor.toJson()
 
-            val sealedRumorEvent = nostrSignerSync.signNormal<SealedRumorEvent>(
+            val sealedRumorEvent = nostrSignerSync.signNormal<SealEvent>(
                 createdAt = TimeUtils.randomWithTwoDays(),
-                kind = SealedRumorEvent.KIND,
+                kind = SealEvent.KIND,
                 tags = emptyArray(),
                 content = nostrSignerSync.nip44Encrypt(
                     plaintext = payload,
                     toPublicKey = participant.participantPublicKey
                 )
             )
-            logger.d("SealedRumorEvent: ${sealedRumorEvent.toJson()}")
+            logger.d("SealEvent: ${sealedRumorEvent.toJson()}")
 
             val giftWrapEvent = wrapperSigner.signNormal<GiftWrapEvent>(
                 createdAt = TimeUtils.randomWithTwoDays(),

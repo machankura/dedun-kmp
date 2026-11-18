@@ -6,7 +6,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
+import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
 import com.vitorpamplona.quartz.nipC7Chats.ChatEvent
 import kotlin.test.Test
@@ -209,7 +209,7 @@ class MarmotDirectMessageDeliveryTest {
                 id = seal.id,
                 pubKey = claimedAuthor,
                 createdAt = seal.createdAt,
-                kind = SealedRumorEvent.KIND,
+                kind = SealEvent.KIND,
                 tags = seal.tags,
                 content = seal.content,
                 sig = seal.sig,
@@ -242,7 +242,7 @@ class MarmotDirectMessageDeliveryTest {
                 id = seal.id,
                 pubKey = seal.pubKey,
                 createdAt = seal.createdAt + 86_400,
-                kind = SealedRumorEvent.KIND,
+                kind = SealEvent.KIND,
                 tags = seal.tags,
                 content = seal.content,
                 sig = seal.sig,
@@ -264,9 +264,9 @@ class MarmotDirectMessageDeliveryTest {
         val rumor = MarmotDirectMessage.rumor(rumorFrom, ChatMessageEvent.KIND, at, emptyArray(), text)
 
         val seal =
-            sealedBy.signNormal<SealedRumorEvent>(
+            sealedBy.signNormal<SealEvent>(
                 createdAt = at,
-                kind = SealedRumorEvent.KIND,
+                kind = SealEvent.KIND,
                 tags = emptyArray(),
                 content = sealedBy.nip44Encrypt(rumor.toJson(), to),
             )

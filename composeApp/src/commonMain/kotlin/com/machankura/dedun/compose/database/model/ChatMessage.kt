@@ -33,7 +33,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.firstTagValue
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip50Search.SearchRelayListEvent
 import com.vitorpamplona.quartz.nip51Lists.relayLists.BlockedRelayListEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
@@ -1946,7 +1946,7 @@ data class ChatMessage(
                 // A kind:1 is content, and keeps the bubble it always had.
                 MetadataEvent.KIND,
                 AdvertisedRelayListEvent.KIND,
-                ChatMessageRelayListEvent.KIND,
+                DmRelayListEvent.KIND,
                 SearchRelayListEvent.KIND,
                 BlockedRelayListEvent.KIND -> null
 

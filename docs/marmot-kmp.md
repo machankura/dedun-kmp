@@ -302,6 +302,39 @@ since, so the behavioural questions are concentrated in `MarmotEngine` and its c
 `SubgroupCeremonyInParentRoomTest`. A test that needed editing to pass is a finding;
 record it in this note's table rather than in the diff.
 
+**Built**, and most of this phase turned out to be already answered by Phase 1 rather than
+work of its own:
+
+- **`GroupEventResult` has nine variants, the same nine.** Not argued from reading:
+  `MarmotEngine.inRoom` is a `when` over the sealed class used as an expression, so the
+  compiler requires it to be exhaustive. It compiles, which is the compiler stating there
+  is no tenth variant for the app to drop silently.
+- **The convergence and lifecycle surface is unchanged.** `convergenceStatus`,
+  `resolveConvergence`, `settleDueConvergence`, `openConvergencePasses` and
+  `groupLifecycle` all take and return what `MarmotEngine.settleLater` and `awaitSettled`
+  already expected, down to `ConvergenceStatus.allowsOutboundWork`.
+- **So is the staging API against the gate.** `stageAddMember` → `StagedCommit` →
+  `gate.prepare` → `installState` needed no edit, and `PublishBeforeApplyJvmTest` and
+  `ConvergenceForkJvmTest` pass with their assertions untouched.
+- **No test's assertions had to move.** The fixtures changed, in that seven of them now
+  construct their group with `MarmotGroupPolicy` like the app does — a construction-site
+  change, not a changed expectation. Nothing in this migration has yet been accommodated
+  by weakening a test.
+
+What was left is the six renames quartz 2.x made and kept deprecated typealiases for, now
+adopted: 104 references across 25 files. Same packages, so each is an identifier rename,
+and none of them reaches a string the app persists — the diff touches code and log lines
+only, no Room column, no string resource, no kind number.
+
+| quartz 1.15.2 | quartz 2.x | why |
+|---|---|---|
+| `SealedRumorEvent` | `SealEvent` | NIP-59 names kind 13 the seal |
+| `ChatMessageRelayListEvent` | `DmRelayListEvent` | NIP-17 kind 10050 is the relay list to receive DMs |
+| `RelayFeedsListEvent` | `FavoriteRelayListEvent` | NIP-51 names kind 10012 the favorite relays list |
+| `LnZapEvent` | `ZapReceiptEvent` | NIP-57 names kind 9735 the zap receipt |
+| `LongTextNoteEvent` | `LongFormContentEvent` | NIP-23 names kind 30023 long-form content |
+| `ChannelListEvent` | `PublicChatListEvent` | NIP-51 names kind 10005 the public chats list |
+
 ## Phase 3 — the stand-in, and what interop now means
 
 `MarmotStandIn` goes over to marmot-kmp's managers, and then there is a choice worth
