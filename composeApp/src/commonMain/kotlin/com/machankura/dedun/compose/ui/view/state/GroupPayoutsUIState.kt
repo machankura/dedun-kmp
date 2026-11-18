@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.MemberBalances
+import com.machankura.dedun.compose.managers.MemberTransfers
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.wallet.PayoutRule
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -40,5 +41,9 @@ sealed interface GroupPayoutsUIState {
         val wavelengthPaysOnchain: Boolean = false,
         /** What's in the Wavelength wallet by this device's own record, which the change a payout leaves is counted from. */
         val wavelengthInWalletSat: Long = 0,
+        /** Transfers members have asked for in the room and the group hasn't recorded (`docs/member-transfers.md`, Phase 4). */
+        val transfersWaiting: List<MemberTransfers.Asked> = emptyList(),
+        /** Whether the active profile can sign a transfer request: an npub profile can't. */
+        val canAskTransfer: Boolean = false,
     ) : GroupPayoutsUIState
 }

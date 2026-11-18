@@ -2,6 +2,8 @@ package com.machankura.dedun.compose.text
 
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
@@ -253,6 +255,24 @@ object ProposedEvent {
                 },
             )
         } ?: Summary(label = "Assign coins", detail = "An assignment this device cannot read")
+
+        // A member's transfer: one balance down, another up, nothing moved. The giver's own signature is
+        // embedded, and every signer checks it fits what they have. docs/member-transfers.md, T13.
+        MemberTransferEvent.KIND -> MemberTransferEvent.read(event)?.let { transfer ->
+            val rail = when (transfer.rail) {
+                TransferRequestEvent.Rail.WAVELENGTH -> "Wavelength"
+                TransferRequestEvent.Rail.LIGHTNING -> "Lightning"
+                TransferRequestEvent.Rail.ONCHAIN -> "onchain"
+            }
+            Summary(
+                label = "@${nameOf(transfer.from) ?: transfer.from.take(8)} transfers ${Satoshi(transfer.amountSat).grouped()} sats of their $rail balance " +
+                    "to @${nameOf(transfer.to) ?: transfer.to.take(8)}",
+                detail = buildString {
+                    append("Signed by @${nameOf(transfer.from) ?: transfer.from.take(8)} themselves. Nothing leaves the wallet, and no fee is paid")
+                    transfer.note?.let { append(" · \"$it\"") }
+                },
+            )
+        } ?: Summary(label = "Record a transfer between members", detail = "A transfer this device cannot read")
 
         MemberWalletPolicyEvent.KIND -> Summary(
             label = "Members' guarded wallets",

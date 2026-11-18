@@ -28,6 +28,8 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
 import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.machankura.dedun.compose.repository.PayoutRepository
+import com.machankura.dedun.compose.repository.TransferRepository
+import com.machankura.dedun.compose.managers.MemberTransfers
 import com.machankura.dedun.compose.ui.view.state.GroupPayoutsUIState
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.GroupWalletState
@@ -61,6 +63,7 @@ class GroupPayoutsViewModel(
     private val wallets: GroupOnchainWallets?,
     private val lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
     private val wavelengthRepository: GroupWavelengthRepository = GroupWavelengthRepository.NO_OP,
+    private val transferRepository: TransferRepository = TransferRepository.NO_OP,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -119,6 +122,8 @@ class GroupPayoutsViewModel(
                 wavelengthPaysLightning = wavelengthPaysLightning,
                 wavelengthPaysOnchain = wavelengthPaysOnchain,
                 wavelengthInWalletSat = wavelengthInWallet,
+                transfersWaiting = waitingTransfers(),
+                canAskTransfer = transferRepository.canAsk(),
             )
             uiState = loaded
 
@@ -129,6 +134,47 @@ class GroupPayoutsViewModel(
             }
             val states = wallet?.let { wallets?.walletFor(it.account, chatRoomId)?.state } ?: return@launch
             follow(loaded, states)
+        }
+    }
+
+    /** The transfers asked for in the room that the group hasn't recorded, nor their givers taken back, nor run out. */
+    private suspend fun waitingTransfers(): List<MemberTransfers.Asked> =
+        runCatching { transferRepository.requests(chatRoomId) }.getOrDefault(emptyList())
+            .filter { it.request.chain == chain && (it.state == MemberTransfers.State.WAITING || it.state == MemberTransfers.State.SIGNING) }
+
+    /** Rereads [GroupPayoutsUIState.Loaded.transfersWaiting], after a request is put to the group or taken back. */
+    private suspend fun refreshTransfers() {
+        val waiting = waitingTransfers()
+        withContext(Dispatchers.Main) { (uiState as? GroupPayoutsUIState.Loaded)?.let { uiState = it.copy(transfersWaiting = waiting) } }
+    }
+
+    /** Puts another member's waiting [asked] to the group from this device, which holds a share (`docs/member-transfers.md`, T10). */
+    fun putTransferToGroup(asked: MemberTransfers.Asked, onSuccess: (sessionId: String) -> Unit, onFailure: () -> Unit) {
+        val loaded = uiState as? GroupPayoutsUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { transferRepository.putToGroup(loaded.localChatRoom, asked.request) }.getOrNull()
+            refreshTransfers()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (session != null) onSuccess(session.id) else onFailure()
+            }
+        }
+    }
+
+    /** Takes back the active profile's own [asked], which the group hasn't recorded (T9). */
+    fun takeBackTransfer(asked: MemberTransfers.Asked, onSuccess: () -> Unit, onFailure: () -> Unit) {
+        val loaded = uiState as? GroupPayoutsUIState.Loaded ?: return
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val done = runCatching { transferRepository.withdraw(loaded.localChatRoom, asked.request) }.isSuccess
+            refreshTransfers()
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                if (done) onSuccess() else onFailure()
+            }
         }
     }
 
@@ -416,11 +462,13 @@ class GroupPayoutsViewModel(
             wallets: GroupOnchainWallets?,
             lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
             wavelengthRepository: GroupWavelengthRepository = GroupWavelengthRepository.NO_OP,
+            transferRepository: TransferRepository = TransferRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 GroupPayoutsViewModel(
                     activeUserPublicKey, chatRoomId, chain, initialUIState,
                     chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository, wavelengthRepository,
+                    transferRepository,
                 )
             }
         }

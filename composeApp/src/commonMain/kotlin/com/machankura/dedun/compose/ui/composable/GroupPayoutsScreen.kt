@@ -57,6 +57,22 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.managers.MemberBalances
+import com.machankura.dedun.compose.managers.MemberTransfers
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
+import com.machankura.dedun.compose.repository.TransferRepository
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupTransferRoute
+import com.machankura.dedun.compose.wallet.MemberTransferRollout
+import dedun.composeapp.generated.resources.asked_the_group_to_record_your_transfer
+import dedun.composeapp.generated.resources.being_signed
+import dedun.composeapp.generated.resources.put_to_the_group
+import dedun.composeapp.generated.resources.received_s_sats_from_members
+import dedun.composeapp.generated.resources.s_asks_to_transfer_s_sats_of_their_s_balance_to_s
+import dedun.composeapp.generated.resources.take_back
+import dedun.composeapp.generated.resources.took_back_your_transfer
+import dedun.composeapp.generated.resources.transfer_from_s_to_a_member
+import dedun.composeapp.generated.resources.transfer_note_s
+import dedun.composeapp.generated.resources.transferred_s_sats_to_members
+import dedun.composeapp.generated.resources.transfers_waiting
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.FrostSigningRepository
@@ -139,6 +155,7 @@ fun GroupPayoutsScreen(
     wallets: GroupOnchainWallets?,
     lightningRepository: GroupLightningRepository = GroupLightningRepository.NO_OP_GROUP_LIGHTNING_REPOSITORY,
     wavelengthRepository: GroupWavelengthRepository = GroupWavelengthRepository.NO_OP,
+    transferRepository: TransferRepository = TransferRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
@@ -146,6 +163,7 @@ fun GroupPayoutsScreen(
         factory = GroupPayoutsViewModel.factory(
             activeUserPublicKey, chatRoomId, chain, initialUIState,
             chatRepository, frostSigningRepository, payoutRepository, payoutDestinationRepository, wallets, lightningRepository, wavelengthRepository,
+            transferRepository,
         )
     )
     LaunchedEffect(chatRoomId, chain) {
@@ -154,6 +172,8 @@ fun GroupPayoutsScreen(
     val notify = rememberNotifier(rememberCoroutineScope())
     val asked = stringResource(Res.string.asked_the_group_to_pay_out)
     val couldNotAsk = stringResource(Res.string.couldn_t_ask_the_group)
+    val tookBack = stringResource(Res.string.took_back_your_transfer)
+    val askedToRecord = stringResource(Res.string.asked_the_group_to_record_your_transfer)
     var lightningProblem by remember { mutableStateOf<GroupPayoutsViewModel.LightningProblem?>(null) }
     lightningProblem?.let { problem ->
         val text = when (problem) {
@@ -211,6 +231,16 @@ fun GroupPayoutsScreen(
                                 balance = balance,
                                 name = name(balance.member),
                                 isSelf = balance.member == state.self,
+                                // Your own row offers to transfer what you hold, on each rail it is offered on (docs/member-transfers.md).
+                                transferRails = if (balance.member == state.self && state.canAskTransfer) transferRailsOf(balance, chain) else emptyList(),
+                                onTransfer = { rail ->
+                                    onNavigateToRoute(
+                                        GroupTransferRoute(
+                                            activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, rail = rail.wire,
+                                            chain = GroupWalletStatementEvent.chainName(chain),
+                                        )
+                                    )
+                                },
                                 selected = balance.member in viewModel.selected,
                                 onToggle = if (selectable) { { viewModel.toggle(balance.member) } } else null,
                                 onSetMine = {
@@ -269,6 +299,32 @@ fun GroupPayoutsScreen(
                             )
                             HorizontalDivider()
                         }
+                        if (state.transfersWaiting.isNotEmpty()) {
+                            item { Text(stringResource(Res.string.transfers_waiting), style = MaterialTheme.typography.titleMedium) }
+                            items(state.transfersWaiting, key = { "transfer:" + it.request.id }) { asked ->
+                                TransferWaitingRow(
+                                    asked = asked,
+                                    name = ::name,
+                                    // Somebody who holds a share puts a request to the group; the giver's own device did already.
+                                    onPutToGroup = if (state.canSign && asked.state == MemberTransfers.State.WAITING && !viewModel.isActionPending.value) {
+                                        {
+                                            viewModel.putTransferToGroup(
+                                                asked = asked,
+                                                onSuccess = { sessionId ->
+                                                    notify(askedToRecord)
+                                                    onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId))
+                                                },
+                                                onFailure = { notify(couldNotAsk) },
+                                            )
+                                        }
+                                    } else null,
+                                    onTakeBack = if (asked.request.giver.equals(state.self, ignoreCase = true) && state.canAskTransfer && !viewModel.isActionPending.value) {
+                                        { viewModel.takeBackTransfer(asked, onSuccess = { notify(tookBack) }, onFailure = { notify(couldNotAsk) }) }
+                                    } else null,
+                                )
+                                HorizontalDivider()
+                            }
+                        }
                         if (state.balances.unownedSat > 0) {
                             item {
                                 ListItem(
@@ -318,6 +374,9 @@ private fun MemberPayoutRow(
     isSelf: Boolean,
     selected: Boolean,
     onToggle: (() -> Unit)?,
+    /** The rails this member can transfer from, on their own row only (`docs/member-transfers.md`, Phase 4). */
+    transferRails: List<TransferRequestEvent.Rail> = emptyList(),
+    onTransfer: (TransferRequestEvent.Rail) -> Unit = {},
     onSetMine: () -> Unit,
     /** The Lightning payout this member's balance makes, as (amount, fee limit) in msat, or null where there is none to offer. */
     lightningOffer: Pair<Long, Long>?,
@@ -373,14 +432,32 @@ private fun MemberPayoutRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (balance.lightning.depositedMsat > 0) {
+                // A member may hold a balance they never deposited: what others transferred to them.
+                if (balance.lightning.depositedMsat > 0 || balance.lightning.transferredMsat != 0L) {
                     Text(stringResource(Res.string.lightning_s_sats, Satoshi(balance.lightning.availableMsat / 1000).grouped()), style = MaterialTheme.typography.bodyMedium)
                 }
-                if (balance.wavelength.depositedSat > 0) {
+                if (balance.wavelength.depositedSat > 0 || balance.wavelength.receivedSat > 0) {
                     Text(stringResource(Res.string.wavelength_s_sats, Satoshi(balance.wavelength.availableSat).grouped()), style = MaterialTheme.typography.bodyMedium)
+                    if (balance.wavelength.receivedSat > 0) {
+                        Text(
+                            stringResource(Res.string.received_s_sats_from_members, Satoshi(balance.wavelength.receivedSat).grouped()),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (balance.wavelength.givenSat > 0) {
+                        Text(
+                            stringResource(Res.string.transferred_s_sats_to_members, Satoshi(balance.wavelength.givenSat).grouped()),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             if (onToggle != null) Checkbox(checked = selected, onCheckedChange = null)
+        }
+        transferRails.forEach { rail ->
+            TextButton(onClick = { onTransfer(rail) }) {
+                Text(stringResource(Res.string.transfer_from_s_to_a_member, stringResource(railNameOf(rail))))
+            }
         }
         // The member's own row asks for the address it can't be paid without (D7).
         if (isSelf && !balance.hasOnchainAddress && balance.onchainConfirmedSat > 0) {
@@ -574,4 +651,42 @@ private fun PayoutPreview(
 @Composable
 private fun ProblemText(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+}
+
+/**
+ * The rails [balance]'s member can transfer from on [chain]: where transfers are offered (`MemberTransferRollout`) and they
+ * hold at least the least a transfer moves. The onchain rail's transfers name coins, and its screen comes later.
+ */
+internal fun transferRailsOf(balance: MemberBalances.MemberBalance, chain: Chain): List<TransferRequestEvent.Rail> =
+    listOfNotNull(
+        TransferRequestEvent.Rail.WAVELENGTH.takeIf { balance.wavelength.netSat >= TransferRequestEvent.MIN_TRANSFER_SAT },
+        TransferRequestEvent.Rail.LIGHTNING.takeIf { balance.lightning.availableMsat / 1000 >= TransferRequestEvent.MIN_TRANSFER_SAT },
+    ).filter { MemberTransferRollout.offers(chain, it) }
+
+/** A transfer a member asked for that the group hasn't recorded: who, how much, to whom, and what this device can do about it. */
+@Composable
+private fun TransferWaitingRow(
+    asked: MemberTransfers.Asked,
+    name: (HexKey) -> String,
+    onPutToGroup: (() -> Unit)?,
+    onTakeBack: (() -> Unit)?,
+) {
+    val request = asked.request
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space50)) {
+        Text(
+            stringResource(
+                Res.string.s_asks_to_transfer_s_sats_of_their_s_balance_to_s,
+                name(request.giver), Satoshi(request.amountSat).grouped(), stringResource(railNameOf(request.rail)), name(request.receiver),
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        request.note?.let { Text(stringResource(Res.string.transfer_note_s, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (asked.state == MemberTransfers.State.SIGNING) {
+            Text(stringResource(Res.string.being_signed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            onPutToGroup?.let { TextButton(onClick = it) { Text(stringResource(Res.string.put_to_the_group)) } }
+            onTakeBack?.let { TextButton(onClick = it) { Text(stringResource(Res.string.take_back)) } }
+        }
+    }
 }

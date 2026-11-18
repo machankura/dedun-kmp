@@ -31,6 +31,28 @@ statement is carried whole. The transfer request is built the same way.
 **Planned, not built.** Written on 18 November 2026 against `f4752156`, database
 schema v45. The file and line references below are as they stood then.
 
+### Where the build stands
+
+| phase | state |
+|---|---|
+| 0 | done: S1, S2 and S4 answered from the code; S3 not run, since no emulator was up |
+| 1 | done: `TransferRequestEvent`, `MemberTransferEvent`, `TransferLedger` |
+| 2 | done: every balance counts transfers; transcript lines; the chronicle carries 30343 |
+| 3 | done, after an adversarial review that added T15: `MemberTransfers.request`, `putToGroup`, `withdraw`, `refuse`, both hooks |
+| 4 | done: `GroupTransferScreen`, the payouts screen's offers and *Transfers waiting*, the approval summary |
+
+**Where the build chose differently from the plan:**
+
+| the plan said | what was built |
+|---|---|
+| T5: the amount in Wavelength ledger sats, checked against `net(giver)` | against the smaller of that and T15's capacity from signed records, so no honest transfer is one some device voids |
+| Phase 2: `netsOf` sums every signed transfer | T15: applies them in order and voids what the giver can't cover, or what was signed outside the request's window. The change landed with Phase 3, where the review found it |
+| T9: a withdrawal stops a session over it | it declines a session somebody else put to the group, on the giver's device. A session the giver proposed already counts their approval, and only the other signers' refusal at approval stops it |
+| Phase 4: *Transfers waiting* on the room's detail screen | on the payouts screen, beside the balances it changes, with *Put to the group* and *Take back*. The detail screen already opens the payouts screen |
+| Phase 4 and T14: transfer entries in the Wavelength history, the export and the receipt | **not built.** The history is built from rows this device signed and the operator's claims, each entry kind has its own detail sheet and filter, and a transfer moves nothing in the wallet. The payouts row says what a member received and gave, and the transcript records every transfer. Putting transfers in the history is a follow-up |
+| Phase 4: the Wavelength balance card's disclosure says what was received and given | **not built**, for the same reason: the card is the wallet's, and a transfer is the members'. The payouts row says it |
+| the form's preview: what the receiver will hold, on the ledger | what arrives by this device's count, with the ledger figure under it when the wallet holds less than the balances add up to (T5) |
+
 ---
 
 ## What is already there

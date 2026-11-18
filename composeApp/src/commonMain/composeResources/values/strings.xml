@@ -1532,4 +1532,32 @@
     <string name="group_wavelength_address_paid_confirming">On the chain and confirming. It joins the wallet in a round once it is deep enough and enough of the group's devices are online. Ask for another address to keep your deposits apart.</string>
     <string name="this_invoice_expired">This invoice expired</string>
     <string name="an_expired_invoice_cannot_be_paid_ask_for_another">Nobody can pay it now. Ask for another to be paid this amount.</string>
+    <!-- docs/member-transfers.md -->
+    <string name="transfer_to_a_member">Transfer to a member</string>
+    <string name="transfer_moves_part_of_your_s_balance">Moves part of your %1$s balance to another member. Nothing leaves the wallet, and no fee is paid.</string>
+    <string name="you_have_s_sats_to_transfer">You have %1$s sats to transfer</string>
+    <string name="transfer_to">To</string>
+    <string name="hasn_t_started_depositing_here">Hasn't started depositing here</string>
+    <string name="transfer_everything">Everything</string>
+    <string name="transfer_amount">Amount</string>
+    <string name="note_optional">Note (optional)</string>
+    <string name="a_transfer_is_at_least_s_sats">A transfer is at least %1$s sats</string>
+    <string name="s_sats_more_than_you_have">%1$s sats more than you have</string>
+    <string name="s_will_hold_s_sats_more_in_the_s_wallet">%1$s will hold %2$s sats more in the %3$s wallet. Nothing leaves the wallet, and no fee is paid.</string>
+    <string name="on_the_group_s_ledger_that_is_s_sats">On the group's ledger that is %1$s sats: the wallet holds less than its members' balances add up to, and everyone shares the difference.</string>
+    <string name="ask_the_group_to_record_it">Ask the group to record it</string>
+    <string name="asked_the_group_to_record_your_transfer">Asked the group to record your transfer</string>
+    <string name="you_have_nothing_to_transfer_in_this_wallet">You have nothing to transfer in this wallet</string>
+    <string name="this_profile_can_t_sign_a_transfer">This profile can't sign a transfer. Sign in with your key to make one.</string>
+    <string name="rail_wavelength">Wavelength</string>
+    <string name="rail_lightning">Lightning</string>
+    <string name="rail_onchain">onchain</string>
+    <string name="transfer_from_s_to_a_member">Transfer from %1$s to a member</string>
+    <string name="received_s_sats_from_members">Includes %1$s sats received from members</string>
+    <string name="transferred_s_sats_to_members">%1$s sats transferred to members</string>
+    <string name="transfers_waiting">Transfers waiting</string>
+    <string name="s_asks_to_transfer_s_sats_of_their_s_balance_to_s">%1$s asks to transfer %2$s sats of their %3$s balance to %4$s</string>
+    <string name="take_back">Take back</string>
+    <string name="took_back_your_transfer">Took back your transfer</string>
+    <string name="transfer_note_s">“%1$s”</string>
 </resources>

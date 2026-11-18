@@ -9,6 +9,10 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupAssignC
 import com.machankura.dedun.compose.ui.composable.GroupAssignCoinsScreen
 import com.machankura.dedun.compose.database.model.IcebergKeySession
 import com.machankura.dedun.compose.database.repository.DatabasePayoutRepository
+import com.machankura.dedun.compose.database.repository.DatabaseTransferRepository
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
+import com.machankura.dedun.compose.ui.composable.GroupTransferScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupTransferRoute
 import com.machankura.dedun.compose.database.repository.DatabaseDepositRepository
 import com.machankura.dedun.compose.managers.Depositors
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -330,6 +334,13 @@ fun DedunNavHost(
     // Whose each coin is, and paying members out: docs/payouts-only.md.
     val databasePayoutRepository = remember {
         DatabasePayoutRepository(
+            database = auxDatabaseManager.auxDatabase,
+            activeIdentity = sovereignWalletViewModel.activeIdentity,
+        )
+    }
+
+    val databaseTransferRepository = remember {
+        DatabaseTransferRepository(
             database = auxDatabaseManager.auxDatabase,
             activeIdentity = sovereignWalletViewModel.activeIdentity,
         )
@@ -1833,6 +1844,23 @@ fun DedunNavHost(
                     wallets = groupOnchainWallets,
                     lightningRepository = databaseGroupLightningRepository,
                     wavelengthRepository = databaseGroupWavelengthRepository,
+                    transferRepository = databaseTransferRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<GroupTransferRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupTransferRoute>()
+
+                GroupTransferScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    rail = TransferRequestEvent.Rail.named(route.rail) ?: TransferRequestEvent.Rail.WAVELENGTH,
+                    chatRepository = databaseChatRepository,
+                    transferRepository = databaseTransferRepository,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()
