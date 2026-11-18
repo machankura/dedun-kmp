@@ -3,17 +3,17 @@ package com.machankura.dedun.compose.database.model
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.PrimaryKey
-import com.machankura.dedun.compose.database.model.traits.BroadcastableEntity
-import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
-import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
-import com.machankura.dedun.compose.database.model.traits.TimestampedEntity
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.machankura.dedun.compose.managers.roomRelays
-import com.vitorpamplona.quartz.marmot.mls.tree.Credential
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.tree.Credential
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.database.model.traits.BroadcastableEntity
+import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
+import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
+import com.machankura.dedun.compose.database.model.traits.TimestampedEntity
+import com.machankura.dedun.compose.managers.roomRelays
 
 /**
  * Derived from kind14/15 tags

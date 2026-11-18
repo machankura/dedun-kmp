@@ -1,8 +1,18 @@
 package com.machankura.dedun.compose.database.dao
 
 import androidx.room3.Room
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -12,18 +22,9 @@ import com.machankura.dedun.compose.database.model.MarmotKeyPackage
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.exceptions.MarmotMissingChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.Relays
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
-import com.machankura.dedun.compose.exceptions.MarmotMissingChatGroupException
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * The membership guards on [MarmotOutboundDao].
@@ -122,6 +123,7 @@ class MarmotOutboundDaoJvmTest {
                     outboxRelays = Relays.DefaultDMRelayList.map { it.url },
                 ).toExtension()
             ),
+            policy = MarmotGroupPolicy,
         )
         val chatRoom = stateless.chatRoom.copy(
             mlsGroupState = mlsGroup.saveState().encodeTls().toHex()

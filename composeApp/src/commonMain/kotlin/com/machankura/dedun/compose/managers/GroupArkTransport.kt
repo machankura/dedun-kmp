@@ -14,7 +14,7 @@ import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkAuth
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupArkSigner
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.utils.RandomInstance
+import com.vitorpamplona.crypto.random.RandomInstance
 import engineering.lightning.wavelength.SignerHost
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32

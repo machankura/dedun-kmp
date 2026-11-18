@@ -1,15 +1,16 @@
 package com.machankura.dedun.compose.managers
 
 import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.marmot.GroupEventResult
-import com.vitorpamplona.quartz.marmot.MarmotInboundProcessor
-import com.vitorpamplona.quartz.marmot.MarmotOutboundProcessor
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRotationManager
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroupManager
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroupState
-import com.vitorpamplona.quartz.marmot.protocolCore.MarmotPublishGate
-import com.vitorpamplona.quartz.marmot.protocolCore.PublishOutcome
+import com.vitorpamplona.marmot.GroupEventResult
+import com.vitorpamplona.marmot.MarmotInboundProcessor
+import com.vitorpamplona.marmot.MarmotOutboundProcessor
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.groups.MlsGroupManager
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageRotationManager
+import com.vitorpamplona.marmot.protocolCore.MarmotPublishGate
+import com.vitorpamplona.marmot.protocolCore.PublishOutcome
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.group.MlsGroupState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,7 +111,7 @@ class MarmotEngine(
         ensureRestored()
         groupManager.getGroup(routingId)?.let { return it }
         val bytes = store.load(routingId) ?: return null
-        val group = MlsGroup.restore(MlsGroupState.decodeTls(bytes))
+        val group = MlsGroup.restore(MlsGroupState.decodeTls(bytes), MarmotGroupPolicy)
         groupManager.adoptGroup(routingId, group)
         inbound.trackGroup(routingId)
         return group

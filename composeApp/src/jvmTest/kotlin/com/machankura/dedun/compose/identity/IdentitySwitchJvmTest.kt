@@ -1,11 +1,14 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import androidx.room3.Room
 import co.touchlab.kermit.Logger
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.lightning.Lightning
 import fr.acinq.phoenix.PhoenixBusiness
 import fr.acinq.phoenix.PhoenixGlobal
+import fr.acinq.phoenix.data.EmptyWalletId
 import fr.acinq.phoenix.data.WalletId
 import fr.acinq.phoenix.jvm.BusinessManager
 import fr.acinq.phoenix.managers.DataStoreManager
@@ -15,6 +18,16 @@ import fr.acinq.phoenix.security.JvmKeyStore
 import fr.acinq.phoenix.utils.PlatformContext
 import com.machankura.dedun.compose.cancelAndWait
 import com.machankura.dedun.compose.extensions.getGlobalPrefs
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,17 +46,6 @@ import com.machankura.dedun.compose.ui.view.model.NotaryViewModel
 import com.machankura.dedun.compose.ui.view.model.SovereignWalletViewModel
 import com.machankura.dedun.compose.ui.view.state.NavigationUIState
 import com.machankura.dedun.compose.ui.view.state.StartupChoice
-import fr.acinq.phoenix.data.EmptyWalletId
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Clock
 
 /**
  * A switch, end to end -- Phase 2 of docs/multiple-profiles.md -- through the real

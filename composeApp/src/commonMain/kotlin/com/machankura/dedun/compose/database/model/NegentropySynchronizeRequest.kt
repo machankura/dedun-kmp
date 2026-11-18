@@ -4,15 +4,15 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
-import com.machankura.dedun.compose.network.serialization.encodeToJsonString
+import com.vitorpamplona.crypto.sha2.sha256
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.utils.sha256.sha256
 import io.ktor.utils.io.core.toByteArray
 import kotlin.math.ceil
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import com.machankura.dedun.compose.network.serialization.encodeToJsonString
 
 @OptIn(ExperimentalUuidApi::class)
 @Entity(

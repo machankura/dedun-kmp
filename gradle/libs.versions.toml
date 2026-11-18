@@ -12,6 +12,12 @@ androidx-testExt = "1.3.0"
 coilCompose = "3.5.0"
 composeHotReload = "1.2.0"
 composeMultiplatform = "1.11.1"
+# SHA, HMAC, HKDF, AES, ChaCha20, X25519, Ed25519 and RandomInstance
+# (vitorpamplona/crypto-kmp). It arrives transitively under both quartz 2.x and mls-kmp,
+# and is declared because the app's source names it in 27 places: the two curves the
+# KeyPackage fixtures generate keys with, `RandomInstance.bytes` and `sha256`. Keep it at
+# the newer of the versions quartz and mls-kmp ask for, which is what gradle resolves anyway.
+cryptoKmp = "2.1.0"
 datastorePreferences = "1.2.1"
 junit = "4.13.2"
 kermit = "2.1.0"
@@ -22,6 +28,15 @@ kotlinxSerialization = "1.11.0"
 ksp = "2.3.6"
 ktor = "3.5.2"
 lightningKmpCore = "1.11.5"
+# Marmot (MIP-00..05), the three processors, convergence, the publish gate, the app
+# components and the KeyPackage managers (vitorpamplona/marmot-kmp). This is quartz's
+# former `marmot` package: 2.3.0 dropped the engine and kept only the event classes.
+# See docs/marmot-kmp.md.
+marmot = "2.2.1"
+# The RFC 9420 MLS engine (vitorpamplona/mls-kmp), which is quartz's former
+# `marmot.mls` package. Pinned by marmot 2.2.1 and named here so the catalog says
+# which engine reads the group state on every device.
+mls = "1.3.0"
 material3 = "1.10.0-alpha05"
 # The version material3 1.10.0-alpha05 itself resolves: its
 # material3-adaptive-navigation-suite pom asks for adaptive 1.2.0. Picking the newer
@@ -34,7 +49,12 @@ materialIconsExtended = "1.7.3"
 navigationCompose = "2.9.2"
 okio = "3.18.1"
 qrose = "1.1.2"
-quartz = "1.15.2"
+# Not the newest published (2.15.1): the version marmot 2.2.1 was compiled and tested
+# against. A quartz that moved an API marmot-kmp calls gives a NoSuchMethodError at run
+# time rather than a compile error, and gradle resolves to the highest of what is asked
+# for -- so this number has to be deliberate. Moving both forward is its own change, with
+# marmot-kmp's CI as the evidence. docs/marmot-kmp.md, D2.
+quartz = "2.7.3"
 room3 = "3.0.1"
 sqldelight = "2.3.2"
 sqlite = "2.7.0"
@@ -94,6 +114,9 @@ sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-ex
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+vitorpamplona-crypto = { module = "com.vitorpamplona.crypto:crypto", version.ref = "cryptoKmp" }
+vitorpamplona-marmot = { module = "com.vitorpamplona.marmot:marmot", version.ref = "marmot" }
+vitorpamplona-mls = { module = "com.vitorpamplona.mls:mls", version.ref = "mls" }
 vitorpamplona-quartz = { module = "com.vitorpamplona.quartz:quartz", version.ref = "quartz" }
 
 [plugins]

@@ -1,18 +1,20 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.appComponents.GroupProfileV1
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.crypto.Ed25519
-import com.vitorpamplona.quartz.marmot.mls.components.AppDataDictionary
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.vitorpamplona.quartz.marmot.mls.messages.MlsKeyPackage
+import com.vitorpamplona.crypto.curve25519.Ed25519
+import com.vitorpamplona.crypto.random.RandomInstance
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.appComponents.GroupProfileV1
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.mls.components.AppDataDictionary
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.messages.MlsKeyPackage
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
-import com.vitorpamplona.quartz.utils.RandomInstance
 import com.machankura.dedun.compose.nostr.MarmotProfile
 
 /**
@@ -78,6 +80,7 @@ object MarmotGroupFactory {
                     identity = creatorHex.hexToByteArray(),
                     signingKey = Ed25519.generateKeyPair().privateKey,
                     initialExtensions = listOf(metadata.toExtension()),
+                    policy = MarmotGroupPolicy,
                 )
                 Created(group = group, routingId = roomId, profile = profile)
             }

@@ -1,18 +1,25 @@
 package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.groups.currentMarmotData
+import com.vitorpamplona.marmot.groups.currentNostrGroupId
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
-import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.NostrEvent
@@ -20,9 +27,6 @@ import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.MarmotProfile
-import kotlin.test.assertNotEquals
-import kotlin.test.assertNull
-import kotlin.time.Clock
 
 /**
  * What the device that *creates* a room knows about it afterwards.

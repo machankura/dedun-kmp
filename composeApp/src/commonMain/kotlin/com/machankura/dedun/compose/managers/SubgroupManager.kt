@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.nostr.subgroup.isDecided
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.DedunDatabase

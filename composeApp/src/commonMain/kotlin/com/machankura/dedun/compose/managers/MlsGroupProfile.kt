@@ -1,6 +1,9 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.groups.currentMarmotData
+import com.vitorpamplona.marmot.groups.currentNostrGroupId
+import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.extensions.toHex
 

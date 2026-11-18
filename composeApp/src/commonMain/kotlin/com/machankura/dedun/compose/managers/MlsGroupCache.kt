@@ -1,10 +1,10 @@
 package com.machankura.dedun.compose.managers
 
 import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.machankura.dedun.compose.extensions.toHex
+import com.vitorpamplona.mls.group.MlsGroup
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.machankura.dedun.compose.extensions.toHex
 
 /**
  * Keeps a room's [MlsGroup] alive between messages instead of rebuilding it

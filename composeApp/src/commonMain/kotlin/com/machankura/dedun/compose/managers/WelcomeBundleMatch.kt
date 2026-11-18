@@ -1,10 +1,10 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsReader
-import com.vitorpamplona.quartz.marmot.mls.framing.MlsMessage
-import com.vitorpamplona.quartz.marmot.mls.framing.WireFormat
-import com.vitorpamplona.quartz.marmot.mls.messages.Welcome
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.mls.codec.TlsReader
+import com.vitorpamplona.mls.framing.MlsMessage
+import com.vitorpamplona.mls.framing.WireFormat
+import com.vitorpamplona.mls.messages.Welcome
 
 /**
  * Which of this device's KeyPackage bundles a Welcome is addressed to.

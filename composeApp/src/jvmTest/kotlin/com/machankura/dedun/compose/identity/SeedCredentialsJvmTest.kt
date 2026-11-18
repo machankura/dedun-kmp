@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import co.touchlab.kermit.Logger
 import fr.acinq.bitcoin.MnemonicCode
 import fr.acinq.bitcoin.byteVector

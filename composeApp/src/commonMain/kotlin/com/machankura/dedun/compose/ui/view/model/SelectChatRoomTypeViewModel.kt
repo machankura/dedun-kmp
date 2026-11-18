@@ -1,6 +1,5 @@
 package com.machankura.dedun.compose.ui.view.model
 
-import com.machankura.dedun.compose.nostr.MarmotProfile
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -11,25 +10,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.machankura.dedun.compose.database.model.Profile
-import com.machankura.dedun.compose.database.model.types.ChatRoomType
-import com.machankura.dedun.compose.extensions.toHex
-import com.machankura.dedun.compose.managers.MarmotGroupFactory
-import com.machankura.dedun.compose.managers.MarmotGroupName
-import com.machankura.dedun.compose.nostr.Relays
-import com.machankura.dedun.compose.repository.ChatRepository
-import com.machankura.dedun.compose.repository.DkgRepository
-import com.machankura.dedun.compose.repository.NostrRepository
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomMessagingRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
-import com.machankura.dedun.compose.ui.view.state.SelectChatRoomTypeUIState
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
-import com.vitorpamplona.quartz.utils.RandomInstance
-import com.machankura.dedun.compose.identity.Identity
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
@@ -41,7 +27,21 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration.Companion.seconds
+import com.machankura.dedun.compose.database.model.Profile
+import com.machankura.dedun.compose.database.model.types.ChatRoomType
+import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.identity.Identity
+import com.machankura.dedun.compose.managers.MarmotGroupFactory
+import com.machankura.dedun.compose.managers.MarmotGroupName
+import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.nostr.Relays
+import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.repository.DkgRepository
+import com.machankura.dedun.compose.repository.NostrRepository
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomMessagingRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
+import com.machankura.dedun.compose.ui.view.state.SelectChatRoomTypeUIState
 
 /**
  * Last step of group creation: how the group should be run, and then actually

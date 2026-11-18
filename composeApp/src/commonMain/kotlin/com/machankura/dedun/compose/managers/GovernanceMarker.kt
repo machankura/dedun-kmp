@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.mls.group.MlsGroup
 
 /**
  * The line in a keyed room's profile description that says its changes need the

@@ -1,18 +1,21 @@
 package com.machankura.dedun.compose.database.repository
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.appComponents.AppComponentIds
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.appComponents.GroupProfileV1
-import com.vitorpamplona.quartz.marmot.appComponents.accountIdentityProof.AccountIdentityProofV2
+import com.vitorpamplona.crypto.random.RandomInstance
+import com.vitorpamplona.marmot.appComponents.AppComponentIds
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.appComponents.GroupProfileV1
+import com.vitorpamplona.marmot.appComponents.accountIdentityProof.AccountIdentityProofV2
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.marmot.mip01Groups.MlsCiphersuite
+import com.vitorpamplona.mls.codec.TlsReader
+import com.vitorpamplona.mls.components.AppDataDictionary
+import com.vitorpamplona.mls.messages.MlsKeyPackage
+import com.vitorpamplona.mls.tree.Credential
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
-import com.vitorpamplona.quartz.marmot.mip01Groups.MlsCiphersuite
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsReader
-import com.vitorpamplona.quartz.marmot.mls.components.AppDataDictionary
-import com.vitorpamplona.quartz.marmot.mls.messages.MlsKeyPackage
-import com.vitorpamplona.quartz.marmot.mls.tree.Credential
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
@@ -21,7 +24,13 @@ import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
 import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import com.vitorpamplona.quartz.utils.RandomInstance
+import kotlin.io.encoding.Base64
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -31,13 +40,6 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
-import kotlin.io.encoding.Base64
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
-import kotlin.time.Instant
 
 /**
  * This identity's own KeyPackages, on both profiles, and the join they make possible.

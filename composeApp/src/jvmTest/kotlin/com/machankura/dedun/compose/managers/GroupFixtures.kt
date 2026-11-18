@@ -11,9 +11,9 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.crypto.Ed25519
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.crypto.curve25519.Ed25519
+import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.NostrEvent
@@ -21,12 +21,14 @@ import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.ByteVector64
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.crypto.frost.Frost
 import fr.acinq.bitcoin.crypto.frost.IndividualNonce
@@ -34,7 +36,6 @@ import fr.acinq.bitcoin.crypto.frost.KeyMaterial
 import fr.acinq.bitcoin.crypto.frost.SecretNonce
 import fr.acinq.bitcoin.crypto.frost.Session
 import fr.acinq.bitcoin.crypto.frost.TweakCache
-import fr.acinq.bitcoin.ByteVector64
 import kotlin.time.Instant
 
 /**
@@ -183,7 +184,7 @@ internal object GroupFixtures {
             adminPubkeys = members + owner,
             relays = Relays.DefaultDMRelayList.map { it.url },
         )
-        val mlsGroup = MlsGroup.create(KeyPair().pubKey, Ed25519.generateKeyPair().privateKey, listOf(metadata.toExtension()))
+        val mlsGroup = MlsGroup.create(KeyPair().pubKey, Ed25519.generateKeyPair().privateKey, listOf(metadata.toExtension()), policy = MarmotGroupPolicy)
         db.chatRoomDao().upsert(
             ChatRoom(id = roomId, userPublicKey = owner, subject = subject, description = metadata.description, mlsGroupState = mlsGroup.saveState().encodeTls().toHex())
         )

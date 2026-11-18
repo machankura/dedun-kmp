@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import co.touchlab.kermit.Logger
@@ -48,8 +50,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import com.machankura.dedun.compose.nostr.MarmotProfile
 import kotlin.time.Instant
+import kotlinx.coroutines.cancel
+import com.machankura.dedun.compose.nostr.MarmotProfile
 
 /**
  * The preview, end to end, and then the upgrade -- Phase 7 of docs/npub-sign-in.md.

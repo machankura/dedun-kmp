@@ -1,8 +1,13 @@
 package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsWriter
-import com.vitorpamplona.quartz.marmot.mls.group.RetainedEpochSecrets
+import com.vitorpamplona.mls.codec.TlsWriter
+import com.vitorpamplona.mls.group.RetainedEpochSecrets
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -11,11 +16,6 @@ import com.machankura.dedun.compose.database.model.MarmotRouting
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.extensions.toHex
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 /**
  * The library's store contract over the app's tables: keyed by routing address,

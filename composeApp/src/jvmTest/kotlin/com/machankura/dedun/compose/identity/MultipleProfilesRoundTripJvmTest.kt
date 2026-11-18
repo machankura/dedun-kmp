@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import androidx.room3.Room
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.lightning.Lightning
@@ -15,6 +17,16 @@ import fr.acinq.phoenix.managers.nostrPublicKeyHex
 import fr.acinq.phoenix.security.JvmKeyStore
 import fr.acinq.phoenix.security.NostrCredential
 import fr.acinq.phoenix.utils.PlatformContext
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,16 +54,6 @@ import com.machankura.dedun.compose.ui.view.model.seedProfileWriter
 import com.machankura.dedun.compose.ui.view.state.CreateProfileUIState
 import com.machankura.dedun.compose.ui.view.state.NavigationUIState
 import com.machankura.dedun.compose.ui.view.state.StartupChoice
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Clock
 
 /**
  * Several profiles, both ways, and a boot -- Phase 8 of docs/multiple-profiles.md, the

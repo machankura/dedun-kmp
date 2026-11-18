@@ -1,6 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
-import com.vitorpamplona.quartz.marmot.mls.messages.CommitResult
+import com.vitorpamplona.mls.messages.CommitResult
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals

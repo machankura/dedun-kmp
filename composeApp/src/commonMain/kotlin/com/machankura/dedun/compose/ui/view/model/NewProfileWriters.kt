@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import fr.acinq.bitcoin.MnemonicCode
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.lightning.Lightning

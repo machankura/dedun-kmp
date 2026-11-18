@@ -1,15 +1,14 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.groups.currentMarmotData
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
-import kotlinx.coroutines.runBlocking
-import com.machankura.dedun.compose.database.dao.marmotKeyPackageFor
-import com.machankura.dedun.compose.nostr.MarmotProfile
-import com.machankura.dedun.compose.nostr.Relays
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -17,6 +16,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.database.dao.marmotKeyPackageFor
+import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.nostr.Relays
 
 /**
  * The one place a Marmot group is minted, on either profile. docs/marmot-v2.md, Phase 4.

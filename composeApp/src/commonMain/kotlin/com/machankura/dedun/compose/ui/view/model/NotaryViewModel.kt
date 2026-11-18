@@ -4,19 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.machankura.dedun.compose.repository.MarmotRepository
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageFetcher
+import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageFetcher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
-import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
-import com.machankura.dedun.compose.nostr.SignInSync
-import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip51Lists.encryption.PrivateTagsInContent
-import com.machankura.dedun.compose.identity.Identity
+import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
@@ -27,8 +25,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.NostrEvent
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
+import com.machankura.dedun.compose.identity.Identity
+import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.nostr.SignInSync
+import com.machankura.dedun.compose.repository.MarmotRepository
 
 class NotaryViewModel(
     val activeIdentityStateFlow: StateFlow<Identity?>,

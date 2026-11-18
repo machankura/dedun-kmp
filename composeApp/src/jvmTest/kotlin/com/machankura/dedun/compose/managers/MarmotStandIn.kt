@@ -1,18 +1,19 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.MarmotInboundProcessor
-import com.vitorpamplona.quartz.marmot.MarmotOutboundProcessor
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.appComponents.GroupProfileV1
+import com.vitorpamplona.crypto.random.RandomInstance
+import com.vitorpamplona.marmot.MarmotInboundProcessor
+import com.vitorpamplona.marmot.MarmotOutboundProcessor
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.appComponents.GroupProfileV1
+import com.vitorpamplona.marmot.groups.MlsGroupManager
+import com.vitorpamplona.marmot.groups.MlsGroupStateStore
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageRotationManager
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.mls.messages.CommitResult
+import com.vitorpamplona.mls.messages.KeyPackageBundle
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRotationManager
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroupManager
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroupStateStore
-import com.vitorpamplona.quartz.marmot.mls.messages.CommitResult
-import com.vitorpamplona.quartz.marmot.mls.messages.KeyPackageBundle
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
@@ -21,16 +22,15 @@ import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
 import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealedRumorEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import com.vitorpamplona.quartz.utils.RandomInstance
+import kotlin.io.encoding.Base64
+import kotlin.test.assertNotNull
+import kotlin.time.Instant
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
-import kotlin.io.encoding.Base64
-import kotlin.test.assertNotNull
-import kotlin.time.Instant
 
 /**
  * Another Marmot client, played by quartz's own managers over a store that forgets

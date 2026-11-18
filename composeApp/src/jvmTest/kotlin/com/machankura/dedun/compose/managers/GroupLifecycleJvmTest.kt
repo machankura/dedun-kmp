@@ -1,14 +1,25 @@
 package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.GroupEventResult
+import com.vitorpamplona.marmot.GroupEventResult
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.mip03GroupMessages.GroupEventEncryption
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
-import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEventEncryption
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
+import kotlin.io.encoding.Base64
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -22,16 +33,6 @@ import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
 import com.machankura.dedun.compose.nostr.MarmotProfile
-import kotlin.io.encoding.Base64
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Instant
 
 /**
  * Leaving, removing and disbanding a current-profile room, with quartz's own

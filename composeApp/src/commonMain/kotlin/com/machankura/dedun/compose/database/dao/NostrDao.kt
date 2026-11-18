@@ -14,6 +14,36 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.managers.IcebergRitualManager
 import androidx.room3.Dao
 import androidx.room3.Transaction
+import co.touchlab.kermit.Logger
+import com.vitorpamplona.marmot.GroupEventResult
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.groups.currentMarmotData
+import com.vitorpamplona.marmot.groups.currentNostrGroupId
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.messages.KeyPackageBundle
+import com.vitorpamplona.mls.tree.Credential
+import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
+import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRelayListEvent
+import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
+import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
+import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.core.toHexKey
+import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
+import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
+import com.vitorpamplona.quartz.nip01Core.tags.events.taggedEvents
+import com.vitorpamplona.quartz.nip01Core.tags.people.taggedUsers
+import com.vitorpamplona.quartz.nip02FollowList.ContactListEvent
+import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
+import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
+import com.vitorpamplona.quartz.nip40Expiration.expiration
+import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
+import kotlin.io.encoding.Base64
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.coroutines.CancellationException
 import com.machankura.dedun.compose.database.GENESIS_AT
 import com.machankura.dedun.compose.database.model.BroadcastNostrEventRequest
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -23,6 +53,7 @@ import com.machankura.dedun.compose.database.model.Connection
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.MarmotGroupEvent
 import com.machankura.dedun.compose.database.model.MarmotKeyPackage
+import com.machankura.dedun.compose.database.model.MarmotRouting
 import com.machankura.dedun.compose.database.model.Mention
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.NostrEvent
@@ -42,49 +73,22 @@ import com.machankura.dedun.compose.exceptions.MarmotMissingNostrGroupDataExtens
 import com.machankura.dedun.compose.exceptions.MarmotNotMemberOfChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
+import com.machankura.dedun.compose.managers.CommitOrdering
+import com.machankura.dedun.compose.managers.FrostSigningManager
+import com.machankura.dedun.compose.managers.GroupKeyStateManager
+import com.machankura.dedun.compose.managers.MarmotEngine.Companion.inRoom
+import com.machankura.dedun.compose.managers.MarmotInboundManager
+import com.machankura.dedun.compose.managers.MarmotReindexSweep
+import com.machankura.dedun.compose.managers.MlsGroupCache
+import com.machankura.dedun.compose.managers.WelcomeBundleMatch
+import com.machankura.dedun.compose.managers.roomDescription
+import com.machankura.dedun.compose.managers.roomId
+import com.machankura.dedun.compose.managers.roomName
+import com.machankura.dedun.compose.managers.routingId
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
-import com.machankura.dedun.compose.managers.FrostSigningManager
-import com.machankura.dedun.compose.managers.GroupKeyStateManager
-import com.machankura.dedun.compose.managers.MlsGroupCache
-import com.machankura.dedun.compose.managers.MarmotInboundManager
-import com.machankura.dedun.compose.managers.MarmotReindexSweep
-import com.machankura.dedun.compose.managers.MarmotEngine.Companion.inRoom
-import com.machankura.dedun.compose.managers.WelcomeBundleMatch
-import com.machankura.dedun.compose.managers.roomDescription
-import com.machankura.dedun.compose.managers.roomName
-import com.machankura.dedun.compose.managers.roomId
-import com.machankura.dedun.compose.managers.routingId
-import com.machankura.dedun.compose.database.model.MarmotRouting
-import co.touchlab.kermit.Logger
-import kotlinx.coroutines.CancellationException
-import com.vitorpamplona.quartz.marmot.GroupEventResult
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRelayListEvent
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
-import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
-import com.machankura.dedun.compose.managers.CommitOrdering
-import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.vitorpamplona.quartz.marmot.mls.messages.KeyPackageBundle
-import com.vitorpamplona.quartz.marmot.mls.tree.Credential
-import com.vitorpamplona.quartz.nip01Core.core.Event
-import com.vitorpamplona.quartz.nip01Core.core.toHexKey
-import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
-import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
-import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
-import com.vitorpamplona.quartz.nip01Core.tags.events.taggedEvents
-import com.vitorpamplona.quartz.nip01Core.tags.people.taggedUsers
-import com.vitorpamplona.quartz.nip02FollowList.ContactListEvent
-import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
-import com.vitorpamplona.quartz.nip17Dm.settings.ChatMessageRelayListEvent
-import com.vitorpamplona.quartz.nip40Expiration.expiration
-import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import kotlin.io.encoding.Base64
-import kotlin.time.Clock
-import kotlin.time.Instant
 
 @Dao
 abstract class NostrDao(
@@ -790,7 +794,8 @@ abstract class NostrDao(
                                         initPrivateKey = initPrivateKey,
                                         signaturePrivateKey = signaturePrivateKey,
                                         encryptionPrivateKey = encryptionPrivateKey
-                                    )
+                                    ),
+                                    policy = MarmotGroupPolicy,
                                 )
                                 logger.d("Group: $group")
 

@@ -21,7 +21,7 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.wallet.PayoutAddress
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.utils.RandomInstance
+import com.vitorpamplona.crypto.random.RandomInstance
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.PublicKey
 import kotlin.time.Clock

@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -15,6 +17,15 @@ import fr.acinq.phoenix.managers.computePreferencePath
 import fr.acinq.phoenix.security.JvmKeyStore
 import fr.acinq.phoenix.utils.PlatformContext
 import fr.acinq.phoenix.utils.preferences.GlobalPrefs
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -30,16 +41,7 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalAccount
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.view.model.NavigationViewModel
 import com.machankura.dedun.compose.ui.view.state.NavigationUIState
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Instant
 
 /**
  * The path a user takes, end to end, with the network faked at the repository.

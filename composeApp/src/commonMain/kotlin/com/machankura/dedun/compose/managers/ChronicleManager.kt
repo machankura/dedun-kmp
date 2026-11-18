@@ -1,24 +1,24 @@
 package com.machankura.dedun.compose.managers
 
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.TagArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
-import com.vitorpamplona.quartz.utils.RandomInstance
 import com.vitorpamplona.quartz.utils.TimeUtils
+import kotlin.time.Clock
+import kotlin.time.Instant
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
 import com.machankura.dedun.compose.extensions.toHex
-import kotlin.time.Clock
-import kotlin.time.Instant
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
+import com.machankura.dedun.compose.nostr.chronicle.ChronicleKinds
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleRequestEvent
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
-import com.machankura.dedun.compose.nostr.chronicle.ChronicleKinds
 
 /**
  * Building the group's signed record into pages a member who lacks it can apply.

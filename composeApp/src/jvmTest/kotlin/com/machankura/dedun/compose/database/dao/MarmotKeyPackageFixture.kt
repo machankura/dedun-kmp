@@ -1,33 +1,34 @@
 package com.machankura.dedun.compose.database.dao
 
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRotationManager.Companion.KEY_PACKAGE_LIFETIME_SECONDS
-import com.vitorpamplona.quartz.marmot.mls.crypto.Ed25519
-import com.vitorpamplona.quartz.marmot.mls.crypto.MlsCryptoProvider
-import com.vitorpamplona.quartz.marmot.mls.crypto.X25519
-import com.vitorpamplona.quartz.marmot.mls.messages.MlsKeyPackage
-import com.vitorpamplona.quartz.marmot.mls.tree.Capabilities
-import com.vitorpamplona.quartz.marmot.mls.tree.Credential
-import com.vitorpamplona.quartz.marmot.mls.tree.Extension
-import com.vitorpamplona.quartz.marmot.mls.tree.LeafNode
-import com.vitorpamplona.quartz.marmot.mls.tree.LeafNodeSource
-import com.vitorpamplona.quartz.marmot.mls.tree.Lifetime
+import com.vitorpamplona.crypto.curve25519.Ed25519
+import com.vitorpamplona.crypto.curve25519.X25519
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageRotationManager.Companion.KEY_PACKAGE_LIFETIME_SECONDS
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.marmot.mip00KeyPackages.buildCurrentProfileFrom
+import com.vitorpamplona.mls.codec.TlsReader
+import com.vitorpamplona.mls.crypto.MlsCryptoProvider
+import com.vitorpamplona.mls.messages.KeyPackageBundle
+import com.vitorpamplona.mls.messages.MlsKeyPackage
+import com.vitorpamplona.mls.tree.Capabilities
+import com.vitorpamplona.mls.tree.Credential
+import com.vitorpamplona.mls.tree.Extension
+import com.vitorpamplona.mls.tree.LeafNode
+import com.vitorpamplona.mls.tree.LeafNodeSource
+import com.vitorpamplona.mls.tree.Lifetime
+import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
-import com.vitorpamplona.quartz.utils.TimeUtils
-import com.machankura.dedun.compose.database.model.MarmotKeyPackage
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsReader
-import com.vitorpamplona.quartz.marmot.mls.messages.KeyPackageBundle
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
-import com.machankura.dedun.compose.database.model.NostrEvent
-import com.machankura.dedun.compose.nostr.Relays
+import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlin.io.encoding.Base64
 import kotlin.time.Instant
+import com.machankura.dedun.compose.database.model.MarmotKeyPackage
+import com.machankura.dedun.compose.database.model.NostrEvent
+import com.machankura.dedun.compose.nostr.Relays
 
 /**
  * A real MLS key package for [publicKey], built the same way

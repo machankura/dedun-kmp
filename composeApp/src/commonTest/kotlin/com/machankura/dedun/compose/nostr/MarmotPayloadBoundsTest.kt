@@ -1,22 +1,22 @@
 package com.machankura.dedun.compose.nostr
 
-import com.vitorpamplona.quartz.marmot.foundation.appEvents.MarmotAppEvent
-import com.vitorpamplona.quartz.marmot.foundation.appEvents.MarmotJson
+import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
+import com.vitorpamplona.marmot.foundation.appEvents.MarmotJson
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
-import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
-import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
-import com.machankura.dedun.compose.nostr.chronicle.TEST_KINDS
-import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
+import com.machankura.dedun.compose.nostr.chronicle.TEST_KINDS
 
 /**
  * The app's largest payloads fit inside what a conformant Marmot decoder will read.

@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import co.touchlab.kermit.Logger
 import fr.acinq.bitcoin.MnemonicCode
@@ -19,18 +21,6 @@ import fr.acinq.phoenix.security.NostrCredential
 import fr.acinq.phoenix.utils.MnemonicLanguage
 import fr.acinq.phoenix.utils.PlatformContext
 import fr.acinq.phoenix.utils.preferences.GlobalPrefs
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.withTimeout
-import okio.FileSystem
-import okio.SYSTEM
-import com.machankura.dedun.compose.ui.view.model.WritingSeedState
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -41,6 +31,18 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
+import com.machankura.dedun.compose.ui.view.model.WritingSeedState
+import okio.FileSystem
+import okio.SYSTEM
 
 /**
  * The three writers, against a real key store and a real directory.

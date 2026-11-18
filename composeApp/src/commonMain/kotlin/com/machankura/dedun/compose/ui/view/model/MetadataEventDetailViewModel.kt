@@ -10,10 +10,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
-import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
-import com.machankura.dedun.compose.nostr.Relays
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.TagArray
@@ -34,10 +32,12 @@ import com.vitorpamplona.quartz.nip57Zaps.LnZapEvent
 import com.vitorpamplona.quartz.nip68Picture.PictureEvent
 import com.vitorpamplona.quartz.nip71Video.VideoNormalEvent
 import com.vitorpamplona.quartz.nip71Video.VideoShortEvent
-import com.vitorpamplona.quartz.utils.RandomInstance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
+import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
+import com.machankura.dedun.compose.nostr.Relays
 
 enum class MetadataEventDetailType {
     Posts, Replies, Articles, Followers, Following, Zaps, Photos, Shorts, Videos,  Bookmarks, Reports, Relays

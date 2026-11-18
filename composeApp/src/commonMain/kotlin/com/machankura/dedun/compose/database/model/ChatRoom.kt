@@ -4,15 +4,11 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Ignore
 import androidx.room3.PrimaryKey
-import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
-import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
-import com.machankura.dedun.compose.database.model.traits.TimestampedEntity
-import com.machankura.dedun.compose.database.model.traits.UserViewableEntity
 import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.marmot.appComponents.MarmotGroupState
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.machankura.dedun.compose.nostr.MarmotProfile
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroupState
+import com.vitorpamplona.marmot.appComponents.MarmotGroupState
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.group.MlsGroupState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import fr.acinq.bitcoin.PrivateKey
@@ -20,6 +16,11 @@ import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.crypto.musig2.Musig2
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
+import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
+import com.machankura.dedun.compose.database.model.traits.TimestampedEntity
+import com.machankura.dedun.compose.database.model.traits.UserViewableEntity
+import com.machankura.dedun.compose.nostr.MarmotProfile
 
 @Entity(
     foreignKeys = [
@@ -229,7 +230,8 @@ data class ChatRoom(
             return MlsGroup.restore(
                 MlsGroupState.decodeTls(
                     mlsGroupState.hexToByteArray()
-                )
+                ),
+                MarmotGroupPolicy,
             )
         }
     }

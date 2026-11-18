@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.identity
 
+import com.vitorpamplona.crypto.random.RandomInstance
+
 import androidx.room3.Room
 import co.touchlab.kermit.Logger
 import fr.acinq.bitcoin.PrivateKey
@@ -12,6 +14,15 @@ import fr.acinq.phoenix.managers.NodeParamsManager
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
 import fr.acinq.phoenix.security.JvmKeyStore
 import fr.acinq.phoenix.utils.PlatformContext
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,15 +40,6 @@ import com.machankura.dedun.compose.ui.view.model.SignInToProfileViewModel
 import com.machankura.dedun.compose.ui.view.model.SovereignWalletViewModel
 import com.machankura.dedun.compose.ui.view.model.bareKeyProfileWriter
 import com.machankura.dedun.compose.ui.view.state.CreateProfileUIState
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * A profile added from inside -- Phase 5 of docs/multiple-profiles.md -- through the

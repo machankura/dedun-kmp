@@ -136,6 +136,24 @@ kotlin {
             implementation(libs.sqldelight.coroutines.extensions)
 
             implementation(libs.vitorpamplona.quartz)
+
+            // The Marmot engine, which quartz 2.3.0 dropped: the three processors, the
+            // MLS group manager and its store, convergence, the publish gate, the app
+            // components and the KeyPackage managers. quartz keeps the event classes --
+            // KeyPackageEvent, WelcomeEvent, GroupEvent, the MIP-05 push events -- and
+            // marmot-kmp imports those from it, so the two halves are declared together.
+            // docs/marmot-kmp.md.
+            implementation(libs.vitorpamplona.marmot)
+
+            // The RFC 9420 engine under it, which reads and writes the group state blob
+            // in ChatRoom.mlsGroupState. Transitive through marmot's `api`, and named
+            // here because MlsGroup, MlsGroupState and the TLS codec are the app's own
+            // imports in 80 places.
+            implementation(libs.vitorpamplona.mls)
+
+            // The primitives under both. Transitive as well; named for the 27 places the
+            // app reaches for Ed25519, X25519, RandomInstance and sha256 directly.
+            implementation(libs.vitorpamplona.crypto)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

@@ -222,6 +222,62 @@ mac. Bumping `kotlin` to 2.4.21 is the cheaper answer if it does.
 `./gradlew check` for the three audits. On a mac, the ios targets too — they are the only
 place a klib skew can appear.
 
+**Built**, and the fear was misplaced. The 854 non-Marmot quartz imports came through the
+1.15.2 → 2.7.3 bump without a single edit. Every compile error — 45 of them — was in the
+engine seam, and 44 of the 45 were one thing: five accessors that were members of
+`MlsGroup` in quartz's engine are extension functions in marmot-kmp
+(`currentGroupState`, `currentMarmotData`, `currentNostrGroupId`,
+`currentAdminIdentities`, `isLocalAdmin`, all in `marmot.groups`), so the 14 files that
+call one now import it. The 45th was `KeyPackageEvent.Companion.buildCurrentProfileFrom`,
+an extension too. Nothing in the API the app drives had changed shape: every constructor
+the plan quoted in D1 took its arguments unaltered, and `GroupEventResult`'s nine variants
+are still nine — `MarmotEngine`'s exhaustive `when` over them compiles, which is the
+compiler proving there is no tenth to drop silently.
+
+Two things the bump brings that are not errors. quartz 2.x keeps a deprecated typealias
+for each class it renamed, so six the app uses still compile and warn:
+`SealedRumorEvent` → `SealEvent` (22 sites), `ChatMessageRelayListEvent` →
+`DmRelayListEvent` (19), `RelayFeedsListEvent` → `FavoriteRelayListEvent` (5),
+`LnZapEvent` → `ZapReceiptEvent` (5), `LongTextNoteEvent` → `LongFormContentEvent` (1),
+`ChannelListEvent` → `PublicChatListEvent` (1). And quartz 2.x drops
+`whyoleg.cryptography`, `andreypfau.kotlinx-crypto-*`, `charlietap.cachemap` and
+`jackson-module-kotlin` from the dependency graph in favour of crypto-kmp. The
+`kotlin-stdlib` skew the plan worried about was already there — 1.15.2 brought 2.4.20
+against the app's Kotlin 2.4.10 — and 2.4.21 behaves no differently.
+
+**And one thing that is not a rename at all: the group policy.** `MlsGroupPolicy` is new
+in mls-kmp. quartz's engine hardcoded Marmot's rules; mls-kmp made them an argument, and
+`MarmotGroupPolicy` (marmot-kmp, `marmot.groups`) is the object that carries them. Every
+factory — `create`, `restore`, `processWelcome`, `externalJoin`, `createKeyPackage` —
+defaults it to `MlsGroupPolicy.Permissive`, so the eleven places the app builds a group
+itself were silently building a non-Marmot group. What that costs, in the order it bites:
+
+| `MarmotGroupPolicy` | `Permissive` |
+|---|---|
+| `commitExporter` = `MLS-Exporter("marmot", "group-event", 32)` | null, so `CommitResult.preCommitExporterSecret` comes back empty and `GroupEventEncryption.encrypt` refuses it: *"Group key must be 32 bytes"* |
+| `greaseCapabilities` = false | true — GREASE values in the leaf's capabilities, which MDK "neither sends nor has been tested against" |
+| `knownExtensionTypes` = `0xF2EE` and the app-data dictionary | empty, so RFC 9420 §13.4's all-members-support check refuses a GroupContextExtensions proposal in a group this client is happily a member of |
+| `defaultLeafCapabilities` / `defaultRequiredCapabilities` = Marmot's | empty / none |
+| `authorizeCommit`, `authorizeProposal`, `authorizeSelfRemove`, `validateJoin` | no-ops: no authorized-proposal-set check, no admin-depletion check |
+
+Only the first of those five is loud, and it is what the single failing test found — the
+second invite into an established legacy room, `MarmotOutboundDaoJvmTest`. The other four
+are silent, and the GREASE line is wire-visible: a KeyPackage this app published would
+have carried values the reference client has never been tested against. So the policy goes
+in at every construction site, which is this phase's one behavioural change and the reason
+the swap is not purely mechanical. Four in `commonMain` — `ChatRoom.toMlsGroup`,
+`MarmotEngine.groupFor`, `MarmotGroupFactory`'s legacy branch, `NostrDao`'s Welcome path —
+and seven in the fixtures. The current-profile paths needed none: they go through
+marmot-kmp's own `CurrentProfileGroupFactory`, which passes the policy itself, and so does
+every `MlsGroupManager` entry point.
+
+With the policy in, the suite is green: 1149 tests, 0 failures, and `compileDebugKotlinAndroid`
+clean. One housekeeping note: a rewritten import keeps its old alphabetical slot, so the
+touched files' import blocks were re-sorted — but only the touched ones. Sorting every
+block in `composeApp` would have moved lines in 253 further files whose imports were
+already out of order before any of this, and C2 is the reason not to: each of those is a
+line a cherry-pick would then conflict in for no reason.
+
 ## Phase 2 — the drift in the seam
 
 Phase 1 ends when it compiles. This phase is for what compiles and means something else.

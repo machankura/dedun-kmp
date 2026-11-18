@@ -1,20 +1,21 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.vitorpamplona.quartz.marmot.mls.messages.KeyPackageBundle
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.messages.KeyPackageBundle
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
-import kotlinx.coroutines.runBlocking
-import com.machankura.dedun.compose.nostr.Relays
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.nostr.Relays
 
 /**
  * A Welcome finds the bundle it was encrypted to by the KeyPackageRef inside it,
@@ -33,6 +34,7 @@ class WelcomeBundleMatchJvmTest {
                 outboxRelays = Relays.DefaultDMRelayList.map { it.url },
             ).toExtension()
         ),
+        policy = MarmotGroupPolicy,
     )
 
     private suspend fun bundle(): KeyPackageBundle =

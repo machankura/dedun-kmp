@@ -14,7 +14,7 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkWire
-import com.vitorpamplona.quartz.marmot.GroupEventResult
+import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.Kind

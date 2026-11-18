@@ -14,18 +14,16 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
-import com.machankura.dedun.compose.repository.ChatRepository
-import com.machankura.dedun.compose.repository.NostrRepository
-import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
-import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.marmot.groups.currentGroupState
+import com.vitorpamplona.marmot.groups.isLocalAdmin
+import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.managers.isGoverned
@@ -37,7 +35,11 @@ import com.machankura.dedun.compose.wallet.UnusedAddressCheck
 import com.machankura.dedun.compose.network.LightningAddressResolver
 import fr.acinq.lightning.MilliSatoshi
 import kotlinx.coroutines.withContext
-import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.repository.NostrRepository
+import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
+import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 
 class ChatRoomDetailViewModel(
     val chatRoomId: String,

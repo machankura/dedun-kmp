@@ -1,10 +1,10 @@
 package com.machankura.dedun.compose.managers
 
 import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsReader
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsWriter
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroupStateStore
-import com.vitorpamplona.quartz.marmot.mls.group.RetainedEpochSecrets
+import com.vitorpamplona.marmot.groups.MlsGroupStateStore
+import com.vitorpamplona.mls.codec.TlsReader
+import com.vitorpamplona.mls.codec.TlsWriter
+import com.vitorpamplona.mls.group.RetainedEpochSecrets
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.MarmotRetainedEpochSecret

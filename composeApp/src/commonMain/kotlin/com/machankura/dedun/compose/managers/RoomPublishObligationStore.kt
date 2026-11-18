@@ -1,6 +1,6 @@
 package com.machankura.dedun.compose.managers
 
-import com.vitorpamplona.quartz.marmot.protocolCore.MarmotPublishObligationStore
+import com.vitorpamplona.marmot.protocolCore.MarmotPublishObligationStore
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.MarmotOutboundGate

@@ -6,10 +6,11 @@ import com.machankura.dedun.compose.nostr.subgroup.tags.WalletPolicyTag
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.crypto.Ed25519
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.machankura.dedun.compose.nostr.Relays
+import com.vitorpamplona.crypto.curve25519.Ed25519
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.groups.currentMarmotData
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
@@ -23,7 +24,6 @@ import fr.acinq.bitcoin.crypto.frost.IndividualNonce
 import fr.acinq.bitcoin.crypto.frost.KeyMaterial
 import fr.acinq.bitcoin.crypto.frost.SecretNonce
 import fr.acinq.bitcoin.crypto.frost.Session
-import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,12 +33,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
 import com.machankura.dedun.compose.database.model.DkgSession
-import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.nostr.subgroup.tags.GuardianTag
@@ -46,7 +46,9 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 
@@ -981,7 +983,8 @@ class SubgroupManagerJvmTest {
         val mlsGroup = MlsGroup.create(
             KeyPair().pubKey,
             Ed25519.generateKeyPair().privateKey,
-            listOf(metadata.toExtension())
+            listOf(metadata.toExtension()),
+            policy = MarmotGroupPolicy,
         )
 
         db.chatRoomDao().upsert(

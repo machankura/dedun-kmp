@@ -1,18 +1,18 @@
 package com.machankura.dedun.compose.database.model
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.foundation.appEvents.MarmotAppEvent
+import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
-import kotlinx.coroutines.runBlocking
-import com.machankura.dedun.compose.database.DedunDatabase
-import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.time.Instant
+import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.builder.getRoomDatabase
 
 /**
  * A kind:1210 or kind:1009 from another client is not a line. docs/marmot-v2.md,

@@ -1,9 +1,9 @@
 package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.GroupEventResult
-import com.vitorpamplona.quartz.marmot.appComponents.CurrentProfileGroupFactory
-import com.vitorpamplona.quartz.marmot.foundation.appEvents.MarmotAppEvent
+import com.vitorpamplona.marmot.GroupEventResult
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
@@ -12,14 +12,6 @@ import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nipC7Chats.ChatEvent
 import com.vitorpamplona.quartz.utils.TimeUtils
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import com.machankura.dedun.compose.database.DedunDatabase
-import com.machankura.dedun.compose.database.builder.getRoomDatabase
-import com.machankura.dedun.compose.database.model.MarmotInnerEvent
-import com.machankura.dedun.compose.database.model.NostrEvent
-import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,6 +20,14 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.builder.getRoomDatabase
+import com.machankura.dedun.compose.database.model.MarmotInnerEvent
+import com.machankura.dedun.compose.database.model.NostrEvent
+import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 
 /**
  * Two implementations in one current-profile group: the app's engine over a

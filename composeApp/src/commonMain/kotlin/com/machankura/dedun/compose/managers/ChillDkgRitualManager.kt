@@ -4,6 +4,28 @@ import com.machankura.dedun.compose.nostr.subgroup.tags.GuardianDelayTag
 import com.machankura.dedun.compose.database.model.subgroupWalletPolicy
 import com.machankura.dedun.compose.nostr.subgroup.tags.WalletPolicyTag
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
+
+import co.touchlab.kermit.Logger
+import com.vitorpamplona.crypto.random.RandomInstance
+import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.vitorpamplona.quartz.nip01Core.core.Kind
+import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
+import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
+import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
+import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
+import com.vitorpamplona.quartz.nip01Core.tags.people.taggedUsers
+import fr.acinq.bitcoin.ByteVector
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.ByteVector64
+import fr.acinq.bitcoin.Crypto
+import fr.acinq.bitcoin.PrivateKey
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.crypto.dkg.chill.ChillDKG
+import fr.acinq.secp256k1.ChilldkgFault
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.coroutines.CancellationException
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
@@ -16,27 +38,6 @@ import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
-import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.nip01Core.core.Event
-import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.nip01Core.core.Kind
-import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
-import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
-import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
-import com.vitorpamplona.quartz.nip01Core.tags.people.PTag
-import com.vitorpamplona.quartz.nip01Core.tags.people.taggedUsers
-import com.vitorpamplona.quartz.utils.RandomInstance
-import fr.acinq.bitcoin.ByteVector
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.ByteVector64
-import fr.acinq.bitcoin.Crypto
-import fr.acinq.bitcoin.PrivateKey
-import fr.acinq.bitcoin.PublicKey
-import fr.acinq.bitcoin.crypto.dkg.chill.ChillDKG
-import fr.acinq.secp256k1.ChilldkgFault
-import kotlinx.coroutines.CancellationException
-import kotlin.time.Clock
-import kotlin.time.Instant
 
 /**
  * Runs a ChillDKG ritual in a group's room, on whichever transport that room has.

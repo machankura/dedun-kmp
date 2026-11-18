@@ -1,13 +1,22 @@
 package com.machankura.dedun.compose.database.dao
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nipC7Chats.ChatEvent
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -22,14 +31,6 @@ import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.exceptions.MarmotMissingChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.Relays
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Instant
 
 /**
  * The outbound queue the notary drains, and what a message it cannot send does to the rest.
@@ -106,6 +107,7 @@ class MarmotOutboundQueueJvmTest {
                     outboxRelays = Relays.DefaultDMRelayList.map { it.url },
                 ).toExtension()
             ),
+            policy = MarmotGroupPolicy,
         )
         db.chatRoomDao().upsert(
             ChatRoom(

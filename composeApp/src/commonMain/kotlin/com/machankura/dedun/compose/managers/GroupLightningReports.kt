@@ -16,7 +16,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.wallet.lightning.WalletWire
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.utils.RandomInstance
+import com.vitorpamplona.crypto.random.RandomInstance
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.lightning.payment.Bolt11Invoice

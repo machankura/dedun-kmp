@@ -9,7 +9,7 @@ import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationE
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
-import com.vitorpamplona.quartz.utils.RandomInstance
+import com.vitorpamplona.crypto.random.RandomInstance
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.lightning.payment.Bolt11Invoice
 import kotlin.time.Clock

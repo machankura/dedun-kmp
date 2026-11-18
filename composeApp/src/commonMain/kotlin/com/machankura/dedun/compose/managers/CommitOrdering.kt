@@ -14,7 +14,7 @@ import kotlinx.coroutines.sync.withLock
  * superseded "and deliberately: both [created_at and event id] are transport metadata
  * the sender chooses and MLS does not authenticate, so a member could win every race by
  * backdating". The app's inbound pipeline does not go through that processor -- it
- * drives [com.vitorpamplona.quartz.marmot.mls.group.MlsGroup] itself -- so the rule is
+ * drives [com.vitorpamplona.mls.group.MlsGroup] itself -- so the rule is
  * kept here, unchanged, until the pipeline adopts the convergence engine.
  *
  * When multiple members submit Commits for the same epoch, exactly one must win:

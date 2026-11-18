@@ -1,14 +1,22 @@
 package com.machankura.dedun.compose.database.dao
 
 import androidx.room3.Room
-import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageUtils
-import com.vitorpamplona.quartz.marmot.mip01Groups.MarmotGroupData
-import com.vitorpamplona.quartz.marmot.mls.codec.TlsReader
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.vitorpamplona.quartz.marmot.mls.messages.MlsKeyPackage
+import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
+import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
+import com.vitorpamplona.mls.codec.TlsReader
+import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.messages.MlsKeyPackage
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import kotlin.io.encoding.Base64
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -18,13 +26,6 @@ import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.Relays
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.io.encoding.Base64
 
 /**
  * A peer's kind:30443 through the sync funnel and into an invite, on both profiles.
@@ -80,6 +81,7 @@ class MarmotKeyPackageIngestJvmTest {
                     outboxRelays = Relays.DefaultDMRelayList.map { it.url },
                 ).toExtension()
             ),
+            policy = MarmotGroupPolicy,
         )
         val chatRoom = ChatRoom(
             id = roomId,

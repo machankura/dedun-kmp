@@ -4,18 +4,18 @@ import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Ignore
 import androidx.room3.PrimaryKey
-import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
-import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
-import com.machankura.dedun.compose.database.model.traits.TimestampedEntity
-import com.machankura.dedun.compose.database.model.traits.UserViewableEntity
 import co.touchlab.kermit.Logger
-import com.vitorpamplona.quartz.marmot.mls.group.MlsGroup
-import com.machankura.dedun.compose.managers.retentionSeconds
+import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nipC7Chats.ChatEvent
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
+import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
+import com.machankura.dedun.compose.database.model.traits.TimestampedEntity
+import com.machankura.dedun.compose.database.model.traits.UserViewableEntity
+import com.machankura.dedun.compose.managers.retentionSeconds
 
 @Entity(
     foreignKeys = [
