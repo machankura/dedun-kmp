@@ -55,9 +55,11 @@ import com.machankura.dedun.compose.exceptions.MarmotConvergencePendingException
  * should not be read as closed. A late application message decrypted under a
  * retained prior epoch is decrypted without the sender's leaf signature being
  * verified -- the library's `tryDecryptWithRetainedEpoch` has the same gap the
- * app's had. And the secret tree's skipped keys do not survive `saveState`
- * (docs/mls-skipped-keys.md); the manager holding the live group covers that
- * within a process, exactly as `MlsGroupCache` did, and no further.
+ * app's had. And the secret tree's skipped keys reach the state the manager would
+ * save -- mls-kmp carries them, which quartz's engine did not -- but an application
+ * message is decrypted without anything being written, so they still do not reach
+ * the row (docs/mls-skipped-keys.md). The manager holding the live group covers
+ * that within a process, exactly as `MlsGroupCache` did, and no further.
  */
 class MarmotEngine(
     private val database: DedunDatabase,

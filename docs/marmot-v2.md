@@ -65,6 +65,13 @@ the fix. Until then the practical exposure is small -- a device that never appli
 before publishing rarely authors one side of a fork -- and the follow-up in Phase 5
 (marking a losing branch's rows withdrawn) waits on the same fix.
 
+*Still true of marmot-kmp 2.2.1, which is where that engine lives now
+([marmot-kmp.md](./marmot-kmp.md), Phase 6): both fork tests pass unchanged, so the swap
+is still the swap. What has changed is that the state the missing replay would produce is
+a first-class thing on the library's side too -- `MlsGroup.stageCommit` with the staged
+commit persisted in `MlsGroupState` -- so the fix is now a choice in
+`MlsCandidateStateEngine` between replaying a branch and taking the state that was kept.*
+
 Written against the code as it stood at `2bbe1fc9`.
 
 ## Where "v2" comes from, and what it asks

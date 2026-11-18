@@ -7,6 +7,13 @@ This is a conformance gap in quartz's MLS implementation, not in this app. What
 this app can do about it from outside the library is partial, and is described
 at the end.
 
+**Half of it is closed.** The engine left quartz for mls-kmp
+([marmot-kmp.md](./marmot-kmp.md)), and mls-kmp's state format carries the skipped
+keys -- steps 1 to 3 of "The fix, in quartz" below, landed in the library the app now
+depends on. What is left is not the same gap, and the last section says what it is.
+Everything between here and there is the account as it stood, and is kept because it
+is still why any of it matters.
+
 ## Symptom
 
 The receiver stores the kind:445 group event and produces nothing from it. No
@@ -215,3 +222,41 @@ work for any other flow in the table above that someone can be asked to repeat.
 The staleness check is what keeps the cache from being *worse* than no cache: a
 group that has been overtaken by another writer is never carried on with, so the
 fallback is always the old behaviour rather than a diverged ratchet.
+
+## What the move to marmot-kmp changed
+
+The engine is not quartz's any more. quartz 2.3.0 dropped it, and the RFC 9420 half
+is [mls-kmp](https://github.com/vitorpamplona/mls-kmp) now
+([marmot-kmp.md](./marmot-kmp.md)). Three of the four steps above are in it:
+
+| the fix above | mls-kmp 1.3.0 |
+|---|---|
+| 1. export and import the skipped keys | `SecretTree.exportSkippedApplicationSecrets` / `importSkippedSecrets`, and the same pair for the handshake ratchet |
+| 2. put them in the group state | `MlsGroupState.skippedApplicationSecrets` and `.skippedHandshakeSecrets`, written by `saveState` and read by `restore` |
+| 3. keep old state readable | they arrived at `STATE_VERSION` 5 and the decoder accepts 1 to 10, so a version-4 blob -- which is what quartz 1.15.2 wrote, and what every device holds -- reads as an empty map, exactly as this note asked |
+| 4. the consumed-generation replay guard travels with them | **not done.** `consumedGenerations` is still a field of one `SecretTree` instance, in no version of the state, so the guard against a replayed message re-using a cached key still weakens across a restart |
+
+So the test this note asked for -- "save and restore a group between the two messages
+of an out-of-order pair, and assert the older one still decrypts" -- now passes, and it
+is `SkippedGenerationJvmTest`.
+
+**What is still broken, for a different reason.** `MlsGroupManager.decrypt` persists
+only when the message was a commit that advanced the epoch. An application message is
+decrypted and nothing is written, so the secret reaches the live group's state and never
+reaches `ChatRoom.mlsGroupState` -- and a process that dies between the two messages
+still loses the late one. The mitigation section above therefore still stands, word for
+word, including its three bullets; only its first sentence has a new cause. It is no
+longer "the cache is never written" but "the state is not saved after a receive", which
+is a decision about write amplification rather than an oversight: persisting per inbound
+message re-encodes the ratchet tree, the group context and every epoch secret, per
+message, growing with the group. `MlsGroupStateStore.saveSenderRatchet` is the shape of
+the answer on the send side, and the receive side wants the same treatment.
+
+`SkippedGenerationJvmTest` pins all of it: the secret is in the state the engine would
+save, a group rebuilt from those bytes reads the late message, and the stored state does
+not carry it yet. Its last test says what to do the day that changes.
+
+One thing this does not change: a device that loses a message this way can still be sent
+a new one, which is encrypted at a generation it has not passed. That is still the
+recovery, and [frost-session-resend.md](./frost-session-resend.md) is still where it
+is built.

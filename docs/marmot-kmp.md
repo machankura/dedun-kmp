@@ -451,6 +451,47 @@ leave its mitigation section as the history of how it was lived with.
 **Check:** the new test, and `MarmotEngine`'s own doc comment, whose last paragraph
 currently names this gap as open.
 
+**Built, and half of it is closed — not the half the plan assumed.** The engine-level gap
+is gone: `MlsGroupState` carries `skippedApplicationSecrets` and
+`skippedHandshakeSecrets` from STATE_VERSION 5, `saveState` exports them from the secret
+tree and `restore` imports them, and because they arrived at version 5 while the decoder
+accepts 1..10, a version-4 blob reads them as an empty map. That is steps 1 to 3 of the
+fix [mls-skipped-keys.md](./mls-skipped-keys.md) proposed, in the library the app now
+depends on. Step 4 is not: `consumedGenerations`, the guard against a replayed message
+re-using a cached key, is still one `SecretTree` instance's field and is in no version of
+the state.
+
+**The app does not benefit yet, and the first draft of this test said it did.**
+`MlsGroupManager.decrypt` persists only when the message was a commit that advanced the
+epoch; an application message is decrypted and nothing is written. So the secret reaches
+the live group's state and never reaches `ChatRoom.mlsGroupState`.
+
+That matters for how the test had to be written, and the first attempt is worth recording
+because it passed. It delivered generation 1, rebuilt the engine with `MarmotEngine(db)`,
+delivered generation 0 and asserted it decrypted — and it did, for the wrong reason
+entirely. The rebuilt engine restores a blob whose sender ratchet never moved, so
+generation 0 is simply the next generation it expects and no skipped key is involved. A
+green test proving nothing, and what caught it was the one assertion that looked redundant
+beside it: that the secret is in the stored state. It was not.
+
+So `SkippedGenerationJvmTest` is three tests that say what is true:
+
+| | |
+|---|---|
+| the secret is in the state the engine *would* save | `MlsGroupManager.snapshot` after generation 1 arrives first — exactly one skipped secret, where the old engine had none |
+| a group rebuilt from those bytes reads the late message | the full round trip through `encodeTls`/`decodeTls`/`restore`, which is what a restart is |
+| the *stored* state does not carry it | pinned, in the style of `ConvergenceForkJvmTest`'s authored fork, with the KDoc saying what to invert the day the receive path starts persisting |
+
+The fix for the third is one call — the app owns the store, so
+`store.save(routingId, groupManager.snapshot(routingId)!!.encodeTls())` after an
+application message would do it — and it is deliberately not made here, because it is a
+write per inbound message that re-encodes the ratchet tree, the group context and every
+epoch secret. `MlsGroupStateStore.saveSenderRatchet` is the library's answer to exactly
+that cost on the send side; the receive side wants the same shape, and that is Phase 7's
+business rather than this one's. [mls-skipped-keys.md](./mls-skipped-keys.md) has a new
+last section saying all of this, and its mitigation section stands word for word with a
+new cause.
+
 ## Phase 6 — the authored fork
 
 marmot-v2.md ends on a gap that is the library's and not the app's: a member cannot replay
@@ -469,6 +510,37 @@ fix.
 
 **Check:** `ConvergenceForkJvmTest`, and whichever way it goes, this note and
 marmot-v2.md's closing paragraph both say so.
+
+**Probed: the gap is still open, and the test still pins the swap.** Both fork tests pass
+unchanged — the one that proves two observers of somebody else's fork settle on the same
+state byte for byte, and the one whose last assertion is
+
+```kotlin
+assertNotEquals(ours.contextBytes().toHexKey(), theirsAfter.contextBytes().toHexKey(),
+    "the two sides agree -- the library has been fixed; rewrite this test as the agreement")
+```
+
+That message is the probe, and it did not fire. So marmot-kmp 2.2.1 scores a fork this
+device is half of the same way quartz 1.15.2 did: `MlsCandidateStateEngine` rebuilds each
+candidate branch with `MlsGroup.processFramedCommit`, a member cannot replay a commit it
+authored, and two committers swap branches rather than agree. Reading says the same thing
+the test does — the suggestive line in `MlsCandidateStateEngine` about holding "an inbound
+commit and one we authored to one rule rather than two" is about *authorization*, not
+replay.
+
+What did change is that the fix marmot-v2.md predicts is now visibly available. Its
+closing note says "the state the missing replay would produce is already retained, and
+using it is the fix", and mls-kmp has made exactly that state a first-class thing:
+`stageCommit`/`mergePendingCommit`, with the staged commit persisted in `MlsGroupState`
+from its STATE_VERSION 9. The app already holds the same state twice over, as
+`MarmotPublishObligation.pendingState`. So the fix is a change to the candidate engine's
+choice of how to get a branch's state — replay it, or take the one we kept — and it
+belongs in marmot-kmp rather than here.
+
+Unchanged, therefore: the practical exposure is small, because a device that never applies
+before publishing rarely authors one side of a fork, and the Phase 5 follow-up in
+marmot-v2.md (marking a losing branch's rows withdrawn) still waits on the same fix. No
+code in this phase.
 
 ## Phase 7 — what the library now offers, and the guard
 
