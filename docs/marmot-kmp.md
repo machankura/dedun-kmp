@@ -401,6 +401,38 @@ version is inside it, so schema 36 stands.
 real rooms in it. The automated evidence is necessary and not sufficient; a room that has
 been through several epochs and several members is not something a fixture reproduces.
 
+**Built, and C1 holds — on real bytes rather than on the argument.** The argument turned
+out to be checkable before any test was written: quartz 1.15.2's own sources, in the
+sources jar beside the artifact in the gradle cache, declare `STATE_VERSION = 4`. mls-kmp
+1.3.0 declares 10 and accepts `1..10`. So every blob in the wild is a version-4 blob and
+the window covers it with six versions to spare.
+
+Then the measurement. `docs/tools/old-state-blob/` is a project whose only dependency is
+`com.vitorpamplona.quartz:quartz:1.15.2` — the engine the app shipped — and it prints a
+real `MlsGroupState` blob: 1033 bytes, a legacy MIP-01 group at epoch 0, which is the
+shape every room in the wild started as. It is checked in for provenance, because once it
+is gone there is no way to tell by reading the hex whether the fixture came from the old
+engine or the new one, and a fixture written by the new engine would make the test pass
+while testing nothing. `MlsGroupStateCompatibilityTest` pins it, six ways:
+
+| | |
+|---|---|
+| the fixture is still a version-4 blob | asserted on its own, so a fixture that quietly became version 10 cannot make the rest pass vacuously |
+| mls-kmp decodes it | epoch 0, leaf 0, a 32-byte group id, an encryption secret |
+| the group restores from it | key schedule, secret tree and ratchet tree rebuilt under `MarmotGroupPolicy`, `0xF2EE` intact, same `nostr_group_id`, same name, and it still reads as legacy rather than current-profile |
+| the kind:445 outer key is derivable from it | 32 bytes — Phase 1's policy finding pinned against real pre-migration bytes rather than a fixture the new engine built |
+| a re-save moves it forward and still decodes | version 10, same group id, same epoch, same leaf: the upgrade a room gets the first time the manager persists it |
+| the retained-epoch record still has five fields | round-tripped, because `RoomMlsGroupStateStore` decodes one into five columns and re-encodes it from them, so a sixth field would be silently truncated on every load |
+
+No schema change was needed, as the plan guessed: the blob is opaque to Room, the version
+is inside it, and schema 36 stands.
+
+**What is not done, and is not automatable here: the manual upgrade.** A fixture is a
+group at epoch 0 with one member. The rooms that matter have been through several epochs,
+several members and a retained-epoch window, and the only way to know they open is to open
+one. That check needs a device or desktop profile with real rooms in it, and it is the last
+thing between this work and a release.
+
 ## Phase 5 — the skipped keys, closed
 
 [mls-skipped-keys.md](./mls-skipped-keys.md) describes a conformance gap in quartz's MLS
