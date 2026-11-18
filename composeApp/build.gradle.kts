@@ -414,6 +414,45 @@ tasks.withType<Test>().configureEach {
     inputs.property("dedunRegtest", providers.environmentVariable("DEDUN_REGTEST").orElse(""))
 }
 
+/**
+ * That the Marmot engine stays marmot-kmp's (docs/marmot-kmp.md, Phase 7): no import of a
+ * class quartz 2.3.0 dropped. quartz keeps the event classes -- `KeyPackageEvent`,
+ * `WelcomeEvent`, `GroupEvent`, the MIP-05 push events -- and those are not reported; the
+ * engine around them is not quartz's at any version the app can resolve, so an import of
+ * it does not compile here anyway.
+ *
+ * It is in `check` because Bennu takes work from Giza (docs/giza-into-bennu.md) and Giza
+ * takes it from Bennu, and a pick from either side that predates the move conflicts on
+ * exactly these lines. The audit turns "resolve it by re-running the rule" from advice into
+ * a build failure if somebody doesn't.
+ */
+val marmotAudit = tasks.register("marmotAudit") {
+    group = "verification"
+    description = "Checks that the Marmot engine still comes from marmot-kmp."
+
+    val script = rootProject.layout.projectDirectory.file("docs/scripts/marmot-kmp-imports.sh").asFile
+    val projectDirectory = rootProject.layout.projectDirectory.asFile
+
+    doLast {
+        val bash = listOf("/bin/bash", "/usr/bin/bash").firstOrNull { File(it).canExecute() }
+        if (bash == null) {
+            logger.warn("marmotAudit: no bash found, skipping. Run docs/scripts/marmot-kmp-imports.sh --check by hand.")
+            return@doLast
+        }
+        val result = providers.exec {
+            commandLine(bash, script.absolutePath, "--check")
+            workingDir = projectDirectory
+            isIgnoreExitValue = true
+        }
+        logger.lifecycle(result.standardOutput.asText.get())
+        if (result.result.get().exitValue != 0) {
+            throw GradleException("quartz's Marmot engine is back. See the report above, and docs/marmot-kmp.md.")
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(marmotAudit) }
+
 compose.desktop {
     application {
         mainClass = "com.machankura.dedun.desktop.MainKt"

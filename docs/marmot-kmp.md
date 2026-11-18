@@ -567,6 +567,44 @@ Four things, each its own commit, none of them required by the move:
 
 **Check:** `./gradlew check`, with the new guard in it.
 
+**The guard is built; the other three are named rather than done, and here is why each.**
+
+`marmotAudit` runs `docs/scripts/marmot-kmp-imports.sh --check` from `check`, beside the
+M3, brand and wallet audits. Verified both ways: silent on a clean tree, and on a tree
+where one import is put back it names the file and the line and fails the build with a
+pointer to this note. That is the whole point of C2 — a cherry-pick from a Bennu still on
+quartz 1.15.2 brings the old spelling back, and the resolution is to re-run the rule, which
+is advice until a build failure makes it a step.
+
+**The app's own copies: nothing to delete.** `CommitOrdering` is still live, in
+`NostrDao`'s reindex sweep and in `MarmotInboundManager`'s epoch tracker, and marmot-kmp
+has no `CommitOrdering` at all — the convergence engine replaced the idea rather than the
+class. Under D4 the legacy pipeline keeps its behaviour, so the comparator stays until the
+legacy profile retires with it. The KDoc that used to cite
+`com.vitorpamplona.quartz.marmot.mls.group.MlsGroup` now cites mls-kmp's, and the sentence
+about quartz 1.14.0's own `CommitOrdering` stays as the historical note it always was.
+
+**The sender ratchet record: a schema change, and it should be its own.** The store's
+`saveSenderRatchet`/`loadSenderRatchet` default to `false`/`null`, and the manager then
+falls back to a full `save()` — which is *correct*, just expensive: it re-encodes the
+ratchet tree, the group context and every epoch secret to persist a counter, per message,
+growing with the group. Implementing the pair means a new table, so schema 36 → 37 and an
+`AutoMigration`, and the interface's own words are that the write MUST be durable before
+it returns or a lost position re-emits a generation already used and reuses an AEAD key
+and nonce pair. That is a change to a per-message write path with a correctness hazard
+attached, and it does not belong in the tail of a migration whose whole discipline was D5:
+no new behaviour inside the swap. It is the obvious next task, and it is the same shape as
+the receive-side write Phase 5 pinned — worth doing as one piece of work that decides how
+often this app persists a group, for both directions at once.
+
+**Durable ingest dedup: not reachable without `MarmotManager`.**
+`MarmotIngestDedupStore` is taken by the client, not by `MarmotInboundProcessor`, so the
+follow-up marmot-v2.md's Phase 5 asked for is only available by adopting the client — the
+question D1 deferred. Phase 3 is where that stopped being hypothetical: a `MarmotManager`
+now runs in this repo's tests and the app's own orchestration agrees with it. What is left
+is a decision about what owns the stores and the publisher in the app, not a question
+about whether the library's client works.
+
 ## Out of scope
 
 `marmot-quic` and agent text streams. MIP-04 encrypted media and the Blossom image
