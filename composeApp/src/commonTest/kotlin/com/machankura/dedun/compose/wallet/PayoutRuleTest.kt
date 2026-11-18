@@ -17,6 +17,9 @@ import fr.acinq.bitcoin.TxId
 import fr.acinq.bitcoin.TxIn
 import fr.acinq.bitcoin.TxOut
 import fr.acinq.secp256k1.Hex
+import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
+import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
+import com.vitorpamplona.quartz.nip01Core.core.Event
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -115,6 +118,54 @@ class PayoutRuleTest {
 
         val theGroups = records.copy(attributions = mapOf(key(a1) to DepositAttributionEvent.Attribution(key(a1), null, 70_000)))
         assertEquals(CoinOwnership.Owner.Nobody(CoinOwnership.Why.THE_GROUPS), CoinOwnership.ownerOf(a1.outPoint, alicesBranch, 70_000, theGroups))
+    }
+
+    // --- transfers (docs/member-transfers.md, T6) ---
+
+    private var transfers = 0
+
+    private fun transferOf(from: String, to: String, vararg moved: Pair<Coin, Long>, signedAt: Long? = null): MemberTransferEvent.Transfer {
+        val n = transfers++
+        val requestEvent = Event(n.toString(16).padStart(64, '0'), from, 1_700_000_000L + n, TransferRequestEvent.KIND, emptyArray(), "", "")
+        val amount = moved.sumOf { it.second }
+        val request = TransferRequestEvent.Request(from, room, Chain.Regtest, TransferRequestEvent.Rail.ONCHAIN, to, amount, 1_800_000_000, null, requestEvent)
+        val event = Event((n + 100).toString(16).padStart(64, '0'), room, signedAt ?: (1_700_000_000L + n), MemberTransferEvent.KIND, emptyArray(), "", "")
+        return MemberTransferEvent.Transfer(Chain.Regtest, TransferRequestEvent.Rail.ONCHAIN, from, to, amount, request, moved.map { MemberTransferEvent.CoinShare(key(it.first), it.second) }, event)
+    }
+
+    @Test
+    fun `a transfer of part of a member's coin makes it shared, and of all of it moves it`() {
+        val part = records.copy(transfers = listOf(transferOf(alice, bob, a1 to 30_000)))
+        assertEquals(CoinOwnership.Owner.Shares(mapOf(alice to 40_000L, bob to 30_000L)), CoinOwnership.ownerOf(a1.outPoint, alicesBranch, 70_000, part))
+        val whole = records.copy(transfers = listOf(transferOf(alice, bob, a1 to 70_000)))
+        assertEquals(CoinOwnership.Owner.Member(bob), CoinOwnership.ownerOf(a1.outPoint, alicesBranch, 70_000, whole))
+        // A coin it doesn't name is untouched.
+        assertEquals(CoinOwnership.Owner.Member(alice), CoinOwnership.ownerOf(a2.outPoint, alicesBranch, 50_000, whole))
+    }
+
+    @Test
+    fun `a transfer applies on top of an assignment, and a giver who doesn't hold enough moves nothing`() {
+        val assigned = records.copy(
+            assignments = mapOf(key(legacy) to CoinAssignmentEvent.Coin(key(legacy), 100_000, mapOf(alice to 60_000, bob to 40_000))),
+            transfers = listOf(transferOf(bob, carol, legacy to 10_000), transferOf(bob, carol, legacy to 40_000)),
+        )
+        // The second asks for 40,000 of Bob's 30,000 left: void on every device.
+        assertEquals(
+            CoinOwnership.Owner.Shares(mapOf(alice to 60_000L, bob to 30_000L, carol to 10_000L)),
+            CoinOwnership.ownerOf(legacy.outPoint, 0, 100_000, assigned),
+        )
+        // And a coin nobody owns stays nobody's, whatever a transfer says.
+        val unowned = records.copy(transfers = listOf(transferOf(alice, bob, oldChange to 10_000)))
+        assertIs<CoinOwnership.Owner.Nobody>(CoinOwnership.ownerOf(oldChange.outPoint, 1, 20_000, unowned))
+    }
+
+    @Test
+    fun `a payout of a coin a transfer shared pays both its owners, or isn't one`() {
+        val shared = PayoutRule.Context(records.copy(transfers = listOf(transferOf(alice, bob, a1 to 30_000))), scripts)
+        // Alice's whole coin to Alice, as before the transfer: Bob's 30,000 would go to her.
+        assertTrue(refused(spend(listOf(a1), listOf(alicesAddress to 69_400)), shared).isNotEmpty())
+        val payout = assertIs<PayoutRule.Result.Payout>(PayoutRule.check(spend(listOf(a1), listOf(alicesAddress to 39_600, bobsAddress to 29_700)), shared))
+        assertEquals(mapOf(alice to 39_600L, bob to 29_700L), payout.members.associate { it.member to it.paid })
     }
 
     // --- the payout ---

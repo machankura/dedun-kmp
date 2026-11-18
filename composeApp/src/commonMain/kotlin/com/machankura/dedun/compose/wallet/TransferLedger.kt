@@ -66,13 +66,15 @@ object TransferLedger {
     /**
      * Whose [key] is after [transfers], starting from [base] -- the owner rule's shares of it, by member. Each transfer naming
      * the coin moves its share from the giver to the receiver, in order. **One whose giver doesn't hold that much of the coin
-     * at that point, or that would leave the giver a share below dust, is void** and skipped (T6): every device that holds
+     * at that point, or that would leave the giver a share below dust, or that the group signed outside its request's window,
+     * is void** and skipped (T6, T15): every device that holds
      * the same records skips the same ones, and the coin's shares still add up to the coin.
      */
     fun applyToCoin(key: DepositKey.Onchain, base: Map<HexKey, Long>, transfers: List<MemberTransferEvent.Transfer>): Map<HexKey, Long> {
         val shares = base.mapKeys { it.key.lowercase() }.toMutableMap()
         transfers.forEach { transfer ->
             if (transfer.rail != Rail.ONCHAIN) return@forEach
+            if (transfer.createdAt < transfer.request.createdAt || transfer.createdAt > transfer.request.expiresAt) return@forEach
             transfer.coins.filter { it.key == key }.forEach { moved ->
                 val from = transfer.from.lowercase()
                 val held = shares[from] ?: 0

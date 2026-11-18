@@ -1,6 +1,12 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.model.IcebergKeySession
+import com.machankura.dedun.compose.text.LightningAddress
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.database.model.MarmotInnerEvent
+import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey
@@ -271,13 +277,132 @@ class MemberTransfersJvmTest {
         assertEquals("is from a member who has a payout waiting", refused(request(), on = bob))
     }
 
+    // --- onchain (Phase 5, T6) ---
+
+    private val coin = DepositKey.Onchain("c0".repeat(32), 0)
+
+    /** A 40,000-sat deposit on Alice's own branch, on every device, confirmed unless said otherwise. */
+    private suspend fun alicesCoin(key: DepositKey.Onchain = coin, sat: Long = 40_000, confirmed: Boolean = true, by: String = DepositRow.BY_BRANCH) = all.forEach { d ->
+        d.db.depositDao().upsert(
+            DepositRow(
+                chatRoomId = fixture.roomId, chain = GroupWalletStatementEvent.chainName(fixture.chain),
+                depositKey = key.text, source = DepositRow.ONCHAIN, amountMsat = sat * 1000,
+                member = alice.publicKey.lowercase(), attributedBy = by,
+                confirmedAt = if (confirmed) kotlin.time.Instant.fromEpochSeconds(now) else null,
+            )
+        )
+    }
+
+    /** Bob says where to be paid onchain too, on every device, newer than his deposits' destination. */
+    private suspend fun bobPaidOnchain() {
+        val destination = GroupPayoutDestinationEvent.build(
+            keyOf(bob), fixture.roomId, fixture.chain, LightningAddress("member${bob.index}", "example.com"),
+            onchainAddress = "bcrt1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3lgth6c", createdAt = now + 1,
+        )
+        val tags = arrayOf(arrayOf("h", fixture.roomId))
+        val id = com.vitorpamplona.quartz.nip01Core.crypto.EventHasher.hashId(bob.publicKey, destination.createdAt, GroupPayoutDestinationEvent.KIND, tags, destination.toJson())
+        all.forEach { d ->
+            d.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(id = id, publicKey = bob.publicKey, kind = GroupPayoutDestinationEvent.KIND, createdAt = kotlin.time.Instant.fromEpochSeconds(destination.createdAt), tags = tags, content = destination.toJson(), chatRoomId = fixture.roomId)
+            )
+        }
+    }
+
+    private fun onchainProposal(vararg moved: Pair<DepositKey.Onchain, Long>, from: GroupLightningFixture.Device = alice, to: String = bob.publicKey, askedAt: Long = now): Event {
+        val asked = request(from = from, to = to, rail = Rail.ONCHAIN, sat = moved.sumOf { it.second }, askedAt = askedAt)
+        val template = MemberTransferEvent.template(asked, moved.map { MemberTransferEvent.CoinShare(it.first, it.second) }, createdAt = askedAt)
+        return Event("00".repeat(32), fixture.roomId, template.createdAt, template.kind, template.tags, template.content, "")
+    }
+
+    private suspend fun refusedOnchain(proposal: Event, on: GroupLightningFixture.Device = carol) =
+        MemberTransfers.refuse(on.db, fixture.roomId, proposal, signsOnchain = true)
+
     @Test
-    fun `a transfer on a ledger rail moving coins can't be read, and an onchain one can't be checked yet`() = runBlocking<Unit> {
+    fun `no device signs an onchain transfer in the release that starts counting them`() = runBlocking<Unit> {
         opened()
-        val onchain = request(rail = Rail.ONCHAIN)
-        val template = MemberTransferEvent.template(onchain, listOf(MemberTransferEvent.CoinShare(DepositKey.Onchain("c0".repeat(32), 0), 20_000)))
-        val event = Event("00".repeat(32), fixture.roomId, now, template.kind, template.tags, template.content, "")
-        assertEquals("moves coins, which this device can't check yet", MemberTransfers.refuse(bob.db, fixture.roomId, event))
+        alicesCoin()
+        bobPaidOnchain()
+        assertEquals("moves coins, which this device doesn't sign yet", MemberTransfers.refuse(carol.db, fixture.roomId, onchainProposal(coin to 15_000)))
+    }
+
+    @Test
+    fun `part of a confirmed coin the giver owns can be transferred, and then it is shared and neither's alone`() = runBlocking<Unit> {
+        opened()
+        alicesCoin()
+        bobPaidOnchain()
+        assertEquals(mapOf(coin to 40_000L), MemberTransfers.ownedCoins(carol.db, fixture.roomId, fixture.chain, alice.publicKey))
+        val proposal = onchainProposal(coin to 15_000)
+        assertNull(refusedOnchain(proposal))
+
+        fixture.fileSignedAsRoom(all, proposal.kind, proposal.tags, createdAt = proposal.createdAt)
+        val records = MemberBalances.recordsOf(carol.db, fixture.roomId, fixture.chain)
+        val branch = assertNotNull(Depositors.statementOf(carol.db, fixture.roomId, fixture.chain, alice.publicKey)).branch
+        assertEquals(
+            com.machankura.dedun.compose.wallet.CoinOwnership.Owner.Shares(mapOf(alice.publicKey.lowercase() to 25_000L, bob.publicKey.lowercase() to 15_000L)),
+            com.machankura.dedun.compose.wallet.CoinOwnership.ownerOf(fr.acinq.bitcoin.OutPoint(fr.acinq.bitcoin.TxId(coin.txid), coin.vout), branch, 40_000, records),
+        )
+        // A shared coin is nobody's alone to split again.
+        assertEquals(emptyMap(), MemberTransfers.ownedCoins(carol.db, fixture.roomId, fixture.chain, alice.publicKey))
+        assertEquals("names a coin the member shares with others", refusedOnchain(onchainProposal(coin to 10_000, askedAt = now + 5)))
+    }
+
+    @Test
+    fun `an onchain transfer of a coin unseen, unconfirmed, unplaceable, too large or leaving dust, or to somebody unpayable onchain, is refused`() = runBlocking<Unit> {
+        opened()
+        alicesCoin()
+        assertEquals("is to a member who has given no onchain address", refusedOnchain(onchainProposal(coin to 1_000)))
+        bobPaidOnchain()
+        val pending = DepositKey.Onchain("c1".repeat(32), 0)
+        alicesCoin(pending, confirmed = false)
+        val corrected = DepositKey.Onchain("c2".repeat(32), 0)
+        alicesCoin(corrected, by = DepositRow.BY_GROUP)
+        assertEquals("names a coin this device has not seen", refusedOnchain(onchainProposal(DepositKey.Onchain("c9".repeat(32), 0) to 1_000)))
+        assertEquals("names a coin that hasn't confirmed", refusedOnchain(onchainProposal(pending to 1_000)))
+        assertEquals("names a coin this device has not seen", refusedOnchain(onchainProposal(corrected to 1_000)), "its branch can't be placed without a wallet")
+        assertEquals("moves more of a coin than the member holds of it", refusedOnchain(onchainProposal(coin to 40_001)))
+        assertEquals("would leave the member a share of a coin too small to pay out", refusedOnchain(onchainProposal(coin to 39_500)))
+    }
+
+    @Test
+    fun `a correction of a coin's owner voids a transfer of it by somebody who turned out not to own it`() = runBlocking<Unit> {
+        opened()
+        alicesCoin()
+        bobPaidOnchain()
+        val proposal = onchainProposal(coin to 15_000)
+        fixture.fileSignedAsRoom(all, proposal.kind, proposal.tags, createdAt = proposal.createdAt)
+
+        fixture.openDeposits(all, carol)
+        // The deposit was Carol's all along, and the group says so after the transfer. Nothing stops the correction (the review's
+        // second finding): it wins, and Alice's transfer of what wasn't hers moves nothing.
+        val attribution = DepositAttributionEvent.template(fixture.chain, listOf(DepositAttributionEvent.Attribution(coin, carol.publicKey.lowercase(), 40_000)))
+        val proposed = Event("00".repeat(32), fixture.roomId, now, attribution.kind, attribution.tags, attribution.content, "")
+        assertNull(DepositLedger.refuseAttribution(bob.db, fixture.roomId, proposed))
+        fixture.fileSignedAsRoom(all, attribution.kind, attribution.tags, createdAt = now + 10)
+        // Read by the owner rule on the coin's real branch, as a payout of it would be: all Carol's, none of it Bob's.
+        val branch = assertNotNull(Depositors.statementOf(bob.db, fixture.roomId, fixture.chain, alice.publicKey)).branch
+        assertEquals(
+            com.machankura.dedun.compose.wallet.CoinOwnership.Owner.Member(carol.publicKey.lowercase()),
+            com.machankura.dedun.compose.wallet.CoinOwnership.ownerOf(
+                fr.acinq.bitcoin.OutPoint(fr.acinq.bitcoin.TxId(coin.txid), coin.vout), branch, 40_000, MemberBalances.recordsOf(bob.db, fixture.roomId, fixture.chain),
+            ),
+        )
+    }
+
+    /** The second review's first finding: a transfer dated before one already recorded would be counted ahead of it. */
+    @Test
+    fun `a transfer dated before one the group already recorded is refused, on every rail`() = runBlocking<Unit> {
+        opened()
+        val first = request(sat = 1_000, askedAt = now - 100)
+        val template = MemberTransferEvent.template(first, createdAt = now - 50)
+        fixture.fileSignedAsRoom(all, template.kind, template.tags, createdAt = now - 50)
+
+        val backdated = request(sat = 1_000, askedAt = now - 200)
+        val earlier = MemberTransferEvent.template(backdated, createdAt = now - 60)
+        assertEquals(
+            "is dated before a transfer the group has already recorded",
+            MemberTransfers.refuse(carol.db, fixture.roomId, Event("00".repeat(32), fixture.roomId, earlier.createdAt, earlier.kind, earlier.tags, earlier.content, "")),
+        )
+        assertNull(refused(request(sat = 1_000)), "and one dated now is fine")
     }
 
     @Test

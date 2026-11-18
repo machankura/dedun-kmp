@@ -20,4 +20,11 @@ object MemberTransferRollout {
         Rail.WAVELENGTH, Rail.LIGHTNING -> chain == Chain.Regtest || chain == Chain.Signet
         Rail.ONCHAIN -> false
     }
+
+    /**
+     * Whether this device signs an onchain transfer at all. Off for the release in which every device starts applying onchain
+     * transfers to coin ownership (Phase 5), so that no device which ignores them can be outvoted by one that signed one --
+     * the order Phase 2 and 3 shipped the ledger rails in. On from the release after (Phase 6).
+     */
+    const val SIGNS_ONCHAIN: Boolean = false
 }

@@ -40,6 +40,7 @@ schema v45. The file and line references below are as they stood then.
 | 2 | done: every balance counts transfers; transcript lines; the chronicle carries 30343 |
 | 3 | done, after an adversarial review that added T15: `MemberTransfers.request`, `putToGroup`, `withdraw`, `refuse`, both hooks |
 | 4 | done: `GroupTransferScreen`, the payouts screen's offers and *Transfers waiting*, the approval summary |
+| 5 | done, after a second review that added T16 and revised T6: onchain transfers move coin ownership on every device. **No device signs one yet** (`MemberTransferRollout.SIGNS_ONCHAIN`) |
 
 **Where the build chose differently from the plan:**
 
@@ -282,6 +283,24 @@ and `DepositLedger.refuseAttribution` gain *names a coin a member has transferre
 of*. Without that rule, a newer 30341 or 30340 would reassign the coin's base owner
 and silently void every transfer on top of it.
 
+*Revised by the Phase 5 review; the paragraph above is not what was built.* With that
+rule, any transfer naming a coin froze its corrections for good, a void one included.
+A member could then lock in a misattribution of somebody else's deposit by transferring
+546 sats of it. So a correction is never refused for a transfer. It wins, and a transfer
+by somebody who turns out not to have owned the coin is void under the rule above:
+nobody can give what wasn't theirs. Three further rules came out of the same review:
+
+- **An onchain transfer names only coins the giver owns entirely.** A coin they share
+  isn't theirs alone to split again. A new owner is one more member every payout of it
+  has to pay, and its other owners never agreed.
+- **The receiver must have given an onchain address**, or the coin they now share could
+  never be paid out to anyone.
+- **Only coins this device can place without a wallet.** These are a deposit on a
+  member's branch, an unattributed one on the receive branch, or an output of one of the
+  room's own spends. A deposit the group attributed by signing could sit on any branch,
+  and the row doesn't say which, so the owner rule might read it differently here than a
+  payout's signers do.
+
 ### T7. The one thing that must not happen: a transfer counted as a deposit
 
 `DepositRow` and `DepositLedger.tallies` record who put money in. A transfer must
@@ -403,6 +422,18 @@ member's *transfers*. It no longer holds it against their next *payout*: the bal
 shows that money back, and the member can be paid it, but can't give it away. Treating an
 unpaid approval as paid on transfers alone is the price of devices agreeing without
 knowing which rounds the others co-signed.
+
+### T16. A transfer is dated after every one already recorded *(added by the Phase 5 review)*
+
+A signer checks a proposed transfer as though it came after every transfer already
+recorded. Every device counts it where its `created_at` puts it, and the proposer
+chooses that date, within the request's window, which the giver can set up to a week
+back. A transfer dated before one already recorded was counted ahead of it. It could
+then leave that earlier transfer's giver short, and void it on every device: R1's gift
+gone and R2 holding it, or, on a ledger rail, R1's money paid twice. So a signer refuses
+a transfer dated at or before the newest one the group has recorded on that chain and
+rail, or more than ten minutes ahead of its own clock. It refuses again at approval, so
+a transfer recorded in between declines it.
 
 ### Spike S1: what a late joiner can count on the Wavelength rail
 
@@ -652,6 +683,22 @@ ownership before any onchain transfer can be proposed.
   - `GroupSpendSigningJvmTest` end to end: Alice transfers part of a coin to Bob; Bob
     is paid out; the payout pays Alice her remainder too, as D4 says; both devices'
     `PayoutRule` agree.
+
+**What the review found.** A second adversarial reading, of the Phase 5 code, before the
+commit. Each finding is fixed and has a test:
+
+| found | what it would have let happen | now |
+|---|---|---|
+| **a transfer dated before one already recorded was counted ahead of it** | the earlier transfer voided on every device: a gift taken back, or, on a ledger rail, money paid twice | T16: refused at or before the newest recorded on its rail, and at approval |
+| any transfer naming a coin froze that coin's corrections for good | a misattribution locked in by transferring 546 sats of it; or a quorum freezing every unattributed deposit with void transfers | T6 revised: corrections are never refused for a transfer, and a transfer of what turns out not to be the giver's is void |
+| a transfer could split a coin shared with a third member, or go to a receiver with no onchain address | that member's share of the coin made unpayable without their agreement | T6 revised: only coins the giver owns entirely, and only to a receiver payable onchain |
+| signers would accept onchain transfers in the release that starts counting them | a quorum of devices a release behind paying the giver the receiver's share | `SIGNS_ONCHAIN` stays off until Phase 6 |
+| a deposit the group attributed was placed on the receive branch whatever branch it was on | the signers' owner rule differing from a payout's | such coins aren't offered or accepted |
+
+**What it left open:** an onchain transfer naming several coins can count for some of
+them, if a correction later makes the giver not the owner of one. Each coin is voided on
+its own. A coin spent by a transaction this device has no record of passes the check, and
+then moves nothing anybody can be paid.
 
 ## Phase 6: the onchain screen
 

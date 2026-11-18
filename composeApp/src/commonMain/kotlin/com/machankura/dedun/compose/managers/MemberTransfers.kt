@@ -4,6 +4,13 @@ import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.wallet.CoinOwnership
+import com.machankura.dedun.compose.wallet.GroupSpend
+import fr.acinq.bitcoin.OutPoint
+import fr.acinq.bitcoin.Transaction
+import fr.acinq.bitcoin.TxId
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
@@ -189,7 +196,13 @@ object MemberTransfers {
      * Why a signer won't sign [proposed], a transfer for [chatRoomId], or null when it will: `docs/member-transfers.md`, T4,
      * against this device's own records. Run when a proposal arrives, so a refused one is never shown, and again at approval.
      */
-    suspend fun refuse(database: DedunDatabase, chatRoomId: String, proposed: Event, nowSeconds: Long = Clock.System.now().epochSeconds): String? {
+    suspend fun refuse(
+        database: DedunDatabase,
+        chatRoomId: String,
+        proposed: Event,
+        nowSeconds: Long = Clock.System.now().epochSeconds,
+        signsOnchain: Boolean = MemberTransferRollout.SIGNS_ONCHAIN,
+    ): String? {
         // 1-2: the giver's own signature, embedded whole, and every tag beside it agreeing with it.
         val transfer = MemberTransferEvent.read(proposed) ?: return "isn't a transfer its giver signed"
         val request = transfer.request
@@ -210,7 +223,13 @@ object MemberTransfers {
         }
 
         // 4: once per request.
-        if (signedIn(database, chatRoomId, transfer.chain).any { it.requestId == transfer.requestId }) return "is a transfer the group has already recorded"
+        val signed = signedIn(database, chatRoomId, transfer.chain)
+        if (signed.any { it.requestId == transfer.requestId }) return "is a transfer the group has already recorded"
+        // And after every transfer already recorded on its rail, by the group's own clock (T16): it is checked as the last, and
+        // every device counts it where its date puts it, so one dated earlier could void a transfer checked before it.
+        if (proposed.createdAt > nowSeconds + MAX_FUTURE_SECONDS) return "is dated in the future"
+        val newest = signed.filter { it.rail == transfer.rail }.maxOfOrNull { it.createdAt }
+        if (newest != null && proposed.createdAt <= newest) return "is dated before a transfer the group has already recorded"
 
         // 5: one outflow open at a time.
         if (hasPayoutOpen(database, chatRoomId, transfer.chain, transfer.rail, transfer.from, nowSeconds)) return "is from a member who has a payout waiting"
@@ -218,10 +237,101 @@ object MemberTransfers {
             return "is from a member who is already transferring part of their balance"
         }
 
-        // 6: no more than the giver has.
+        // 6: no more than the giver has -- onchain, of each coin it names (7, T6).
+        if (transfer.rail == Rail.ONCHAIN) {
+            if (!signsOnchain) return "moves coins, which this device doesn't sign yet"
+            return refuseCoins(database, chatRoomId, transfer)
+        }
         val givable = givableSat(database, chatRoomId, transfer.chain, transfer.rail, transfer.from, nowSeconds)
             ?: return "moves coins, which this device can't check yet"
         if (transfer.amountSat > givable) return "transfers ${transfer.amountSat} sats, more than the $givable sats the member has to give"
+        return null
+    }
+
+    /** A coin of the group's onchain wallet as this device knows it, without a wallet open: what a transfer of part of it is checked against. */
+    data class KnownCoin(val key: DepositKey.Onchain, val amountSat: Long, val branch: Long, val confirmed: Boolean)
+
+    /**
+     * Every coin of [chatRoomId]'s onchain wallet on [chain] this device knows of without a wallet open, as
+     * `CoinAssignments.refuse` knows them: a deposit on its ledger -- on its depositor's branch, or the receive branch -- or an
+     * output of one of the room's own spends, on the change branch. Whether it is still unspent takes the chain; a transfer of
+     * a coin since spent moves nothing anybody can be paid.
+     */
+    suspend fun knownCoins(database: DedunDatabase, chatRoomId: String, chain: Chain): Map<DepositKey.Onchain, KnownCoin> {
+        val chainName = GroupWalletStatementEvent.chainName(chain)
+        val branches = Depositors.statementsIn(database, chatRoomId, chain).mapKeys { it.key.lowercase() }.mapValues { it.value.branch }
+        val outputs = database.groupTransactionDao().getByChatRoomId(chatRoomId)
+            .filter { it.chain == chainName }
+            .flatMap { row ->
+                val tx = row.signedTransaction?.let { runCatching { Transaction.read(it) }.getOrNull() } ?: GroupSpend.decode(row.psbt)?.global?.tx
+                tx?.txOut?.mapIndexed { index, out ->
+                    val key = DepositKey.Onchain(tx.txid.toString().lowercase(), index.toLong())
+                    key to KnownCoin(key, out.amount.sat, GroupWalletDerivation.CHANGE, row.confirmedAt != null)
+                }.orEmpty()
+            }
+        val deposits = DepositLedger.depositsIn(database, chatRoomId, chain)
+            .filter { it.source == DepositRow.ONCHAIN }
+            .mapNotNull { row ->
+                val key = DepositKey.parse(row.depositKey) as? DepositKey.Onchain ?: return@mapNotNull null
+                // A deposit the group attributed by signing may sit on any branch, and the row doesn't say which: such a coin
+                // can't be placed without a wallet, and isn't offered. On a member's branch, or unattributed on the receive
+                // branch, the row says where it is.
+                val branch = when (row.attributedBy) {
+                    DepositRow.BY_BRANCH -> row.member?.let { branches[it.lowercase()] } ?: return@mapNotNull null
+                    null -> GroupWalletDerivation.RECEIVE
+                    else -> return@mapNotNull null
+                }
+                key to KnownCoin(key, row.amountMsat / 1000, branch, row.confirmedAt != null)
+            }
+        return (outputs + deposits).toMap()
+    }
+
+    /**
+     * Each confirmed coin this device knows that [member] owns all of, held by no open spend: what an onchain transfer of theirs
+     * may name (T6). A coin they share isn't theirs alone to split again: a new owner would be one more member every payout of it
+     * has to pay, and its other owners never agreed.
+     */
+    suspend fun ownedCoins(database: DedunDatabase, chatRoomId: String, chain: Chain, member: HexKey): Map<DepositKey.Onchain, Long> {
+        val records = MemberBalances.recordsOf(database, chatRoomId, chain)
+        val reserved = reservedKeys(database, chatRoomId)
+        return knownCoins(database, chatRoomId, chain).values
+            .filter { it.confirmed && it.key !in reserved }
+            .mapNotNull { coin ->
+                val owner = CoinOwnership.ownerOf(OutPoint(TxId(coin.key.txid), coin.key.vout), coin.branch, coin.amountSat, records)
+                (owner as? CoinOwnership.Owner.Member)?.takeIf { it.member.equals(member, ignoreCase = true) }?.let { coin.key to coin.amountSat }
+            }
+            .toMap()
+    }
+
+    private suspend fun reservedKeys(database: DedunDatabase, chatRoomId: String): Set<DepositKey.Onchain> =
+        FrostSigningManager.reservedOutPoints(database, chatRoomId).map { DepositKey.Onchain(it.txid.toString().lowercase(), it.index) }.toSet()
+
+    /**
+     * T6's checks on an onchain transfer, against the coins this device knows: each is one of this room's that this device can
+     * place, confirmed, held by no open spend, and the giver's alone, keeping nothing of it or at least dust; and the receiver
+     * can be paid onchain.
+     */
+    private suspend fun refuseCoins(database: DedunDatabase, chatRoomId: String, transfer: MemberTransferEvent.Transfer): String? {
+        // A shared coin is paid out to every owner at once, so the receiver has to be payable onchain or the giver's share
+        // of the coin, and the receiver's, could never leave.
+        GroupPayoutDestinations.payoutDestinationOf(database, chatRoomId, transfer.chain, transfer.to)?.onchainAddress
+            ?: return "is to a member who has given no onchain address"
+        val known = knownCoins(database, chatRoomId, transfer.chain)
+        val records = MemberBalances.recordsOf(database, chatRoomId, transfer.chain)
+        val reserved = reservedKeys(database, chatRoomId)
+        transfer.coins.forEach { moved ->
+            val coin = known[moved.key] ?: return "names a coin this device has not seen"
+            if (!coin.confirmed) return "names a coin that hasn't confirmed"
+            if (coin.key in reserved) return "names a coin a spend being signed holds"
+            val owner = CoinOwnership.ownerOf(OutPoint(TxId(coin.key.txid), coin.key.vout), coin.branch, coin.amountSat, records)
+            if (owner !is CoinOwnership.Owner.Member || !owner.member.equals(transfer.from, ignoreCase = true)) {
+                return if (CoinOwnership.sharesOf(owner, coin.amountSat)[transfer.from.lowercase()] != null) "names a coin the member shares with others"
+                else "names a coin that isn't the member's"
+            }
+            val held = coin.amountSat
+            if (held < moved.sat) return "moves more of a coin than the member holds of it"
+            if (held - moved.sat in 1 until TransferRequestEvent.MIN_TRANSFER_SAT) return "would leave the member a share of a coin too small to pay out"
+        }
         return null
     }
 

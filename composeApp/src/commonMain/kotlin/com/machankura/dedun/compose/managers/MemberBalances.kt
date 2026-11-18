@@ -65,7 +65,12 @@ object MemberBalances {
             chatRoomId,
             chain,
         )
-        return CoinOwnership.Records.of(Depositors.statementsIn(database, chatRoomId, chain).values, attributions, assignments)
+        return CoinOwnership.Records.of(
+            Depositors.statementsIn(database, chatRoomId, chain).values,
+            attributions,
+            assignments,
+            MemberTransfers.signedIn(database, chatRoomId, chain),
+        )
     }
 
     /**
