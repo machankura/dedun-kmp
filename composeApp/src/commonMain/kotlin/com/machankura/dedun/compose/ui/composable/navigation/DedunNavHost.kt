@@ -339,13 +339,6 @@ fun DedunNavHost(
         )
     }
 
-    val databaseTransferRepository = remember {
-        DatabaseTransferRepository(
-            database = auxDatabaseManager.auxDatabase,
-            activeIdentity = sovereignWalletViewModel.activeIdentity,
-        )
-    }
-
     val databaseMarmotRepository = remember {
         DatabaseMarmotRepository(
             database = auxDatabaseManager.auxDatabase,
@@ -495,6 +488,14 @@ fun DedunNavHost(
     val currentGroupOnchainWallets by rememberUpdatedState(groupOnchainWallets)
     val databasePayoutDestinationRepository = remember {
         DatabasePayoutDestinationRepository(
+            database = auxDatabaseManager.auxDatabase,
+            activeIdentity = sovereignWalletViewModel.activeIdentity,
+            wallets = { currentGroupOnchainWallets },
+        )
+    }
+
+    val databaseTransferRepository = remember {
+        DatabaseTransferRepository(
             database = auxDatabaseManager.auxDatabase,
             activeIdentity = sovereignWalletViewModel.activeIdentity,
             wallets = { currentGroupOnchainWallets },

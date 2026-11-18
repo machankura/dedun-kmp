@@ -269,6 +269,9 @@ object ProposedEvent {
                     "to @${nameOf(transfer.to) ?: transfer.to.take(8)}",
                 detail = buildString {
                     append("Signed by @${nameOf(transfer.from) ?: transfer.from.take(8)} themselves. Nothing leaves the wallet, and no fee is paid")
+                    if (transfer.coins.isNotEmpty()) {
+                        append(" · from ${transfer.coins.size} coin${if (transfer.coins.size == 1) "" else "s"} of theirs, which @${nameOf(transfer.to) ?: transfer.to.take(8)} then owns in part or whole")
+                    }
                     transfer.note?.let { append(" · \"$it\"") }
                 },
             )

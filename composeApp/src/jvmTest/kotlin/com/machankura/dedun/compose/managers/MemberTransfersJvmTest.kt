@@ -128,10 +128,10 @@ class MemberTransfersJvmTest {
     }
 
     @Test
-    fun `nothing is offered on mainnet yet, or onchain`() = runBlocking<Unit> {
+    fun `nothing is offered on mainnet yet`() = runBlocking<Unit> {
         opened()
         assertFailsWith<IllegalArgumentException> {
-            MemberTransfers.request(alice.db, alice.room, keyOf(alice), fixture.chain, Rail.ONCHAIN, bob.publicKey, 1_000)
+            MemberTransfers.request(alice.db, alice.room, keyOf(alice), fr.acinq.bitcoin.Chain.Mainnet, Rail.WAVELENGTH, bob.publicKey, 1_000)
         }
     }
 
@@ -318,11 +318,31 @@ class MemberTransfersJvmTest {
         MemberTransfers.refuse(on.db, fixture.roomId, proposal, signsOnchain = true)
 
     @Test
-    fun `no device signs an onchain transfer in the release that starts counting them`() = runBlocking<Unit> {
+    fun `a device with onchain signing off refuses every onchain transfer, as Phase 5's release did`() = runBlocking<Unit> {
         opened()
         alicesCoin()
         bobPaidOnchain()
-        assertEquals("moves coins, which this device doesn't sign yet", MemberTransfers.refuse(carol.db, fixture.roomId, onchainProposal(coin to 15_000)))
+        assertEquals(
+            "moves coins, which this device doesn't sign yet",
+            MemberTransfers.refuse(carol.db, fixture.roomId, onchainProposal(coin to 15_000), signsOnchain = false),
+        )
+        assertNull(MemberTransfers.refuse(carol.db, fixture.roomId, onchainProposal(coin to 15_000)), "and on from Phase 6")
+    }
+
+    @Test
+    fun `Alice asks for an onchain transfer, her coins are chosen, the group signs, and the coin is shared`() = runBlocking<Unit> {
+        opened()
+        alicesCoin()
+        alicesCoin(DepositKey.Onchain("c3".repeat(32), 0), sat = 10_000)
+        bobPaidOnchain()
+        val (_, session) = MemberTransfers.request(alice.db, alice.room, keyOf(alice), fixture.chain, Rail.ONCHAIN, bob.publicKey, 15_000)
+        fixture.signSession(all, alice, assertNotNull(session).id)
+
+        val recorded = MemberTransfers.signedIn(carol.db, fixture.roomId, fixture.chain).single()
+        // The 10,000 coin whole, and 5,000 split from the 40,000: one coin shared.
+        assertEquals(setOf(MemberTransferEvent.CoinShare(DepositKey.Onchain("c3".repeat(32), 0), 10_000), MemberTransferEvent.CoinShare(coin, 5_000)), recorded.coins.toSet())
+        assertEquals(mapOf(DepositKey.Onchain("c3".repeat(32), 0) to 10_000L), MemberTransfers.ownedCoins(carol.db, fixture.roomId, fixture.chain, bob.publicKey))
+        assertEquals(emptyMap(), MemberTransfers.ownedCoins(carol.db, fixture.roomId, fixture.chain, alice.publicKey), "her 40,000 coin is shared now")
     }
 
     @Test

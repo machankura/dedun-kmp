@@ -149,6 +149,68 @@ class GroupTransferScreenJvmTest {
     }
 
     @Test
+    fun `onchain, the form says which coins, and when one becomes shared`() {
+        val coin = com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey.Onchain("c0".repeat(32), 0)
+        val small = com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey.Onchain("c1".repeat(32), 0)
+        val givable = TransferRepository.Givable(50_000, 50_000, mapOf(coin to 40_000L, small to 10_000L))
+        runDesktopComposeUiTest(width = 420, height = 2000) {
+            setContent {
+                DedunTheme {
+                    ProvideSnackbarHost {
+                        GroupTransferScreen(
+                            activeUserPublicKey = me, chatRoomId = room.chatRoom.id, chain = chain, rail = Rail.ONCHAIN,
+                            initialUIState = loaded(givable), chatRepository = ChatRepository.NO_OP_CHAT_REPOSITORY,
+                            transferRepository = TransferRepository.NO_OP, onNavigateBack = {},
+                        )
+                    }
+                }
+            }
+            onNodeWithText("@Bob").performClick()
+            onNodeWithText("Amount").performTextInput("10000")
+            onNodeWithText("From one of your coins").assertIsDisplayed()
+            assertEquals(0, onAllNodesWithText("This makes one coin shared", substring = true).fetchSemanticsNodes().size, "a whole coin moves")
+            onNodeWithText("Everything").performClick()
+            onNodeWithText("From 2 of your coins").assertIsDisplayed()
+        }
+        runDesktopComposeUiTest(width = 420, height = 2000) {
+            setContent {
+                DedunTheme {
+                    ProvideSnackbarHost {
+                        GroupTransferScreen(
+                            activeUserPublicKey = me, chatRoomId = room.chatRoom.id, chain = chain, rail = Rail.ONCHAIN,
+                            initialUIState = loaded(givable), chatRepository = ChatRepository.NO_OP_CHAT_REPOSITORY,
+                            transferRepository = TransferRepository.NO_OP, onNavigateBack = {},
+                        )
+                    }
+                }
+            }
+            onNodeWithText("@Bob").performClick()
+            onNodeWithText("Amount").performTextInput("15000")
+            onNodeWithText("This makes one coin shared between you and @Bob", substring = true).assertIsDisplayed()
+        }
+        // 49,600: the 40,000 coin whole leaves 9,600, which only the 10,000 could give, keeping 400 -- less than dust. No choice
+        // makes it, and the form says so rather than asking for a transfer every signer would refuse.
+        assertNull(givable.coinsFor(49_600))
+        runDesktopComposeUiTest(width = 420, height = 2000) {
+            setContent {
+                DedunTheme {
+                    ProvideSnackbarHost {
+                        GroupTransferScreen(
+                            activeUserPublicKey = me, chatRoomId = room.chatRoom.id, chain = chain, rail = Rail.ONCHAIN,
+                            initialUIState = loaded(givable), chatRepository = ChatRepository.NO_OP_CHAT_REPOSITORY,
+                            transferRepository = TransferRepository.NO_OP, onNavigateBack = {},
+                        )
+                    }
+                }
+            }
+            onNodeWithText("@Bob").performClick()
+            onNodeWithText("Amount").performTextInput("49600")
+            onNodeWithText("No choice of your coins makes that amount", substring = true).assertIsDisplayed()
+            onNodeWithText("Ask the group to record it").assertIsNotEnabled()
+        }
+    }
+
+    @Test
     fun `a profile that can't sign, or a member with nothing to give, is told so instead of a form`() {
         render(loaded(canAsk = false)) { onNodeWithText("This profile can't sign a transfer", substring = true).assertIsDisplayed() }
         render(loaded(TransferRepository.Givable(545, 545))) { onNodeWithText("You have nothing to transfer in this wallet").assertIsDisplayed() }

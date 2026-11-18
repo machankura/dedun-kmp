@@ -40,7 +40,8 @@ schema v45. The file and line references below are as they stood then.
 | 2 | done: every balance counts transfers; transcript lines; the chronicle carries 30343 |
 | 3 | done, after an adversarial review that added T15: `MemberTransfers.request`, `putToGroup`, `withdraw`, `refuse`, both hooks |
 | 4 | done: `GroupTransferScreen`, the payouts screen's offers and *Transfers waiting*, the approval summary |
-| 5 | done, after a second review that added T16 and revised T6: onchain transfers move coin ownership on every device. **No device signs one yet** (`MemberTransferRollout.SIGNS_ONCHAIN`) |
+| 5 | done, after a second review that added T16 and revised T6: onchain transfers move coin ownership on every device, with signing off for that release |
+| 6 | done: signing on, the onchain form with its coins and the shared-coin line, the payouts row's offer; offered on regtest and signet |
 
 **Where the build chose differently from the plan:**
 
@@ -52,6 +53,9 @@ schema v45. The file and line references below are as they stood then.
 | Phase 4: *Transfers waiting* on the room's detail screen | on the payouts screen, beside the balances it changes, with *Put to the group* and *Take back*. The detail screen already opens the payouts screen |
 | Phase 4 and T14: transfer entries in the Wavelength history, the export and the receipt | **not built.** The history is built from rows this device signed and the operator's claims, each entry kind has its own detail sheet and filter, and a transfer moves nothing in the wallet. The payouts row says what a member received and gave, and the transcript records every transfer. Putting transfers in the history is a follow-up |
 | Phase 4: the Wavelength balance card's disclosure says what was received and given | **not built**, for the same reason: the card is the wallet's, and a transfer is the members'. The payouts row says it |
+| Phase 6: the approval lists each coin, its owner before and the share moved | the summary says how many of the giver's coins it moves from; the coins themselves are in the event every signer checks |
+| Phase 6: `CoinRow` labels a coin a transfer shared | **not built**: the payouts row's coin count already excludes what isn't the member's, and the coin rows are the wallet screen's |
+| Phase 6: the form chooses coins from what the member owns | from the coins they own *entirely* that the wallet still holds unspent (T6 revised), so a form never offers a coin a signer would refuse or a coin already spent |
 | the form's preview: what the receiver will hold, on the ledger | what arrives by this device's count, with the ledger figure under it when the wallet holds less than the balances add up to (T5) |
 
 ---

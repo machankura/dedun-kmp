@@ -13,18 +13,15 @@ import fr.acinq.bitcoin.Chain
 object MemberTransferRollout {
     /**
      * The chains a transfer is offered on, per rail. The two ledger rails on regtest and signet, until the emulator run of
-     * Phase 7 and the owner's word for mainnet (question 1). The onchain rail nowhere until its screen (Phase 6), a release
-     * after every device applies onchain transfers to coin ownership (Phase 5).
+     * Phase 7 and the owner's word for mainnet (question 1). The onchain rail the same since its screen (Phase 6), a release
+     * after every device began applying onchain transfers to coin ownership (Phase 5).
      */
-    fun offers(chain: Chain, rail: Rail): Boolean = when (rail) {
-        Rail.WAVELENGTH, Rail.LIGHTNING -> chain == Chain.Regtest || chain == Chain.Signet
-        Rail.ONCHAIN -> false
-    }
+    fun offers(chain: Chain, rail: Rail): Boolean = chain == Chain.Regtest || chain == Chain.Signet
 
     /**
      * Whether this device signs an onchain transfer at all. Off for the release in which every device starts applying onchain
      * transfers to coin ownership (Phase 5), so that no device which ignores them can be outvoted by one that signed one --
      * the order Phase 2 and 3 shipped the ledger rails in. On from the release after (Phase 6).
      */
-    const val SIGNS_ONCHAIN: Boolean = false
+    const val SIGNS_ONCHAIN: Boolean = true
 }

@@ -80,12 +80,25 @@ class GroupTransferViewModel(
         data object NoAmount : Problem
         data object BelowFloor : Problem
         data class OverBalance(val bySat: Long) : Problem
+
+        /** Onchain, no choice of the member's coins makes the amount without leaving a share below dust. */
+        data object NoCoinsFit : Problem
     }
 
     /** Why the form can't be sent yet, or null when it can. */
     fun problem(): Problem? {
         val loaded = uiState as? GroupTransferUIState.Loaded ?: return Problem.NoAmount
-        return problemWith(receiver, ledgerAmount(), loaded.givable.givableSat)
+        val amount = ledgerAmount()
+        problemWith(receiver, amount, loaded.givable.givableSat)?.let { return it }
+        if (rail == Rail.ONCHAIN && amount != null && loaded.givable.coinsFor(amount) == null) return Problem.NoCoinsFit
+        return null
+    }
+
+    /** Onchain, the coins the form's amount would move, as the request will choose them. */
+    fun coins(): List<com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent.CoinShare>? {
+        val loaded = uiState as? GroupTransferUIState.Loaded ?: return null
+        if (rail != Rail.ONCHAIN) return null
+        return ledgerAmount()?.let { loaded.givable.coinsFor(it) }
     }
 
     /** Signs the request, carries it, and puts it to the group where this device can: [onSent] with the session if one opened. */

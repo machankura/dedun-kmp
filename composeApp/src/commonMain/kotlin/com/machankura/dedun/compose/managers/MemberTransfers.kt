@@ -354,16 +354,19 @@ object MemberTransfers {
         note: String? = null,
         standsFor: Long = DEFAULT_REQUEST_SECONDS,
         nowSeconds: Long = Clock.System.now().epochSeconds,
+        /** Onchain, which coins and how much of each: chosen from what the giver owns entirely when not given (T6). */
+        coins: List<MemberTransferEvent.CoinShare>? = null,
     ): Pair<TransferRequestEvent.Request, FrostSigningSession?> {
         val chatRoomId = localChatRoom.chatRoom.id
         require(standsFor in 1..MAX_REQUEST_SECONDS) { "a request stands for at most seven days" }
         require(MemberTransferRollout.offers(chain, rail)) { "transfers aren't offered on this rail and network yet" }
         val signed = TransferRequestEvent.build(giverPrivateKey, chatRoomId, chain, rail, receiver, amountSat, nowSeconds + standsFor, note, nowSeconds)
         val request = TransferRequestEvent.verified(signed) as TransferRequestEvent.Request
-        refuse(database, chatRoomId, unsigned(chatRoomId, request), nowSeconds)?.let { throw IllegalArgumentException("This transfer $it") }
+        val moved = coinsFor(database, chatRoomId, request, coins)
+        refuse(database, chatRoomId, unsigned(chatRoomId, request, moved), nowSeconds)?.let { throw IllegalArgumentException("This transfer $it") }
 
         carry(database, chatRoomId, signed)
-        val session = if (FrostSigningManager.canSign(database, chatRoomId)) putToGroup(database, localChatRoom, request.giver, request) else null
+        val session = if (FrostSigningManager.canSign(database, chatRoomId)) putToGroup(database, localChatRoom, request.giver, request, moved) else null
         return request to session
     }
 
@@ -389,11 +392,18 @@ object MemberTransfers {
      * A device that holds a share putting [request] to the group (T10): the transfer it embeds, checked as this device would
      * check it, and no second session while one is already open over it.
      */
-    suspend fun putToGroup(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, request: TransferRequestEvent.Request): FrostSigningSession {
+    suspend fun putToGroup(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        userPublicKey: HexKey,
+        request: TransferRequestEvent.Request,
+        coins: List<MemberTransferEvent.CoinShare>? = null,
+    ): FrostSigningSession {
         val chatRoomId = localChatRoom.chatRoom.id
         openSessionFor(database, chatRoomId, request)?.let { return it }
-        val template = MemberTransferEvent.template(request)
-        refuse(database, chatRoomId, unsigned(chatRoomId, request))?.let { throw IllegalStateException("This group would refuse it: it $it") }
+        val moved = coinsFor(database, chatRoomId, request, coins)
+        val template = MemberTransferEvent.template(request, moved)
+        refuse(database, chatRoomId, unsigned(chatRoomId, request, moved))?.let { throw IllegalStateException("This group would refuse it: it $it") }
         logger.i("Putting ${request.giver.take(8)}'s transfer ${request.id.take(8)} to $chatRoomId")
         return FrostSigningManager.proposeSigning(
             database = database,
@@ -416,9 +426,25 @@ object MemberTransfers {
                     .any { it.kind == MemberTransferEvent.KIND && MemberTransferEvent.read(it)?.requestId == request.id }
             }
 
+    /**
+     * The coins an onchain [request] moves: [given], or chosen from the coins its giver owns entirely, as this device knows them
+     * ([TransferLedger.chooseCoins]). Nothing on a ledger rail. A sponsor's device chooses for a giver who holds no share.
+     */
+    private suspend fun coinsFor(
+        database: DedunDatabase,
+        chatRoomId: String,
+        request: TransferRequestEvent.Request,
+        given: List<MemberTransferEvent.CoinShare>?,
+    ): List<MemberTransferEvent.CoinShare> {
+        if (request.rail != Rail.ONCHAIN) return emptyList()
+        given?.takeIf { it.isNotEmpty() }?.let { return it }
+        return TransferLedger.chooseCoins(ownedCoins(database, chatRoomId, request.chain, request.giver), request.amountSat)
+            ?: throw IllegalArgumentException("No choice of the member's coins makes ${request.amountSat} sats")
+    }
+
     /** [request] as the group's transfer, unsigned: what [refuse] reads. */
-    private fun unsigned(chatRoomId: String, request: TransferRequestEvent.Request): Event {
-        val template = MemberTransferEvent.template(request)
+    private fun unsigned(chatRoomId: String, request: TransferRequestEvent.Request, coins: List<MemberTransferEvent.CoinShare>): Event {
+        val template = MemberTransferEvent.template(request, coins)
         return Event("00".repeat(32), chatRoomId.lowercase(), template.createdAt, template.kind, template.tags, template.content, "")
     }
 

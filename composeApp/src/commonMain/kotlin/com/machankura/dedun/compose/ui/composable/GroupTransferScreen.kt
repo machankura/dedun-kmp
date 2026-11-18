@@ -62,6 +62,10 @@ import dedun.composeapp.generated.resources.asked_the_group_to_record_your_trans
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group
 import dedun.composeapp.generated.resources.hasn_t_started_depositing_here
 import dedun.composeapp.generated.resources.note_optional
+import dedun.composeapp.generated.resources.no_choice_of_your_coins_makes_that_amount
+import dedun.composeapp.generated.resources.from_s_of_your_coins
+import dedun.composeapp.generated.resources.this_makes_a_coin_shared_between_you_and_s
+import org.jetbrains.compose.resources.pluralStringResource
 import dedun.composeapp.generated.resources.on_the_group_s_ledger_that_is_s_sats
 import dedun.composeapp.generated.resources.rail_lightning
 import dedun.composeapp.generated.resources.rail_onchain
@@ -251,6 +255,10 @@ private fun TransferForm(
                         stringResource(Res.string.s_sats_more_than_you_have, Satoshi(state.givable.arrivesAs(problem.bySat)).grouped()),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error,
                     )
+                    GroupTransferViewModel.Problem.NoCoinsFit -> Text(
+                        stringResource(Res.string.no_choice_of_your_coins_makes_that_amount),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error,
+                    )
                     else -> Unit
                 }
                 val receiver = viewModel.receiver
@@ -268,6 +276,20 @@ private fun TransferForm(
                             stringResource(Res.string.on_the_group_s_ledger_that_is_s_sats, Satoshi(ledger).grouped()),
                             style = MaterialTheme.typography.bodySmall, color = muted,
                         )
+                    }
+                    // Onchain, which coins, and the one consequence a member has to know before agreeing: a split coin is
+                    // paid out to both its owners at once (`docs/payouts-only.md`, D4).
+                    viewModel.coins()?.let { coins ->
+                        Text(
+                            pluralStringResource(Res.plurals.from_s_of_your_coins, coins.size, coins.size.toString()),
+                            style = MaterialTheme.typography.bodySmall, color = muted,
+                        )
+                        if (coins.any { it.sat < (state.givable.coins[it.key] ?: 0) }) {
+                            Text(
+                                stringResource(Res.string.this_makes_a_coin_shared_between_you_and_s, name(receiver)),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
                 Button(onClick = onSend, enabled = problem == null && !viewModel.isActionPending.value) {

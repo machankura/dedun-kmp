@@ -655,12 +655,14 @@ private fun ProblemText(text: String) {
 
 /**
  * The rails [balance]'s member can transfer from on [chain]: where transfers are offered (`MemberTransferRollout`) and they
- * hold at least the least a transfer moves. The onchain rail's transfers name coins, and its screen comes later.
+ * hold at least the least a transfer moves.
  */
 internal fun transferRailsOf(balance: MemberBalances.MemberBalance, chain: Chain): List<TransferRequestEvent.Rail> =
     listOfNotNull(
         TransferRequestEvent.Rail.WAVELENGTH.takeIf { balance.wavelength.netSat >= TransferRequestEvent.MIN_TRANSFER_SAT },
         TransferRequestEvent.Rail.LIGHTNING.takeIf { balance.lightning.availableMsat / 1000 >= TransferRequestEvent.MIN_TRANSFER_SAT },
+        // Onchain, a coin they own entirely: one they share isn't theirs alone to split again (T6).
+        TransferRequestEvent.Rail.ONCHAIN.takeIf { balance.coins.any { it.isConfirmed && !it.shared && it.sat >= TransferRequestEvent.MIN_TRANSFER_SAT } },
     ).filter { MemberTransferRollout.offers(chain, it) }
 
 /** A transfer a member asked for that the group hasn't recorded: who, how much, to whom, and what this device can do about it. */

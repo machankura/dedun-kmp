@@ -1560,4 +1560,10 @@
     <string name="take_back">Take back</string>
     <string name="took_back_your_transfer">Took back your transfer</string>
     <string name="transfer_note_s">“%1$s”</string>
+    <string name="no_choice_of_your_coins_makes_that_amount">No choice of your coins makes that amount without leaving a share too small to pay out. Try a little more or less.</string>
+    <string name="this_makes_a_coin_shared_between_you_and_s">This makes one coin shared between you and %1$s. When either of you is paid out, the other is paid their share at the same time.</string>
+    <plurals name="from_s_of_your_coins">
+        <item quantity="one">From one of your coins</item>
+        <item quantity="other">From %1$s of your coins</item>
+    </plurals>
 </resources>

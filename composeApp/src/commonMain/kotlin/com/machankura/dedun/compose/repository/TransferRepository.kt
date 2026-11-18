@@ -3,6 +3,9 @@ package com.machankura.dedun.compose.repository
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.MemberTransfers
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey
+import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
+import com.machankura.dedun.compose.wallet.TransferLedger
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent.Rail
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -19,7 +22,15 @@ interface TransferRepository {
      * ledger sats, and [heldSat] of it the wallet holds for them today. The two differ only on the Wavelength rail, when the
      * wallet holds less than the ledger promises (T5).
      */
-    data class Givable(val givableSat: Long, val heldSat: Long) {
+    data class Givable(
+        val givableSat: Long,
+        val heldSat: Long,
+        /** Onchain, each unspent, confirmed coin the profile owns entirely, by what it holds: what a transfer may name (T6). */
+        val coins: Map<DepositKey.Onchain, Long> = emptyMap(),
+    ) {
+        /** Onchain, the coins [ledgerSat] would be moved from, or null when no choice of [coins] makes it. */
+        fun coinsFor(ledgerSat: Long): List<MemberTransferEvent.CoinShare>? = TransferLedger.chooseCoins(coins, ledgerSat)
+
         /** What [ledgerSat] given arrives as, by this device's count today. */
         fun arrivesAs(ledgerSat: Long): Long = if (givableSat == 0L) 0 else ledgerSat * heldSat / givableSat
 
