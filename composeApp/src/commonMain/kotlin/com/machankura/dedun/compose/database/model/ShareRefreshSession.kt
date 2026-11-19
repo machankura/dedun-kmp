@@ -74,7 +74,14 @@ data class ShareRefreshSession(
     /** Secret-adjacent. Round 2's auxiliary randomness for the confirmation's signature. */
     val auxRandom: HexKey,
 
+    /** When this device's owner agreed to take part: the refresh's one approval. */
     val dealApprovedAt: Instant? = null,
+
+    /**
+     * Written by builds before docs/rotate-shares-single-approval.md, when storing
+     * the new share was its own approval. Read by nothing; kept rather than
+     * migrated away.
+     */
     val confirmApprovedAt: Instant? = null,
 
     /** The furthest step this device has asked its owner about, so the request line is written once. */

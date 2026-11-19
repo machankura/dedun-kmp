@@ -139,7 +139,7 @@ class ShareRefreshRitualJvmTest {
             .filter { it.publicKey == device.publicKey }
             .sortedWith(compareBy({ it.createdAt }, { it.kind }))
 
-    private suspend fun pump(between: List<Device>) {
+    private suspend fun pump(between: List<Device>, tamper: (MarmotInnerEvent) -> MarmotInnerEvent = { it }) {
         var moved = true
         while (moved) {
             moved = false
@@ -148,8 +148,9 @@ class ShareRefreshRitualJvmTest {
                 outbox(from).forEach { queued ->
                     if (!to.received.add(queued.id)) return@forEach
                     moved = true
-                    to.db.marmotInnerEventDao().upsert(queued.copy(chatRoomId = to.group.roomId))
-                    val event = Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, queued.content, "")
+                    val delivered = tamper(queued)
+                    to.db.marmotInnerEventDao().upsert(delivered.copy(chatRoomId = to.group.roomId))
+                    val event = Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, delivered.content, "")
                     if (ShareRefreshEvents.isShareRefreshKind(event.kind)) {
                         ShareRefreshManager.processRefreshPayload(to.db, to.room, event, to.publicKey, to.privateKey)
                     } else if (com.machankura.dedun.compose.nostr.frost.ShareRepairEvents.isShareRepairKind(event.kind)) {
@@ -314,12 +315,12 @@ class ShareRefreshRitualJvmTest {
     // ---- the approvals, counted (docs/rotate-shares-single-approval.md) ---------------------------------------------
 
     /**
-     * Today's gates, pinned: taking part is not enough. With every recipient's
-     * owner agreeing to take part and nothing more, the rotation goes quiet with
-     * every recipient asked to store their new share, and nobody has stored one.
+     * Taking part is the only approval. With every recipient's owner agreeing to
+     * take part and nothing more, every device stores its new share, confirms it,
+     * and arrives at the new generation; and nothing ever asks to store it.
      */
     @Test
-    fun `after taking part, every recipient is asked again before storing the new share`() = runBlocking<Unit> {
+    fun `after taking part, every device stores its new share without being asked again`() = runBlocking<Unit> {
         val group = Group(3, 2)
         val all = devicesFor(group)
         val refresh = propose(all[0])
@@ -329,31 +330,100 @@ class ShareRefreshRitualJvmTest {
 
         all.forEach { device ->
             val session = device.refresh(refresh.id)!!
-            assertEquals(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.CONFIRM, ShareRefreshManager.pendingApproval(device.db, session), "device ${device.index}")
-            assertNull(device.db.keyShareDao().getGeneration(ceremonyId, 1), "device ${device.index} stored a share it was not told to")
-            assertTrue(outbox(device).none { it.kind == ShareRefreshEvents.ROUND_2 }, "device ${device.index} confirmed")
-            assertTrue(outbox(device).any { it.kind == ShareRefreshEvents.ROUND_1 }, "device ${device.index} did not deal")
+            assertEquals(ShareRefreshStage.COMPLETE, session.stage, "device ${device.index}")
+            assertNull(ShareRefreshManager.pendingApproval(device.db, session), "device ${device.index}")
+            assertNull(session.confirmApprovedAt, "nothing writes the old second approval")
+            assertEquals(ShareGenerationState.ACTIVE, device.db.keyShareDao().getGeneration(ceremonyId, 1)?.state, "device ${device.index}")
+            assertTrue(outbox(device).any { it.kind == ShareRefreshEvents.ROUND_2 }, "device ${device.index} did not confirm")
+            val lines = device.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId)
+                .filter { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED }
+            assertEquals(1, lines.size, "device ${device.index} must be asked once")
         }
     }
 
     /**
-     * Today's asks, pinned: three per recipient -- take part, store the new
-     * share, sign the new generation's key state -- before the old shares are
-     * deleted. The proposer is asked the first two; its device proposes the key
-     * state, and a proposer's signature is its proposal.
+     * The last recipient to take part deals at once, and confirms on the next
+     * pass that brings the coordinator's sum, with no call in between.
      */
     @Test
-    fun `a recipient is asked three times before the old shares go`() = runBlocking<Unit> {
+    fun `the last to take part deals and then confirms with nothing more asked`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        all.dropLast(1).forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
+        pump(all)
+        val last = all.last()
+        assertTrue(outbox(last).none { it.kind == ShareRefreshEvents.ROUND_1 })
+
+        ShareRefreshManager.approve(last.db, last.room, refresh.id, last.privateKey)
+        assertTrue(outbox(last).any { it.kind == ShareRefreshEvents.ROUND_1 }, "it deals in the approve call")
+        pump(all)
+        assertTrue(outbox(last).any { it.kind == ShareRefreshEvents.ROUND_2 }, "and confirms when the sum arrives")
+        all.forEach { assertEquals(ShareRefreshStage.COMPLETE, it.refresh(refresh.id)?.stage) }
+    }
+
+    /**
+     * What the second approval was said to protect, protected without it: a
+     * coordinator's sum altered on its way fails the rotation on every device,
+     * and nobody arrives at a new generation.
+     */
+    @Test
+    fun `a tampered sum fails the rotation with nobody asked`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        all.forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
+        pump(all) { event ->
+            if (event.kind != ShareRefreshEvents.COORDINATOR_ROUND_1) event
+            else event.copy(content = event.content.dropLast(2) + if (event.content.endsWith("00")) "01" else "00")
+        }
+
+        all.forEach { device ->
+            val session = device.refresh(refresh.id)!!
+            assertEquals(ShareRefreshStage.FAILED, session.stage, "device ${device.index}")
+            assertEquals(0, device.active().generation, "device ${device.index} moved to a generation")
+        }
+        assertTrue(all.drop(1).any { it.refresh(refresh.id)!!.failureReason!!.contains("Share refresh") }, "an honest recipient has to say what it found")
+    }
+
+    /**
+     * Two members open a rotation from the same generation at once. With every
+     * owner saying yes to everything, the group never splits: at most one
+     * completes, and every device that moved holds the same table.
+     */
+    @Test
+    fun `two rotations opened at once never split the group`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val first = propose(all[0])
+        val second = propose(all[1])
+        pump(all)
+        answerEverything(all, first.id)
+        answerEverything(all, second.id)
+
+        val completed = listOf(first.id, second.id).filter { id -> all.any { it.refresh(id)?.stage == ShareRefreshStage.COMPLETE } }
+        assertTrue(completed.size <= 1, "two rotations from one generation both completed")
+        val tables = all.map { it.active().generation to it.active().publicShares }.toSet()
+        assertEquals(1, tables.size, "devices disagree about the group's table: $tables")
+    }
+
+    /**
+     * What a recipient is asked before the old shares are deleted: to take part,
+     * and -- until Phase 5 -- to sign the new generation's key state. The
+     * proposer is asked only to take part; its device proposes the key state, and
+     * a proposer's signature is its proposal.
+     */
+    @Test
+    fun `a recipient is asked to take part and to sign the new key state`() = runBlocking<Unit> {
         val group = Group(3, 2)
         val all = devicesFor(group)
         val refresh = propose(all[0])
         pump(all)
         val asks = answerEverything(all, refresh.id)
 
-        val rotation = listOf(
-            Ask.Rotation(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.DEAL),
-            Ask.Rotation(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.CONFIRM),
-        )
+        val rotation = listOf(Ask.Rotation(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.DEAL))
         assertEquals(rotation, asks[0], "the proposer")
         all.drop(1).forEach { device -> assertEquals(rotation + Ask.KeyState, asks[device.index], "device ${device.index}") }
         all.forEach { device ->

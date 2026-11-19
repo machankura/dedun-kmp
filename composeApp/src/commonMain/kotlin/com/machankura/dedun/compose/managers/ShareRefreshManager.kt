@@ -62,8 +62,12 @@ import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
  * - **Every recipient takes part** (D2). A certificate needs them all; anyone
  *   who cannot is withheld, and repaired later.
  *
- * Nothing of this device's own goes out without its owner's approval, at two
- * gates ([ShareRefreshApprovalStep]). [pendingApproval] mirrors them.
+ * Nothing of this device's own goes out until its owner agrees to take part,
+ * with the withheld list the proposal names ([ShareRefreshApprovalStep.DEAL]).
+ * That is the only gate, and [pendingApproval] mirrors it. Everything after it
+ * -- dealing, checking the combined result, storing the new share, confirming --
+ * the device does itself: the check is the device's, and a person tapping
+ * "store" added nothing to it (docs/rotate-shares-single-approval.md).
  */
 object ShareRefreshManager {
     private val logger = Logger.withTag("ShareRefreshManager")
@@ -464,6 +468,8 @@ object ShareRefreshManager {
             val hostSecretKey = ChillDkgRitualManager.deriveHostSecretKey(nostrPrivateKey)
 
             if (isRecipient) {
+                // The one gate: taking part, with these members withheld. Every
+                // step after it follows from that decision and asks nothing more.
                 if (session.dealApprovedAt == null) {
                     announceApprovalNeeded(database, session, ShareRefreshApprovalStep.DEAL)
                     return
@@ -488,10 +494,10 @@ object ShareRefreshManager {
             session = moveTo(database, session, ShareRefreshStage.COLLECTING_ROUND_2)
 
             if (isRecipient && ownMessage(database, session, ShareRefreshEvents.ROUND_2) == null) {
-                if (session.confirmApprovedAt == null) {
-                    announceApprovalNeeded(database, session, ShareRefreshApprovalStep.CONFIRM)
-                    return
-                }
+                // No gate here. participantStep2 is the check that stops a
+                // coordinator substituting a table nobody dealt, and it runs
+                // whoever is looking; confirmAndStore is the one-confirmation
+                // rule, and it holds whoever is looking.
                 val secretShare = base.secretShare ?: throw IllegalStateException("this device holds no share of generation ${base.generation}")
                 val step2 = FrostRefresh.participantStep2(hostSecretKey, secretShare, params, myId.toUInt(), ByteVector(cmsg1.hexToByteArray()), ByteVector32(session.auxRandom))
                 step2.fault.raiseIfFaulty("round 2", base)
@@ -659,8 +665,11 @@ object ShareRefreshManager {
 
     /**
      * What this device's owner is being asked for, or null. **Must mirror the
-     * gates in [advance] exactly**: drift makes the screen offer an approval that
+     * gate in [advance] exactly**: drift makes the screen offer an approval that
      * does nothing, or none while the refresh sits still.
+     *
+     * Only ever [ShareRefreshApprovalStep.DEAL]. [ShareRefreshApprovalStep.CONFIRM]
+     * was a second gate until docs/rotate-shares-single-approval.md.
      */
     suspend fun pendingApproval(database: DedunDatabase, session: ShareRefreshSession): ShareRefreshApprovalStep? {
         if (session.stage == ShareRefreshStage.COMPLETE || session.stage == ShareRefreshStage.FAILED) return null
@@ -668,11 +677,7 @@ object ShareRefreshManager {
         val base = ShareGenerations.at(database, key, session.baseGeneration) ?: return null
         val myId = base.roster.firstOrNull { it.memberPublicKey == session.userPublicKey }?.participantId ?: return null
         if (myId !in session.recipientIdList()) return null
-        if (session.dealApprovedAt == null) return ShareRefreshApprovalStep.DEAL
-        if (session.coordinatorRound1 != null && session.confirmApprovedAt == null &&
-            ownMessage(database, session, ShareRefreshEvents.ROUND_2) == null
-        ) return ShareRefreshApprovalStep.CONFIRM
-        return null
+        return if (session.dealApprovedAt == null) ShareRefreshApprovalStep.DEAL else null
     }
 
     /** Approves the step this device's owner is being asked for, and moves on. */
@@ -681,8 +686,8 @@ object ShareRefreshManager {
         val now = Clock.System.now()
         when (pendingApproval(database, session)) {
             ShareRefreshApprovalStep.DEAL -> update(database, session) { it.copy(dealApprovedAt = now) }
-            ShareRefreshApprovalStep.CONFIRM -> update(database, session) { it.copy(confirmApprovedAt = now) }
-            null -> return
+            // Never pending any more; kept so the `when` stays over the whole enum.
+            ShareRefreshApprovalStep.CONFIRM, null -> return
         }
         advance(database, localChatRoom, sessionId, nostrPrivateKey)
     }
@@ -783,6 +788,7 @@ object ShareRefreshManager {
         update(database, session) { it.copy(approvalRequestedThrough = step) }
         val line = when (step) {
             ShareRefreshApprovalStep.DEAL -> "Your approval is needed to take part in rotating the group's shares."
+            // Unreachable: CONFIRM is no longer asked. Kept because the enum keeps the value.
             ShareRefreshApprovalStep.CONFIRM -> "Your approval is needed to store your new share."
         }
         announce(database, session, ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED, line, session.userPublicKey)
