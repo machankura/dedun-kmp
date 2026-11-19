@@ -38,6 +38,7 @@ import com.machankura.dedun.compose.wallet.UnusedAddressCheck
 import com.machankura.dedun.compose.network.LightningAddressResolver
 import fr.acinq.lightning.MilliSatoshi
 import kotlinx.coroutines.withContext
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
@@ -313,6 +314,34 @@ class ChatRoomDetailViewModel(
 
     fun askToBeRepaired(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
         sharesAction(onDone) { chatRepository.askToBeRepaired(localChatRoom) }
+
+    /**
+     * A rotation this device's owner is being asked to confirm, and who it leaves
+     * out: the members stale at this generation, withheld again as stale. The
+     * proposal approves the proposer, so this is where they decide who is withheld
+     * (docs/rotation-waits-for-key-state.md, Phase 4).
+     */
+    data class RotationConfirmation(val localChatRoom: LocalChatRoom, val leftOut: List<String>)
+
+    var rotationConfirmation: RotationConfirmation? by mutableStateOf(null)
+        private set
+
+    fun askToRotate(localChatRoom: LocalChatRoom, shares: SharesSummary) {
+        rotationConfirmation = RotationConfirmation(
+            localChatRoom,
+            shares.members.filter { it.standing == ShareStanding.STALE }.map { it.name },
+        )
+    }
+
+    fun dismissRotationConfirmation() {
+        rotationConfirmation = null
+    }
+
+    /** Proposes the rotation [rotationConfirmation] asked about. */
+    fun confirmRotation(confirmation: RotationConfirmation, onDone: (String?) -> Unit) {
+        rotationConfirmation = null
+        rotateShares(confirmation.localChatRoom, onDone)
+    }
 
     /** A removed member who still holds a share of the room's key, for the offer to rotate without them. */
     data class RotationOffer(

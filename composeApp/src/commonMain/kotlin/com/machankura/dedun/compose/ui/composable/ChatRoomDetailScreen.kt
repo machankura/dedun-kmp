@@ -234,6 +234,9 @@ import dedun.composeapp.generated.resources.not_now
 import dedun.composeapp.generated.resources.rotate_shares
 import dedun.composeapp.generated.resources.rotate_shares_does_not_reach_lightning
 import dedun.composeapp.generated.resources.rotation_held_running
+import dedun.composeapp.generated.resources.rotate_shares_confirm_title
+import dedun.composeapp.generated.resources.rotate_shares_confirm_everyone
+import dedun.composeapp.generated.resources.rotate_shares_confirm_left_out
 import dedun.composeapp.generated.resources.rotation_held_awaiting_signatures
 import dedun.composeapp.generated.resources.rotation_held_behind
 import dedun.composeapp.generated.resources.rotation_held_after_removal
@@ -340,6 +343,37 @@ fun ChatRoomDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { chatRoomDetailViewModel.dismissRotationOffer() }) {
+                    Text(stringResource(Res.string.not_now))
+                }
+            },
+        )
+    }
+
+    // The plain rotate button's confirmation. Proposing approves the proposer, so
+    // this names who the rotation leaves out (docs/rotation-waits-for-key-state.md,
+    // Phase 4).
+    chatRoomDetailViewModel.rotationConfirmation?.let { confirmation ->
+        AlertDialog(
+            onDismissRequest = { chatRoomDetailViewModel.dismissRotationConfirmation() },
+            title = { Text(stringResource(Res.string.rotate_shares_confirm_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                    Text(stringResource(Res.string.shares_rotation_caveat))
+                    if (confirmation.leftOut.isEmpty()) {
+                        Text(stringResource(Res.string.rotate_shares_confirm_everyone))
+                    } else {
+                        Text(stringResource(Res.string.rotate_shares_confirm_left_out))
+                        confirmation.leftOut.forEach { name -> Text(name, style = MaterialTheme.typography.bodyMedium) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { chatRoomDetailViewModel.confirmRotation(confirmation) { failure -> notify(failure ?: rotationRequested) } }) {
+                    Text(stringResource(Res.string.rotate_shares))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { chatRoomDetailViewModel.dismissRotationConfirmation() }) {
                     Text(stringResource(Res.string.not_now))
                 }
             },
@@ -692,9 +726,7 @@ fun ChatRoomDetailScreen(
                                                 FilledTonalButton(
                                                     enabled = rotation == SharesSummary.Rotation.Available && !actionPending,
                                                     onClick = {
-                                                        chatRoomDetailViewModel.rotateShares(chatRoomDetailUIState.localChatRoom) { failure ->
-                                                            notify(failure ?: rotationRequested)
-                                                        }
+                                                        chatRoomDetailViewModel.askToRotate(chatRoomDetailUIState.localChatRoom, shares)
                                                     }
                                                 ) {
                                                     Text(stringResource(Res.string.rotate_shares))

@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
@@ -21,6 +22,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -54,6 +56,8 @@ class ChatRoomDetailSharesJvmTest {
         ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
         val inputs = MutableSharedFlow<Unit>(replay = 1)
         var reads = 0
+        var rotations = 0
+        override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? { rotations++; return null }
         override suspend fun getChatRoomByIdentifier(id: HexKey): LocalChatRoom? = room.takeIf { id == room.chatRoom.id }
         override suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary { reads++; return shares }
         override fun observeSharesInputs(chatRoomId: String): Flow<Unit> = inputs
@@ -101,5 +105,29 @@ class ChatRoomDetailSharesJvmTest {
         val reads = repository.reads - before
         assertTrue(reads in 1..2, "20 changes in a burst read the section $reads times")
         assertEquals(SharesSummary.Rotation.Available, (viewModel.chatRoomDetailUIState as ChatRoomDetailUIState.Loaded).shares?.rotation)
+    }
+
+    @Test
+    fun `rotating asks first, naming who it leaves out`() = runBlocking<Unit> {
+        val shares = summary(SharesSummary.Rotation.Available).copy(
+            members = listOf(
+                SharesSummary.Member("b".repeat(64), "Bongani", ShareStanding.LIVE, isSelf = false),
+                SharesSummary.Member("c".repeat(64), "Carol", ShareStanding.STALE, isSelf = false),
+                SharesSummary.Member("d".repeat(64), "Dumi", ShareStanding.RETIRED, isSelf = false),
+            )
+        )
+        val repository = Repository(localChatRoom, shares)
+        val viewModel = viewModel(repository)
+
+        viewModel.askToRotate(localChatRoom, shares)
+        val confirmation = viewModel.rotationConfirmation!!
+        assertEquals(listOf("Carol"), confirmation.leftOut, "the stale are withheld again; the retired are gone already")
+        assertEquals(0, repository.rotations, "nothing is proposed before the owner confirms")
+
+        val done = kotlinx.coroutines.CompletableDeferred<String?>()
+        viewModel.confirmRotation(confirmation) { done.complete(it) }
+        assertNull(withTimeout(5_000) { done.await() })
+        assertEquals(1, repository.rotations)
+        assertNull(viewModel.rotationConfirmation)
     }
 }

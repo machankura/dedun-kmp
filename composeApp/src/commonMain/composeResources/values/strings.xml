@@ -140,7 +140,10 @@
     <string name="ask_the_group_to_sign_the_new_shares">Ask the group to sign the new shares</string>
     <string name="key_state_requested">Asked the group to sign the new shares</string>
     <string name="see_the_proposal">See the proposal</string>
-    <string name="share_rotation_requested">Share rotation proposed; every remaining member is asked to take part</string>
+    <string name="share_rotation_requested">Share rotation proposed; every other member is asked to take part</string>
+    <string name="rotate_shares_confirm_title">Rotate the group's shares?</string>
+    <string name="rotate_shares_confirm_everyone">Every member with a share takes part.</string>
+    <string name="rotate_shares_confirm_left_out">Left out again, until they are brought back:</string>
     <string name="library">Library</string>
     <string name="lightning_invoice">Lightning invoice</string>
     <string name="live">LIVE</string>

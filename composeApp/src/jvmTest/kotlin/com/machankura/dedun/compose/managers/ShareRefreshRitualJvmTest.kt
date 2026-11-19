@@ -38,6 +38,7 @@ import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.machankura.dedun.compose.database.model.types.ShareGenerationState
+import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.extensions.toHex
@@ -217,18 +218,56 @@ class ShareRefreshRitualJvmTest {
     }
 
     @Test
-    fun `nothing of a member's own goes out before they approve`() = runBlocking<Unit> {
+    fun `nothing of a member's own goes out before they approve, but the proposer is not asked`() = runBlocking<Unit> {
         val group = Group(3, 2)
         val all = devicesFor(group)
         val refresh = propose(all[0])
         pump(all)
 
-        all.forEach { device ->
-            assertEquals(listOf(ShareRefreshEvents.PROPOSAL).takeIf { device.index == 0 } ?: emptyList(), outbox(device).map { it.kind }, "device ${device.index}")
-            assertNotNull(ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index} must be asked")
+        // The proposer confirmed who is withheld before proposing, and is the
+        // coordinator CONFIRM guards against: it deals at once and is asked nothing
+        // (docs/rotation-waits-for-key-state.md, Phase 4).
+        assertEquals(listOf(ShareRefreshEvents.PROPOSAL, ShareRefreshEvents.ROUND_1), outbox(all[0]).map { it.kind })
+        assertNull(ShareRefreshManager.pendingApproval(all[0].db, all[0].refresh(refresh.id)!!), "the proposer must not be asked")
+        assertTrue(all[0].db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).none { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED })
+
+        // Everyone else is asked, and has sent nothing.
+        all.drop(1).forEach { device ->
+            assertEquals(emptyList(), outbox(device).map { it.kind }, "device ${device.index}")
+            assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index} must be asked")
         }
-        // The proposer is asked like anyone: proposing is not agreeing to withhold whoever the form defaulted to.
-        assertTrue(all[0].db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).any { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED })
+
+        // And once they have dealt, they are asked again before confirming; the proposer is not.
+        all.drop(1).forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
+        pump(all)
+        assertNull(ShareRefreshManager.pendingApproval(all[0].db, all[0].refresh(refresh.id)!!))
+        all.drop(1).forEach { device ->
+            assertEquals(ShareRefreshApprovalStep.CONFIRM, ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index}")
+        }
+    }
+
+    /**
+     * Two members propose from one base before either hears of the other. Each is
+     * approved for its own and refuses the other on arrival, as a recipient,
+     * out loud -- so neither stalls and nothing forks.
+     */
+    @Test
+    fun `two proposals crossing on the wire end with neither stuck and at most one generation`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val first = propose(all[0])
+        val second = propose(all[1])
+        pump(all)
+        approveAll(all, first.id)
+        approveAll(all, second.id)
+
+        all.forEach { device ->
+            val stages = listOf(first.id, second.id).map { device.refresh(it)?.stage }
+            assertTrue(stages.none { it != null && it != ShareRefreshStage.COMPLETE && it != ShareRefreshStage.FAILED }, "device ${device.index} left one running: $stages")
+            assertTrue(stages.count { it == ShareRefreshStage.COMPLETE } <= 1, "device ${device.index}: $stages")
+            assertTrue(ShareRefreshManager.rotationHold(device.db, device.room, device.key()) !is RotationHold.Running, "device ${device.index}")
+        }
+        assertEquals(1, all.map { it.active().publicShares }.toSet().size, "every device on one table")
     }
 
     @Test

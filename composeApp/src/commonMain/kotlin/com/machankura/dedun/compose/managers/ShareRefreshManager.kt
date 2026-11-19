@@ -113,9 +113,13 @@ object ShareRefreshManager {
      * Opens a refresh of [key], making this device the coordinator. Every live
      * participant not in [withheld] is a recipient.
      *
-     * The proposer is auto-approved for nothing: proposing a refresh is not
-     * agreeing to withhold whomever the form defaulted to, so it is asked at both
-     * gates like everyone else.
+     * The proposer is approved at both gates on proposal
+     * (docs/rotation-waits-for-key-state.md, Phase 4). `DEAL` is the decision about
+     * the withheld list, and the screen only proposes after its owner has confirmed
+     * a dialog naming everyone withheld -- so the tap was that decision. `CONFIRM`
+     * guards against a coordinator substituting a table nobody dealt, and the
+     * proposer is the coordinator: its own CertEq check does that work, and a tap
+     * adds nothing to it. Every other recipient is asked at both gates as before.
      */
     suspend fun proposeRefresh(
         database: DedunDatabase,
@@ -158,6 +162,8 @@ object ShareRefreshManager {
             withheld = ShareRefreshSession.formatWithheld(allWithheld),
             round1Random = RandomInstance.bytes(32).toHex(),
             auxRandom = RandomInstance.bytes(32).toHex(),
+            dealApprovedAt = Clock.System.now(),
+            confirmApprovedAt = Clock.System.now(),
         )
         database.shareRefreshDao().upsert(session)
         announce(database, session, ChatMessage.TYPE_SHARE_REFRESH_STARTED, startedLine(session, shares), userPublicKey)
