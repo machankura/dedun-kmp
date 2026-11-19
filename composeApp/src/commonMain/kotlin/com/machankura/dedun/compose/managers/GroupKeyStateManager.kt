@@ -629,7 +629,11 @@ object GroupKeyStateManager {
      *    [claimFrom] checks the derivation, the same check [stateFrom] makes;
      * 6. claiming the parent the ceremony was run for, or none for a group's own,
      *    with a certificate that parent's quorum signed -- [claimFrom] again;
-     * 7. and with no state for that room already signed on this device.
+     * 7. with no state for that room already signed on this device;
+     * 8. and naming no share generation and no member binding. A rotation's key
+     *    state, or one binding an id to a new identity, says more than the
+     *    ceremony did -- which shares the group now signs with, who holds an id --
+     *    and that is its owner's to agree to (docs/frost-share-refresh.md).
      */
     suspend fun vouchesFor(
         database: DedunDatabase,
@@ -664,6 +668,9 @@ object GroupKeyStateManager {
         // 7
         val signed = stateAmong(database.groupSignedEventDao().getByKind(GroupKeyStateEvent.KIND), claim.chatRoomId)
         if (signed != null) return false
+
+        // 8
+        if (claim.generation != null || claim.memberBindings != null) return false
 
         return true
     }
