@@ -10,7 +10,24 @@ approval gates, Phase 8 (the cutover) and D6 (when the old share is wiped). Read
 asks its owner only for decisions the device cannot make on its own", is the precedent
 for Phase 4 here.
 
-**Not built.** Planned against `fc437d05`.
+**Built**, one commit per phase on `claude/rotate-shares-pending-proposal-9d72d7`
+(`159ae402`, `d358a0db`, `98567629`, `95131248`), against the code as it stood at
+`fc437d05`. The phases are kept as written because they are the reasoning. Where the
+build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| R1(c)'s open question: does a key-state session nobody finishes ever fail here? | Only once `participantCount - threshold + 1` members have declined (`FrostSigningSession.declinesThatAbandon`), so one refusal does not end it. An open session counts **unless this device declined it**. The coordinator who proposed it cannot decline its own, and stays held until others do or it completes |
+| Phase 2's `ChatRepository.proposeKeyState` does the work | the work is `ShareRefreshManager.proposeOwedKeyState`, which the repository wraps, so it is tested in the ritual harness without building an `Identity` |
+| Phase 2's held line links to the proposals | a **See the proposal** button under the line, to `ProposalListRoute` |
+| Phase 2's summary tests are their own file | two tests in `ShareRefreshRitualJvmTest`, reading `DatabaseChatRepository.sharesSummary` on the harness's devices through every `Rotation` value, the re-ask included |
+| Phase 3 recomputes on repairs too, or leaves them out | left out: `ShareRepairDao` has no observable query |
+| Phase 4's dialog says "%1$s will be left out again…" | a line, then one name per line. Joining names into one string needs a separator the catalogue cannot hold |
+| Phase 4's crossing proposals end in one completed refresh or one a recipient can abandon | each proposer is a recipient of the other's proposal and refuses it on arrival ("another refresh of this key is still running here"), out loud, so neither is left running. The test asserts the property, not which one survives: nothing running, at most one complete, every device on one table |
+
+**Not done:** none of it has been seen on a device or a desktop window: the disabled
+button and its line, the re-ask, the confirmation dialog, or the section updating while
+open.
 
 ---
 

@@ -26,6 +26,7 @@ ceremony they describe and the rule that a room's id *is* the key it signs with.
 | 11 | `99229090` | `compileDebugKotlinAndroid`; the M3 audit at its budgets. **Not seen on a device or a desktop window** |
 | 12 | `4949f0fe` | `ShareRefreshRitualJvmTest`: three refreshes in a row, then the recovery walk from the generation-0 share lands on every device's live share, each generation checked against its table. `jvmTest` 1200/1200 |
 | 13 | `99229090` | `ShareRefreshRitualJvmTest`: with the flag off, the recipients decline a rotation out loud and it fails; proposing one throws. Android, desktop and iOS device checks not done |
+| after 13 | `159ae402`, `d358a0db`, `98567629`, `95131248` | [rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md): a rotation waits for the group to sign the last one's key state, the Shares section says why, follows the group while open, and the proposer is not asked about their own rotation. `ShareRefreshRitualJvmTest` 25/25, `ChatRoomDetailSharesJvmTest` 3/3; `./gradlew check` (`jvmTest` 1240/1240, `testDebugUnitTest` 496/496, lint, audits). **Not seen on a device or a desktop window** |
 | 5 | `4040ae74` | `SecureDeleteJvmTest` (5, two of them controls that fail without the fix); `jvmTest` 1176/1176; `compileDebugKotlinAndroid`, `processDebugResources` |
 | 6 | `fce51e20` | `ShareGenerationsJvmTest` (7: a real 2-of-3 signature with hand-refreshed shares verifying as the unchanged room, a decline from a device without the generation, a withheld member who is not a signer); every existing signing test unedited; `jvmTest` 1183/1183; `compileDebugKotlinAndroid`; the M3, brand and wallet audits |
 
@@ -48,7 +49,7 @@ Where the build chose differently from the plan:
 | Phase 7: the refusals | one more: every participant not retired has to be a recipient or withheld, so a proposal cannot leave someone in neither list. A participant stale at the base generation is withheld again, as stale, automatically: a refresh brings nobody back, a repair does. A recipient that refuses a proposal on arrival broadcasts a failure, since the certificate needs it; anyone else refuses silently. D5's capability check waits for Phase 13 |
 | Phase 7: a kill between storing the pending generation and sending the confirmation | handled the way the plan said -- `confirmAndStore` is idempotent for the refresh that holds the claim, so the next pass stores it again and sends -- but not tested on its own |
 | Phase 7: the transcript | system lines through `RitualNotice`, settled. The request line opens nothing until the refresh screen exists (Phase 11) |
-| Phase 8: any recipient proposes the new key state | the coordinator does, automatically, the moment its refresh completes; anyone can again. That races the certificate to the other devices, and lost in the first test run: a device still holding the generation as pending declined. A proposal at a generation this device has confirmed and is waiting on the certificate for now waits instead, and the refresh resumes it on activation (`FrostSigningManager.resumeAt`) |
+| Phase 8: any recipient proposes the new key state | the coordinator does, automatically, the moment its refresh completes; anyone can again. That races the certificate to the other devices, and lost in the first test run: a device still holding the generation as pending declined. A proposal at a generation this device has confirmed and is waiting on the certificate for now waits instead, and the refresh resumes it on activation (`FrostSigningManager.resumeAt`). "Anyone can again" had no button until [rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md): the Shares section offers it when the key state is owed and nobody is asking |
 | Phase 8: `ShareRefreshCutoverJvmTest` | the cutover tests live in `ShareRefreshRitualJvmTest`, which has the multi-device harness. The bytes-on-disk check is `SecureDeleteJvmTest`'s, against a file; these devices are in memory. A device that disagrees with the group's table keeps its share and logs it, untested |
 | Phase 8: gen-0's randomness nulled | emptied: `round1Random` and `round2AuxRandom` are not nullable, and a complete ceremony never reads them again |
 | Phase 9: an action on the members screen | a dialog the room detail screen raises after a removal succeeds, when the member held a live share (asked before the removal, while they are still in the roster). "Not now" leaves it; nothing offers it again yet -- Phase 11's Shares section is where a rotation can be started at any time. `MemberRemovalRefreshJvmTest` is two tests in the ritual harness |
@@ -477,7 +478,12 @@ host keys, so a room-wide message is fine here, which it is **not** for repair (
   enforced with a write-once column on `KeyShareGeneration`, set in the same transaction that
   stores the `PENDING` row. **It is as important as the nonce rules, and for the same reason: it
   is the one way the group splits.**
-- an open ChillDKG or refresh for the same key.
+- an open ChillDKG or refresh for the same key;
+- **on the proposer's device only**, a rotation whose key state the group has not signed yet, a
+  key-state proposal still open there, or a device behind the group
+  ([rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md),
+  `ShareRefreshManager.rotationHold`). Not on arrival: a recipient a few seconds behind on the
+  signature would end a rotation that was fine.
 
 **Approval gates.** Two, mirroring the ceremony's, with `pendingApproval` mirroring `advance`
 exactly:
@@ -487,8 +493,13 @@ exactly:
 | `DEAL` | round 1 | joins the refresh and agrees to the withheld list. Withholding someone is a decision about them, so every recipient makes it, not only the proposer |
 | `CONFIRM` | CertEq | commits to the new generation. This is what stops a coordinator substituting a table the recipients never dealt |
 
-The proposer is auto-approved for nothing. Proposing a refresh is not agreeing to withhold
-whomever the form defaulted to.
+~~The proposer is auto-approved for nothing. Proposing a refresh is not agreeing to withhold
+whomever the form defaulted to.~~ The proposer is approved at both gates on proposal
+([rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md), Phase 4). The form no
+longer defaults silently: the Shares section's button asks first in a dialog naming everyone
+the rotation leaves out, so the tap is the `DEAL` decision; and the proposer is the coordinator
+`CONFIRM` guards against, whose own CertEq check does that work. Every other recipient is asked
+at both gates.
 
 **Transcript.** System lines in the room, as the ceremony writes them, idempotent by reading the
 row before writing:
