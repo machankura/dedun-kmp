@@ -832,6 +832,14 @@ class DatabaseChatRepository(
         return MarmotInboundManager.reconcileAdmins(database, chatRoomId, group)
     }
 
+    override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
+        database.marmotOutboundDao().promote(localChatRoom, memberPublicKey)
+    }
+
+    override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
+        database.marmotOutboundDao().demote(localChatRoom, adminPublicKey)
+    }
+
     override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         database.marmotOutboundDao().removeMember(localChatRoom, memberPublicKey)
     }

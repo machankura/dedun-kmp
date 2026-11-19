@@ -431,6 +431,21 @@ interface ChatRepository {
     suspend fun foundingAdmins(chatRoomId: String): FoundingAdmins.Check
 
     /**
+     * Makes [memberPublicKey] an admin of a convenient room this device
+     * administers: one commit through the publish gate, captioned when it is
+     * applied. Throws with words a person can act on when it cannot be done. See
+     * docs/member-admin-promotion.md, Phase 6.
+     */
+    suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey)
+
+    /**
+     * Makes [adminPublicKey] stop being an admin of a convenient room this device
+     * administers -- this device's own account included, which is stepping down.
+     * Throws with words a person can act on when it cannot be done.
+     */
+    suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey)
+
+    /**
      * Whether [memberPublicKey] holds a live share of the room's key, and so
      * whether a removal leaves them able to help sign until the shares are
      * rotated without them (docs/frost-share-refresh.md, Phase 9).
@@ -714,6 +729,10 @@ interface ChatRepository {
             }
 
             override suspend fun reconcileAdmins(chatRoomId: String): Boolean = false
+
+            override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
+
+            override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) = Unit
 
             override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
 

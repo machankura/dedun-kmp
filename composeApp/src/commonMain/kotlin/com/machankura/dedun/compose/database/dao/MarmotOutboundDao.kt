@@ -36,10 +36,10 @@ import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import com.machankura.dedun.compose.nostr.Relays
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.crypto.random.RandomInstance
+import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
 import com.vitorpamplona.marmot.appComponents.AppComponentIds
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.marmot.groups.MlsGroupManager
-import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.isLocalAdmin
@@ -67,6 +67,7 @@ import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 
 @Dao
@@ -859,17 +860,36 @@ abstract class MarmotOutboundDao(
      * every other from the commit -- so every device says the same thing at the
      * same point. The library's admin-depletion guard refuses a commit that would
      * leave no admin in the tree.
+     *
+     * An admin is taken off the admin list first, by a commit of its own, and
+     * removed once that one is confirmed. A bare `Remove` left their key on the
+     * list, so inviting them back made them an admin again with nobody having
+     * said so -- and `AdminPolicyV1` says a commit removing an account's last leaf
+     * must drop its key. Two commits until the library can stage both proposals
+     * in one (docs/member-admin-promotion.md, Phase 0, step 5); if the second is
+     * lost to a restart, the member is left demoted, and removing them again is
+     * one commit.
      */
     @Transaction
     open suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room can remove a member" }
-        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+        val engine = database.marmotEngine
+        val group = engine.groupFor(localChatRoom.routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
         if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
         val leafIndex = group.members()
             .firstOrNull { (_, leaf) -> (leaf.credential as? Credential.Basic)?.identity?.toHexKey() == memberPublicKey }
             ?.first
             ?: throw IllegalArgumentException("$memberPublicKey is not in the group")
+
+        if (memberPublicKey in group.currentAdminIdentities()) {
+            publishAdmins(localChatRoom) { admins -> admins - memberPublicKey }
+            engine.afterConfirmed(localChatRoom.routingId) {
+                database.chatRoomDao().findChatRoomById(localChatRoom.chatRoom.id)
+                    ?.let { removeMember(it, memberPublicKey) }
+            }
+            return
+        }
 
         publishGatedCommit(localChatRoom) { manager, id -> manager.stageRemoveMember(id, leafIndex) }
     }
@@ -892,10 +912,80 @@ abstract class MarmotOutboundDao(
         val current = group.currentAdminIdentities()
         val added = publicKeys - current
         if (added.isEmpty()) return
+        // A room whose changes need the group's signature takes no bare commit from
+        // this build (GovernanceMarker; docs/giza-into-dedun.md, Phase 1).
+        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
 
         val policy = AdminPolicyV1.ofHex(current + added).encode()
         publishGatedCommit(localChatRoom) { manager, id ->
             manager.stageAppDataUpdate(id, AdminPolicyV1.COMPONENT_ID, policy)
+        }
+    }
+
+    /**
+     * Makes [memberPublicKey] an admin of a room this device administers, by one
+     * commit through the publish gate. Nothing happens for someone who already is.
+     *
+     * Refused in a keyed room, whose admins change only with the group's signature
+     * and a share of its key (docs/member-admin-promotion.md, R1 and R2), and for
+     * someone who is not in the tree: an admin with no leaf is not valid state.
+     * The line saying so is written when the commit is applied, on every device.
+     * docs/member-admin-promotion.md, Phase 6.
+     */
+    @Transaction
+    open suspend fun promote(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
+        val group = governedGroup(localChatRoom)
+        if (memberPublicKey in group.currentAdminIdentities()) return
+        check(!AdminGovernance.isKeyedRoom(group)) { KEYED_ROOM_REFUSAL }
+        if (memberPublicKey !in AdminGovernance.members(group)) {
+            throw IllegalArgumentException("${memberName(memberPublicKey)} is not in the group any more")
+        }
+
+        publishAdmins(localChatRoom) { admins -> admins + memberPublicKey }
+    }
+
+    /**
+     * Makes [adminPublicKey] stop being an admin of a room this device administers,
+     * by one commit through the publish gate. Nothing happens for someone who is not
+     * one. [adminPublicKey] may be this device's own account, which is stepping down.
+     *
+     * Refused in a keyed room, as [promote] is, and where it would leave no admin
+     * among the members -- the commit every peer refuses as admin depletion, said
+     * here in words that name the fix. docs/member-admin-promotion.md, Phase 6.
+     */
+    @Transaction
+    open suspend fun demote(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
+        val group = governedGroup(localChatRoom)
+        if (adminPublicKey !in group.currentAdminIdentities()) return
+        check(!AdminGovernance.isKeyedRoom(group)) { KEYED_ROOM_REFUSAL }
+        if (!AdminGovernance.canDemote(group, localChatRoom.chatRoom.userPublicKey, adminPublicKey)) {
+            throw IllegalStateException(
+                if (adminPublicKey == localChatRoom.chatRoom.userPublicKey) "You're the only admin. Make someone else an admin first"
+                else "${memberName(adminPublicKey)} is the only admin. Make someone else an admin first"
+            )
+        }
+
+        publishAdmins(localChatRoom) { admins -> admins - adminPublicKey }
+    }
+
+    /** The room's live group, when this device may change who administers it. */
+    private suspend fun governedGroup(localChatRoom: LocalChatRoom): MlsGroup {
+        require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room has admins to change" }
+        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+            ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
+        check(group.isLocalAdmin()) { "Only an admin can change who the admins are" }
+        return group
+    }
+
+    /**
+     * Commits the room's admin list as [change] makes it from the list the group
+     * holds at the moment the commit is staged -- after any convergence pass has
+     * settled -- rather than from one read before the wait.
+     */
+    private suspend fun publishAdmins(localChatRoom: LocalChatRoom, change: (Set<HexKey>) -> Set<HexKey>) {
+        publishGatedCommit(localChatRoom) { manager, id ->
+            val live = manager.getGroup(id) ?: throw MarmotMissingChatGroupException("No live group for $id")
+            manager.stageAppDataUpdate(id, AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(change(live.currentAdminIdentities())).encode())
         }
     }
 
@@ -1374,5 +1464,9 @@ abstract class MarmotOutboundDao(
 
     companion object {
         const val TAG = "MarmotOutboundDao"
+
+        /** Why a keyed room's admins cannot be changed by one admin's commit yet. */
+        const val KEYED_ROOM_REFUSAL =
+            "This group's admins hold shares of its key, so changing them needs the group's signature. That isn't built yet"
     }
 }

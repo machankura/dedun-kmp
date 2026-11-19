@@ -91,6 +91,29 @@ class MarmotEngine(
     val gate = MarmotPublishGate(groupManager, RoomPublishObligationStore(database))
 
     private val restoreMutex = Mutex()
+
+    /**
+     * The next step of a two-commit change, by the group whose commit it waits on:
+     * removing an admin is a demotion and then the removal, and leaving as an admin
+     * is a step-down and then the leave. Run when that group's commit is confirmed,
+     * dropped when every relay refuses it.
+     *
+     * Keyed by group because the gate allows one commit in flight per group, so the
+     * next confirmation for it is the one this waits on. In memory on purpose: a
+     * restart between the two leaves a demoted member who has not been removed, or
+     * an ex-admin who has not left, and either can be finished with one tap.
+     * docs/member-admin-promotion.md, Phases 6 and 10.
+     */
+    private val followUps = mutableMapOf<HexKey, suspend () -> Unit>()
+    private val followUpsMutex = Mutex()
+
+    /** Runs [step] once [routingId]'s commit now in flight is confirmed. */
+    suspend fun afterConfirmed(routingId: HexKey, step: suspend () -> Unit) {
+        followUpsMutex.withLock { followUps[routingId] = step }
+    }
+
+    private suspend fun takeFollowUp(routingId: HexKey): (suspend () -> Unit)? =
+        followUpsMutex.withLock { followUps.remove(routingId) }
     private var restored = false
 
     /**
@@ -230,6 +253,9 @@ class MarmotEngine(
             priorAdmins = MarmotGroupPolicy.adminIdentitiesIn(obligation.priorState.groupContext.extensions),
         )
         database.marmotOutboundDao().continueDisband(localChatRoom)
+        takeFollowUp(obligation.groupId)?.let { step ->
+            runCatching { step() }.onFailure { logger.w("The step after ${obligation.groupId.take(8)}…'s commit failed: ${it.message}") }
+        }
     }
 
     /**
@@ -245,6 +271,7 @@ class MarmotEngine(
         ensureRestored()
         val obligation = gate.allPending().firstOrNull { it.obligationId == obligationId } ?: return false
         gate.resolve(obligationId, PublishOutcome.FAILED)
+        takeFollowUp(obligation.groupId)
         logger.w("Commit ${obligationId.take(8)}… discarded; ${obligation.groupId.take(8)}… stays at epoch ${obligation.priorState.groupContext.epoch}")
         return true
     }
