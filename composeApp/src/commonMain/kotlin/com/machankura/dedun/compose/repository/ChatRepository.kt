@@ -28,6 +28,7 @@ import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.ui.view.state.SharesSummary
 
 interface ChatRepository {
     suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>>
@@ -346,6 +347,21 @@ interface ChatRepository {
      */
     suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String?
 
+    /** The room's key as the Shares section shows it, or null when the room has none. */
+    suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary?
+
+    /** Proposes rotating every share of the room's key. Null on success, or why not. */
+    suspend fun rotateShares(localChatRoom: LocalChatRoom): String?
+
+    /** Answers what [approval] asks. Null on success, or why not. */
+    suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String?
+
+    /** Ends the rotation [sessionId] for everyone. Null on success, or why not. */
+    suspend fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String): String?
+
+    /** Asks the group to bring this device's stale id back. Null on success, or why not. */
+    suspend fun askToBeRepaired(localChatRoom: LocalChatRoom): String?
+
     /**
      * Disbands a current-profile room this device administers. Absorbing: once the
      * disband commit is applied nobody rejoins, and a replacement conversation is a
@@ -572,6 +588,16 @@ interface ChatRepository {
             override suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean = false
 
             override suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String? = null
+
+            override suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary? = null
+
+            override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? = null
+
+            override suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String? = null
+
+            override suspend fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String): String? = null
+
+            override suspend fun askToBeRepaired(localChatRoom: LocalChatRoom): String? = null
 
             override suspend fun disbandChatRoom(localChatRoom: LocalChatRoom) = Unit
 

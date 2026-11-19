@@ -30,6 +30,7 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.types.ShareRepairStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
 
@@ -71,6 +72,7 @@ object ShareRepairManager {
         key: DkgSession,
         targetId: Int? = null,
     ): ShareRepairSession {
+        check(ExperimentalFeatures.shareRefresh) { "This build does not repair shares" }
         require(key.stage == DkgRitualStage.COMPLETE) { "Ceremony ${key.id} has not produced a key" }
         val shares = ShareGenerations.active(database, key)
         val id = targetId ?: shares.roster.firstOrNull { it.memberPublicKey == userPublicKey }?.participantId
@@ -135,6 +137,7 @@ object ShareRepairManager {
 
     private suspend fun acceptRequest(database: DedunDatabase, localChatRoom: LocalChatRoom, event: Event, sessionId: String, userPublicKey: HexKey): ShareRepairSession? {
         database.shareRepairDao().getSessionById(sessionId)?.let { return it }
+        if (!ExperimentalFeatures.shareRefresh) return null
         val tag = { name: String -> ShareRepairEvents.value(event.tags, name) }
         val key = tag(ShareRepairEvents.KEY_TAG)?.let { database.dkgSessionDao().getSessionById(it) }?.takeIf { it.stage == DkgRitualStage.COMPLETE } ?: return null
         val generation = tag(ShareRepairEvents.GENERATION_TAG)?.toIntOrNull() ?: return null

@@ -34,6 +34,7 @@ import com.machankura.dedun.compose.database.model.types.ShareGenerationState
 import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 
@@ -122,6 +123,7 @@ object ShareRefreshManager {
         key: DkgSession,
         withheld: Map<Int, ShareStanding> = emptyMap(),
     ): ShareRefreshSession {
+        check(ExperimentalFeatures.shareRefresh) { "This build does not rotate shares" }
         require(key.stage == DkgRitualStage.COMPLETE) { "Ceremony ${key.id} has not produced a key" }
         require(isKeysRoom(database, localChatRoom, key)) { "${localChatRoom.chatRoom.id} is not the room key ${key.id} signs as" }
 
@@ -285,6 +287,9 @@ object ShareRefreshManager {
         )
 
         val reason = when {
+            // Built but not shipped (D4): a release build declines, out loud, rather
+            // than leaving a refresh that needs it waiting forever.
+            !ExperimentalFeatures.shareRefresh -> "this build cannot rotate shares"
             base != active.generation -> "it refreshes generation $base, and this device is at generation ${active.generation}"
             proposer == null || proposer !in recipients -> "its proposer is not one of its recipients"
             running(database, key) != null -> "another refresh of this key is still running here"

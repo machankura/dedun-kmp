@@ -58,6 +58,16 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.ui.view.state.SharesSummary
+import com.machankura.dedun.compose.database.model.types.ShareStanding
+import com.machankura.dedun.compose.database.model.types.ShareRepairStage
+import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
+import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
+import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.managers.ShareGenerations
+import com.machankura.dedun.compose.managers.ShareRepairManager
+import com.machankura.dedun.compose.ExperimentalFeatures
 
 /**
  * @param activeIdentity the identity the app runs as. Read by the one write here that
@@ -730,7 +740,82 @@ class DatabaseChatRepository(
     }
 
     override suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean =
-        runCatching { ShareRefreshManager.liveIdOf(database, localChatRoom, memberPublicKey) != null }.getOrDefault(false)
+        ExperimentalFeatures.shareRefresh &&
+            runCatching { ShareRefreshManager.liveIdOf(database, localChatRoom, memberPublicKey) != null }.getOrDefault(false)
+
+    /** The key the room's Shares section is about: the one its key state names, else the one this device signs it with. */
+    private suspend fun shareKeyOf(localChatRoom: LocalChatRoom): DkgSession? {
+        val roomId = localChatRoom.chatRoom.id
+        return GroupKeyStateManager.keyStateFor(database, roomId)?.dkgSessionId?.let { database.dkgSessionDao().getSessionById(it) }
+            ?.takeIf { it.stage == DkgRitualStage.COMPLETE }
+            ?: FrostSigningManager.completedKey(database, roomId)
+    }
+
+    override suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary? = runCatching {
+        if (localChatRoom.chatRoom.mlsGroupState == null) return null
+        val key = shareKeyOf(localChatRoom) ?: return null
+        val me = localChatRoom.chatRoom.userPublicKey
+        val shares = ShareGenerations.active(database, key)
+        if (shares.roster.isEmpty()) return null
+        val names = localChatRoom.localParticipants.associate { it.participant.participantPublicKey to it.profile?.humanReadableNameOrPubkey() }
+        val refreshes = database.shareRefreshDao().getSessionsForKey(key.id)
+        val repairs = database.shareRepairDao().getSessionsForKey(key.id)
+        val pending = refreshes.mapNotNull { session ->
+            when (ShareRefreshManager.pendingApproval(database, session)) {
+                ShareRefreshApprovalStep.DEAL -> SharesSummary.PendingApproval(session.id, SharesSummary.PendingApproval.Kind.REFRESH_DEAL)
+                ShareRefreshApprovalStep.CONFIRM -> SharesSummary.PendingApproval(session.id, SharesSummary.PendingApproval.Kind.REFRESH_CONFIRM)
+                null -> null
+            }
+        } + repairs.filter { ShareRepairManager.isAwaitingApproval(database, it) }
+            .map { SharesSummary.PendingApproval(it.id, SharesSummary.PendingApproval.Kind.REPAIR_HELP) }
+        val running = refreshes.any { it.stage != ShareRefreshStage.COMPLETE && it.stage != ShareRefreshStage.FAILED }
+        val mine = shares.roster.firstOrNull { it.memberPublicKey == me }
+        val repairing = repairs.any { it.targetPublicKey == me && it.stage != ShareRepairStage.FAILED && it.stage != ShareRepairStage.COMPLETE }
+        SharesSummary(
+            generation = shares.generation,
+            members = shares.roster.map { entry ->
+                SharesSummary.Member(entry.memberPublicKey, names[entry.memberPublicKey] ?: entry.memberPublicKey.take(8), entry.standing, entry.memberPublicKey == me)
+            },
+            pending = if (ExperimentalFeatures.shareRefresh) pending else emptyList(),
+            canRotate = ExperimentalFeatures.shareRefresh && shares.secretShare != null && !running,
+            canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,
+        )
+    }.getOrNull()
+
+    private fun failureOf(t: Throwable?): String? = t?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
+
+    private fun privateKeyOrNull(): Pair<HexKey, ByteArray>? {
+        val identity = activeIdentity.value ?: return null
+        val privateKey = identity.toKeyPair().privKey ?: return null
+        return identity.nostrPublicKey to privateKey
+    }
+
+    override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? {
+        val (me, privateKey) = privateKeyOrNull() ?: return "This identity cannot sign"
+        val key = shareKeyOf(localChatRoom) ?: return "This group has no shared key"
+        return failureOf(runCatching { ShareRefreshManager.proposeRefresh(database, localChatRoom, me, privateKey, key) }.exceptionOrNull())
+    }
+
+    override suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String? {
+        val (_, privateKey) = privateKeyOrNull() ?: return "This identity cannot sign"
+        return failureOf(runCatching {
+            when (approval.kind) {
+                SharesSummary.PendingApproval.Kind.REFRESH_DEAL, SharesSummary.PendingApproval.Kind.REFRESH_CONFIRM ->
+                    ShareRefreshManager.approve(database, localChatRoom, approval.sessionId, privateKey)
+                SharesSummary.PendingApproval.Kind.REPAIR_HELP ->
+                    ShareRepairManager.approve(database, localChatRoom, approval.sessionId, privateKey)
+            }
+        }.exceptionOrNull())
+    }
+
+    override suspend fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String): String? =
+        failureOf(runCatching { ShareRefreshManager.abandon(database, localChatRoom, sessionId) }.exceptionOrNull())
+
+    override suspend fun askToBeRepaired(localChatRoom: LocalChatRoom): String? {
+        val (me, privateKey) = privateKeyOrNull() ?: return "This identity cannot sign"
+        val key = shareKeyOf(localChatRoom) ?: return "This group has no shared key"
+        return failureOf(runCatching { ShareRepairManager.requestRepair(database, localChatRoom, me, privateKey, key) }.exceptionOrNull())
+    }
 
     override suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String? {
         val identity = activeIdentity.value ?: return "No identity is signed in"

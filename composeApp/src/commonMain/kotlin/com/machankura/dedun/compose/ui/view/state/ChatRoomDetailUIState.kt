@@ -152,6 +152,12 @@ sealed interface ChatRoomDetailUIState {
         val openableDepositors: Set<HexKey> = emptySet(),
         /** What each member has put in, the unattributed and the total: `docs/member-deposits.md`, Phase 8. */
         val tallies: DepositLedger.Tallies? = null,
+        /**
+         * The room's key as the Shares section shows it: the generation, who
+         * holds what, and what this device is asked or may start. Null when the
+         * room has no key (docs/frost-share-refresh.md, Phase 11).
+         */
+        val shares: SharesSummary? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

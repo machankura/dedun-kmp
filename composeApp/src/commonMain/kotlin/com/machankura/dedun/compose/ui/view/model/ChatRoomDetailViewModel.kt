@@ -40,6 +40,7 @@ import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
+import com.machankura.dedun.compose.ui.view.state.SharesSummary
 
 class ChatRoomDetailViewModel(
     val chatRoomId: String,
@@ -162,6 +163,7 @@ class ChatRoomDetailViewModel(
                             .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }
                             .toSet()
                     } else emptySet(),
+                    shares = chatRepository.sharesSummary(localChatRoom),
                 )
             }
         }
@@ -244,6 +246,31 @@ class ChatRoomDetailViewModel(
             }
         }
     }
+
+    /**
+     * Runs one Shares section action, reloads the screen, and reports: null for
+     * done, or why not. Every one of them is a proposal or an answer the group
+     * goes on with in the background, so done means sent, not finished.
+     */
+    private fun sharesAction(onDone: (String?) -> Unit, action: suspend () -> String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = action()
+            initiateChatRoomDetail()
+            viewModelScope.launch(Dispatchers.Main) { onDone(failure) }
+        }
+    }
+
+    fun rotateShares(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
+        sharesAction(onDone) { chatRepository.rotateShares(localChatRoom) }
+
+    fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval, onDone: (String?) -> Unit) =
+        sharesAction(onDone) { chatRepository.approveShares(localChatRoom, approval) }
+
+    fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String, onDone: (String?) -> Unit) =
+        sharesAction(onDone) { chatRepository.abandonRotation(localChatRoom, sessionId) }
+
+    fun askToBeRepaired(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
+        sharesAction(onDone) { chatRepository.askToBeRepaired(localChatRoom) }
 
     /** A removed member who still holds a share of the room's key, for the offer to rotate without them. */
     data class RotationOffer(

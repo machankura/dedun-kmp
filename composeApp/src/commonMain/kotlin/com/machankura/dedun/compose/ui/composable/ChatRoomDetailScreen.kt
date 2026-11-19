@@ -213,6 +213,22 @@ import dedun.composeapp.generated.resources.direct_message_functionality_will_be
 import dedun.composeapp.generated.resources.invite_new_member
 import dedun.composeapp.generated.resources.leave_group
 import dedun.composeapp.generated.resources.remove_from_group
+import dedun.composeapp.generated.resources.shares_action_sent
+import dedun.composeapp.generated.resources.pending_repair_help
+import dedun.composeapp.generated.resources.pending_rotation_confirm
+import dedun.composeapp.generated.resources.pending_rotation_deal
+import dedun.composeapp.generated.resources.abandon
+import dedun.composeapp.generated.resources.approve
+import dedun.composeapp.generated.resources.ask_to_be_brought_back
+import dedun.composeapp.generated.resources.shares_rotation_caveat
+import dedun.composeapp.generated.resources.share_standing_you
+import dedun.composeapp.generated.resources.share_standing_retired
+import dedun.composeapp.generated.resources.share_standing_stale
+import dedun.composeapp.generated.resources.share_standing_live
+import dedun.composeapp.generated.resources.share_generation
+import dedun.composeapp.generated.resources.shares
+import com.machankura.dedun.compose.ui.view.state.SharesSummary
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 import dedun.composeapp.generated.resources.share_rotation_requested
 import dedun.composeapp.generated.resources.not_now
 import dedun.composeapp.generated.resources.rotate_shares
@@ -291,6 +307,7 @@ fun ChatRoomDetailScreen(
     val removalLeavesWavelengthShare = stringResource(Res.string.member_removal_requested_wavelength)
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
+    val sharesActionSent = stringResource(Res.string.shares_action_sent)
 
     // Offered after removing a member who still holds a share of the room's key:
     // the removal took them out of the room, not out of the key
@@ -564,6 +581,119 @@ fun ChatRoomDetailScreen(
                                                     chain = GroupWalletStatementEvent.chainName(chain),
                                                 )
                                             )
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    HorizontalDivider()
+                                }
+                            }
+
+                            // The room's key, share by share (docs/frost-share-refresh.md,
+                            // Phase 11): which generation the group signs with, who
+                            // holds what, what this device is being asked, and the two
+                            // things it may start. Absent where the room has no key.
+                            chatRoomDetailUIState.shares?.let { shares ->
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.shares),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.share_generation, shares.generation),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                items(items = shares.members, key = { member -> "share-${member.publicKey}" }) { member ->
+                                    ListItem(
+                                        headlineContent = {
+                                            Text(if (member.isSelf) stringResource(Res.string.share_standing_you, member.name) else member.name)
+                                        },
+                                        supportingContent = {
+                                            Text(
+                                                stringResource(
+                                                    when (member.standing) {
+                                                        ShareStanding.LIVE -> Res.string.share_standing_live
+                                                        ShareStanding.STALE -> Res.string.share_standing_stale
+                                                        ShareStanding.RETIRED -> Res.string.share_standing_retired
+                                                    }
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
+                                items(items = shares.pending, key = { approval -> "pending-${approval.sessionId}-${approval.kind}" }) { approval ->
+                                    ListItem(
+                                        headlineContent = {
+                                            Text(
+                                                stringResource(
+                                                    when (approval.kind) {
+                                                        SharesSummary.PendingApproval.Kind.REFRESH_DEAL -> Res.string.pending_rotation_deal
+                                                        SharesSummary.PendingApproval.Kind.REFRESH_CONFIRM -> Res.string.pending_rotation_confirm
+                                                        SharesSummary.PendingApproval.Kind.REPAIR_HELP -> Res.string.pending_repair_help
+                                                    }
+                                                )
+                                            )
+                                        },
+                                        trailingContent = {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                                                if (approval.kind != SharesSummary.PendingApproval.Kind.REPAIR_HELP) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            chatRoomDetailViewModel.abandonRotation(chatRoomDetailUIState.localChatRoom, approval.sessionId) { failure ->
+                                                                notify(failure ?: sharesActionSent)
+                                                            }
+                                                        }
+                                                    ) {
+                                                        Text(stringResource(Res.string.abandon))
+                                                    }
+                                                }
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        chatRoomDetailViewModel.approveShares(chatRoomDetailUIState.localChatRoom, approval) { failure ->
+                                                            notify(failure ?: sharesActionSent)
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text(stringResource(Res.string.approve))
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                                if (shares.canRotate || shares.canAskToBeRepaired) {
+                                    item {
+                                        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                                            Text(
+                                                text = stringResource(Res.string.shares_rotation_caveat),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            if (shares.canRotate) {
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        chatRoomDetailViewModel.rotateShares(chatRoomDetailUIState.localChatRoom) { failure ->
+                                                            notify(failure ?: rotationRequested)
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text(stringResource(Res.string.rotate_shares))
+                                                }
+                                            }
+                                            if (shares.canAskToBeRepaired) {
+                                                TextButton(
+                                                    onClick = {
+                                                        chatRoomDetailViewModel.askToBeRepaired(chatRoomDetailUIState.localChatRoom) { failure ->
+                                                            notify(failure ?: sharesActionSent)
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text(stringResource(Res.string.ask_to_be_brought_back))
+                                                }
+                                            }
                                         }
                                     }
                                 }
