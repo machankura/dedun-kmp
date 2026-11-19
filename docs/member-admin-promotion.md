@@ -11,9 +11,10 @@ the plan follows from them.
 
 **Built**, one commit per phase on `claude/member-admin-promotion-plan-d9d716`: the
 first release's phases (10a, 1, 2, 6, and 10 and 11 for convenient rooms), Phase 7's
-app side, and Phase 3. **Not built:** Phase 0, which is upstream work in mls-kmp and
-marmot-kmp, and everything that waits on it (4, 5, 7's policy half, 8, 9, 12). Where the
-build chose differently:
+app side, and Phase 3. The plan was then revised: the first draft's Phase 0, upstream
+work in mls-kmp and marmot-kmp, is gone, because the commit now travels inside the
+group's signature (the headline). **Not built yet:** Phases 4, 5, 8, 9 and 12, and 7's
+gate half. Where the build chose differently:
 
 | what the plan said | what it turned out to be |
 |---|---|
@@ -40,7 +41,7 @@ governance change is signed as a batch.
 | | rule | what it means here |
 |---|---|---|
 | **R1** | **Every admin holds a share of the group's key** | Promotion includes enrolling the new admin into the key. Demotion includes rotating the shares without them. A member row still shows **Admin** and **Holds a share** as two separate labels, because between the commit and the share work they disagree, and that disagreement is how a person sees that an enrollment or a rotation is still owed. |
-| **R2** | **Every commit is first a proposal, and becomes a commit only once the group's threshold signature is on it**, except a member's own leave and a member's own key update (D6) | No single admin can change a keyed room. An admin proposes, `t` share holders sign, and only then is the MLS commit built. It carries the signature, and every device refuses a commit without one. |
+| **R2** | **Every commit is first a proposal, and becomes a commit only once the group's threshold signature is on it**, except a member's own leave and a member's own key update (D6) | No single admin can change a keyed room. An admin builds the commit and proposes it, `t` share holders sign an event that carries it, and only that signed event is published. Every device refuses a bare commit. |
 | **R3** | **A robust group always has at least three admins** | The floor `ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE` already sets at creation becomes an invariant. Demotion, removal and leaving are refused when they would break it, and so is anything that would leave fewer admins than the quorum `t`. |
 
 ### Which rooms they apply to
@@ -58,7 +59,7 @@ promotion and demotion on those terms (Phase 6). **Direct messages** are unaffec
 
 ---
 
-## The headline: changing the admin list is easy; requiring a signature is not
+## The headline: the signature carries the commit
 
 Changing who is an admin needs nothing new. In a current-profile group it is an
 `AppDataUpdate` on component `0x8003` (`marmot.group.admin-policy.v1`), and
@@ -68,23 +69,35 @@ admin (`MarmotGroupPolicy.enforceNoAdminDepletion`). The app even receives one t
 [ConvergenceForkJvmTest.kt:186](../composeApp/src/jvmTest/kotlin/com/machankura/dedun/compose/managers/ConvergenceForkJvmTest.kt:186)
 has a stand-in member promote the app over the wire.
 
-R2 is different. To refuse an unsigned commit, every device has to look at a commit
-before applying it and ask whether the group signed it. The engine cannot be told to
-do that today:
+R2 is the hard part: every device has to refuse a commit the group did not sign. The
+library cannot be told to -- its commit hook sees neither the commit's
+`authenticated_data` nor its epoch, and `MlsGroupManager` hard-codes Marmot's policy --
+so the first draft made that upstream work. It does not have to be. **The commit
+travels inside the group's signature instead of the signature inside the commit**:
 
-| what R2 needs | what the libraries do | where |
-|---|---|---|
-| a hook that sees each commit before it applies | `MlsGroupPolicy.authorizeCommit` does, on the local build, on inbound, and in convergence replay | mls-kmp `group/MlsGroup.kt:1255`, `:2282`, `:2763` |
-| the hook sees the signature the commit carries | it sees the proposals and the committer's leaf, not the commit's `authenticated_data` | `MlsGroupPolicy.authorizeCommit(group, proposals, committerLeafIndex)` |
-| the hook knows which epoch the commit is for | `GroupView` has extensions, leaf count and identities. It has no epoch and no group id | mls-kmp `group/MlsGroupPolicy.kt:248` |
-| the app can supply its own policy | `MlsGroupManager` hard-codes `MarmotGroupPolicy` everywhere it restores a group, and so do convergence and `ChatRoom.toMlsGroup` | marmot-kmp `groups/MlsGroupManager.kt:155`, `:246`, `:310`, `:341`, `:381`; `protocolCore/MlsCandidateStateEngine.kt:63` |
-| a commit can carry a signature | `MlsGroup.commit(authenticatedData)` can, but no `stage…` function in `MlsGroupManager` passes it | mls-kmp `group/MlsGroup.kt:1158`; marmot-kmp `groups/MlsGroupManager.kt:438` |
-| one commit can carry two changes (remove *and* drop from the admin list) | `stage` is private, and each public `stage…` makes a commit of one kind | marmot-kmp `groups/MlsGroupManager.kt:438` |
+1. The proposer's device stages the commit on a copy and builds the kind:445 event that
+   carries it, exactly as it would publish it -- and does not publish it.
+2. The group signs one event whose content *is* that kind:445 event, with Phase 3's
+   statement as its tags. Each signer's device runs the commit on a throwaway copy of the
+   group and checks it does what the tags say before approving.
+3. The signed event goes out as an ordinary application message at the commit's epoch.
+4. Every device verifies it and hands the inner kind:445 to the engine as if it had
+   arrived from a relay. In a room where the rule is on, a kind:445 that is a bare
+   commit is dropped before the engine sees it.
 
-So **Phase 0 is upstream work.** Nothing in Phases 3–5 can be enforced on a receiving
-device without it. The plan does not try to work around it in the app (by holding
-commits back, or by checking them on a cloned group), for a reason D4 gives: a rule
-that devices apply at different moments, from different inputs, splits the group.
+Everything that needs is public and already in the app's hands:
+
+| what the envelope needs | where it is |
+|---|---|
+| one place every inbound group event passes through, before the engine applies it | `NostrDao.indexCurrentProfileGroupEvent` calls `engine.processGroupEvent` and nothing else does ([NostrDao.kt:1419](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/dao/NostrDao.kt:1419)) |
+| telling a commit from a message without processing it | after the Marmot outer layer, an MLS `PrivateMessage` or `PublicMessage` carries its `contentType` in the clear; `MarmotInboundManager.tryDecryptOuterLayer` already does the outer half |
+| running a commit without applying it | `MlsGroup.restore(state, policy)` and `processFramedCommit` are public, and a policy passed to the copy is handed the commit's real proposals |
+| applying a commit the app was handed rather than received | the inner kind:445 is a complete signed event; `engine.processGroupEvent` takes it like any other, and convergence sees it as it would any commit |
+| the proposer's own commit, which it cannot process | the staged state and the publish gate: `gate.prepare` with the state staged at proposal time, confirmed when a relay accepts the envelope |
+
+Because the inner kind:445 is the proposer's own event, byte for byte, every device
+hands the engine the same event with the same id -- which is what convergence needs to
+pick the same branch everywhere when two signed commits race.
 
 ---
 
@@ -99,7 +112,7 @@ that devices apply at different moments, from different inputs, splits the group
 | Removal and disband are one admin's commit through the publish gate | `MarmotOutboundDao.removeMember`, `disband` | under R2 that changes in keyed rooms. Phase 5 |
 | Repair already runs `FrostReducedEnrollment` for an existing id (`newId < n`) | [ShareRepairManager.kt:268](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/managers/ShareRepairManager.kt:268) | promotion is the same primitive at `newId = n`, which nothing builds yet ([frost-share-refresh.md](./frost-share-refresh.md) 10c; [submodule-refresh.md](./submodule-refresh.md) Phase 6). Phase 8 |
 | A refresh that withholds a removed member is built | `ChatRepository.rotateSharesWithout`, frost-share-refresh Phase 9 | demotion's share half. Phase 9 |
-| The group's key state carries the id-to-member table, `MemberBinding(participantId, memberPublicKey, hostPublicKey)`, signed by the group | [GroupKeyStateEvent.kt:163](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/nostr/frost/GroupKeyStateEvent.kt:163) | the authenticated table an enrollment reads its expected public share from, and the authority for a room's founding members (D7) |
+| The group's key state carries the id-to-member table, `MemberBinding(participantId, memberPublicKey, hostPublicKey)`, signed by the group | [GroupKeyStateEvent.kt:163](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/nostr/frost/GroupKeyStateEvent.kt:163) | the authenticated table an enrollment reads its expected public share from |
 | Enrollment, refresh and repair sit behind `ExperimentalFeatures.shareRefresh`, off in release, until upstream drops "experimental" | frost-share-refresh D4 | **R1 cannot ship to release users before that.** R2 and R3 can. See *Ship order* |
 | `CommitProcessed` names the epoch and not the committer | marmot-kmp `MarmotInboundProcessor.kt:75` | captions are unattributed, as the membership lines are. A keyed room's lines can name the proposer instead, from the signed statement (Phase 2) |
 
@@ -154,30 +167,37 @@ device asks only for what it cannot decide.
 A convenient room has no share, so its promotion needs no acceptance, the same as
 being invited.
 
-### D4. The signature rides inside the commit, and the rule lives in the group's state (R2)
+### D4. The commit rides inside the signature, and the rule lives in the group's state (R2)
 
 Two choices here decide whether R2 holds at all.
 
-**Inside the commit, not beside it.** The group-signed statement goes in the commit's
-`authenticated_data`. That field is authenticated by MLS and, under Marmot's outer
-layer, readable only by members. A statement published as a separate message would
-race the commit on relays that impose no order. A device that saw the commit first
-would refuse it, a device that saw the statement first would apply it, and the group
-would split into two epochs. With the statement inside the commit, every device
-reaches the same verdict from the same bytes, at the same moment.
+**The commit inside the signature, not beside it.** The group signs an event whose
+content is the complete kind:445 commit event. A signature published as a separate
+message would race the commit on relays that impose no order: a device that saw the
+commit first would refuse it, a device that saw the signature first would apply it, and
+the group would split into two epochs. With the commit inside the signed event, every
+device reaches the same verdict from the same bytes at the same moment.
 
-**In the group's state, not in the app's settings.** Whether a room needs signed
-commits is a GroupContext component, `giza.governance.threshold.v1`, in the private
-component range. It holds the room's signing key, `t`, and the admin floor (R3).
-Marking it *required* makes RFC 9420's capability check enforce it on membership: a
-leaf that does not advertise the component cannot be added, and the component cannot
-be activated while such a leaf is present. So the rule can never be on for some
-members and off for others. A device that does not know the rule cannot be in the
-room.
+**The rule in the group's state, not in the app's settings.** Whether a room needs
+signed commits is a marker line in its profile description, read the way
+`MarmotRoomIdentity` reads the room id from the same place:
+`giza-governance: threshold/v1`. It is switched on by an ordinary commit -- the room's
+last bare one -- and from the next epoch every device that applies that commit enforces
+the rule, from the state it just applied. Taking the line out again is itself a change
+the group has to sign. A rule read from the state cannot be on for some members and off
+for others.
 
-*Rejected:* MLS proposals by reference. MIP-03 lets a member send only `SelfRemove`
-on its own (`MarmotGroupPolicy.authorizeProposal`). "Proposal" in R2 is a Giza signing
+What the marker cannot do is keep out a client that does not know it: Bennu, or an
+older Giza build, applies the bare commits Giza drops and reads none of the envelopes.
+So the switch is refused until every member's account has said, in the room, that it
+applies signed commits (Phase 4b). A member who joins later on such a client cannot
+follow the room, and the invite says so.
+
+*Rejected:* MLS proposals by reference. MIP-03 lets a member send only `SelfRemove` on
+its own (`MarmotGroupPolicy.authorizeProposal`). "Proposal" in R2 is a Giza signing
 proposal, the kind the room already uses for key states and subgroup certificates.
+*Rejected, from the first draft:* the signature in the commit's `authenticated_data`,
+which every device's library would have had to be changed to read.
 
 ### D5. A statement is bound to one epoch, and names exactly what the commit does
 
@@ -232,15 +252,12 @@ considered and turned down for the two reasons above. Taking the exemption out l
 would be one `if` in the policy, plus a signing step in Phase 10's leave flow for a
 member who is not an admin.
 
-### D7. A room's founding commits are authorised by its key state
+### D7. A room's founding commits come before the rule
 
-A keyed room is born at epoch 0 holding only its coordinator, who then adds the
-ceremony's participants. At that moment no governance statement could exist yet. But
-the key state the quorum has already signed (`GroupKeyStateEvent`, which every
-`MarmotGroupCreation` waits for) names exactly those people in its `MemberBinding`s.
-So founding Add commits carry the signed key state as their authorisation, and the
-policy accepts an Add-only commit whose new members are all named in it. No new
-signing round is needed, and creating a room stays fully automatic.
+A keyed room is founded by its coordinator's bare commits, which every member who joins
+from the Welcome never processes. The rule is switched on afterwards (D4), once every
+member has said it can follow it, so nothing at founding needs a signature. The first
+draft authorised founding commits by the key state; with the switch, that is not needed.
 
 ### D8. Admins at least `max(3, t)` in a robust group (R3)
 
@@ -280,45 +297,14 @@ rather than closing it:
 
 ---
 
-## Phase 0 — upstream: let a group demand a signature
+## Phase 0 — none: the commit travels inside the signature
 
-**About a week, most of it review time. Blocks Phases 4, 5, 7, 8 and 9.**
-
-In **mls-kmp**:
-
-1. `authorizeCommit` receives what it needs to check a signature. Add a
-   `CommitContext(epoch, groupId, authenticatedData)` parameter, with a default
-   overload so existing policies compile unchanged. Pass it at all three call sites
-   (local build, inbound, convergence replay), so that a commit refused on receipt is
-   also refused before it is built.
-2. A test in mls-kmp shows a policy refusing an inbound commit by its
-   `authenticated_data`, with the group left at the old epoch.
-
-In **marmot-kmp**:
-
-3. `MlsGroupManager`, `MlsCandidateStateEngine` and the convergence engine take an
-   `MlsGroupPolicy` that defaults to `MarmotGroupPolicy`, and use it everywhere they
-   restore a group (the six sites in the table above).
-4. Every `stage…` function takes `authenticatedData: ByteArray = ByteArray(0)`.
-5. A public `stageProposals(id, proposals, authenticatedData)` that builds one commit
-   from several proposals. Removal (`Remove` plus the `0x8003` update) and invite
-   (`Add`, optionally plus the update) need it.
-6. Independently: `stageRemoveMember` drops the removed account's key from `0x8003`
-   when it removes their last leaf, which is `AdminPolicyV1`'s own invariant. That
-   fixes the re-invite hole for every Marmot client, not just this one.
-
-Check, and write down the answer in this note:
-
-7. Whether the current Marmot profile says anything about `authenticated_data` on a
-   commit. Keyed rooms with the component are Giza-only by construction (D4), so a
-   conflict would not break interop, but it should be known.
-8. Whether `FrostReducedEnrollment` accepts `targetId == n` (a new id, growing the
-   group), not only `targetId < n`. Upstream's KDoc calls this "enrollment proper".
-   If it does not, Phase 8 waits on that and R1 waits with it.
-
-Upstream is vitorpamplona's. If the review is slow, the fallback is a fork published
-the way `lightning-kmp-app` is: on a branch, pinned by commit in the catalogue, with
-the PRs open against upstream so the fork can be dropped later.
+The first draft's Phase 0 changed mls-kmp and marmot-kmp so that a device could refuse an
+unsigned commit. The headline shows the app can do it with the libraries as they are, so
+there is no upstream work. Two library changes would still be welcome and are not needed:
+`stageRemoveMember` dropping a removed account's admin entry in the same commit (the app
+does it in two, Phase 6), and a public way to stage several proposals in one commit (a
+promotion is one proposal; a removal of an admin is two commits until then).
 
 ## Phase 1 — `adminAt` is true from the first moment
 
@@ -407,109 +393,91 @@ missing Remove, an admin list off by one, a signature by another key, a statemen
 another room); `isExempt` for each MIP-03 case and for a SelfRemove riding in a signed
 commit.
 
-## Phase 4 — the policy, and the component that turns it on
+## Phase 4 — the envelope, the filter, and the switch
 
-**Three days.** Needs Phase 0.
+**4a. The envelope and the filter. Three days.**
 
-**`GizaGroupPolicy`**, an `MlsGroupPolicy` that delegates to `MarmotGroupPolicy`,
-then, when the group carries `giza.governance.threshold.v1`:
+`GovernanceStatementEvent` (Phase 3) gains its content: the complete signed kind:445
+commit event, as JSON. A second kind, `OwnCommitEvent` (30371), carries a commit that
+needs nobody's signature (D6) -- a member's own leave folded in by an admin's device, or a
+member's own key update -- signed by the committer's account key.
 
-1. returns if the commit is exempt (D6);
-2. otherwise requires `authenticated_data` to hold a statement that `authorises` the
-   commit, or, for the founding commits, a key state that names every new member
-   (D7);
-3. requires the admin count after the commit to be at least the component's floor
-   (D8).
+`GovernanceGate`, one function the inbound path calls for a current-profile room:
 
-It is supplied everywhere a group is restored: the engine, convergence, and
-`ChatRoom.toMlsGroup` ([ChatRoom.kt:228](../composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/database/model/ChatRoom.kt:228)).
-Then a grep in `build.gradle.kts`, in the manner of the marmot-kmp import check, fails
-the build on a `MarmotGroupPolicy` named anywhere else, because a group restored with
-the bare policy silently drops the rule.
+1. If the room's state does not carry the marker, do what is done today.
+2. Peel the outer layer. A bare `COMMIT` is dropped before the engine sees it, with a
+   line in the room saying a change arrived without the group's signature. A proposal or
+   an application message goes on as today.
+3. An application message whose inner event is a 30370 is checked: signed by the room,
+   at the group's current epoch, and its inner commit -- run on a throwaway copy with a
+   policy that captures the proposals -- does exactly what its tags say, and leaves at
+   least the floor of admins (R3). Then the inner kind:445 is handed to the engine.
+4. A 30371 is checked the same way, except that it must be exempt (D6) and signed by the
+   account whose leaf committed it.
 
-**`ThresholdGovernanceV1`**, the component: the room's x-only signing key, `t`, and
-`minimumAdmins`, TLS-encoded like the library's components. It is advertised in the
-app's leaf capabilities from this phase on, so every device on this build can be in
-an enabled room.
+The copy is `MlsGroup.restore(liveState, policy)`; the policy delegates to
+`MarmotGroupPolicy` and records what `authorizeCommit` is given. A commit the copy
+refuses is refused.
 
-**New keyed rooms** get it in epoch 0, in `MarmotGroupFactory.create`, when
-`MarmotGroupCreation` passes a key, and it is listed as required.
+**Tests**, with the stand-in as the other member: an unsigned commit in a governed room is
+dropped and the room stays at its epoch; a signed one lands, on both sides, with the same
+event id; one signed for another epoch, by a member's own key, or carrying an extra
+proposal is refused; a member's leave in a 30371 lands; a governance change in a 30371
+does not; nothing changes in a room without the marker.
 
-**Existing keyed rooms** are switched on by an enablement commit, which is itself a
-signed statement (`enable governance`, Phase 5), and only once every leaf advertises
-the component. Until then the room is governed the way it is today, and its detail
-screen says why: "{name} needs to update Giza before this group's changes can require
-signatures". The library's `componentSupportBlockers` already names those leaves.
+**4b. Support, and the switch. Two days.**
 
-**A Bennu member blocks this.** Bennu does not advertise the component, so a keyed
-room with a Bennu member in it cannot enable R2, and an enabled room cannot add one.
-That is D4 doing its job, but it is a real consequence for groups that span the fork,
-and the screen should say so plainly, not report a generic failure.
+- Each device on this build says once per keyed room, as an application message signed by
+  its account (`GovernanceSupportEvent`, 30372), that it applies signed commits. The room
+  records who has said it.
+- **Require signatures for changes**, on a keyed room's detail screen, for an admin, once
+  every current member has said it. It is one bare commit adding the marker line to the
+  profile description. Until every member has, the screen names who has not.
+- An invite into a governed room is refused for an account that has not said it, with
+  words that say why, once it is in the room (it says so from its own device on joining).
 
-**Tests** (`jvmTest`, beside `ConvergenceForkJvmTest`, with `MarmotStandIn` patched to
-use the same policy):
+**Tests:** the switch is refused while a member has not said it; after it lands, both
+sides enforce from the next epoch; a member added later announces on joining.
 
-- an unsigned admin commit in an enabled room is refused on receipt, and the room stays
-  at its epoch on every device;
-- a commit signed for epoch `E` arriving at `E+1` is refused;
-- a signed commit that also carries an extra Add is refused;
-- a member's SelfRemove-only commit, unsigned, is accepted;
-- a signed demotion below the floor is refused by every receiver;
-- founding Adds named by the key state are accepted, and one more Add is refused;
-- two devices handed the same commits in opposite orders end in the same state, which
-  is D4's claim.
-
-## Phase 5 — propose, sign, commit
+## Phase 5 — propose, sign, publish
 
 **Four days.**
 
-`GovernanceManager` turns a change into a commit in three steps, all through machinery
-the room already has:
+`GovernanceManager` turns a change in a governed room into a commit:
 
 1. **Propose.** The admin's device reads the live group (D1), checks the change against
-   `MarmotGroupPermissions` and the floor, builds the statement at the current epoch
-   `E`, and opens a FROST signing session for it with
-   `FrostSigningManager.proposeSigningBatch`. A promotion's batch also carries the new
-   key state (Phase 8), so one round of approvals signs both.
-2. **Sign.** Members approve through the existing signing approval, which now reads the
-   statement's summary. `t` signatures complete it, as for any group-signed event.
-3. **Commit.** When the signed statement is filed, any admin's device that holds it and
-   whose group is still at `E` stages the commit. It uses `stageProposals` with the
-   statement as `authenticatedData`, through `publishGatedCommit`, so relay rejection,
-   restart and confirmation already behave. The proposer's device goes first. The
-   others wait a short, randomised delay and then look again, so a proposer who went
-   offline after signing does not strand the change, and two devices racing make an
-   ordinary fork that convergence settles. Both branches carry the same signed change,
-   so either winning is the same outcome.
+   `AdminGovernance` and the floor, stages it on a copy at the current epoch `E`, and builds
+   the kind:445 that carries it -- signed by a throwaway key, outer-encrypted, exactly as
+   `publishCommit` would publish it. Nothing is published. The staged state (prior and
+   pending), the commit event and any Welcome are stored in a `GovernanceProposal` row,
+   because signing outlasts a session. Then it opens a FROST signing session over the
+   unsigned 30370 whose tags are the statement and whose content is that kind:445.
+2. **Sign.** Members approve through the existing signing approval, which reads the
+   statement's summary. Before a device puts its share to it, it runs the inner commit on
+   a copy and checks the tags (as the gate will), so nobody signs a commit that does not
+   say what it does.
+3. **Publish.** When the signature completes, the proposer's device -- if its group is
+   still at `E` -- raises the publish gate with the stored staged state and publishes the
+   signed 30370 as an application message. A relay's OK confirms the obligation, which
+   installs the pending state, captions the change and sends any Welcome. Any other
+   admin's device that holds the signed event and is still at `E` may publish it instead
+   after a short wait, so a proposer who went quiet does not strand the change.
 
-**Stale statements.** When the group moves past `E` before the commit, the session is
-marked stale and the proposer's device re-proposes at the new epoch automatically.
-That is a new signing round, which nobody's earlier approval covers, so it is asked
-again. Pending `SelfRemove`s are folded into the governance commit, not committed on
-their own, while a statement at the current epoch is being signed (D5).
+**Stale statements.** If the group moves past `E` first, the proposal is dead: the
+proposer's device marks it and proposes again at the new epoch, which nobody's earlier
+approval covers.
 
-**Every existing commit path in a keyed room moves onto this:**
-
-| today | after |
+| today, in a keyed room | after the switch |
 |---|---|
-| `inviteMember` | propose `add` |
-| `removeMember` | propose `remove` (and `admins` without them, if they were one) |
-| `disband` | propose `disband`, then the lifecycle's two commits under one statement each |
-| `commitStagedProposals` | unchanged: SelfRemove-only commits are exempt |
-| founding adds in `MarmotGroupCreation` | unchanged in shape, with the key state in `authenticatedData` (D7) |
+| `inviteMember` | propose an add |
+| `removeMember` | propose a remove (with the admin list, if they were one) |
+| `disband` | propose each of its commits |
+| `commitStagedProposals` (a member's leave) | the same commit, in a 30371 |
+| leaving as an admin | propose your own demotion; leave once it lands |
 
-The detail screen shows a pending change on the member's row ("Being made an admin:
-1 of 2 signatures"). Snackbars say "Proposed; it takes effect once {t} of you sign"
-instead of "sent".
-
-**Tests**, across three in-memory devices with real FROST (`CeremonyNetwork`):
-
-- invite, remove and disband each run propose → sign → commit and land on every
-  device;
-- a statement staled by a member leaving is re-proposed at the new epoch and lands;
-  the leaver's SelfRemove lands inside it;
-- the proposer goes offline after the signature: another admin commits it;
-- a restart between the signature and the commit: the commit is still made.
+**Tests** across devices with real FROST (`CeremonyNetwork`): a removal runs propose →
+sign → publish and lands on every device; a statement staled by a member leaving is
+proposed again and lands; a restart between signature and publish still publishes.
 
 ## Phase 6 — convenient rooms: one admin's commit
 
@@ -522,8 +490,9 @@ This is the first draft's Phase 3, kept for the rooms R2 cannot reach.
 tree, a demotion that leaves no admin among the members (`canDemote`), and a commit
 while another is waiting.
 
-Removing an admin here needs the `Remove` and the list update together. Until Phase 0
-step 5 lands, that is two commits chained in memory: demote, then remove when the
+Removing an admin here needs the `Remove` and the list update together. Until the
+library can stage both in one commit (Phase 0), that is two commits chained in
+memory: demote, then remove when the
 first is confirmed. A restart in between leaves a demoted member, and **Remove** works
 in one commit after that. Once `stageProposals` exists, it becomes one commit.
 
@@ -597,7 +566,8 @@ with real FROST):
 **Three days.** Needs Phases 4, 5 and 7, and the refresh. Behind the same flag.
 
 1. **Sign** a statement: `admins` without them, plus `remove` for a removal. One
-   commit carries both (Phase 0 step 5), so a removed admin never stays on the list.
+   statement covers both commits -- the demotion and then the removal -- so a removed admin
+never stays on the list.
 2. **Commit.** The row reads **Holds a share** only.
 3. **Refresh** without them, started automatically by the proposer's device. This is
    `rotateSharesWithout`, from frost-share-refresh Phase 9, with each remaining
@@ -705,7 +675,7 @@ and enrollment cannot reach release users until upstream drops "experimental". S
 | release | phases | users get |
 |---|---|---|
 | first | 10 (the crash fix alone), 1, 2, 6 | convenient rooms: promote, demote, step down, leave as admin; the re-invite hole closed there |
-| second | 0, 3, 4, 5, 7 | keyed rooms: every change is proposed and signed; the floor; no promotion yet, because R1 cannot be met |
+| second | 3, 4, 5, 7 | keyed rooms: every change is proposed and signed; the floor; no promotion yet, because R1 cannot be met |
 | third, when enrollment leaves experimental | 8, 9, the rest of 10, 11, 12 | keyed rooms: promotion with a share, demotion with a refresh |
 
 In the second release, a keyed room's **Make admin** is hidden, not offered without a
@@ -736,12 +706,11 @@ By hand, with three devices in a robust group and the experimental flag on:
 
 | phase | size |
 |---|---|
-| 0 — upstream | about a week, mostly review |
 | 1 — `adminAt` | half a day |
 | 2 — captions | half a day |
 | 3 — the statement | two days |
-| 4 — the policy and component | three days |
-| 5 — propose, sign, commit | four days |
+| 4 — the envelope, the filter and the switch | five days |
+| 5 — propose, sign, publish | four days |
 | 6 — convenient rooms | one day |
 | 7 — the floor | one day |
 | 8 — promotion with a share | four days |
@@ -750,8 +719,8 @@ By hand, with three devices in a robust group and the experimental flag on:
 | 11 — the member row | two days |
 | 12 — across devices, docs | two days |
 
-About five weeks of work, with Phase 0's review time on top. The first release's
-phases need about three days and wait on nothing.
+About five weeks of work, and none of it waits on another repository. The first
+release's phases need about three days and wait on nothing.
 
 ## Out of scope
 
@@ -765,15 +734,21 @@ phases need about three days and wait on nothing.
 
 ## Appendix — what was considered and rejected
 
-**Enforcing R2 in the app without upstream changes.** Either by holding a commit until
-its statement arrives, or by running it on a cloned group under the app's own policy
-first. Both make the verdict depend on what a device has seen and when. That is how
-D4's split happens, and it is worse than no rule, because it looks like one.
+**Holding a commit until its signature arrives.** The verdict would depend on what a
+device has seen and when, which is how D4's split happens. The envelope avoids it by
+putting the commit and its signature in one event: every device decides from the same
+bytes. (The first draft also rejected checking a commit on a copy under the app's own
+policy, for the same reason; with the commit inside the envelope, the copy-check sees the
+same bytes everywhere and the objection falls away.)
 
-**Signing the commit's bytes, not a statement.** It binds just as tightly, but signers
-would approve an opaque hash, which is what the subgroup notes spent a section
-removing. Every commit would also have to be built before signing and rebuilt if the
-epoch moved, so the hash would change with it.
+**The signature in the commit's `authenticated_data`, enforced by the library.** The
+first draft's Phase 0: a week of changes to two libraries this app does not own, for a
+rule the app can enforce at its one inbound door.
+
+**Signing the commit's bytes alone, without a statement.** It binds just as tightly,
+but signers would approve an opaque hash, which is what the subgroup notes spent a
+section removing. The envelope signs both: the statement as tags a person reads, and the
+commit as content their device checks against them.
 
 **A statement valid at any epoch, with a precondition ("admins are A").** It survives
 staleness, but it can be replayed whenever the room comes back round to `A`. D5.

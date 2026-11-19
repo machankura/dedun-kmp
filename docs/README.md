@@ -77,7 +77,7 @@ silent, or a decision that looked arbitrary and was not.
 | [member-row-actions.md](./member-row-actions.md) | every member row but your own offers every action that applies to that member, and an action you can't take now opens a screen saying what stands in the way and what would change it — phased and built. Covers the twelve reasons an action is refused today, why an unavailable item is marked rather than disabled, and why the explanation screen recomputes its reason instead of carrying it |
 | [remove-convenient-groups.md](./remove-convenient-groups.md) | every group a member makes is robust -- phased and built. Covers why a one-to-one chat is not a group yet takes no new members, why the three-member floor moves to the member picker rather than down to 2-of-2, the quorum rules that outlive `ChatRoomType`, and why a Bennu peer's convenient group is still joined |
 | [robust-group-admins.md](./robust-group-admins.md) | making every founding member of a robust group an admin of its room, on every device -- phased and built. Covers why the ceremony's participants are the founding set, the Welcome that flags no admins, the joiner's check against the ceremony it took part in, and finishing an invite that partly failed |
-| [member-admin-promotion.md](./member-admin-promotion.md) | making a member an admin and back, phased and built for convenient rooms, under three rules: every admin holds a share, every commit in a keyed room is a proposal until the group's threshold signature is on it, and a robust group keeps at least three admins. Covers why the signature has to ride inside the commit and the rule inside the group's state, the upstream change that lets a device refuse an unsigned commit at all, why a member's own leave stays exempt, and why a removed admin comes back as an admin when re-invited today |
+| [member-admin-promotion.md](./member-admin-promotion.md) | making a member an admin and back, phased and built for convenient rooms, under three rules: every admin holds a share, every commit in a keyed room is a proposal until the group's threshold signature is on it, and a robust group keeps at least three admins. Covers why the commit rides inside the group's signature and the rule inside the group's state, which lets every device refuse an unsigned commit with the libraries as they are, why a member's own leave stays exempt, and why a removed admin comes back as an admin when re-invited today |
 
 Start with the ceremony if you are new to this area; the Marmot notes all assume it.
 Read the skipped-keys note before debugging any "the other device never got it"
@@ -212,8 +212,8 @@ The member-admin-promotion note is a phased plan built for convenient rooms and 
 for keyed ones, which wait on its Phase 0. It reads as
 the Marmot v2 note's Phase 7 finished, and as the share-refresh note put to work: a
 promotion is an enrollment and a demotion is a refresh. Read its three rules and its
-headline before any phase. Its Phase 0 is upstream work in mls-kmp and marmot-kmp,
-without which no device can refuse an unsigned commit, and its ship order says which
+headline before any phase. Its headline is the one idea the keyed-room half stands
+on -- the commit travels inside the group's signature -- and its ship order says which
 half can go out before enrollment leaves experimental.
 
 The wallet-removal note is a phased plan that has been built but for its Phase 7b.
