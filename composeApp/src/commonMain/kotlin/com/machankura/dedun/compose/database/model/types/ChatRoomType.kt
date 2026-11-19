@@ -5,9 +5,11 @@ import kotlinx.serialization.Serializable
 /**
  * How a chat room is governed.
  *
- * The choice is stamped into the epoch-0 `MarmotGroupData.admin_pubkeys` list,
- * which is what `MarmotInboundManager.processGroupMembershipChanges` reads to
- * flag participants as admins on every side of the group.
+ * The choice decides the room's founding admins, written into its epoch-0 admin
+ * list. That list is the group's state from then on, and a promotion or demotion
+ * changes it; `MarmotInboundManager.reconcileAdmins` and
+ * `processGroupMembershipChanges` keep each participant's `adminAt` in line with
+ * whatever it says now. See docs/member-admin-promotion.md.
  */
 @Serializable
 enum class ChatRoomType {

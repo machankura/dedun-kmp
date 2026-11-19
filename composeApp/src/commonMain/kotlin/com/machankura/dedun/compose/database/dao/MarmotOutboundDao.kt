@@ -66,6 +66,7 @@ import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.managers.MarmotInboundManager
 
 @Dao
 abstract class MarmotOutboundDao(
@@ -139,6 +140,9 @@ abstract class MarmotOutboundDao(
                 )
             )
         )
+        // The creator administers the room from epoch 0, and this device learns that
+        // nowhere else. docs/member-admin-promotion.md, Phase 1.
+        MarmotInboundManager.reconcileAdmins(database, chatRoom.id, mlsGroup)
 
         // Invite peer. On the current profile the manager owns the group from the row
         // just written, and the invite moves that instance rather than the one the

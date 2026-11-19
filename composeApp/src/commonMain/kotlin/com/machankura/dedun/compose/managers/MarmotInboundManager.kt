@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
@@ -271,6 +272,45 @@ object MarmotInboundManager {
                 else Contacts.announceIfNeeded(database, localChatRoom.chatRoom.id, userPublicKey)
             }.onFailure { logger.e("Couldn't say this device reads contacts", it) }
         }
+    }
+
+    /**
+     * The participant rows whose `adminAt` disagrees with [adminPublicKeys], each
+     * corrected: flagged now if the group names them, cleared if it does not. Rows
+     * that already agree are left out, so a flag keeps the moment it was first set.
+     */
+    internal fun adminFlagChanges(participants: List<Participant>, adminPublicKeys: Set<HexKey>): List<Participant> {
+        val now = Clock.System.now()
+        return participants.mapNotNull { participant ->
+            val named = participant.participantPublicKey in adminPublicKeys
+            when {
+                named && participant.adminAt == null -> participant.copy(adminAt = now)
+                !named && participant.adminAt != null -> participant.copy(adminAt = null)
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * Brings the room's `adminAt` flags into line with [mlsGroup]'s admin set, and
+     * says nothing about it.
+     *
+     * The flag is a cache of the group's state, and until this existed it was written
+     * only when a commit arrived -- so on the device that created a convenient room or
+     * a direct message, nobody was an admin until somebody else committed. Run where
+     * rooms are made and when a room is opened, it makes the cache true before
+     * anything reads it as news. Only flags move: membership is
+     * [processGroupMembershipChanges]'s, which also captions what it changes. Returns
+     * whether any row changed. See docs/member-admin-promotion.md, Phase 1.
+     */
+    suspend fun reconcileAdmins(database: DedunDatabase, chatRoomId: String, mlsGroup: MlsGroup): Boolean {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return false
+        val changes = adminFlagChanges(
+            participants = room.localParticipants.map { it.participant },
+            adminPublicKeys = mlsGroup.currentAdminIdentities(),
+        )
+        if (changes.isNotEmpty()) database.participantDao().upsert(changes)
+        return changes.isNotEmpty()
     }
 
     private suspend fun memberName(database: DedunDatabase, publicKey: HexKey): String =

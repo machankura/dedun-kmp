@@ -263,6 +263,9 @@ class SelectChatRoomTypeViewModel(
             )
             if (localChatRoom != null) {
                 chatRepository.recordMarmotRouting(chatRoomId = gid, routingId = created.routingId)
+                // The creator administers the room from epoch 0, and this device learns
+                // that nowhere else. docs/member-admin-promotion.md, Phase 1.
+                chatRepository.reconcileAdmins(gid)
             }
 
             if (localChatRoom == null) {

@@ -381,6 +381,12 @@ interface ChatRepository {
     )
 
     /**
+     * Brings the room's admin flags into line with its group's admin set, without a
+     * caption. Returns whether any changed. See docs/member-admin-promotion.md, Phase 1.
+     */
+    suspend fun reconcileAdmins(chatRoomId: String): Boolean
+
+    /**
      * Removes [memberPublicKey] from a current-profile room this device administers:
      * a commit through the publish gate, applied when a relay accepts it. See
      * docs/marmot-v2.md, Phase 7.
@@ -659,6 +665,8 @@ interface ChatRepository {
             ) {
                 TODO("Not yet implemented")
             }
+
+            override suspend fun reconcileAdmins(chatRoomId: String): Boolean = false
 
             override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
 

@@ -95,6 +95,11 @@ class ChatRoomDetailViewModel(
         logger.d("compressed (most likely chat room): $chatRoomId")
         // Get ChatRoomById
         viewModelScope.launch(Dispatchers.IO) {
+            // A room made before its creator's flag was written at creation reads as
+            // having no admins until a commit arrives; caught up here, silently, before
+            // anything reads it. docs/member-admin-promotion.md, Phase 1.
+            runCatching { chatRepository.reconcileAdmins(chatRoomId) }
+                .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't reconcile $chatRoomId's admins" } }
             val localChatRoom = chatRepository.getChatRoomByIdentifier(chatRoomId)
 
             logger.d("localChatRoom: $localChatRoom")
