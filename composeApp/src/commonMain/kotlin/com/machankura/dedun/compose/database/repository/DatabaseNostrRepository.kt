@@ -58,6 +58,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.machankura.dedun.compose.managers.ChillDkgRitualManager
+import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.identity.Identity
 
 /**
@@ -133,6 +135,20 @@ class DatabaseNostrRepository(
         // Under the same lock as every other write through indexNostrEvent.
         return storeNostrEventMutex.withLock {
             database.nostrDao().reopenInbox(activeKeyPair)
+        }
+    }
+
+    override suspend fun resumeRunningCeremonies(activeKeyPair: KeyPair): Int {
+        val privateKey = activeKeyPair.privKey ?: return 0
+
+        // Under the same lock as the inbound path that otherwise drives a ritual, so
+        // a message arriving mid-sweep is not acted on twice at once.
+        return storeNostrEventMutex.withLock {
+            ChillDkgRitualManager.resumeRunning(
+                database = database,
+                userPublicKey = activeKeyPair.pubKey.toHexKey(),
+                nostrPrivateKey = privateKey
+            )
         }
     }
 

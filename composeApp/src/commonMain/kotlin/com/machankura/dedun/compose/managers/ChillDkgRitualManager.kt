@@ -440,6 +440,48 @@ object ChillDkgRitualManager {
     }
 
     /**
+     * Moves every ceremony [userPublicKey] has joined as far as its stored messages
+     * allow. Returns how many it looked at.
+     *
+     * What a tap on "Contribute" used to do. [advance] runs when a message arrives,
+     * and until rounds 1 and 2 stopped being asked about, a member's approval was
+     * the other thing that ran it. Without one, a ceremony that already holds
+     * every message it needs and will be sent no more never moves -- which is
+     * exactly where an older build leaves a ceremony it was waiting to be told to
+     * contribute to, and where a crash between storing a message and acting on it
+     * leaves any ceremony.
+     *
+     * Safe to run as often as the caller likes: [advance] repeats no work, and a
+     * ceremony with nothing to do returns at its first missing input.
+     */
+    suspend fun resumeRunning(
+        database: DedunDatabase,
+        userPublicKey: HexKey,
+        nostrPrivateKey: ByteArray
+    ): Int {
+        val running = database.dkgSessionDao().getRunningSessionsFor(userPublicKey)
+
+        running.forEach { session ->
+            val localChatRoom = database.chatRoomDao().findChatRoomById(session.chatRoomId)
+            if (localChatRoom == null) {
+                logger.w("Ritual ${session.id} is in ${session.chatRoomId}, which is gone; not resuming it")
+                return@forEach
+            }
+
+            advance(
+                database = database,
+                localChatRoom = localChatRoom,
+                sessionId = session.id,
+                nostrPrivateKey = nostrPrivateKey
+            )
+        }
+
+        if (running.isNotEmpty()) logger.i("Resumed ${running.size} running ritual(s)")
+
+        return running.size
+    }
+
+    /**
      * Records a proposal and answers it with this device's host key. Returns the
      * session, whether it was just created or already known.
      */

@@ -57,6 +57,14 @@ interface NostrRepository {
      */
     suspend fun reopenInbox(activeKeyPair: KeyPair): Int
 
+    /**
+     * Moves every key ceremony [activeKeyPair] has joined as far as the messages
+     * already stored allow. Run once per activation, after [reopenInbox], since what
+     * that opens may be what a ceremony was waiting for. Returns how many it looked
+     * at. See docs/automatic-key-ceremony.md, Phase 3.
+     */
+    suspend fun resumeRunningCeremonies(activeKeyPair: KeyPair): Int
+
     suspend fun createNewProfile(
         publicKey: HexKey,
         name: String?,
@@ -264,6 +272,8 @@ interface NostrRepository {
             }
 
             override suspend fun reopenInbox(activeKeyPair: KeyPair): Int = 0
+
+            override suspend fun resumeRunningCeremonies(activeKeyPair: KeyPair): Int = 0
 
             override suspend fun observePendingSynchronizeNostrEventRequests(ownerPublicKey: HexKey): Flow<SynchronizeNostrEventRequest?> {
                 TODO("Not yet implemented")

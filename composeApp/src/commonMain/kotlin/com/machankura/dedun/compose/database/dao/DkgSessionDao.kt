@@ -156,6 +156,20 @@ interface DkgSessionDao {
     @Query("SELECT * FROM DkgSession WHERE parentChatRoomId = :parentChatRoomId ORDER BY createdAt DESC")
     suspend fun getByParentChatRoomId(parentChatRoomId: String): List<DkgSession>
 
+    /**
+     * Every ceremony [userPublicKey] has joined that has not finished either way,
+     * oldest first: what `ChillDkgRitualManager.resumeRunning` moves on.
+     *
+     * Joined, because a ceremony nobody here agreed to has nothing of this
+     * device's to send. Stage by name, which is how Room stores an enum.
+     */
+    @Query(
+        "SELECT * FROM DkgSession WHERE userPublicKey = :userPublicKey AND " +
+            "hostKeyApprovedAt IS NOT NULL AND stage NOT IN ('COMPLETE', 'FAILED') " +
+            "ORDER BY createdAt ASC"
+    )
+    suspend fun getRunningSessionsFor(userPublicKey: HexKey): List<DkgSession>
+
     @Upsert
     suspend fun upsert(dkgSession: DkgSession)
 

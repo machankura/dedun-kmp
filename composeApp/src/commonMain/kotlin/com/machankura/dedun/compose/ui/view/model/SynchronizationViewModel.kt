@@ -237,6 +237,15 @@ class SynchronizationViewModel(
                             runCatching { nostrRepository.reopenInbox(keyPair) }
                                 .onSuccess { if (it > 0) logger.i { "Reopened $it gift wrap(s) that arrived while this profile was not open" } }
                                 .onFailure { logger.e("Could not reopen the inbox", it) }
+                            // A key ceremony moves when a message arrives, and nothing
+                            // else moves it now that its members are not asked to.
+                            // One that already holds what it needs -- an older build
+                            // left it waiting on a tap, or the app died between storing
+                            // a message and acting on it -- would sit still for good.
+                            // After the reopen, since what that opened may be what it
+                            // was waiting for. docs/automatic-key-ceremony.md, Phase 3.
+                            runCatching { nostrRepository.resumeRunningCeremonies(keyPair) }
+                                .onFailure { logger.e("Could not resume running key ceremonies", it) }
                             launch(Dispatchers.IO) { observePendingBroadcastNostrEventRequests(keyPair) }
                             // Runs until cancelled rather than draining a queue, but it
                             // belongs here for the same reason the pumps do: it needs the

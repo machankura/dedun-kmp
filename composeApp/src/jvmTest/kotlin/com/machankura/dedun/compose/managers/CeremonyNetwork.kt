@@ -111,6 +111,10 @@ class CeremonyNetwork private constructor(
             nostrPrivateKey = device.privateKey,
         )
 
+    /** What the app does once per activation; see `ChillDkgRitualManager.resumeRunning`. */
+    suspend fun resume(device: Device): Int =
+        ChillDkgRitualManager.resumeRunning(device.db, device.publicKey, device.privateKey)
+
     /**
      * Hands every message queued so far to every device that has not had it.
      * Returns how many handings there were, so a caller can tell a quiet network.
