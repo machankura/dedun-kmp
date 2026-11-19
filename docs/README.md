@@ -76,8 +76,8 @@ silent, or a decision that looked arbitrary and was not.
 | [dependency-update.md](./dependency-update.md) | moving everything else in the catalogue to its newest stable release, phased and built but for a mac, devices and pushing the submodule branches — why the libraries go first and need no newer Kotlin, why AGP and Kotlin can only move down the whole submodule chain at once, the material3 alpha that was built for an older Compose than the app's, and what has to keep opening on a device afterwards |
 | [member-row-actions.md](./member-row-actions.md) | every member row but your own offers every action that applies to that member, and an action you can't take now opens a screen saying what stands in the way and what would change it — phased and built. Covers the twelve reasons an action is refused today, why an unavailable item is marked rather than disabled, and why the explanation screen recomputes its reason instead of carrying it |
 | [remove-convenient-groups.md](./remove-convenient-groups.md) | every group a member makes is robust -- phased and built. Covers why a one-to-one chat is not a group yet takes no new members, why the three-member floor moves to the member picker rather than down to 2-of-2, the quorum rules that outlive `ChatRoomType`, and why a Bennu peer's convenient group is still joined |
-| [member-admin-promotion.md](./member-admin-promotion.md) | making a member an admin and back, phased and not built, under three rules: every admin holds a share, every commit in a keyed room is a proposal until the group's threshold signature is on it, and a robust group keeps at least three admins. Covers why the signature has to ride inside the commit and the rule inside the group's state, the upstream change that lets a device refuse an unsigned commit at all, why a member's own leave stays exempt, and why a removed admin comes back as an admin when re-invited today |
 | [robust-group-admins.md](./robust-group-admins.md) | making every founding member of a robust group an admin of its room, on every device -- phased and built. Covers why the ceremony's participants are the founding set, the Welcome that flags no admins, the joiner's check against the ceremony it took part in, and finishing an invite that partly failed |
+| [member-admin-promotion.md](./member-admin-promotion.md) | making a member an admin and back, phased and built for convenient rooms, under three rules: every admin holds a share, every commit in a keyed room is a proposal until the group's threshold signature is on it, and a robust group keeps at least three admins. Covers why the signature has to ride inside the commit and the rule inside the group's state, the upstream change that lets a device refuse an unsigned commit at all, why a member's own leave stays exempt, and why a removed admin comes back as an admin when re-invited today |
 
 Start with the ceremony if you are new to this area; the Marmot notes all assume it.
 Read the skipped-keys note before debugging any "the other device never got it"
@@ -208,7 +208,8 @@ wallet note and the ceremony note, and reads as the lightning-kmp fork's
 constraints and its decision table before any phase, its trust table before
 arguing with either, and its two tables of what the build found before
 changing anything it describes.
-The member-admin-promotion note is a phased plan that has not been built. It reads as
+The member-admin-promotion note is a phased plan built for convenient rooms and not yet
+for keyed ones, which wait on its Phase 0. It reads as
 the Marmot v2 note's Phase 7 finished, and as the share-refresh note put to work: a
 promotion is an enrollment and a demotion is a refresh. Read its three rules and its
 headline before any phase. Its Phase 0 is upstream work in mls-kmp and marmot-kmp,

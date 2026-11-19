@@ -4,10 +4,27 @@ A plan for promoting a member of a group to admin and demoting an admin back to
 member. It also covers the jobs that need the same machinery: removing an admin, an
 admin stepping down, and an admin leaving.
 
-**A phased plan, not built.** Written against the code as it stood at `fc437d05`, with
+**A phased plan, partly built.** Written against the code as it stood at `fc437d05`, with
 marmot-kmp 2.2.1 and mls-kmp 1.3.0 as the catalogue pins them. The second draft adds
 three rules the first draft lacked; they are stated in the next section, and most of
 the plan follows from them.
+
+**Built**, one commit per phase on `claude/member-admin-promotion-plan-d9d716`: the
+first release's phases (10a, 1, 2, 6, and 10 and 11 for convenient rooms), Phase 7's
+app side, and Phase 3. **Not built:** Phase 0, which is upstream work in mls-kmp and
+marmot-kmp, and everything that waits on it (4, 5, 7's policy half, 8, 9, 12). Where the
+build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 2's lines in the library's order: departures, arrivals, demotions, promotions | after the membership lines, which keep the order they had (arrivals, then departures); then demotions, then promotions |
+| Phase 3's statement has a `disband` line | a `component` line per GroupContext component the commit changes, by id and the hash of its new value. Disband, enabling disband and a rename are all that one rule, and a statement cannot sign off one component while the commit changes another |
+| Phase 3's kind "in the 303xx range" | 30370, past the last retired wallet kind (30366) |
+| Phase 6's removal of an admin is "chained in memory" | through `MarmotEngine.afterConfirmed`, registered *before* the commit it waits on so a relay's OK cannot overtake it, and taken back if publishing throws. Leaving as an admin uses the same hook. It applies in keyed rooms too, where every member is an admin, so a removal there is also two commits |
+| Phase 7's floor is checked on demotion, removal and leaving | on removal only, so far: a keyed room offers no demotion and no leave for an admin until Phase 5, and the floor is enforced where those arrive |
+| Phase 10's keyed-room rows: "above the floor" and "at the floor" | one row for now. A keyed room's admin who presses **Leave group** is told, as before, that an admin cannot leave; `AdminLeave.CANNOT` |
+| Phase 11's dialogs for every action | removal keeps the immediate action it had; promotion, demotion and stepping down ask first |
+| Phase 1 calls `reconcileAdmins` from `initiateChatRoomDetail` | and from `MarmotGroupCreation` in place of `stampAdmins`, and from the direct-message and convenient-room creation sites, as planned; the repository's `reconcileAdmins(chatRoomId)` is what the view models call |
 
 Read [marmot-v2.md](./marmot-v2.md) Phase 7 first. Removing a member, disbanding and
 the derived membership captions all come from there. Read
