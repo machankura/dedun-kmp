@@ -334,9 +334,8 @@ object ChillDkgRitualManager {
             round1Random = RandomInstance.bytes(32).toHex(),
             round2AuxRandom = RandomInstance.bytes(32).toHex(),
             // Opening a ceremony is already the act of agreeing to be in it, so this
-            // member is not asked again to publish the host key they just committed
-            // the group to. Rounds 1 and 2 are still asked for: those publish key
-            // material, and by then the ceremony has other people in it.
+            // member is never asked about it: joining is the only approval a
+            // ceremony asks for, and this is it.
             hostKeyApprovedAt = Clock.System.now(),
             // What this ceremony is for, if it is for anything in particular. The
             // coordinator's own copy of the claim they are about to put on the
@@ -794,10 +793,16 @@ object ChillDkgRitualManager {
         val hostSeckey = deriveHostSecretKey(nostrPrivateKey)
 
         try {
-            // Nothing of this device's own goes out before its owner has said so.
-            // Each gate returns rather than throwing: the ritual is not failing, it
-            // is waiting on a person, and everything already received stays stored
-            // so it resumes the moment they approve.
+            // Nothing of this device's own goes out before its owner has said so,
+            // and joining is the one thing they are asked. It returns rather than
+            // throwing: the ritual is not failing, it is waiting on a person, and
+            // everything already received stays stored so it resumes the moment
+            // they approve.
+            //
+            // Rounds 1 and 2 used to be gates of their own. They were never
+            // decisions: contributing follows from having joined, and confirming
+            // is the check ChillDKG makes below, which refuses a mismatch whether
+            // or not anybody is looking. See docs/automatic-key-ceremony.md.
             if (session.hostKeyApprovedAt == null) return
 
             if (ownMessage(database, session, DkgRitualEvents.HOST_KEY) == null) {
@@ -807,13 +812,6 @@ object ChillDkgRitualManager {
             // Waiting on host keys: the participant set isn't settled, so there is
             // nothing this device can compute yet.
             val hostPublicKeys = hostPublicKeys(database, session) ?: return
-
-            // A second decision, and a different one: the host key only joined the
-            // ceremony, this contributes to the key itself.
-            if (session.round1ApprovedAt == null) {
-                announceApprovalNeeded(database, session, DkgApprovalStep.ROUND_1)
-                return
-            }
 
             val step1 = ChillDKG.participantStep1(
                 hostSecretKey = hostSeckey,
@@ -843,15 +841,12 @@ object ChillDkgRitualManager {
 
             val coordinatorRound1 = session.coordinatorRound1 ?: return
 
-            // The last decision, and a real check rather than a formality: signing
-            // here asserts the combined result matches what this device sent, which
-            // is what stops a coordinator swapping in a key the members never
-            // contributed to.
-            if (session.round2ApprovedAt == null) {
-                announceApprovalNeeded(database, session, DkgApprovalStep.ROUND_2)
-                return
-            }
-
+            // A real check rather than a formality: signing here asserts the
+            // combined result matches what this device sent, which is what stops a
+            // coordinator swapping in a key the members never contributed to. The
+            // device makes it -- `participantStep2` faults on a mismatch, and the
+            // catch below fails the ceremony for everyone -- so a person approving
+            // it would add nothing to it.
             val step2 = ChillDKG.participantStep2(
                 hostSecretKey = hostSeckey,
                 state = step1.state,
@@ -1177,32 +1172,21 @@ object ChillDkgRitualManager {
      * What this ritual is waiting on its owner for, or null if it is waiting on
      * somebody else — or on nothing, being finished.
      *
-     * Mirrors the gates in [advance] rather than duplicating their reasoning: a step
-     * is pending exactly when [advance] would stop at it. The two must agree, or the
-     * screen offers an approval that does nothing, or none while the ritual sits
-     * still.
+     * Mirrors the gate in [advance]: a step is pending exactly when [advance] would
+     * stop at it. The two must agree, or the screen offers an approval that does
+     * nothing, or none while the ritual sits still. There is one gate now, joining;
+     * rounds 1 and 2 were gates until docs/automatic-key-ceremony.md, and are never
+     * returned here.
+     *
+     * Still suspending and still handed the database, though this reading needs
+     * neither, so a gate that does need them can come back without every caller
+     * changing shape.
      */
+    @Suppress("UNUSED_PARAMETER", "RedundantSuspendModifier")
     suspend fun pendingApproval(database: DedunDatabase, session: DkgSession): DkgApprovalStep? {
         if (session.stage == DkgRitualStage.COMPLETE || session.stage == DkgRitualStage.FAILED) return null
 
-        if (session.hostKeyApprovedAt == null) return DkgApprovalStep.HOST_KEY
-
-        if (session.round1ApprovedAt == null) {
-            // Nothing to contribute to until the participant set is settled: round 1
-            // is computed over every member's host key, so asking earlier would be
-            // asking about a ceremony whose shape is not yet known.
-            val hostKeys = database.dkgSessionDao()
-                .countMessagesByKind(session.id, DkgRitualEvents.HOST_KEY)
-
-            return if (hostKeys >= session.participantCount) DkgApprovalStep.ROUND_1 else null
-        }
-
-        if (session.round2ApprovedAt == null) {
-            // Nothing to check until the coordinator has combined the contributions.
-            return if (session.coordinatorRound1 != null) DkgApprovalStep.ROUND_2 else null
-        }
-
-        return null
+        return if (session.hostKeyApprovedAt == null) DkgApprovalStep.HOST_KEY else null
     }
 
     /**
@@ -1250,11 +1234,15 @@ object ChillDkgRitualManager {
 
     /**
      * Records that this device's owner agreed to [step], then lets the ritual run as
-     * far as the next thing it is waiting on.
+     * far as the next thing it is waiting on -- which, once they have joined, is
+     * the end of the ceremony or another member.
      *
      * Approving a step it is not actually waiting on is a no-op rather than an error:
      * a stale screen left open across a redelivery should not publish anything, and
-     * the caller has no way to know the ritual has moved on since it was drawn.
+     * the caller has no way to know the ritual has moved on since it was drawn. That
+     * covers [DkgApprovalStep.ROUND_1] and [DkgApprovalStep.ROUND_2] too, which
+     * [pendingApproval] no longer returns: a screen for either left open across the
+     * upgrade does nothing.
      */
     suspend fun approve(
         database: DedunDatabase,
@@ -1316,6 +1304,9 @@ object ChillDkgRitualManager {
                 "Your approval is needed to join the shared key ceremony. Nothing has been " +
                     "published from this device yet."
 
+            // Never reached: rounds 1 and 2 are no longer asked for. Kept because the
+            // enum keeps the values for rows that recorded asking, and this is the
+            // wording those rows were written with -- MIGRATION_3_4 matches on it.
             DkgApprovalStep.ROUND_1 -> ChatMessage.TYPE_DKG_APPROVAL_NEEDED_ROUND_1 to
                 "Everyone has joined the shared key ceremony. Your approval is needed to " +
                     "contribute to the key."

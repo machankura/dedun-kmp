@@ -59,6 +59,18 @@ class CeremonyNetwork private constructor(
     /** Which messages each device has already been handed, by device and event id. */
     private val delivered = mutableSetOf<Pair<HexKey, HexKey>>()
 
+    /**
+     * What the relay does to a message on its way to one receiver: the identity by
+     * default. A test standing in for a dishonest sender rewrites it here, which is
+     * the same as the sender having written it that way -- nothing on the path
+     * checks a rumor's id against its content.
+     */
+    var tamper: (sender: Device, receiver: Device, event: Event) -> Event = { _, _, event -> event }
+
+    /** Everything [device] has queued for its room, of [kind]. */
+    suspend fun sent(device: Device, kind: Int): List<Event> =
+        outboundOf(device).filter { it.kind == kind }
+
     val coordinator: Device get() = devices.first()
 
     /** The device's own copy of the room, read fresh: the ritual rewrites it. */
@@ -116,11 +128,13 @@ class CeremonyNetwork private constructor(
             devices
                 .filter { it !== sender }
                 .filter { (it.publicKey to event.id) !in delivered }
-                .map { receiver -> receiver to event }
+                .map { receiver -> Triple(sender, receiver, event) }
         }.let { if (random != null) it.shuffled(random) else it }
 
-        handings.forEach { (receiver, event) ->
-            delivered += receiver.publicKey to event.id
+        handings.forEach { (sender, receiver, sent) ->
+            delivered += receiver.publicKey to sent.id
+            val event = tamper(sender, receiver, sent)
+
             store(receiver, event)
             ChillDkgRitualManager.processRitualPayload(
                 database = receiver.db,

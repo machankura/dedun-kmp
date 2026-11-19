@@ -173,19 +173,23 @@ data class DkgSession(
      *
      * The ritual is otherwise driven entirely by arriving messages, which would
      * mean a member is enrolled in the group's permanent signing quorum by a relay
-     * delivering an event to a phone in their pocket. Each of these three is a
-     * separate decision because each publishes something different and commits the
-     * member to something different -- see `ChillDkgRitualManager.pendingApproval`.
+     * delivering an event to a phone in their pocket. This is the one decision it
+     * asks for, and it covers the whole ceremony: the rounds after it run without
+     * asking -- see docs/automatic-key-ceremony.md.
      *
      * Set at creation for the member who opened the ceremony: starting one is
      * already the act of agreeing to be in it.
      */
     val hostKeyApprovedAt: Instant? = null,
 
-    /** When they approved publishing their contribution to the key. */
+    /**
+     * When they approved publishing their contribution to the key, on a row from a
+     * build that asked. Nothing reads or writes it now; kept rather than migrated
+     * away, since dropping a nullable column buys nothing.
+     */
     val round1ApprovedAt: Instant? = null,
 
-    /** When they approved signing to confirm the combined result. */
+    /** When they approved confirming the combined result. As [round1ApprovedAt]. */
     val round2ApprovedAt: Instant? = null,
 
     /**
