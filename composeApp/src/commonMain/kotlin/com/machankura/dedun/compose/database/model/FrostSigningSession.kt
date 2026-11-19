@@ -117,6 +117,21 @@ data class FrostSigningSession(
      */
     val derivationPath: String? = null,
 
+    /**
+     * Which generation of the key's shares this session signs with
+     * (docs/frost-share-refresh.md), or null on a session from before shares
+     * could change -- which signed with generation 0, the ceremony's, and reads
+     * as that.
+     *
+     * Fixed at creation like every other input. A share is an input to the
+     * nonce, so a session whose device moved to a newer generation halfway
+     * through would regenerate a different nonce from the same seed; and a
+     * partial signature made with another generation's share is checked against
+     * the wrong public share and cannot aggregate. A device that holds no share
+     * of the generation a proposal names declines it, out loud.
+     */
+    val generation: Int? = null,
+
     val stage: FrostSigningStage = FrostSigningStage.COLLECTING_NONCES,
 
     /** The chosen signers' FROST ids in aggregation order, comma separated. Written once. */

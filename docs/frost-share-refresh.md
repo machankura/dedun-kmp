@@ -11,6 +11,23 @@ up to Giza. Read [shared-key-ceremony.md](./shared-key-ceremony.md) and
 [shared-key-derivation.md](./shared-key-derivation.md) first. Everything below assumes the
 ceremony they describe and the rule that a room's id *is* the key it signs with.
 
+## Where it stands
+
+| phase | commit | checked |
+|---|---|---|
+| 5 | `4040ae74` | `SecureDeleteJvmTest` (5, two of them controls that fail without the fix); `jvmTest` 1176/1176; `compileDebugKotlinAndroid`, `processDebugResources` |
+| 6 | Phase 6 | `ShareGenerationsJvmTest` (7: a real 2-of-3 signature with hand-refreshed shares verifying as the unchanged room, a decline from a device without the generation, a withheld member who is not a signer); every existing signing test unedited; `jvmTest` 1183/1183; `compileDebugKotlinAndroid`; the M3, brand and wallet audits |
+
+Where the build chose differently from the plan:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 5: a test overwrites a share and finds no copy | three. An overwrite in this schema happens to write the new cell over the old share, so it passed with `secure_delete` off too and proved nothing; a deleted row is the control that fails without it. And `secure_delete` alone leaves the share in `-wal` until a truncating checkpoint, so `DedunDatabase.scrubFreedPages` is part of the fix, with its own control |
+| Phase 6: a manual `MIGRATION_37_38` backfills generation 0 into the new tables | no backfill, and no manual migration. Generation 0 stays where the ceremony wrote it, read by `ShareGenerations` with ids derived from the host keys exactly as `signerIds` derived them; rows exist from generation 1 on. A copy of generation 0 would have been a second source of truth for the one fact signing most needs to agree with the ceremony about, and `ShareGenerationsJvmTest` asserts the derivation instead of a copy. The migration is a Room `AutoMigration` |
+| Phase 6: a session at a generation this device lacks declines | so does one whose `frost_generation` is present and unreadable, filed at generation -1 so nothing reads it as a share this device holds. A decline's reason is `FrostSigningManager.GENERATION_REFUSAL` |
+| Phase 6: (not in the plan) | `DkgSessionDao.getKeyHoldingSessions` now counts a share of any generation, and `completedKey` asks `ShareGenerations.canSign`, so a refreshed key whose ceremony share is wiped is still found -- and a member withheld from the newest refresh is offered nothing to sign. `ShippedProfileUpgradeJvmTest` pins the built version at 38 |
+| Phase 5: `dataExtractionRules` or `allowBackup="false"` | both. From Android 12 `allowBackup="false"` stops cloud backup but not a device-to-device transfer |
+
 ## The headline: enrollment cannot rotate a share
 
 The word in the request is *re-enrollment*, and the enrollment module that just arrived looks

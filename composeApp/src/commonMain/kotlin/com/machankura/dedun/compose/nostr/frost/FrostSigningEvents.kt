@@ -5,6 +5,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import kotlinx.serialization.json.jsonArray
 import com.machankura.dedun.compose.network.serialization.CommonJson
+import com.machankura.dedun.compose.nostr.frost.tags.FrostGenerationTag
 import com.machankura.dedun.compose.nostr.frost.tags.FrostKeyTag
 import com.machankura.dedun.compose.nostr.frost.tags.FrostSessionIdTag
 import com.machankura.dedun.compose.nostr.frost.tags.FrostSignerIdsTag
@@ -144,10 +145,13 @@ object FrostSigningEvents {
         sessionId: String,
         dkgSessionId: String? = null,
         signerIds: List<Int>? = null,
-        silentMembers: List<HexKey>? = null
+        silentMembers: List<HexKey>? = null,
+        generation: Int? = null
     ): Array<Array<String>> = buildList {
         add(FrostSessionIdTag.assemble(sessionId))
         dkgSessionId?.let { add(FrostKeyTag.assemble(it)) }
+        // Only beside the key, and only from generation 1: see FrostGenerationTag.
+        if (dkgSessionId != null && generation != null && generation > 0) add(FrostGenerationTag.assemble(generation))
         signerIds?.let { add(FrostSignerIdsTag.assemble(it)) }
         silentMembers?.takeIf { it.isNotEmpty() }?.let { add(FrostSilentMembersTag.assemble(it)) }
     }.toTypedArray()
@@ -202,6 +206,18 @@ object FrostSigningEvents {
 
     fun parseKey(tags: Array<Array<String>>): String? =
         tags.firstNotNullOfOrNull(FrostKeyTag::parse)?.dkgSessionId
+
+    /**
+     * The generation of the key's shares a proposal signs with: the tag's, or 0
+     * when there is none -- every proposal from before shares could change, and
+     * every one since at the ceremony's own generation. Null for a tag present
+     * and unreadable, which is not the same as absent: it names a generation,
+     * and this device cannot tell which.
+     */
+    fun parseGeneration(tags: Array<Array<String>>): Int? {
+        val tag = tags.firstOrNull { it.isNotEmpty() && it[0] == FrostGenerationTag.TAG_NAME } ?: return 0
+        return FrostGenerationTag.parse(tag)?.generation
+    }
 
     fun parseSignerIds(tags: Array<Array<String>>): List<Int>? =
         tags.firstNotNullOfOrNull(FrostSignerIdsTag::parse)?.signerIds

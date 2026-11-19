@@ -1,6 +1,10 @@
 package com.machankura.dedun.compose.managers
 
 import kotlin.test.assertFailsWith
+import com.machankura.dedun.compose.database.model.KeyShareGeneration
+import com.machankura.dedun.compose.database.model.KeyShareMember
+import com.machankura.dedun.compose.database.model.types.ShareGenerationState
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.ui.view.state.GuardedWalletRow
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
@@ -622,6 +626,62 @@ class GuardianSigningJvmTest {
             val signed = Transaction.read(assertNotNull(row.signedTransaction))
             signed.correctlySpends(mapOf(OutPoint(funding, 0) to funding.txOut[0]), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
             assertEquals(3, signed.txIn[0].witness.stack.size, "a signature, the leaf, and its control block")
+        }
+    }
+
+    /**
+     * Renews [device]'s share of the guardian's key by hand and deletes the old one,
+     * as a finished refresh and the group signing it would. The key, and so the
+     * leaf the guardian spends through, does not move. docs/giza-into-dedun.md, Phase 6.
+     */
+    private suspend fun refresh(device: Device) {
+        val coefficient = PrivateKey(ByteVector32("0de17a".padEnd(62, '0') + "0e"))
+        fun delta(participant: Int) = coefficient * PrivateKey(ByteVector32(ByteArray(32).also { it[31] = (participant + 1).toByte() }))
+        val index = members.indexOf(device.publicKey)
+        device.db.keyShareDao().upsert(
+            KeyShareGeneration(
+                dkgSessionId = ceremonyId, generation = 1,
+                secretShare = (keyMaterial.secretShares[index] + delta(index)).value.toHex(),
+                publicShares = keyMaterial.publicShares.mapIndexed { i, share -> share + delta(i).publicKey() }.joinToString(",") { it.value.toHex() },
+                state = ShareGenerationState.ACTIVE,
+            )
+        )
+        device.db.keyShareDao().upsert(
+            members.mapIndexed { i, member ->
+                KeyShareMember(dkgSessionId = ceremonyId, generation = 1, participantId = i, memberPublicKey = member, hostPublicKey = hostKeys[i], standing = ShareStanding.LIVE)
+            }
+        )
+        val key = device.db.dkgSessionDao().getSessionById(ceremonyId)!!
+        device.db.dkgSessionDao().upsert(key.copy(secretShare = null))
+    }
+
+    @Test
+    fun `after a share refresh and the wipe, the guardian's quorum still spends through its leaf`(): Unit = runBlocking {
+        val proposer = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+        val statement = guardedStatement()
+        tell(proposer, statement)
+        tell(other, statement)
+        refresh(proposer)
+        refresh(other)
+
+        val guarded = assertNotNull(GuardianManager.guardedWalletFor(proposer.db, roomId, guardedChildRoomId, chain, 0))
+        val funding = fundingOf(guarded.account)
+        val built = assertIs<GroupSpendBuilder.Result.Built>(
+            GroupSpendBuilder.send(fundedState(guarded.account, funding, 100, 200), fr.acinq.bitcoin.Bitcoin.addressFromPublicKeyScript(chain.chainHash, elsewhere.toByteArray()).right!!,
+                Satoshi(30_000), 2, emptySet(), emptySet(), guarded.spender())
+        )
+
+        val session = FrostSigningManager.proposeGuardianSpend(proposer.db, proposer.room, proposer.publicKey, built.psbt, guardedChildRoomId, chain)
+        assertEquals(1, session.generation)
+        pump(proposer, other)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(proposer, other)
+
+        listOf(proposer, other).forEach { device ->
+            assertEquals(FrostSigningStage.COMPLETE, device.session(session.id)?.stage)
+            val signed = Transaction.read(assertNotNull(device.db.groupTransactionDao().getBySessionId(session.id)?.signedTransaction))
+            signed.correctlySpends(mapOf(OutPoint(funding, 0) to funding.txOut[0]), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
         }
     }
 

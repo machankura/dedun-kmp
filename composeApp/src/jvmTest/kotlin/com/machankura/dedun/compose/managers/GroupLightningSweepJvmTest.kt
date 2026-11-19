@@ -102,6 +102,31 @@ class GroupLightningSweepJvmTest {
         assertEquals(1, GroupLightningSweeps.unswept(all[2].db, fixture.roomId, report).size)
     }
 
+    /**
+     * After the group renews its onchain shares and deletes the old ones, a sweep
+     * still signs: the basepoints derive from the key, which did not move, and the
+     * session signs at the generation the group now holds. docs/giza-into-dedun.md,
+     * Phase 6.
+     */
+    @Test
+    fun `after a share refresh and the wipe, the group still sweeps into its onchain wallet`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        fixture.refreshOnchainKey(all)
+
+        val outputs = listOf(toRemote(wallet, 300_000))
+        val sweep = assertNotNull(GroupSweep.build(wallet.statement.wallet, outputs.map(GroupSweep::inputOf), fixture.account, receiveIndex = 0, feeratePerVbyte = 2))
+        val session = FrostSigningManager.proposeSweep(all[3].db, all[3].room, all[3].publicKey, sweep, fixture.chain)
+        assertEquals(1, session.generation)
+        fixture.signSession(all, all[3], session.id)
+
+        all.forEach { d ->
+            assertEquals(FrostSigningStage.COMPLETE, d.db.frostSigningSessionDao().getSessionById(session.id)?.stage, "device ${d.index}")
+            assertEquals(1, d.db.frostSigningSessionDao().getSessionById(session.id)?.generation)
+        }
+        val signed = Transaction.read(assertNotNull(all[0].db.groupTransactionDao().getBySessionId(session.id)?.signedTransaction))
+        Transaction.correctlySpends(signed, outputs.associate { it.outPoint to it.txOut }, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+    }
+
     @Test
     fun `a sweep that pays anyone else, or signs under a key that is not the group's, is refused`() = runBlocking<Unit> {
         val (_, wallet) = opened()

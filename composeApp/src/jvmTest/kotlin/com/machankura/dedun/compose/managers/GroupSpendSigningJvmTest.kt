@@ -19,6 +19,11 @@ import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
+import com.machankura.dedun.compose.database.model.KeyShareGeneration
+import com.machankura.dedun.compose.database.model.KeyShareMember
+import com.machankura.dedun.compose.database.model.types.ShareGenerationState
+import com.machankura.dedun.compose.database.model.types.ShareStanding
+import fr.acinq.bitcoin.PublicKey
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -320,6 +325,113 @@ class GroupSpendSigningJvmTest {
         assertEquals(listOf(0, 1), items.map { it.inputIndex })
         assertNotEquals(items[0].aggregatedNonce, items[1].aggregatedNonce)
         assertNotEquals(items[0].nonceRandom, items[1].nonceRandom)
+    }
+
+    // ---- After a share refresh (docs/giza-into-dedun.md, Phase 6) --------
+
+    /**
+     * delta(x) = a·x, the refresh the protocol makes, by hand: it moves every share
+     * and leaves the key, and so the wallet, where it is. ShareGenerationsJvmTest's.
+     */
+    private val deltaCoefficient = PrivateKey(ByteVector32("0de17a0000000000000000000000000000000000000000000000000000000c0e"))
+    private fun scalar(value: Int) = PrivateKey(ByteVector32(ByteArray(32).also { it[31] = value.toByte() }))
+    private fun delta(participant: Int): PrivateKey = deltaCoefficient * scalar(participant + 1)
+    private val refreshedSecretShares = keyMaterial.secretShares.mapIndexed { i, share -> share + delta(i) }
+    private val refreshedPublicShares: List<PublicKey> = keyMaterial.publicShares.mapIndexed { i, share -> share + delta(i).publicKey() }
+
+    /**
+     * Files generation 1 on [device] as a finished refresh would, and -- with
+     * [wipe] -- deletes the ceremony's share the way the group signing generation 1
+     * does, so nothing can sign at generation 0 any more.
+     */
+    private suspend fun refresh(device: Device, wipe: Boolean = true) {
+        val index = members.indexOf(device.publicKey)
+        device.db.keyShareDao().upsert(
+            KeyShareGeneration(
+                dkgSessionId = ceremonyId,
+                generation = 1,
+                secretShare = refreshedSecretShares[index].value.toHex(),
+                publicShares = refreshedPublicShares.joinToString(",") { it.value.toHex() },
+                state = ShareGenerationState.ACTIVE,
+            )
+        )
+        device.db.keyShareDao().upsert(
+            members.mapIndexed { i, member ->
+                KeyShareMember(
+                    dkgSessionId = ceremonyId, generation = 1, participantId = i,
+                    memberPublicKey = member, hostPublicKey = hostKeys[i], standing = ShareStanding.LIVE,
+                )
+            }
+        )
+        if (wipe) {
+            val key = device.db.dkgSessionDao().getSessionById(ceremonyId)!!
+            device.db.dkgSessionDao().upsert(key.copy(secretShare = null))
+        }
+    }
+
+    @Test
+    fun `after a refresh and the wipe, the group's key still answers for its wallet`() = runBlocking<Unit> {
+        val proposer = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+        openWallet(proposer, other)
+        refresh(proposer)
+
+        val key = assertNotNull(FrostSigningManager.completedKey(proposer.db, roomId), "the key went with the old share")
+        assertEquals(ceremonyId, key.id)
+        assertTrue(FrostSigningManager.canSign(proposer.db, roomId))
+        assertEquals(thresholdPublicKey, GroupWalletManager.thresholdKeyFor(proposer.db, roomId))
+        assertNotNull(GroupWalletManager.walletFor(proposer.db, roomId, chain), "the wallet is the key's, which did not move")
+    }
+
+    @Test
+    fun `after a refresh and the wipe, a quorum spends the group's coins with the new shares`() = runBlocking<Unit> {
+        val proposer = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+        openWallet(proposer, other)
+        refresh(proposer)
+        refresh(other)
+
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        assertEquals(1, session.generation, "a spend proposed after the refresh signs at the new generation")
+        val proposal = outbox(proposer).single { it.kind == FrostSigningEvents.TRANSACTION_PROPOSAL }
+        assertEquals(1, FrostSigningEvents.parseGeneration(proposal.tags))
+
+        pump(proposer, other)
+        assertEquals(1, other.session(session.id)?.generation)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(proposer, other)
+
+        listOf(proposer, other).forEach { device ->
+            assertEquals(FrostSigningStage.COMPLETE, device.session(session.id)?.stage)
+            val signed = Transaction.read(assertNotNull(device.transaction(session.id)?.signedTransaction))
+            signed.correctlySpends(
+                funding.txOut.mapIndexed { i, out -> OutPoint(funding, i.toLong()) to out }.toMap(),
+                ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS,
+            )
+        }
+    }
+
+    @Test
+    fun `a device that missed the refresh declines a spend out loud, and reserves nothing`() = runBlocking<Unit> {
+        val proposer = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+        openWallet(proposer, other)
+        refresh(proposer)
+        // The other device never heard of generation 1.
+
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        pump(proposer, other)
+
+        val onOther = assertNotNull(other.session(session.id), "silence would leave the group waiting on it")
+        assertNotNull(onOther.signDeclinedAt)
+        assertEquals(FrostSigningSubject.TRANSACTION, onOther.subject)
+        assertNull(other.transaction(session.id), "a spend it cannot sign reserves none of the group's coins")
+        val decline = outbox(other).single { it.kind == FrostSigningEvents.DECLINE }
+        assertEquals(FrostSigningManager.GENERATION_REFUSAL, decline.content)
+        assertNotNull(
+            proposer.db.frostSigningSessionDao().getMessage(session.id, FrostSigningEvents.DECLINE, other.publicKey),
+            "and the proposer counts it",
+        )
     }
 
     // ---- What a member refuses ------------------------------------------

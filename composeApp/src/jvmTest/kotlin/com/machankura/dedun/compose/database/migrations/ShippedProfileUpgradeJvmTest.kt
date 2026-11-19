@@ -61,8 +61,13 @@ class ShippedProfileUpgradeJvmTest {
     /** The schema version on `dedun`, which is the one every existing install is at. */
     private val shipped = 45
 
-    /** The schema version this branch builds. */
-    private val current = 46
+    /**
+     * The schema version this branch builds. 47 since share generations
+     * (docs/frost-share-refresh.md, Phase 6), so the upgrade crosses two
+     * generated migrations, 45 -> 46 -> 47, and the file has to come out at the
+     * second.
+     */
+    private val current = 47
 
     private val directory: File = Files.createTempDirectory("dedun-shipped-profile").toFile()
     private val file: File = File(directory, "aux.db")
@@ -225,13 +230,13 @@ class ShippedProfileUpgradeJvmTest {
     // -- what it has to prove --------------------------------------------------------
 
     /**
-     * Room finds the way from 45 to 46, runs it, and stamps the file with the hash the
+     * Room finds the way from 45 to the current version, runs it, and stamps the file with the hash the
      * generated code expects. The hash is the assertion that matters: Room writes it
      * only after `validateMigration` has compared every table it was handed against the
      * schema the entities declare.
      */
     @Test
-    fun `a v45 profile opens at v46, with the table this branch adds`(): Unit = runBlocking {
+    fun `a v45 profile opens at the current version, with the tables added since`(): Unit = runBlocking {
         writeShippedProfile()
         onDisk { connection ->
             assertEquals(shipped.toLong(), connection.userVersion(), "the fixture is not at the shipped version")
@@ -247,7 +252,7 @@ class ShippedProfileUpgradeJvmTest {
             assertEquals(
                 schema(current)["identityHash"]!!.jsonPrimitive.content,
                 connection.identityHash(),
-                "Room did not stamp the v37 identity hash, so it did not validate the migrated schema",
+                "Room did not stamp the current identity hash, so it did not validate the migrated schema",
             )
             val expected = entities(current).associateBy { it.tableName() }
             assertEquals(expected.keys, connection.tables(), "the migrated file has a different set of tables")

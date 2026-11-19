@@ -331,6 +331,15 @@ room3 {
     schemaDirectory("$projectDir/schemas")
 }
 
+// Room checks every table against the schema when a database opens, in generated methods it
+// splits every `room.validationSplitSize` statements -- 300 by default. Dedun has 83 tables, and
+// at schema 47 one of those methods passed the JVM's 64 KB limit ("Method too large:
+// DedunDatabase_Impl...onValidateSchema2"). 200 leaves each one well under it.
+// docs/giza-into-dedun.md, Phase 6.
+ksp {
+    arg("room.validationSplitSize", "200")
+}
+
 /**
  * The Material Design conformance audit, as a build task.
  *

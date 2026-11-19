@@ -129,6 +129,20 @@ data class GroupKeyState(
      */
     val birthCertificateJson: String? = null,
 
+    /**
+     * Which generation of the key's shares the group says it signs with, or null
+     * for a state from before shares could change, which means generation 0.
+     * docs/frost-share-refresh.md, Phase 8, is what writes it.
+     */
+    val generation: Int? = null,
+
+    /**
+     * A hash of the public-share table at [generation], as the group signed it.
+     * What a device checks its own table against, so that it cannot sign at a
+     * generation the group disagrees with it about.
+     */
+    val publicSharesHash: String? = null,
+
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,

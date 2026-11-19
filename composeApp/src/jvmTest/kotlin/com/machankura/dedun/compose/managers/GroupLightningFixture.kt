@@ -44,6 +44,10 @@ import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.crypto.frost.Frost
 import fr.acinq.bitcoin.crypto.frost.KeyMaterial
+import com.machankura.dedun.compose.database.model.KeyShareGeneration
+import com.machankura.dedun.compose.database.model.KeyShareMember
+import com.machankura.dedun.compose.database.model.types.ShareGenerationState
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 import kotlin.test.assertNotNull
 
 /**
@@ -236,6 +240,40 @@ class GroupLightningFixture(
             d.db.groupSignedEventDao().upsert(row)
         }
         return event
+    }
+
+    /**
+     * Renews every device's share of the onchain key by hand, as a finished refresh
+     * would leave it, and deletes the ceremony's share as the group signing the new
+     * generation does: delta(x) = a·x moves every share and leaves the key, the
+     * wallets and the Lightning basepoints where they are. docs/giza-into-dedun.md,
+     * Phase 6.
+     */
+    suspend fun refreshOnchainKey(all: List<Device>) {
+        val coefficient = PrivateKey(ByteVector32("0de17a".padEnd(62, '0') + "0e"))
+        fun delta(participant: Int) = coefficient * PrivateKey(ByteVector32(ByteArray(32).also { it[31] = (participant + 1).toByte() }))
+        val publicShares = keyMaterial.publicShares.mapIndexed { i, share -> share + delta(i).publicKey() }
+        all.forEach { d ->
+            d.db.keyShareDao().upsert(
+                KeyShareGeneration(
+                    dkgSessionId = onchainCeremonyId,
+                    generation = 1,
+                    secretShare = (keyMaterial.secretShares[d.index] + delta(d.index)).value.toHex(),
+                    publicShares = publicShares.joinToString(",") { it.value.toHex() },
+                    state = ShareGenerationState.ACTIVE,
+                )
+            )
+            d.db.keyShareDao().upsert(
+                members.mapIndexed { i, member ->
+                    KeyShareMember(
+                        dkgSessionId = onchainCeremonyId, generation = 1, participantId = i,
+                        memberPublicKey = member, hostPublicKey = hostKeys[i], standing = ShareStanding.LIVE,
+                    )
+                }
+            )
+            val key = d.db.dkgSessionDao().getSessionById(onchainCeremonyId)!!
+            d.db.dkgSessionDao().upsert(key.copy(secretShare = null))
+        }
     }
 
     /** Four devices with an onchain wallet open. */

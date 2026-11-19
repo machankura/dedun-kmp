@@ -136,8 +136,18 @@ interface DkgSessionDao {
      * Signing happens in the admin room, whose id is derived from the key
      * rather than from the room the ceremony ran in, so the key is found by
      * matching that derivation rather than by a stored room id.
+     *
+     * A share of any generation counts (docs/frost-share-refresh.md): once a key
+     * has been refreshed and its ceremony's share wiped, the share it holds is a
+     * KeyShareGeneration row. Which generation signs is `ShareGenerations`'s to
+     * say, not this query's.
      */
-    @Query("SELECT * FROM DkgSession WHERE thresholdPublicKey IS NOT NULL AND secretShare IS NOT NULL ORDER BY createdAt DESC")
+    @Query(
+        "SELECT * FROM DkgSession WHERE thresholdPublicKey IS NOT NULL AND (" +
+            "secretShare IS NOT NULL OR " +
+            "id IN (SELECT dkgSessionId FROM KeyShareGeneration WHERE secretShare IS NOT NULL)" +
+            ") ORDER BY createdAt DESC"
+    )
     suspend fun getKeyHoldingSessions(): List<DkgSession>
 
     /**

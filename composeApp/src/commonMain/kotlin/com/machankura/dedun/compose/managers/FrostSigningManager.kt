@@ -184,6 +184,13 @@ object FrostSigningManager {
     const val MAX_BATCH_SIZE: Int = 64
 
     /**
+     * The reason a device gives for declining a session at a generation of the
+     * key's shares it holds nothing of (docs/frost-share-refresh.md). Read by
+     * other devices as the reason in a decline.
+     */
+    const val GENERATION_REFUSAL: String = "Holds no share of the generation this signs with"
+
+    /**
      * How many seconds [broadcast] will step forward looking for an unused
      * outbound row id before giving up and publishing nothing.
      *
@@ -332,12 +339,17 @@ object FrostSigningManager {
         dependents: (lead: Event) -> List<EventTemplate<*>>,
         key: DkgSession? = null
     ): FrostSigningSession {
-        val ceremony = key?.takeIf { it.stage == DkgRitualStage.COMPLETE && it.secretShare != null }
+        val ceremony = key?.takeIf { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
             ?: completedKey(database, localChatRoom.chatRoom.id)
             ?: throw IllegalStateException("This group has no shared key to sign with")
 
-        val signerId = signerIdOf(database, ceremony, userPublicKey)
-            ?: throw IllegalStateException("This device is not a participant in ceremony ${ceremony.id}")
+        // The generation the group signs with now. Every signer has to sign with
+        // a share of this one, so the session names it and is fixed to it.
+        val shares = ShareGenerations.active(database, ceremony)
+        val signerId = shares.signerIds[userPublicKey]
+            ?: throw IllegalStateException(
+                "This device holds no share of generation ${shares.generation} of ceremony ${ceremony.id}"
+            )
 
         val path = signingPath(database, localChatRoom, ceremony)
         val unsignedEventOf = { template: EventTemplate<*> ->
@@ -370,6 +382,7 @@ object FrostSigningManager {
             participantCount = ceremony.participantCount,
             signerId = signerId,
             derivationPath = path?.let(SharedKeyDerivation::formatPath),
+            generation = shares.generation,
             // Proposing a signature is already the act of agreeing to it.
             signApprovedAt = Clock.System.now()
         )
@@ -487,6 +500,88 @@ object FrostSigningManager {
     }
 
     /**
+     * The generation a wallet session this device proposes signs at, and this
+     * device's signer id in it: the active one, as [proposeSigningBatch] reads it.
+     * Dedun's: Giza has no wallet sessions to stamp. A spend proposed at generation 0
+     * after the group has moved on would be signed by nobody else, and once the old
+     * share is wiped not by this device either. docs/giza-into-dedun.md, Phase 6.
+     *
+     * @throws IllegalStateException when this device holds no share of it
+     */
+    private suspend fun activeShareOf(
+        database: DedunDatabase,
+        ceremony: DkgSession,
+        userPublicKey: HexKey,
+    ): Pair<Int, Int> {
+        val shares = ShareGenerations.active(database, ceremony)
+        val signerId = shares.signerIds[userPublicKey]
+            ?: throw IllegalStateException(
+                "This device holds no share of generation ${shares.generation} of ceremony ${ceremony.id}"
+            )
+        return shares.generation to signerId
+    }
+
+    /**
+     * A wallet proposal at a generation this device holds no share of, filed as a
+     * declined session so [advance] says so out loud with [GENERATION_REFUSAL] -- the
+     * rule [acceptProposal] applies to events, applied to a spend or a sweep. Null
+     * when this device can sign at [generation], which is the ordinary case.
+     *
+     * Declined before the spend is checked or written: nothing is reserved for a
+     * transaction this device cannot help sign, and its items are never made.
+     */
+    private suspend fun declineWithoutShare(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        innerEvent: Event,
+        sessionId: String,
+        userPublicKey: HexKey,
+        key: DkgSession,
+        signerId: Int,
+        generation: Int?,
+        subject: FrostSigningSubject,
+    ): FrostSigningSession? {
+        val signable = generation?.let { ShareGenerations.at(database, key, it) }
+        if (generation != null && signable?.secretShare != null && signable.signerIds[userPublicKey] != null) return null
+
+        logger.w(
+            "${subject.name.lowercase()} proposal $sessionId signs with generation ${generation ?: "(unreadable)"} " +
+                "of key ${key.id}, of which this device holds no share; declining"
+        )
+        val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path = null, generation ?: -1)
+            .copy(subject = subject, signDeclinedAt = Clock.System.now())
+        database.frostSigningSessionDao().upsert(declined)
+        announceStarted(database, declined)
+        return declined
+    }
+
+    /** A session for [innerEvent]'s proposal at [generation] of [key]'s shares. */
+    private fun newSession(
+        sessionId: String,
+        localChatRoom: LocalChatRoom,
+        innerEvent: Event,
+        userPublicKey: HexKey,
+        key: DkgSession,
+        signerId: Int,
+        path: List<Long>?,
+        generation: Int = 0
+    ) = FrostSigningSession(
+        id = sessionId,
+        chatRoomId = localChatRoom.chatRoom.id,
+        // Whoever proposes coordinates. Aggregating nonces and partial
+        // signatures gives no power over the outcome -- a wrong aggregate
+        // produces a signature that does not verify, not a forged one.
+        coordinatorPublicKey = innerEvent.pubKey,
+        userPublicKey = userPublicKey,
+        dkgSessionId = key.id,
+        threshold = key.threshold,
+        participantCount = key.participantCount,
+        signerId = signerId,
+        derivationPath = path?.let(SharedKeyDerivation::formatPath),
+        generation = generation
+    )
+
+    /**
      * Records a proposal. Returns the session, whether it was just created or
      * already known.
      *
@@ -535,6 +630,8 @@ object FrostSigningManager {
             logger.w("Signing proposal $sessionId is for a ceremony this device did not take part in; dropping")
             return null
         }
+
+        val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
 
         val proposed = FrostSigningEvents.decodeProposal(innerEvent.content)
         if (proposed == null) {
@@ -716,6 +813,28 @@ object FrostSigningManager {
             }
         }
 
+        // A share of the generation the proposal names, or a refusal said out loud.
+        // Signing with any other generation's share would put a partial signature
+        // behind the wrong public share -- it cannot aggregate -- and staying
+        // silent would leave the group waiting on a member who cannot help.
+        // Withheld from a refresh, or never told of one, this device declines.
+        // docs/frost-share-refresh.md, Phase 6.
+        val signable = generation?.let { ShareGenerations.at(database, key, it) }
+        if (generation == null || signable?.secretShare == null || signable.signerIds[userPublicKey] == null) {
+            logger.w(
+                "Signing proposal $sessionId signs with generation ${generation ?: "(unreadable)"} of key " +
+                    "${key.id}, of which this device holds no share; declining"
+            )
+            // An unreadable tag is filed as -1: no generation, so nothing reads it as a
+            // share this device holds, and the decline says why.
+            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: -1)
+                .copy(signDeclinedAt = Clock.System.now())
+            database.frostSigningSessionDao().upsert(declined)
+            database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+            announceStarted(database, declined)
+            return declined
+        }
+
         unsignedEvents.forEach { rebuilt ->
             if (rebuilt.kind != GroupKeyStateEvent.KIND) return@forEach
             SubgroupManager.refuseKeyState(key, rebuilt)?.let { reason ->
@@ -724,20 +843,7 @@ object FrostSigningManager {
             }
         }
 
-        val session = FrostSigningSession(
-            id = sessionId,
-            chatRoomId = localChatRoom.chatRoom.id,
-            // Whoever proposes coordinates. Aggregating nonces and partial
-            // signatures gives no power over the outcome -- a wrong aggregate
-            // produces a signature that does not verify, not a forged one.
-            coordinatorPublicKey = innerEvent.pubKey,
-            userPublicKey = userPublicKey,
-            dkgSessionId = key.id,
-            threshold = key.threshold,
-            participantCount = key.participantCount,
-            signerId = signerId,
-            derivationPath = path?.let(SharedKeyDerivation::formatPath)
-        )
+        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation)
         database.frostSigningSessionDao().upsert(session)
         database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
         announceStarted(database, session)
@@ -785,8 +891,7 @@ object FrostSigningManager {
             ?: throw IllegalStateException("This group has no shared key to sign with")
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
-        val signerId = signerIdOf(database, ceremony, userPublicKey)
-            ?: throw IllegalStateException("This device is not a participant in ceremony ${ceremony.id}")
+        val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
         val wallet = GroupWalletManager.walletFor(database, chatRoomId, thresholdPublicKey, chain, account)
             ?: throw IllegalStateException("This group has not opened a wallet on ${GroupWalletStatementEvent.chainName(chain)}")
 
@@ -809,6 +914,7 @@ object FrostSigningManager {
             // derivation, and those are on the items.
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
+            generation = generation,
             // Proposing a spend is already the act of agreeing to it.
             signApprovedAt = Clock.System.now()
         )
@@ -864,8 +970,7 @@ object FrostSigningManager {
             ?: throw IllegalStateException("This group has no shared key to sign with")
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
-        val signerId = signerIdOf(database, ceremony, userPublicKey)
-            ?: throw IllegalStateException("This device is not a participant in ceremony ${ceremony.id}")
+        val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
         val guarded = GuardianManager.guardedWalletFor(database, chatRoomId, descendantChatRoomId, chain, account)
             ?: throw IllegalStateException("This group guards no wallet of $descendantChatRoomId on ${GroupWalletStatementEvent.chainName(chain)}")
 
@@ -885,6 +990,7 @@ object FrostSigningManager {
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
+            generation = generation,
             signApprovedAt = Clock.System.now()
         )
         writeSpend(database, session, checked, chain, account, guardedChatRoomId = descendantChatRoomId)
@@ -964,6 +1070,10 @@ object FrostSigningManager {
             return null
         }
 
+        val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
+        declineWithoutShare(database, localChatRoom, innerEvent, sessionId, userPublicKey, key, signerId, generation, FrostSigningSubject.TRANSACTION)
+            ?.let { return it }
+
         val (chainName, account) = FrostSigningEvents.parseWallet(innerEvent.tags) ?: run {
             logger.w("Spend proposal $sessionId names no wallet; dropping")
             return null
@@ -1024,6 +1134,7 @@ object FrostSigningManager {
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
+            generation = generation,
         )
         writeSpend(database, session, checked, chain, account, guardedChatRoomId)
         announceStarted(database, session)
@@ -1179,8 +1290,7 @@ object FrostSigningManager {
             ?: throw IllegalStateException("This group has no shared key to sign with")
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
-        val signerId = signerIdOf(database, ceremony, userPublicKey)
-            ?: throw IllegalStateException("This device is not a participant in ceremony ${ceremony.id}")
+        val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
         val checked = when (val result = checkSweep(database, chatRoomId, thresholdPublicKey, chain, account, sweep)) {
             is GroupSweep.Result.Ok -> result.checked
             is GroupSweep.Result.Refused -> throw IllegalArgumentException("This sweep ${result.reason}")
@@ -1197,6 +1307,7 @@ object FrostSigningManager {
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.SWEEP,
+            generation = generation,
             signApprovedAt = Clock.System.now()
         )
         writeSweep(database, session, checked, chain, account)
@@ -1252,6 +1363,9 @@ object FrostSigningManager {
             logger.w("Sweep proposal $sessionId is for a ceremony this device did not take part in; dropping")
             return null
         }
+        val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
+        declineWithoutShare(database, localChatRoom, innerEvent, sessionId, userPublicKey, key, signerId, generation, FrostSigningSubject.SWEEP)
+            ?.let { return it }
         val (chainName, account) = FrostSigningEvents.parseWallet(innerEvent.tags) ?: run {
             logger.w("Sweep proposal $sessionId names no wallet; dropping")
             return null
@@ -1279,6 +1393,7 @@ object FrostSigningManager {
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.SWEEP,
+            generation = generation,
         )
         writeSweep(database, session, checked, chain, account)
         announceStarted(database, session)
@@ -1875,7 +1990,7 @@ object FrostSigningManager {
         reason: String
     ): Boolean {
         val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return true
-        val participants = signerIds(database, key).keys
+        val participants = participantIds(database, key, session).keys
 
         if (member !in participants) {
             logger.w(
@@ -1976,8 +2091,11 @@ object FrostSigningManager {
         if (session.stage == FrostSigningStage.COMPLETE || session.stage == FrostSigningStage.FAILED) return
 
         val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return
-        val secretShare = key.secretShare?.let { PrivateKey(ByteVector32(it)) } ?: return
         val thresholdPublicKey = key.thresholdPublicKey ?: return
+        // The generation the session was opened at, never whichever is newest:
+        // see FrostSigningSession.generation. Null when this device holds nothing
+        // of it, which only a session it has declined can be.
+        val shares = ShareGenerations.at(database, key, session.generationOrZero())
 
         try {
             // A signature the group has already made settles this session whether
@@ -2016,12 +2134,14 @@ object FrostSigningManager {
                 return
             }
 
+            val secretShare = shares?.secretShare ?: return
+
             // The room's key rather than the group's root key. A signature
             // aggregates against whatever the cache carries, so the cache and the
             // author on the event have to be the same derivation -- and the
             // session stores the path exactly so that every pass rebuilds the
             // same one.
-            val publicShares = key.publicShareList()
+            val publicShares = shares?.publicShares
 
             // The events this session signs, in the order the proposal fixed. Every
             // join below is positional against it.
@@ -2511,7 +2631,7 @@ object FrostSigningManager {
         items: Int
     ): List<Pair<Int, List<IndividualNonce>>>? {
         val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return null
-        val idByMember = signerIds(database, key)
+        val idByMember = signerIds(database, key, session)
 
         val offered = database.frostSigningSessionDao()
             .getMessagesByKind(session.id, FrostSigningEvents.NONCE)
@@ -2549,7 +2669,7 @@ object FrostSigningManager {
         items: Int
     ): List<List<ByteArray>>? {
         val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return null
-        val memberById = signerIds(database, key).entries.associate { (member, id) -> id to member }
+        val memberById = signerIds(database, key, session).entries.associate { (member, id) -> id to member }
 
         val payloadByMember = database.frostSigningSessionDao()
             .getMessagesByKind(session.id, FrostSigningEvents.PARTIAL_SIGNATURE)
@@ -2613,34 +2733,34 @@ object FrostSigningManager {
     }
 
     /**
-     * Every ceremony participant's FROST id, keyed by their nostr public key.
-     *
-     * The id is the member's index in the ceremony's participant order, which is
-     * the bytewise sort of the host public keys — the same ordering ChillDKG
-     * hashed into the session identity, and so the same one the public shares
-     * are in. Deriving it rather than storing it means signing cannot disagree
-     * with the ceremony that made the key.
+     * Who can sign in [session], keyed by nostr public key: every member holding a
+     * share of the generation it signs with. See [ShareGenerations]; at the
+     * ceremony's own generation this is every ceremony participant, at its index
+     * in the ceremony's participant order.
      */
     private suspend fun signerIds(
         database: DedunDatabase,
-        key: DkgSession
-    ): Map<HexKey, Int> {
-        val hostKeys = database.dkgSessionDao()
-            .getMessagesByKind(key.id, DkgRitualEvents.HOST_KEY)
-            .associate { it.participantPublicKey to it.payload.lowercase() }
+        key: DkgSession,
+        session: FrostSigningSession
+    ): Map<HexKey, Int> =
+        ShareGenerations.at(database, key, session.generationOrZero())?.signerIds.orEmpty()
 
-        val order = hostKeys.values.sorted()
-
-        return hostKeys.mapNotNull { (member, hostKey) ->
-            order.indexOf(hostKey).takeIf { it >= 0 }?.let { member to it }
-        }.toMap()
-    }
+    /** Every member with a participant id in [key] at [session]'s generation, whether or not they can sign at it. */
+    private suspend fun participantIds(
+        database: DedunDatabase,
+        key: DkgSession,
+        session: FrostSigningSession
+    ): Map<HexKey, Int> =
+        ShareGenerations.at(database, key, session.generationOrZero())?.participantIds
+            ?: ShareGenerations.active(database, key).participantIds
 
     private suspend fun signerIdOf(
         database: DedunDatabase,
         key: DkgSession,
         member: HexKey
-    ): Int? = signerIds(database, key)[member]
+    ): Int? = ShareGenerations.participantIdOf(database, key, member)
+
+    private fun FrostSigningSession.generationOrZero(): Int = generation ?: 0
 
     /**
      * The key a room signs with, or null when it has none.
@@ -2689,8 +2809,8 @@ object FrostSigningManager {
         GroupKeyStateManager.keyStateFor(database, chatRoomId)?.let { state ->
             database.dkgSessionDao().getSessionById(state.dkgSessionId)?.takeIf { key ->
                 key.stage == DkgRitualStage.COMPLETE &&
-                    key.secretShare != null &&
-                    key.thresholdPublicKey == state.thresholdPublicKey
+                    key.thresholdPublicKey == state.thresholdPublicKey &&
+                    ShareGenerations.canSign(database, key)
             }?.let { return it }
         }
 
@@ -2698,12 +2818,13 @@ object FrostSigningManager {
             session.stage == DkgRitualStage.COMPLETE &&
                 session.thresholdPublicKey?.let {
                     SharedKeyDerivation.marmotGroupId(it) == chatRoomId
-                } == true
+                } == true &&
+                ShareGenerations.canSign(database, session)
         }?.let { return it }
 
         return database.dkgSessionDao()
             .getLatestOwnSessionForChatRoom(chatRoomId)
-            ?.takeIf { it.stage == DkgRitualStage.COMPLETE && it.secretShare != null }
+            ?.takeIf { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
     }
 
     /** Whether this group can sign at all, read by the UI so it offers nothing that would fail. */
@@ -3370,7 +3491,7 @@ object FrostSigningManager {
         session: FrostSigningSession
     ): Set<HexKey> {
         val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return emptySet()
-        val holders = signerIds(database, key)
+        val holders = signerIds(database, key, session)
 
         val collectingPartials = session.stage == FrostSigningStage.COLLECTING_PARTIAL_SIGNATURES
         val chosen = session.signerIdList()?.toSet()
@@ -3506,12 +3627,26 @@ object FrostSigningManager {
         }
     }
 
+    /**
+     * Whether this device holds a share of the generation [session] signs with.
+     * Not holding one is the only refusal that is not a person's: the device
+     * cannot sign, so it says so rather than leaving the group to wait.
+     */
+    private suspend fun holdsShareFor(database: DedunDatabase, session: FrostSigningSession): Boolean {
+        val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return false
+        val shares = ShareGenerations.at(database, key, session.generationOrZero()) ?: return false
+        return shares.secretShare != null && shares.signerIds[session.userPublicKey] != null
+    }
+
     private suspend fun publishDecline(
         database: DedunDatabase,
         localChatRoom: LocalChatRoom,
         session: FrostSigningSession
     ) {
-        val reason = "Declined to sign"
+        val reason = when {
+            !holdsShareFor(database, session) -> GENERATION_REFUSAL
+            else -> "Declined to sign"
+        }
 
         broadcast(
             database = database,
@@ -3782,7 +3917,8 @@ object FrostSigningManager {
             sessionId = session.id,
             dkgSessionId = if (includeKey) session.dkgSessionId else null,
             signerIds = signerIds,
-            silentMembers = silentMembers
+            silentMembers = silentMembers,
+            generation = session.generation
         ) + extraTags
 
         // No MLS state is what marks a room NIP-17 -- the same reading

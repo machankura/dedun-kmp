@@ -66,6 +66,7 @@ import com.machankura.dedun.compose.database.dao.GiftWrapSealDao
 import com.machankura.dedun.compose.database.dao.GroupKeyStateDao
 import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
 import com.machankura.dedun.compose.database.dao.InReplyToRelationDao
+import com.machankura.dedun.compose.database.dao.KeyShareDao
 import com.machankura.dedun.compose.database.dao.MarmotCommitResultDao
 import com.machankura.dedun.compose.database.dao.MarmotOutboundDao
 import com.machankura.dedun.compose.database.dao.MarmotGroupEventDao
@@ -107,6 +108,8 @@ import com.machankura.dedun.compose.database.model.GiftWrapMessage
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.GiftWrapSeal
 import com.machankura.dedun.compose.database.model.GroupKeyState
+import com.machankura.dedun.compose.database.model.KeyShareGeneration
+import com.machankura.dedun.compose.database.model.KeyShareMember
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.InReplyToRelation
 import com.machankura.dedun.compose.database.model.MarmotCommitResult
@@ -201,6 +204,8 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         IcebergNonceRow::class,
         IcebergParticipantMessage::class,
         IcebergShareRow::class,
+        KeyShareGeneration::class,
+        KeyShareMember::class,
         InReplyToRelation::class,
         MarmotCommitResult::class,
         MarmotGroupEvent::class,
@@ -232,7 +237,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 46,
+    version = 47,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -514,6 +519,12 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // Giza's v37 and Bennu's v36: Giza's v36 removed its wallets, which Dedun keeps, and Dedun's own
         // 36-45 came before it (docs/giza-into-dedun.md, "The schema numbers").
         AutoMigration(from = 45, to = 46),
+        // v47 adds share generations (docs/frost-share-refresh.md, Phase 6): the
+        // KeyShareGeneration and KeyShareMember tables, FrostSigningSession.generation,
+        // and GroupKeyState.generation and publicSharesHash. Two new tables and four
+        // nullable columns, so Room generates it. Giza's v38, Bennu's v37. Nothing is backfilled: generation 0
+        // stays where the ceremony put it, and a null generation reads as 0.
+        AutoMigration(from = 46, to = 47),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -545,6 +556,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun frostSigningSessionDao(): FrostSigningSessionDao
 
     abstract fun groupKeyStateDao(): GroupKeyStateDao
+
+    abstract fun keyShareDao(): KeyShareDao
 
     abstract fun groupSignedEventDao(): GroupSignedEventDao
 
