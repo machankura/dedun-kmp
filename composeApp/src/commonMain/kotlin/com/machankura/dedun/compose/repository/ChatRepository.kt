@@ -14,6 +14,7 @@ import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
 import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
@@ -350,6 +351,14 @@ interface ChatRepository {
     /** The room's key as the Shares section shows it, or null when the room has none. */
     suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary?
 
+    /**
+     * Emits whenever something [sharesSummary] reads for [chatRoomId] may have
+     * changed -- the key state the group signed, a signing session, a refresh --
+     * so the section follows the group without being reopened
+     * (docs/rotation-waits-for-key-state.md, Phase 3).
+     */
+    fun observeSharesInputs(chatRoomId: String): Flow<Unit>
+
     /** Proposes rotating every share of the room's key. Null on success, or why not. */
     suspend fun rotateShares(localChatRoom: LocalChatRoom): String?
 
@@ -597,6 +606,8 @@ interface ChatRepository {
             override suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String? = null
 
             override suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary? = null
+
+            override fun observeSharesInputs(chatRoomId: String): Flow<Unit> = emptyFlow()
 
             override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? = null
 

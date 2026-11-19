@@ -21,7 +21,10 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
@@ -166,6 +169,30 @@ class ChatRoomDetailViewModel(
                     shares = chatRepository.sharesSummary(localChatRoom),
                 )
             }
+            localChatRoom?.let { observeShares(it.chatRoom.id) }
+        }
+    }
+
+    private var sharesObserver: Job? = null
+
+    /**
+     * Keeps the Shares section following the group: a key state signed, a
+     * proposal declined, a refresh moved on by another device, all while this
+     * screen is open (docs/rotation-waits-for-key-state.md, Phase 3). Only the
+     * section is read again -- the rest of the screen has its own paths.
+     */
+    @OptIn(FlowPreview::class)
+    private fun observeShares(roomId: String) {
+        if (sharesObserver != null) return
+        sharesObserver = viewModelScope.launch(Dispatchers.IO) {
+            chatRepository.observeSharesInputs(roomId)
+                // A signing session writes a row per message; read once it settles.
+                .debounce(SHARES_SETTLE_MILLIS)
+                .collect {
+                    val loaded = chatRoomDetailUIState as? ChatRoomDetailUIState.Loaded ?: return@collect
+                    val shares = chatRepository.sharesSummary(loaded.localChatRoom)
+                    (chatRoomDetailUIState as? ChatRoomDetailUIState.Loaded)?.let { chatRoomDetailUIState = it.copy(shares = shares) }
+                }
         }
     }
 
@@ -415,6 +442,9 @@ class ChatRoomDetailViewModel(
 
     companion object {
         private const val TAG = "ChatRoomDetailViewModel"
+
+        /** How long the Shares section's inputs have to be still before it is read again. */
+        internal const val SHARES_SETTLE_MILLIS = 250L
 
         fun factory(
             activeUserPublicKey: HexKey,

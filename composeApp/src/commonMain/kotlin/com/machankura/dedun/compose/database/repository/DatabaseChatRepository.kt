@@ -57,6 +57,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
@@ -793,6 +794,12 @@ class DatabaseChatRepository(
             canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,
         )
     }.getOrNull()
+
+    override fun observeSharesInputs(chatRoomId: String): Flow<Unit> = combine(
+        database.groupKeyStateDao().observeByChatRoomId(chatRoomId),
+        database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId),
+        database.shareRefreshDao().observeSessionsForRoom(chatRoomId),
+    ) { _, _, _ -> }
 
     private fun failureOf(t: Throwable?): String? = t?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
 
