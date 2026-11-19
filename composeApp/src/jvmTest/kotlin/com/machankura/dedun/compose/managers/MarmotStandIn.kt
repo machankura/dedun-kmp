@@ -85,13 +85,13 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
         CurrentProfileGroupFactory.createKeyPackage(signer).also { bundle = it }
 
     /** A current-profile group of this client's own, tracked. Returns its routing id. */
-    suspend fun createGroup(name: String): String {
+    suspend fun createGroup(name: String, description: String = ""): String {
         val routingId = RandomInstance.bytes(32)
         val group = CurrentProfileGroupFactory.createGroup(
             signer = signer,
             nostrGroupId = routingId,
             relays = Relays.DefaultDMRelayList.map { it.url },
-            profile = GroupProfileV1(name = name, description = ""),
+            profile = GroupProfileV1(name = name, description = description),
         )
         val hex = routingId.toHexKey()
         manager.adoptGroup(hex, group)
@@ -105,7 +105,7 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
      * throwaway key and p-tagged to the app, through the sync funnel. The app's
      * current-profile package is published first. Returns the app's room id.
      */
-    suspend fun inviteApp(db: DedunDatabase, marmotRepository: DatabaseMarmotRepository, user: KeyPair, routingId: String): String {
+    suspend fun inviteApp(db: DedunDatabase, marmotRepository: DatabaseMarmotRepository, user: KeyPair, routingId: String, roomId: String = routingId): String {
         val userHex = user.pubKey.toHexKey()
         marmotRepository.publishMarmotKeyPackageBundle(user, setOf(MarmotProfile.CURRENT))
         val unsigned = db.unsignedNostrEventDao().getAllUnprocessedUnsignedNostrEvents()
@@ -130,8 +130,8 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
         )
         val wrap = GiftWrapEvent.create(event = seal, recipientPubKey = userHex, createdAt = rumor.createdAt)
         storeInApp(db, user, wrap)
-        assertNotNull(db.chatRoomDao().findChatRoomById(routingId), "the app did not join")
-        return routingId
+        assertNotNull(db.chatRoomDao().findChatRoomById(roomId), "the app did not join")
+        return roomId
     }
 
     companion object {

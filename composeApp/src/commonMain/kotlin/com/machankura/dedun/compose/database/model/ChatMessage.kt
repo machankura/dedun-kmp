@@ -79,6 +79,7 @@ import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleRequestEvent
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
@@ -919,6 +920,13 @@ data class ChatMessage(
         const val TYPE_ADMIN_REMOVED = "adminRemoved"
 
         /**
+         * A change to a governed room that this device refused: a commit sent bare,
+         * or an envelope whose check failed. Every device refuses the same ones,
+         * so every device says so. docs/member-admin-promotion.md, Phase 4a.
+         */
+        const val TYPE_CHANGE_NOT_APPLIED = "changeNotApplied"
+
+        /**
          * A change this device asked for that every relay refused, so the line
          * written when it was asked for -- a removal, a disband -- did not come
          * true. The invite's own version is [TYPE_MEMBER_INVITE_FAILED].
@@ -948,6 +956,7 @@ data class ChatMessage(
             TYPE_GROUP_DISBANDED,
             TYPE_ADMIN_ADDED,
             TYPE_ADMIN_REMOVED,
+            TYPE_CHANGE_NOT_APPLIED,
             TYPE_CHANGE_REJECTED,
             TYPE_FOUNDING_ADMINS_MISSING,
         )
@@ -1249,7 +1258,8 @@ data class ChatMessage(
                             event.kind in GroupLightningEvents.PROTOCOL ||
                             MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL ||
                             ShareRefreshEvents.isShareRefresh(event) ||
-                            event.kind in ShareRepairEvents.ALL
+                            event.kind in ShareRepairEvents.ALL ||
+                            GovernanceEvents.isGovernance(event)
                     )
 
                     database.marmotInnerEventDao().upsert(

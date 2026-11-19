@@ -18,6 +18,10 @@ import co.touchlab.kermit.Logger
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
+import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
+import com.machankura.dedun.compose.nostr.frost.OwnCommitEvent
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.currentMarmotData
 import com.vitorpamplona.marmot.groups.currentNostrGroupId
@@ -92,6 +96,7 @@ import com.machankura.dedun.compose.managers.roomId
 import com.machankura.dedun.compose.managers.roomName
 import com.machankura.dedun.compose.managers.routingId
 import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.extensions.exporterSecret
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
@@ -1426,10 +1431,15 @@ abstract class NostrDao(
         }
     }
 
+    /**
+     * @param authorized true for a commit [GovernanceGate.admit] has let through out
+     *   of its envelope, which the bare-commit check below must not then drop.
+     */
     private suspend fun indexCurrentProfileGroupEvent(
         groupEvent: GroupEvent,
         localChatRoom: LocalChatRoom,
         activeKeyPair: KeyPair,
+        authorized: Boolean = false,
     ) {
         val chatRoomId = localChatRoom.chatRoom.id
         val routingId = groupEvent.groupId()
@@ -1440,6 +1450,21 @@ abstract class NostrDao(
 
         if (!mlsGroup.currentMemberIdentities().contains(activeKeyPair.pubKey.toHex())) {
             throw MarmotNotMemberOfChatGroupException("We are not a member of the chat room $chatRoomId")
+        }
+
+        // In a room whose state says its changes need the group's signature, a
+        // commit sent bare is dropped before the engine sees it: only one that came
+        // out of a checked envelope is applied. docs/member-admin-promotion.md, R2.
+        if (!authorized && GovernanceGate.isGoverned(mlsGroup)) {
+            val outerKeys = listOf(mlsGroup.exporterSecret()) + engine.groupManager.retainedExporterSecrets(routingId)
+            if (GovernanceGate.isBareCommit(groupEvent, outerKeys)) {
+                logger.w("Dropped an unsigned commit ${groupEvent.id.take(8)}… into governed room ${chatRoomId.take(8)}…")
+                // Filed, so its line is replaced rather than repeated when a relay
+                // hands it over again.
+                upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
+                announceChangeNotApplied(chatRoomId, activeKeyPair, groupEvent.id, "A change arrived without the group's signature, so it was not applied")
+                return
+            }
         }
 
         upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
@@ -1678,6 +1703,19 @@ abstract class NostrDao(
                                 nostrPrivateKey = activeKeyPair.privKey!!
                             )
 
+                        // A change to a governed room, inside the group's signature or,
+                        // for a member's own leave, its committer's. Checked, and its
+                        // commit applied, only here (docs/member-admin-promotion.md).
+                        //
+                        // Before the Wavelength arms: until K3, 30371 and 30373 are also the
+                        // legacy numbers of the Wavelength operator statement and signing
+                        // request, and the envelope's shape is what tells them apart.
+                        innerEvent.kind == OwnCommitEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
+                            admitEnvelopedCommit(localChatRoom, innerEvent, activeKeyPair)
+                        innerEvent.kind == GovernanceCarrierEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
+                            GovernanceCarrierEvent.statementOf(innerEvent)
+                                ?.let { admitEnvelopedCommit(localChatRoom, it, activeKeyPair) }
+
                         // The Wavelength wallet's co-signing, as the Lightning wallet's above.
                         MovedKinds.current(innerEvent.kind) in GroupWavelengthEvents.CO_SIGNING ->
                             GroupArkCoSigner.process(
@@ -1766,9 +1804,76 @@ abstract class NostrDao(
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
                             )
+
                     }
                 }
         }
+    }
+
+    /**
+     * Applies the commit [envelope] carries, if [GovernanceGate.admit] says the room
+     * may; otherwise says in the room why not. The commit is handed to the engine as
+     * the event it is -- the proposer's own kind:445, byte for byte -- so every device
+     * applies the same event with the same id.
+     *
+     * Nothing for an envelope around this device's own commit: the proposer installs
+     * its staged state when a relay accepts the envelope, and cannot process its own
+     * commit in any case.
+     */
+    private suspend fun admitEnvelopedCommit(localChatRoom: LocalChatRoom, envelope: Event, activeKeyPair: KeyPair) {
+        if (localChatRoom.chatRoom.marmotProfile() != MarmotProfile.CURRENT) return
+        val engine = database.marmotEngine
+        val group = engine.groupFor(localChatRoom.routingId) ?: return
+        if (!GovernanceGate.isGoverned(group)) return
+        val inner = GovernanceEvents.innerCommitOf(envelope)
+        // This device's own commit, or one already applied: the same envelope can
+        // arrive twice -- carried by two members, or repeated by a relay -- and the
+        // second is not news, nor a refusal.
+        if (inner != null && database.marmotCommitResultDao().getMarmotCommitRequestById(inner.id) != null) return
+        if (inner != null && database.marmotGroupEventDao().getMarmotGroupEventById(inner.id) != null) return
+
+        GovernanceGate.admit(group, localChatRoom.chatRoom.id, envelope).fold(
+            onSuccess = { commit ->
+                val fresh = database.chatRoomDao().findChatRoomById(localChatRoom.chatRoom.id) ?: return
+                // Stored as the event it is, as if a relay had handed it over: the
+                // room's group events are kept against their nostr rows.
+                database.nostrEventDao().upsert(
+                    NostrEvent(
+                        id = commit.id,
+                        createdAt = Instant.fromEpochSeconds(commit.createdAt),
+                        content = commit.content,
+                        sig = commit.sig,
+                        tags = commit.tags,
+                        kind = commit.kind,
+                        pubKey = commit.pubKey,
+                    )
+                )
+                indexCurrentProfileGroupEvent(commit, fresh, activeKeyPair, authorized = true)
+            },
+            onFailure = { refusal ->
+                logger.w("Refused envelope ${envelope.id.take(8)}…: ${refusal.message}")
+                announceChangeNotApplied(localChatRoom.chatRoom.id, activeKeyPair, null, "A change was not applied: ${refusal.message}")
+            },
+        )
+    }
+
+    /**
+     * A line saying a change to the room was refused -- once per group event, when
+     * [eventId] names the one that carried it.
+     */
+    private suspend fun announceChangeNotApplied(chatRoomId: String, activeKeyPair: KeyPair, eventId: HexKey?, content: String) {
+        persistMarmotChatMessage(
+            ChatMessage(
+                content = content,
+                messageType = ChatMessage.TYPE_CHANGE_NOT_APPLIED,
+                chatRoomId = chatRoomId,
+                senderPublicKey = activeKeyPair.pubKey.toHex(),
+                isUserMessage = true,
+                giftWrapPayloadId = null,
+                marmotGroupEventId = eventId,
+                marmotInnerEventId = null,
+            )
+        )
     }
 
     /**

@@ -984,6 +984,7 @@ private fun RitualNotice(
         ChatMessage.TYPE_CHANGE_REJECTED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_ADMIN_ADDED -> Icons.Default.AdminPanelSettings
         ChatMessage.TYPE_ADMIN_REMOVED -> Icons.Default.RemoveModerator
+        ChatMessage.TYPE_CHANGE_NOT_APPLIED -> Icons.Default.Block
 
         ChatMessage.TYPE_GROUP_LIGHTNING_WALLET_OPENED -> Icons.Default.Bolt
         ChatMessage.TYPE_GROUP_LIGHTNING_OPERATOR_ELECTED -> Icons.Default.Badge
@@ -1041,7 +1042,8 @@ private fun RitualNotice(
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION ||
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEADLINE ||
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET ||
-            chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ->
+            chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ||
+            chatMessage.messageType == ChatMessage.TYPE_CHANGE_NOT_APPLIED ->
             MaterialTheme.colorScheme.error
         isRequest -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant

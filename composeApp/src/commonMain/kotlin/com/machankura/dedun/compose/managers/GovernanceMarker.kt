@@ -5,22 +5,15 @@ import com.vitorpamplona.mls.group.MlsGroup
 
 /**
  * The line in a keyed room's profile description that says its changes need the
- * group's signature, and how few admins it may ever have.
+ * group's signature, and how few admins it may ever have. docs/member-admin-promotion.md,
+ * D4 and D8.
  *
- * Giza writes it into the epoch-0 description of every keyed room it makes, and from
- * then on its devices apply a commit to that room only from inside a group-signed
- * envelope: a bare commit is dropped. Dedun cannot yet make or unwrap those envelopes
- * (docs/giza-into-dedun.md, Phase 8), so a bare commit from a Dedun device in such a
- * room moves Dedun's devices one epoch and leaves Giza's behind -- the room forks,
- * and the members on each side stop hearing the other.
- *
- * Until Phase 8, Dedun reads the line and stops making commits in a room that carries
- * it: [MarmotOutboundDao][com.machankura.dedun.compose.database.dao.MarmotOutboundDao]
- * refuses an invite, a removal and a disband there, and does not commit a leaver's
- * proposal. Dedun never writes the line.
- *
- * The wording is Giza's, byte for byte (Giza's `GovernanceMarker`), because it is the
- * only thing on the wire that says a room is governed.
+ * In the group's state, so every device that applies the commit adding it enforces
+ * the rule from the same epoch, and reads the same floor: a floor each device worked
+ * out for itself from the ceremony it happens to hold would differ between a founder
+ * and a member welcomed later, and the two would disagree about a commit. The
+ * description is the one free text the current profile offers, which is why
+ * [MarmotRoomIdentity] and [SharedKeyDerivation.describe] put their lines there too.
  */
 object GovernanceMarker {
     private const val PREFIX = "Changes need the group's signature; at least "
@@ -33,7 +26,7 @@ object GovernanceMarker {
             ?.firstNotNullOfOrNull { LINE.find(it.trim())?.groupValues?.get(1)?.toIntOrNull() }
             ?.takeIf { it >= 1 }
 
-    /** [description] with the line set to [minimumAdmins]. Only tests write it here. */
+    /** [description] with the line set to [minimumAdmins], replacing any it already had. */
     fun describe(description: String?, minimumAdmins: Int): String {
         val kept = description.orEmpty().lines().filterNot { LINE.matches(it.trim()) }.joinToString("\n").trimEnd()
         val line = "$PREFIX$minimumAdmins$SUFFIX"
