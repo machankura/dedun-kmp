@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.combine
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
+import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.database.model.types.ShareRepairStage
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
@@ -814,6 +815,20 @@ class DatabaseChatRepository(
         val key = shareKeyOf(localChatRoom) ?: return "This group has no shared key"
         return failureOf(runCatching { ShareRefreshManager.proposeRefresh(database, localChatRoom, me, privateKey, key) }.exceptionOrNull())
     }
+
+    override suspend fun rotationPreview(localChatRoom: LocalChatRoom, without: HexKey?): RotationPreview? = runCatching {
+        if (!ExperimentalFeatures.shareRefresh) return null
+        val me = localChatRoom.chatRoom.userPublicKey
+        val preview = ShareRefreshManager.preview(database, localChatRoom, me, without) ?: return null
+        val names = localChatRoom.localParticipants.associate { it.participant.participantPublicKey to it.profile?.humanReadableNameOrPubkey() }
+        fun nameOf(member: HexKey) = names[member] ?: member.take(8)
+        RotationPreview(
+            takingPart = preview.takingPart.map(::nameOf),
+            untilBroughtBack = preview.withheld.filterValues { it == ShareStanding.STALE }.keys.map(::nameOf),
+            forGood = preview.withheld.filterValues { it == ShareStanding.RETIRED }.keys.map(::nameOf),
+            refusal = preview.refusal,
+        )
+    }.getOrNull()
 
     override suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String? {
         val (_, privateKey) = privateKeyOrNull() ?: return "This identity cannot sign"

@@ -120,6 +120,13 @@
     <string name="rotate_shares_without_body">They are out of the room, but their share of the group key still helps sign until the shares are rotated without them. Rotating asks every remaining member to take part. Shares held before the rotation stop working once every device has deleted them.</string>
     <string name="rotate_shares">Rotate shares</string>
     <string name="rotate_shares_does_not_reach_lightning">Rotating does not reach the Lightning wallet: they keep their share of its key and its node's seed until the group opens a new Lightning wallet without them.</string>
+    <string name="rotate_shares_title">Rotate the shares?</string>
+    <string name="rotation_taking_part">Taking part: %1$s</string>
+    <string name="rotation_left_out_until_brought_back">Left out until they are brought back: %1$s</string>
+    <string name="rotation_left_out_for_good">Left out for good: %1$s</string>
+    <string name="rotation_proposing_is_taking_part">Each member taking part is asked once. Rotating counts as your own agreement, so you are not asked again.</string>
+    <string name="rotation_no_key">This group has no key this device can rotate</string>
+    <string name="rotation_cannot_start">This rotation cannot start: %1$s</string>
     <string name="shares">Shares</string>
     <string name="share_generation">Generation %1$d</string>
     <string name="share_standing_live">Holds a share</string>

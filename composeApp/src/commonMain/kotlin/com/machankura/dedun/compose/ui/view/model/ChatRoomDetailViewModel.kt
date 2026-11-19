@@ -45,6 +45,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
+import com.machankura.dedun.compose.ui.view.state.RotationPreview
 
 class ChatRoomDetailViewModel(
     val chatRoomId: String,
@@ -265,8 +266,10 @@ class ChatRoomDetailViewModel(
                 .exceptionOrNull()
             // Offered only when a rotation could start now; while the last one is
             // unfinished the offer would only be refused
-            // (docs/rotation-waits-for-key-state.md, Phase 2).
+            // (docs/rotation-waits-for-key-state.md, Phase 2). Who else it would
+            // leave out, for the offer to name.
             val rotation = if (failure == null && heldShare) chatRepository.sharesSummary(localChatRoom)?.rotation else null
+            val preview = if (rotation == SharesSummary.Rotation.Available) chatRepository.rotationPreview(localChatRoom, memberPublicKey) else null
             initiateChatRoomDetail()
             viewModelScope.launch(Dispatchers.Main) {
                 onDone(failure?.message, rotation is SharesSummary.Rotation.Held)
@@ -274,7 +277,7 @@ class ChatRoomDetailViewModel(
                 // can still help sign until the shares are rotated without them.
                 // A second act, offered rather than folded in -- it needs every
                 // remaining holder (docs/frost-share-refresh.md, Phase 9).
-                if (rotation == SharesSummary.Rotation.Available) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, heldLightningShare)
+                if (rotation == SharesSummary.Rotation.Available) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, preview, heldLightningShare)
             }
         }
     }
@@ -300,8 +303,35 @@ class ChatRoomDetailViewModel(
         }
     }
 
-    fun rotateShares(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
-        sharesAction(onDone) { chatRepository.rotateShares(localChatRoom) }
+    /** A rotation this device could propose, shown before it is: pressing it is the proposer's agreement to take part. */
+    data class RotationProposal(val localChatRoom: LocalChatRoom, val preview: RotationPreview)
+
+    var rotationProposal: RotationProposal? by mutableStateOf(null)
+        private set
+
+    /**
+     * Asks who a rotation would take part and leave out, and shows it. Nothing is
+     * sent until [rotateShares]. [onUnavailable] is told when there is nothing to
+     * show -- the room has no key this device can rotate.
+     */
+    fun previewRotation(localChatRoom: LocalChatRoom, onUnavailable: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val preview = chatRepository.rotationPreview(localChatRoom)
+            viewModelScope.launch(Dispatchers.Main) {
+                if (preview == null) onUnavailable() else rotationProposal = RotationProposal(localChatRoom, preview)
+            }
+        }
+    }
+
+    fun dismissRotationProposal() {
+        rotationProposal = null
+    }
+
+    /** Proposes the rotation [rotationProposal] showed. */
+    fun rotateShares(proposal: RotationProposal, onDone: (String?) -> Unit) {
+        rotationProposal = null
+        sharesAction(onDone) { chatRepository.rotateShares(proposal.localChatRoom) }
+    }
 
     fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval, onDone: (String?) -> Unit) =
         sharesAction(onDone) { chatRepository.approveShares(localChatRoom, approval) }
@@ -316,37 +346,13 @@ class ChatRoomDetailViewModel(
         sharesAction(onDone) { chatRepository.askToBeRepaired(localChatRoom) }
 
     /**
-     * A rotation this device's owner is being asked to confirm, and who it leaves
-     * out: the members stale at this generation, withheld again as stale. The
-     * proposal approves the proposer, so this is where they decide who is withheld
-     * (docs/rotation-waits-for-key-state.md, Phase 4).
+     * A removed member who still holds a share of the room's key, for the offer to
+     * rotate without them, with who else it would leave out.
      */
-    data class RotationConfirmation(val localChatRoom: LocalChatRoom, val leftOut: List<String>)
-
-    var rotationConfirmation: RotationConfirmation? by mutableStateOf(null)
-        private set
-
-    fun askToRotate(localChatRoom: LocalChatRoom, shares: SharesSummary) {
-        rotationConfirmation = RotationConfirmation(
-            localChatRoom,
-            shares.members.filter { it.standing == ShareStanding.STALE }.map { it.name },
-        )
-    }
-
-    fun dismissRotationConfirmation() {
-        rotationConfirmation = null
-    }
-
-    /** Proposes the rotation [rotationConfirmation] asked about. */
-    fun confirmRotation(confirmation: RotationConfirmation, onDone: (String?) -> Unit) {
-        rotationConfirmation = null
-        rotateShares(confirmation.localChatRoom, onDone)
-    }
-
-    /** A removed member who still holds a share of the room's key, for the offer to rotate without them. */
     data class RotationOffer(
         val localChatRoom: LocalChatRoom,
         val memberPublicKey: HexKey,
+        val preview: RotationPreview? = null,
         /** They also hold a share of the Lightning wallet's key, which no rotation reaches. */
         val holdsLightningShare: Boolean = false,
     )

@@ -245,6 +245,14 @@ import dedun.composeapp.generated.resources.key_state_requested
 import dedun.composeapp.generated.resources.see_the_proposal
 import dedun.composeapp.generated.resources.rotate_shares_without_body
 import dedun.composeapp.generated.resources.rotate_shares_without_title
+import dedun.composeapp.generated.resources.rotate_shares_title
+import dedun.composeapp.generated.resources.rotation_cannot_start
+import dedun.composeapp.generated.resources.rotation_left_out_for_good
+import dedun.composeapp.generated.resources.rotation_left_out_until_brought_back
+import dedun.composeapp.generated.resources.rotation_proposing_is_taking_part
+import dedun.composeapp.generated.resources.rotation_taking_part
+import dedun.composeapp.generated.resources.rotation_no_key
+import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import androidx.compose.material3.AlertDialog
 import dedun.composeapp.generated.resources.disband_group
 import dedun.composeapp.generated.resources.disband_group_explainer
@@ -320,6 +328,7 @@ fun ChatRoomDetailScreen(
     val sharesActionSent = stringResource(Res.string.shares_action_sent)
     val keyStateRequested = stringResource(Res.string.key_state_requested)
     val rotationHeldAfterRemoval = stringResource(Res.string.rotation_held_after_removal)
+    val noKeyToRotate = stringResource(Res.string.rotation_no_key)
 
     // Offered after removing a member who still holds a share of the room's key:
     // the removal took them out of the room, not out of the key
@@ -334,10 +343,16 @@ fun ChatRoomDetailScreen(
                     if (offer.holdsLightningShare) {
                         Text(stringResource(Res.string.rotate_shares_does_not_reach_lightning))
                     }
+                    // The removed member is named by the title; the others it would leave out are not.
+                    offer.preview?.let { RotationLeftOut(it.copy(forGood = emptyList())) }
+                    offer.preview?.refusal?.let { Text(stringResource(Res.string.rotation_cannot_start, it), color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { chatRoomDetailViewModel.rotateSharesWithout(offer) { failure -> notify(failure ?: rotationRequested) } }) {
+                TextButton(
+                    enabled = offer.preview?.refusal == null,
+                    onClick = { chatRoomDetailViewModel.rotateSharesWithout(offer) { failure -> notify(failure ?: rotationRequested) } }
+                ) {
                     Text(stringResource(Res.string.rotate_shares))
                 }
             },
@@ -349,31 +364,34 @@ fun ChatRoomDetailScreen(
         )
     }
 
-    // The plain rotate button's confirmation. Proposing approves the proposer, so
-    // this names who the rotation leaves out (docs/rotation-waits-for-key-state.md,
-    // Phase 4).
-    chatRoomDetailViewModel.rotationConfirmation?.let { confirmation ->
+    // The proposer's one approval: the rotation as it will be proposed, with
+    // everyone it leaves out named (docs/rotate-shares-single-approval.md, Phase 4).
+    chatRoomDetailViewModel.rotationProposal?.let { proposal ->
         AlertDialog(
-            onDismissRequest = { chatRoomDetailViewModel.dismissRotationConfirmation() },
-            title = { Text(stringResource(Res.string.rotate_shares_confirm_title)) },
+            onDismissRequest = { chatRoomDetailViewModel.dismissRotationProposal() },
+            title = { Text(stringResource(Res.string.rotate_shares_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
-                    Text(stringResource(Res.string.shares_rotation_caveat))
-                    if (confirmation.leftOut.isEmpty()) {
-                        Text(stringResource(Res.string.rotate_shares_confirm_everyone))
+                    Text(stringResource(Res.string.rotation_taking_part, proposal.preview.takingPart.joinToString(", ")))
+                    RotationLeftOut(proposal.preview)
+                    val refusal = proposal.preview.refusal
+                    if (refusal != null) {
+                        Text(stringResource(Res.string.rotation_cannot_start, refusal), color = MaterialTheme.colorScheme.error)
                     } else {
-                        Text(stringResource(Res.string.rotate_shares_confirm_left_out))
-                        confirmation.leftOut.forEach { name -> Text(name, style = MaterialTheme.typography.bodyMedium) }
+                        Text(stringResource(Res.string.rotation_proposing_is_taking_part))
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { chatRoomDetailViewModel.confirmRotation(confirmation) { failure -> notify(failure ?: rotationRequested) } }) {
+                TextButton(
+                    enabled = proposal.preview.refusal == null,
+                    onClick = { chatRoomDetailViewModel.rotateShares(proposal) { failure -> notify(failure ?: rotationRequested) } }
+                ) {
                     Text(stringResource(Res.string.rotate_shares))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { chatRoomDetailViewModel.dismissRotationConfirmation() }) {
+                TextButton(onClick = { chatRoomDetailViewModel.dismissRotationProposal() }) {
                     Text(stringResource(Res.string.not_now))
                 }
             },
@@ -726,7 +744,9 @@ fun ChatRoomDetailScreen(
                                                 FilledTonalButton(
                                                     enabled = rotation == SharesSummary.Rotation.Available && !actionPending,
                                                     onClick = {
-                                                        chatRoomDetailViewModel.askToRotate(chatRoomDetailUIState.localChatRoom, shares)
+                                                        chatRoomDetailViewModel.previewRotation(chatRoomDetailUIState.localChatRoom) {
+                                                            notify(noKeyToRotate)
+                                                        }
                                                     }
                                                 ) {
                                                     Text(stringResource(Res.string.rotate_shares))
@@ -2224,5 +2244,16 @@ private fun ChatRoomMessagingScreenPreview() {
                 onNavigateBack = {},
             )
         }
+    }
+}
+
+/** Who a rotation leaves out, a line per standing, nothing when it leaves out nobody. */
+@Composable
+private fun RotationLeftOut(preview: RotationPreview) {
+    if (preview.untilBroughtBack.isNotEmpty()) {
+        Text(stringResource(Res.string.rotation_left_out_until_brought_back, preview.untilBroughtBack.joinToString(", ")))
+    }
+    if (preview.forGood.isNotEmpty()) {
+        Text(stringResource(Res.string.rotation_left_out_for_good, preview.forGood.joinToString(", ")))
     }
 }

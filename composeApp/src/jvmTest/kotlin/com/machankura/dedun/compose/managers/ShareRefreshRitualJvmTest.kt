@@ -271,50 +271,66 @@ class ShareRefreshRitualJvmTest {
         val refresh = propose(all[0])
         pump(all)
 
-        // The proposer confirmed who is withheld before proposing, and is the
-        // coordinator CONFIRM guards against: it deals at once and is asked nothing
-        // (docs/rotation-waits-for-key-state.md, Phase 4).
-        assertEquals(listOf(ShareRefreshEvents.PROPOSAL, ShareRefreshEvents.ROUND_1), outbox(all[0]).map { it.kind })
-        assertNull(ShareRefreshManager.pendingApproval(all[0].db, all[0].refresh(refresh.id)!!), "the proposer must not be asked")
-        assertTrue(all[0].db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).none { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED })
-
-        // Everyone else is asked, and has sent nothing.
         all.drop(1).forEach { device ->
             assertEquals(emptyList(), outbox(device).map { it.kind }, "device ${device.index}")
-            assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index} must be asked")
+            assertNotNull(ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index} must be asked")
         }
-
-        // And once they have dealt, they are asked again before confirming; the proposer is not.
-        all.drop(1).forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
-        pump(all)
-        assertNull(ShareRefreshManager.pendingApproval(all[0].db, all[0].refresh(refresh.id)!!))
-        all.drop(1).forEach { device ->
-            assertEquals(ShareRefreshApprovalStep.CONFIRM, ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index}")
-        }
+        // Proposing is the proposer's agreement, made from a dialog that named
+        // everyone left out: its device deals at once, and its owner is not asked.
+        val proposer = all[0]
+        assertEquals(listOf(ShareRefreshEvents.PROPOSAL, ShareRefreshEvents.ROUND_1), outbox(proposer).map { it.kind })
+        assertNull(ShareRefreshManager.pendingApproval(proposer.db, proposer.refresh(refresh.id)!!))
+        assertTrue(proposer.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).none { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED })
     }
 
-    /**
-     * Two members propose from one base before either hears of the other. Each is
-     * approved for its own and refuses the other on arrival, as a recipient,
-     * out loud -- so neither stalls and nothing forks.
-     */
+    // ---- Phase 4 of rotate-shares-single-approval: what the proposer is shown ----------------------------------------
+
+    /** The dialog shows what the proposal will say: the same recipients, the same members left out, as the same standing. */
     @Test
-    fun `two proposals crossing on the wire end with neither stuck and at most one generation`() = runBlocking<Unit> {
-        val group = Group(3, 2)
+    fun `the preview is the proposal`() = runBlocking<Unit> {
+        suspend fun agrees(by: Device, without: HexKey? = null) {
+            val preview = assertNotNull(ShareRefreshManager.preview(by.db, by.room, by.publicKey, without))
+            assertNull(preview.refusal, preview.refusal)
+            val refresh = if (without == null) propose(by) else ShareRefreshManager.proposeWithout(by.db, by.room, by.publicKey, by.privateKey, without)
+            val roster = by.active().roster.associate { it.participantId to it.memberPublicKey }
+            assertEquals(preview.takingPart, refresh.recipientIdList().map { roster.getValue(it) })
+            assertEquals(preview.withheld, refresh.withheldStandings().mapKeys { roster.getValue(it.key) })
+        }
+
+        // Nobody stale, nobody removed.
+        val fresh = devicesFor(Group(3, 2))
+        agrees(fresh[0])
+
+        // One stale, withheld again without being asked for.
+        val (_, rotated) = rotatedWithout(2)
+        val stale = ShareRefreshManager.preview(rotated[0].db, rotated[0].room, rotated[0].publicKey)!!
+        assertEquals(mapOf(rotated[2].publicKey to ShareStanding.STALE), stale.withheld)
+        agrees(rotated[0])
+    }
+
+    @Test
+    fun `the preview of a removal names the removed for good and the stale until they are back`() = runBlocking<Unit> {
+        val group = Group(5, 2)
         val all = devicesFor(group)
-        val first = propose(all[0])
-        val second = propose(all[1])
+        val first = propose(all[0], mapOf(group.idOf[4] to ShareStanding.STALE))
         pump(all)
         approveAll(all, first.id)
-        approveAll(all, second.id)
+        approveSigning(all)
 
-        all.forEach { device ->
-            val stages = listOf(first.id, second.id).map { device.refresh(it)?.stage }
-            assertTrue(stages.none { it != null && it != ShareRefreshStage.COMPLETE && it != ShareRefreshStage.FAILED }, "device ${device.index} left one running: $stages")
-            assertTrue(stages.count { it == ShareRefreshStage.COMPLETE } <= 1, "device ${device.index}: $stages")
-            assertTrue(ShareRefreshManager.rotationHold(device.db, device.room, device.key()) !is RotationHold.Running, "device ${device.index}")
-        }
-        assertEquals(1, all.map { it.active().publicShares }.toSet().size, "every device on one table")
+        val preview = assertNotNull(ShareRefreshManager.preview(all[0].db, all[0].room, all[0].publicKey, without = all[3].publicKey))
+        assertNull(preview.refusal, preview.refusal)
+        assertEquals(mapOf(all[3].publicKey to ShareStanding.RETIRED, all[4].publicKey to ShareStanding.STALE), preview.withheld)
+        assertEquals(setOf(all[0], all[1], all[2]).map { it.publicKey }.toSet(), preview.takingPart.toSet())
+    }
+
+    @Test
+    fun `the preview of a rotation that would be refused says why and sends nothing`() = runBlocking<Unit> {
+        val group = Group(2, 2)
+        val (alice, bob) = devicesFor(group)
+        val preview = assertNotNull(ShareRefreshManager.preview(alice.db, alice.room, alice.publicKey, without = bob.publicKey))
+        assertTrue(preview.refusal!!.contains("fewer than the 2 it takes to sign"), preview.refusal)
+        assertTrue(outbox(alice).isEmpty())
+        assertNull(alice.db.shareRefreshDao().getSessionsForKey(ceremonyId).firstOrNull())
     }
 
     // ---- the approvals, counted (docs/rotate-shares-single-approval.md) ---------------------------------------------
@@ -342,7 +358,7 @@ class ShareRefreshRitualJvmTest {
             assertTrue(outbox(device).any { it.kind == ShareRefreshEvents.ROUND_2 }, "device ${device.index} did not confirm")
             val lines = device.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId)
                 .filter { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED }
-            assertEquals(1, lines.size, "device ${device.index} must be asked once")
+            assertEquals(if (device.index == 0) 0 else 1, lines.size, "device ${device.index} must be asked once, the proposer never")
         }
     }
 
@@ -484,8 +500,8 @@ class ShareRefreshRitualJvmTest {
     /**
      * What a recipient is asked before the old shares are deleted: to take part,
      * and -- until Phase 5 -- to sign the new generation's key state. The
-     * proposer is asked only to take part; its device proposes the key state, and
-     * a proposer's signature is its proposal.
+     * proposer is asked nothing: proposing was taking part, its device proposes
+     * the key state, and a proposer's signature is its proposal.
      */
     @Test
     fun `a recipient is asked to take part and to sign the new key state`() = runBlocking<Unit> {
@@ -496,7 +512,7 @@ class ShareRefreshRitualJvmTest {
         val asks = answerEverything(all, refresh.id)
 
         val rotation = listOf(Ask.Rotation(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.DEAL))
-        assertEquals(rotation, asks[0], "the proposer")
+        assertEquals(emptyList(), asks[0], "the proposer, whose proposal was its answer")
         all.drop(1).forEach { device -> assertEquals(rotation + Ask.KeyState, asks[device.index], "device ${device.index}") }
         all.forEach { device ->
             assertEquals(1, device.db.groupKeyStateDao().getByChatRoomId(group.roomId)?.generation, "device ${device.index}")

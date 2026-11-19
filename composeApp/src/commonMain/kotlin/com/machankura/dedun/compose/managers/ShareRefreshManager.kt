@@ -114,16 +114,74 @@ object ShareRefreshManager {
     // ---- proposing ------------------------------------------------------------------------------------------------
 
     /**
+     * Who a refresh of [key] from [shares] would deal to and who it would leave
+     * out, with [withheld] asked for: every live participant not in it is a
+     * recipient, and every stale participant is withheld again, as what they
+     * were -- a refresh does not bring anybody back, a repair does. [refusal] is
+     * why it cannot run, or null. One function for [proposeRefresh] and
+     * [preview], so the dialog shows exactly what the proposal will say.
+     */
+    private fun plan(key: DkgSession, shares: ShareGenerations.Shares, userPublicKey: HexKey, withheld: Map<Int, ShareStanding>): Plan {
+        val recipients = shares.roster
+            .filter { it.standing == ShareStanding.LIVE && it.participantId !in withheld }
+            .map { it.participantId }
+        val allWithheld = withheld + shares.roster
+            .filter { it.standing == ShareStanding.STALE && it.participantId !in withheld }
+            .associate { it.participantId to ShareStanding.STALE }
+        val myId = shares.signerIds[userPublicKey]
+        val refusal = when {
+            shares.secretShare == null -> "this device holds no share of generation ${shares.generation}"
+            myId == null -> "this device is not a signer of generation ${shares.generation}"
+            else -> refusal(key, shares, recipients, allWithheld)
+                ?: "the proposer has to be a recipient".takeIf { myId !in recipients }
+        }
+        return Plan(recipients, allWithheld, refusal)
+    }
+
+    private data class Plan(val recipients: List<Int>, val withheld: Map<Int, ShareStanding>, val refusal: String?)
+
+    /** A refresh as it would be proposed, by member rather than by id. */
+    data class Preview(
+        val takingPart: List<HexKey>,
+        val withheld: Map<HexKey, ShareStanding>,
+        /** Why it cannot be proposed, or null. */
+        val refusal: String?,
+    )
+
+    /**
+     * What [proposeRefresh] would open from this device, without opening it: who
+     * takes part and who is left out, stale members included, and whether it
+     * would be refused. The proposer's dialog shows this, and pressing it is the
+     * proposer's agreement to take part (docs/rotate-shares-single-approval.md,
+     * Phase 4). [without] is a member to withhold for good, as after a removal.
+     */
+    suspend fun preview(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, without: HexKey? = null): Preview? {
+        val key = FrostSigningManager.completedKey(database, localChatRoom.chatRoom.id) ?: return null
+        if (!isKeysRoom(database, localChatRoom, key)) return null
+        val shares = ShareGenerations.active(database, key)
+        val withheld = without?.let { member ->
+            val id = shares.signerIds[member] ?: return Preview(emptyList(), emptyMap(), "they hold no share of the group's key")
+            mapOf(id to ShareStanding.RETIRED)
+        } ?: emptyMap()
+        val plan = plan(key, shares, userPublicKey, withheld)
+        val memberOf = shares.roster.associate { it.participantId to it.memberPublicKey }
+        return Preview(
+            takingPart = plan.recipients.mapNotNull { memberOf[it] },
+            withheld = plan.withheld.mapNotNull { (id, standing) -> memberOf[id]?.let { it to standing } }.toMap(),
+            refusal = plan.refusal ?: running(database, key)?.let { "a rotation of this key is already running" },
+        )
+    }
+
+    /**
      * Opens a refresh of [key], making this device the coordinator. Every live
-     * participant not in [withheld] is a recipient.
+     * participant not in [withheld] is a recipient, and every stale one is
+     * withheld again ([plan]).
      *
-     * The proposer is approved at both gates on proposal
-     * (docs/rotation-waits-for-key-state.md, Phase 4). `DEAL` is the decision about
-     * the withheld list, and the screen only proposes after its owner has confirmed
-     * a dialog naming everyone withheld -- so the tap was that decision. `CONFIRM`
-     * guards against a coordinator substituting a table nobody dealt, and the
-     * proposer is the coordinator: its own CertEq check does that work, and a tap
-     * adds nothing to it. Every other recipient is asked at both gates as before.
+     * **Proposing is the proposer's agreement to take part**: the proposer's
+     * device deals at once, and its owner is not asked again. That is safe only
+     * because the proposal is made from a dialog that named everyone it leaves
+     * out ([preview]) -- proposing is agreeing to withhold whoever the form
+     * showed, never whoever it defaulted to unseen.
      */
     suspend fun proposeRefresh(
         database: DedunDatabase,
@@ -141,19 +199,8 @@ object ShareRefreshManager {
         rotationHold(database, localChatRoom, key)?.let { throw IllegalStateException("Cannot rotate yet: ${it.reason}") }
 
         val shares = ShareGenerations.active(database, key)
-        requireNotNull(shares.secretShare) { "This device holds no share of generation ${shares.generation}" }
-        val myId = requireNotNull(shares.signerIds[userPublicKey]) { "This device is not a signer of generation ${shares.generation}" }
-
-        val recipients = shares.roster
-            .filter { it.standing == ShareStanding.LIVE && it.participantId !in withheld }
-            .map { it.participantId }
-        // Stale participants are withheld again, as what they were: a refresh does
-        // not bring anybody back. That is a repair.
-        val allWithheld = withheld + shares.roster
-            .filter { it.standing == ShareStanding.STALE && it.participantId !in withheld }
-            .associate { it.participantId to ShareStanding.STALE }
-        refusal(key, shares, recipients, allWithheld)?.let { throw IllegalStateException("Cannot refresh: $it") }
-        require(myId in recipients) { "The proposer has to be a recipient" }
+        val (recipients, allWithheld, refused) = plan(key, shares, userPublicKey, withheld)
+        refused?.let { throw IllegalStateException("Cannot refresh: $it") }
 
         val session = ShareRefreshSession(
             id = RandomInstance.bytes(32).toHex(),
@@ -167,7 +214,6 @@ object ShareRefreshManager {
             round1Random = RandomInstance.bytes(32).toHex(),
             auxRandom = RandomInstance.bytes(32).toHex(),
             dealApprovedAt = Clock.System.now(),
-            confirmApprovedAt = Clock.System.now(),
         )
         database.shareRefreshDao().upsert(session)
         announce(database, session, ChatMessage.TYPE_SHARE_REFRESH_STARTED, startedLine(session, shares), userPublicKey)

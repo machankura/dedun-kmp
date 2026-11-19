@@ -18,6 +18,7 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
+import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -58,6 +59,8 @@ class ChatRoomDetailSharesJvmTest {
         var reads = 0
         var rotations = 0
         override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? { rotations++; return null }
+        var preview: RotationPreview? = null
+        override suspend fun rotationPreview(localChatRoom: LocalChatRoom, without: HexKey?): RotationPreview? = preview
         override suspend fun getChatRoomByIdentifier(id: HexKey): LocalChatRoom? = room.takeIf { id == room.chatRoom.id }
         override suspend fun sharesSummary(localChatRoom: LocalChatRoom): SharesSummary { reads++; return shares }
         override fun observeSharesInputs(chatRoomId: String): Flow<Unit> = inputs
@@ -109,25 +112,26 @@ class ChatRoomDetailSharesJvmTest {
 
     @Test
     fun `rotating asks first, naming who it leaves out`() = runBlocking<Unit> {
-        val shares = summary(SharesSummary.Rotation.Available).copy(
-            members = listOf(
-                SharesSummary.Member("b".repeat(64), "Bongani", ShareStanding.LIVE, isSelf = false),
-                SharesSummary.Member("c".repeat(64), "Carol", ShareStanding.STALE, isSelf = false),
-                SharesSummary.Member("d".repeat(64), "Dumi", ShareStanding.RETIRED, isSelf = false),
-            )
-        )
+        val shares = summary(SharesSummary.Rotation.Available)
         val repository = Repository(localChatRoom, shares)
+        // As ShareRefreshManager.preview reads it: the stale withheld again, the retired gone already.
+        repository.preview = RotationPreview(takingPart = listOf("Ama", "Bongani"), untilBroughtBack = listOf("Carol"), forGood = emptyList(), refusal = null)
         val viewModel = viewModel(repository)
 
-        viewModel.askToRotate(localChatRoom, shares)
-        val confirmation = viewModel.rotationConfirmation!!
-        assertEquals(listOf("Carol"), confirmation.leftOut, "the stale are withheld again; the retired are gone already")
+        val unavailable = kotlinx.coroutines.CompletableDeferred<Unit>()
+        viewModel.previewRotation(localChatRoom) { unavailable.complete(Unit) }
+        val proposal = withTimeout(5_000) {
+            while (viewModel.rotationProposal == null) delay(10)
+            viewModel.rotationProposal!!
+        }
+        assertEquals(listOf("Carol"), proposal.preview.untilBroughtBack)
         assertEquals(0, repository.rotations, "nothing is proposed before the owner confirms")
 
         val done = kotlinx.coroutines.CompletableDeferred<String?>()
-        viewModel.confirmRotation(confirmation) { done.complete(it) }
+        viewModel.rotateShares(proposal) { done.complete(it) }
         assertNull(withTimeout(5_000) { done.await() })
         assertEquals(1, repository.rotations)
-        assertNull(viewModel.rotationConfirmation)
+        assertNull(viewModel.rotationProposal)
+        assertTrue(!unavailable.isCompleted)
     }
 }

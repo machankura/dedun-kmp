@@ -30,6 +30,7 @@ import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
+import com.machankura.dedun.compose.ui.view.state.RotationPreview
 
 interface ChatRepository {
     suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>>
@@ -362,6 +363,13 @@ interface ChatRepository {
     /** Proposes rotating every share of the room's key. Null on success, or why not. */
     suspend fun rotateShares(localChatRoom: LocalChatRoom): String?
 
+    /**
+     * Who a rotation proposed from this device would take part and who it would
+     * leave out -- [without] for good, as after a removal -- or null when the room
+     * has no key this device can rotate. Nothing is sent.
+     */
+    suspend fun rotationPreview(localChatRoom: LocalChatRoom, without: HexKey? = null): RotationPreview?
+
     /** Answers what [approval] asks. Null on success, or why not. */
     suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String?
 
@@ -610,6 +618,8 @@ interface ChatRepository {
             override fun observeSharesInputs(chatRoomId: String): Flow<Unit> = emptyFlow()
 
             override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? = null
+
+            override suspend fun rotationPreview(localChatRoom: LocalChatRoom, without: HexKey?): RotationPreview? = null
 
             override suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String? = null
 
