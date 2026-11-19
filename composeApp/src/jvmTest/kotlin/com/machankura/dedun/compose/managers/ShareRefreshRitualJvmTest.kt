@@ -19,6 +19,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -32,6 +34,7 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.model.ShareRefreshConfirmation
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.machankura.dedun.compose.database.model.types.ShareGenerationState
@@ -41,6 +44,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
+import com.machankura.dedun.compose.ui.view.state.SharesSummary
 
 /**
  * A share refresh between devices (docs/frost-share-refresh.md, Phase 7).
@@ -582,6 +586,55 @@ class ShareRefreshRitualJvmTest {
 
         assertEquals(RotationHold.Behind(groupGeneration = 1, localGeneration = 0), ShareRefreshManager.rotationHold(late.db, late.room, late.key()))
         assertFailsWith<IllegalStateException> { propose(late) }
+    }
+
+    /** The rotate action as the room's Shares section reads it. */
+    private suspend fun rotation(device: Device): SharesSummary.Rotation? =
+        DatabaseChatRepository(device.db, CoroutineScope(Job())).sharesSummary(device.room)?.rotation
+
+    @Test
+    fun `the Shares section holds the button while a rotation is unfinished, and says why`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val (alice, bob) = all
+        assertEquals(SharesSummary.Rotation.Available, rotation(bob))
+
+        val refresh = propose(alice)
+        pump(all)
+        assertEquals(SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ROTATION_RUNNING), rotation(bob))
+
+        approveAll(all, refresh.id)
+        val awaiting = SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.AWAITING_SIGNATURES, canAskForSignature = false)
+        assertEquals(awaiting, rotation(bob), "the coordinator is already asking")
+
+        // The coordinator's proposal fails: nobody is asking, so Bob may.
+        all.forEach { device ->
+            device.db.frostSigningSessionDao().getSessionsForChatRoom(group.roomId).forEach {
+                device.db.frostSigningSessionDao().upsert(it.copy(stage = FrostSigningStage.FAILED))
+            }
+        }
+        assertEquals(awaiting.copy(canAskForSignature = true), rotation(bob))
+        val asked = ShareRefreshManager.proposeOwedKeyState(bob.db, bob.room, bob.publicKey, bob.key())
+        pump(all)
+        assertEquals(awaiting, rotation(bob))
+        assertFailsWith<IllegalStateException>("one ask at a time") {
+            ShareRefreshManager.proposeOwedKeyState(alice.db, alice.room, alice.publicKey, alice.key())
+        }
+
+        approveSigning(all)
+        assertEquals(FrostSigningStage.COMPLETE, bob.db.frostSigningSessionDao().getSessionById(asked.id)?.stage)
+        all.forEach { assertEquals(SharesSummary.Rotation.Available, rotation(it), "device ${it.index}") }
+        val stated = Event.fromJson(bob.db.frostSigningSessionDao().getItems(asked.id).single().unsignedEventJson)
+        assertTrue(stated.tags.any { it.contains(refresh.id) }, "the refresh is named as the coordinator would have named it")
+    }
+
+    @Test
+    fun `a member left out of a rotation is offered no rotate button`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedWithout(2)
+        assertEquals(SharesSummary.Rotation.Unavailable, rotation(all[2]))
+        assertEquals(SharesSummary.Rotation.Available, rotation(all[0]))
     }
 
     // ---- Phase 10: re-enrollment -----------------------------------------------------------------------------------

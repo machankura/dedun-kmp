@@ -356,6 +356,13 @@ interface ChatRepository {
     /** Answers what [approval] asks. Null on success, or why not. */
     suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String?
 
+    /**
+     * Asks the group to sign the key state at the generation the last rotation
+     * produced, when nobody here is asking (docs/rotation-waits-for-key-state.md, R4).
+     * Null when the request went out, or why it did not.
+     */
+    suspend fun proposeKeyState(localChatRoom: LocalChatRoom): String?
+
     /** Ends the rotation [sessionId] for everyone. Null on success, or why not. */
     suspend fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String): String?
 
@@ -594,6 +601,8 @@ interface ChatRepository {
             override suspend fun rotateShares(localChatRoom: LocalChatRoom): String? = null
 
             override suspend fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval): String? = null
+
+            override suspend fun proposeKeyState(localChatRoom: LocalChatRoom): String? = null
 
             override suspend fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String): String? = null
 

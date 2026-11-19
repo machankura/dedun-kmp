@@ -233,6 +233,13 @@ import dedun.composeapp.generated.resources.share_rotation_requested
 import dedun.composeapp.generated.resources.not_now
 import dedun.composeapp.generated.resources.rotate_shares
 import dedun.composeapp.generated.resources.rotate_shares_does_not_reach_lightning
+import dedun.composeapp.generated.resources.rotation_held_running
+import dedun.composeapp.generated.resources.rotation_held_awaiting_signatures
+import dedun.composeapp.generated.resources.rotation_held_behind
+import dedun.composeapp.generated.resources.rotation_held_after_removal
+import dedun.composeapp.generated.resources.ask_the_group_to_sign_the_new_shares
+import dedun.composeapp.generated.resources.key_state_requested
+import dedun.composeapp.generated.resources.see_the_proposal
 import dedun.composeapp.generated.resources.rotate_shares_without_body
 import dedun.composeapp.generated.resources.rotate_shares_without_title
 import androidx.compose.material3.AlertDialog
@@ -308,6 +315,8 @@ fun ChatRoomDetailScreen(
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
     val sharesActionSent = stringResource(Res.string.shares_action_sent)
+    val keyStateRequested = stringResource(Res.string.key_state_requested)
+    val rotationHeldAfterRemoval = stringResource(Res.string.rotation_held_after_removal)
 
     // Offered after removing a member who still holds a share of the room's key:
     // the removal took them out of the room, not out of the key
@@ -642,6 +651,7 @@ fun ChatRoomDetailScreen(
                                             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
                                                 if (approval.kind != SharesSummary.PendingApproval.Kind.REPAIR_HELP) {
                                                     TextButton(
+                                                        enabled = !chatRoomDetailViewModel.isActionPending.value,
                                                         onClick = {
                                                             chatRoomDetailViewModel.abandonRotation(chatRoomDetailUIState.localChatRoom, approval.sessionId) { failure ->
                                                                 notify(failure ?: sharesActionSent)
@@ -652,6 +662,7 @@ fun ChatRoomDetailScreen(
                                                     }
                                                 }
                                                 FilledTonalButton(
+                                                    enabled = !chatRoomDetailViewModel.isActionPending.value,
                                                     onClick = {
                                                         chatRoomDetailViewModel.approveShares(chatRoomDetailUIState.localChatRoom, approval) { failure ->
                                                             notify(failure ?: sharesActionSent)
@@ -664,7 +675,9 @@ fun ChatRoomDetailScreen(
                                         }
                                     )
                                 }
-                                if (shares.canRotate || shares.canAskToBeRepaired) {
+                                val rotation = shares.rotation
+                                val actionPending = chatRoomDetailViewModel.isActionPending.value
+                                if (rotation != SharesSummary.Rotation.Unavailable || shares.canAskToBeRepaired) {
                                     item {
                                         Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
                                             Text(
@@ -672,8 +685,12 @@ fun ChatRoomDetailScreen(
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
-                                            if (shares.canRotate) {
+                                            if (rotation != SharesSummary.Rotation.Unavailable) {
+                                                // Disabled rather than hidden while the last rotation is
+                                                // unfinished, with the reason beneath it
+                                                // (docs/rotation-waits-for-key-state.md, Phase 2).
                                                 FilledTonalButton(
+                                                    enabled = rotation == SharesSummary.Rotation.Available && !actionPending,
                                                     onClick = {
                                                         chatRoomDetailViewModel.rotateShares(chatRoomDetailUIState.localChatRoom) { failure ->
                                                             notify(failure ?: rotationRequested)
@@ -683,8 +700,50 @@ fun ChatRoomDetailScreen(
                                                     Text(stringResource(Res.string.rotate_shares))
                                                 }
                                             }
+                                            if (rotation is SharesSummary.Rotation.Held) {
+                                                Text(
+                                                    text = stringResource(
+                                                        when (rotation.reason) {
+                                                            SharesSummary.Rotation.Reason.ROTATION_RUNNING -> Res.string.rotation_held_running
+                                                            SharesSummary.Rotation.Reason.AWAITING_SIGNATURES -> Res.string.rotation_held_awaiting_signatures
+                                                            SharesSummary.Rotation.Reason.BEHIND -> Res.string.rotation_held_behind
+                                                        }
+                                                    ),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (rotation.canAskForSignature) {
+                                                    // Nobody is asking for the key state the group owes:
+                                                    // the coordinator's proposal failed, or its device is
+                                                    // gone. Anyone may ask again (frost-share-refresh.md, Phase 8).
+                                                    TextButton(
+                                                        enabled = !actionPending,
+                                                        onClick = {
+                                                            chatRoomDetailViewModel.proposeKeyState(chatRoomDetailUIState.localChatRoom) { failure ->
+                                                                notify(failure ?: keyStateRequested)
+                                                            }
+                                                        }
+                                                    ) {
+                                                        Text(stringResource(Res.string.ask_the_group_to_sign_the_new_shares))
+                                                    }
+                                                } else if (rotation.reason == SharesSummary.Rotation.Reason.AWAITING_SIGNATURES) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            onNavigateToRoute.invoke(
+                                                                ProposalListRoute(
+                                                                    activeUserPublicKey = activeUserPublicKey,
+                                                                    chatRoomId = chatRoomId
+                                                                )
+                                                            )
+                                                        }
+                                                    ) {
+                                                        Text(stringResource(Res.string.see_the_proposal))
+                                                    }
+                                                }
+                                            }
                                             if (shares.canAskToBeRepaired) {
                                                 TextButton(
+                                                    enabled = !actionPending,
                                                     onClick = {
                                                         chatRoomDetailViewModel.askToBeRepaired(chatRoomDetailUIState.localChatRoom) { failure ->
                                                             notify(failure ?: sharesActionSent)
@@ -1064,12 +1123,19 @@ fun ChatRoomDetailScreen(
                                                         chatRoomDetailViewModel.removeMember(
                                                             localChatRoom = chatRoomDetailUIState.localChatRoom,
                                                             memberPublicKey = memberPublicKey,
-                                                        ) { failure ->
+                                                        ) { failure, rotationHeld ->
                                                             // They keep a share of the Lightning wallet's key and its seed: say so,
                                                             // since only a new wallet takes it from them (Phase 14).
                                                             val holdsShare = memberPublicKey.lowercase() in chatRoomDetailUIState.lightningParticipants
                                                             val holdsWavelengthShare = memberPublicKey.lowercase() in chatRoomDetailUIState.wavelengthParticipants
-                                                            notify(failure ?: if (holdsWavelengthShare) removalLeavesWavelengthShare else if (holdsShare) removalLeavesLightningShare else removalRequested)
+                                                            notify(
+                                                                failure ?: when {
+                                                                    holdsWavelengthShare -> removalLeavesWavelengthShare
+                                                                    holdsShare -> removalLeavesLightningShare
+                                                                    rotationHeld -> rotationHeldAfterRemoval
+                                                                    else -> removalRequested
+                                                                }
+                                                            )
                                                         }
                                                     }
                                                 ) {

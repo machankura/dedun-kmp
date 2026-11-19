@@ -224,7 +224,7 @@ class ChatRoomDetailViewModel(
      * applied when a relay accepts it, so the member's row stays until then; the
      * line saying they were removed is there at once.
      */
-    fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (String?) -> Unit = {}) {
+    fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (failure: String?, rotationHeld: Boolean) -> Unit = { _, _ -> }) {
         viewModelScope.launch(Dispatchers.IO) {
             // Asked before the removal, while they are still in the room's roster.
             val heldShare = chatRepository.holdsShare(localChatRoom, memberPublicKey)
@@ -235,14 +235,18 @@ class ChatRoomDetailViewModel(
                 memberPublicKey.lowercase() in chatRepository.lightningParticipants(localChatRoom.chatRoom.id, GroupLightningRollout.NETWORK)
             val failure = runCatching { chatRepository.removeMember(localChatRoom, memberPublicKey) }
                 .exceptionOrNull()
+            // Offered only when a rotation could start now; while the last one is
+            // unfinished the offer would only be refused
+            // (docs/rotation-waits-for-key-state.md, Phase 2).
+            val rotation = if (failure == null && heldShare) chatRepository.sharesSummary(localChatRoom)?.rotation else null
             initiateChatRoomDetail()
             viewModelScope.launch(Dispatchers.Main) {
-                onDone(failure?.message)
+                onDone(failure?.message, rotation is SharesSummary.Rotation.Held)
                 // The removal takes them out of the room, not out of the key: they
                 // can still help sign until the shares are rotated without them.
                 // A second act, offered rather than folded in -- it needs every
                 // remaining holder (docs/frost-share-refresh.md, Phase 9).
-                if (failure == null && heldShare) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, heldLightningShare)
+                if (rotation == SharesSummary.Rotation.Available) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, heldLightningShare)
             }
         }
     }
@@ -253,9 +257,17 @@ class ChatRoomDetailViewModel(
      * goes on with in the background, so done means sent, not finished.
      */
     private fun sharesAction(onDone: (String?) -> Unit, action: suspend () -> String?) {
+        // One at a time: the section's buttons read this, so a second tap while the
+        // first is on its way does nothing rather than reporting twice.
+        if (isActionPending.value) return
+        isActionPending.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            val failure = action()
-            initiateChatRoomDetail()
+            val failure = try {
+                action()
+            } finally {
+                initiateChatRoomDetail()
+                viewModelScope.launch(Dispatchers.Main) { isActionPending.value = false }
+            }
             viewModelScope.launch(Dispatchers.Main) { onDone(failure) }
         }
     }
@@ -265,6 +277,9 @@ class ChatRoomDetailViewModel(
 
     fun approveShares(localChatRoom: LocalChatRoom, approval: SharesSummary.PendingApproval, onDone: (String?) -> Unit) =
         sharesAction(onDone) { chatRepository.approveShares(localChatRoom, approval) }
+
+    fun proposeKeyState(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
+        sharesAction(onDone) { chatRepository.proposeKeyState(localChatRoom) }
 
     fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String, onDone: (String?) -> Unit) =
         sharesAction(onDone) { chatRepository.abandonRotation(localChatRoom, sessionId) }

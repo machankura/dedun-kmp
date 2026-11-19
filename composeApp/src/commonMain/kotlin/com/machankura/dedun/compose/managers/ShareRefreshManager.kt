@@ -236,6 +236,26 @@ object ShareRefreshManager {
     }
 
     /**
+     * Asks the group to sign the key state it owes for the generation the last
+     * rotation produced, when nobody here is asking -- the coordinator's proposal
+     * failed, or its device is gone. Anyone may (docs/frost-share-refresh.md,
+     * Phase 8); without it a lost coordinator holds every later rotation for good
+     * (docs/rotation-waits-for-key-state.md, R4).
+     */
+    suspend fun proposeOwedKeyState(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, key: DkgSession): FrostSigningSession {
+        val hold = rotationHold(database, localChatRoom, key)
+        check(hold is RotationHold.AwaitingKeyState && hold.signingSessionId == null) {
+            "The group is not waiting on anyone to ask for its key state"
+        }
+        // The refresh that produced the generation, named on the state as the
+        // coordinator would have named it.
+        val refreshId = database.shareRefreshDao().getSessionsForKey(key.id)
+            .firstOrNull { it.stage == ShareRefreshStage.COMPLETE && it.baseGeneration + 1 == hold.generation }
+            ?.id
+        return GroupKeyStateManager.proposeGeneration(database, localChatRoom, userPublicKey, key, refreshId)
+    }
+
+    /**
      * A key-state signing session of [key] still open on this device -- a
      * rotation's, a rebind's, or the ceremony's first -- unless this device has
      * declined it. A session fails only once enough members decline, so one this

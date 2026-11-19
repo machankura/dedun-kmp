@@ -58,6 +58,7 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.database.model.types.ShareRepairStage
@@ -768,7 +769,6 @@ class DatabaseChatRepository(
             }
         } + repairs.filter { ShareRepairManager.isAwaitingApproval(database, it) }
             .map { SharesSummary.PendingApproval(it.id, SharesSummary.PendingApproval.Kind.REPAIR_HELP) }
-        val running = refreshes.any { it.stage != ShareRefreshStage.COMPLETE && it.stage != ShareRefreshStage.FAILED }
         val mine = shares.roster.firstOrNull { it.memberPublicKey == me }
         val repairing = repairs.any { it.targetPublicKey == me && it.stage != ShareRepairStage.FAILED && it.stage != ShareRepairStage.COMPLETE }
         SharesSummary(
@@ -777,7 +777,19 @@ class DatabaseChatRepository(
                 SharesSummary.Member(entry.memberPublicKey, names[entry.memberPublicKey] ?: entry.memberPublicKey.take(8), entry.standing, entry.memberPublicKey == me)
             },
             pending = if (ExperimentalFeatures.shareRefresh) pending else emptyList(),
-            canRotate = ExperimentalFeatures.shareRefresh && shares.secretShare != null && !running,
+            rotation = if (!ExperimentalFeatures.shareRefresh || shares.secretShare == null) {
+                SharesSummary.Rotation.Unavailable
+            } else {
+                when (val hold = ShareRefreshManager.rotationHold(database, localChatRoom, key)) {
+                    null -> SharesSummary.Rotation.Available
+                    is RotationHold.Running -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ROTATION_RUNNING)
+                    is RotationHold.AwaitingKeyState -> SharesSummary.Rotation.Held(
+                        SharesSummary.Rotation.Reason.AWAITING_SIGNATURES,
+                        canAskForSignature = hold.signingSessionId == null,
+                    )
+                    is RotationHold.Behind -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.BEHIND)
+                }
+            },
             canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,
         )
     }.getOrNull()
@@ -806,6 +818,12 @@ class DatabaseChatRepository(
                     ShareRepairManager.approve(database, localChatRoom, approval.sessionId, privateKey)
             }
         }.exceptionOrNull())
+    }
+
+    override suspend fun proposeKeyState(localChatRoom: LocalChatRoom): String? {
+        val (me, _) = privateKeyOrNull() ?: return "This identity cannot sign"
+        val key = shareKeyOf(localChatRoom) ?: return "This group has no shared key"
+        return failureOf(runCatching { ShareRefreshManager.proposeOwedKeyState(database, localChatRoom, me, key) }.exceptionOrNull())
     }
 
     override suspend fun abandonRotation(localChatRoom: LocalChatRoom, sessionId: String): String? =

@@ -133,6 +133,13 @@
     <string name="pending_rotation_confirm">Store your new share</string>
     <string name="pending_repair_help">Help bring a member back</string>
     <string name="shares_action_sent">Sent to the group</string>
+    <string name="rotation_held_running">A rotation is in progress</string>
+    <string name="rotation_held_awaiting_signatures">Waiting for the group to sign the new shares before another rotation</string>
+    <string name="rotation_held_behind">This device is catching up with the group's latest rotation</string>
+    <string name="rotation_held_after_removal">Removal sent. They still hold a share; rotate without them once the group has signed the current shares.</string>
+    <string name="ask_the_group_to_sign_the_new_shares">Ask the group to sign the new shares</string>
+    <string name="key_state_requested">Asked the group to sign the new shares</string>
+    <string name="see_the_proposal">See the proposal</string>
     <string name="share_rotation_requested">Share rotation proposed; every remaining member is asked to take part</string>
     <string name="library">Library</string>
     <string name="lightning_invoice">Lightning invoice</string>
