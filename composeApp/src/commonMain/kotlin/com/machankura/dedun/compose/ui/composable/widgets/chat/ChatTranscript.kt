@@ -57,6 +57,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.RemoveModerator
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.FactCheck
@@ -980,6 +982,8 @@ private fun RitualNotice(
         ChatMessage.TYPE_MEMBER_INVITE_SENT -> Icons.Default.Upload
         ChatMessage.TYPE_MEMBER_INVITE_FAILED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_CHANGE_REJECTED -> Icons.Default.ErrorOutline
+        ChatMessage.TYPE_ADMIN_ADDED -> Icons.Default.AdminPanelSettings
+        ChatMessage.TYPE_ADMIN_REMOVED -> Icons.Default.RemoveModerator
 
         ChatMessage.TYPE_GROUP_LIGHTNING_WALLET_OPENED -> Icons.Default.Bolt
         ChatMessage.TYPE_GROUP_LIGHTNING_OPERATOR_ELECTED -> Icons.Default.Badge

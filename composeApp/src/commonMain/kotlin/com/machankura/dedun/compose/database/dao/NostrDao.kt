@@ -17,6 +17,7 @@ import androidx.room3.Transaction
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.currentMarmotData
 import com.vitorpamplona.marmot.groups.currentNostrGroupId
@@ -29,6 +30,7 @@ import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRelayListEvent
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
@@ -1442,6 +1444,10 @@ abstract class NostrDao(
 
         upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
 
+        // Who administered the room before this event, for the captions a commit's
+        // change to it earns. A copy, taken before the engine moves the group.
+        val priorAdmins = mlsGroup.currentAdminIdentities()
+
         // Through the engine, not the processor: an application message is the one
         // result that moves state the library writes nothing for, and the engine is
         // where that write is. The processor names the group by its address; every
@@ -1456,6 +1462,7 @@ abstract class NostrDao(
             activeKeyPair = activeKeyPair,
             // The live group the manager holds, which the commit just moved.
             mlsGroup = engine.groupManager.getGroup(routingId) ?: mlsGroup,
+            priorAdmins = priorAdmins,
         )
 
         // A commit that forked the group opened a pass, and a quiet group has
@@ -1500,6 +1507,8 @@ abstract class NostrDao(
 
             if (memberPubkeys.contains(activeKeyPair.pubKey.toHex())) {
                 upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
+                // Before processing moves this very instance.
+                val priorAdmins = mlsGroup.currentAdminIdentities()
                 MarmotInboundManager.processGroupEvent(
                     database = database,
                     activeKeyPair = activeKeyPair,
@@ -1515,6 +1524,7 @@ abstract class NostrDao(
                         groupEventResult = groupEventResult,
                         activeKeyPair = activeKeyPair,
                         mlsGroup = mlsGroup,
+                        priorAdmins = priorAdmins,
                     )
                 }
             } else {
@@ -1563,13 +1573,15 @@ abstract class NostrDao(
         groupEventResult: GroupEventResult,
         activeKeyPair: KeyPair,
         mlsGroup: MlsGroup,
+        priorAdmins: Set<HexKey>? = null,
     ) {
         when(groupEventResult) {
             is GroupEventResult.CommitProcessed -> {
                 MarmotInboundManager.processGroupMembershipChanges(
                     database = database,
                     mlsGroup = mlsGroup,
-                    localChatRoom = localChatRoom
+                    localChatRoom = localChatRoom,
+                    priorAdmins = priorAdmins,
                 )
             }
             // A member's standalone proposal -- their SelfRemove -- sits in the

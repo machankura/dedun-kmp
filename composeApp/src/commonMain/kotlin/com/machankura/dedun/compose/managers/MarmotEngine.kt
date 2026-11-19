@@ -225,7 +225,10 @@ class MarmotEngine(
         val chatRoomId = database.marmotRoutingDao().chatRoomIdFor(obligation.groupId)
         val localChatRoom = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return
         val group = groupManager.getGroup(obligation.groupId) ?: return
-        MarmotInboundManager.processGroupMembershipChanges(database, localChatRoom, group, announceAdditions = false)
+        MarmotInboundManager.processGroupMembershipChanges(
+            database, localChatRoom, group, announceAdditions = false,
+            priorAdmins = MarmotGroupPolicy.adminIdentitiesIn(obligation.priorState.groupContext.extensions),
+        )
         database.marmotOutboundDao().continueDisband(localChatRoom)
     }
 

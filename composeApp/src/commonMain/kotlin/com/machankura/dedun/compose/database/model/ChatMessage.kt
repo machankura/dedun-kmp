@@ -911,6 +911,14 @@ data class ChatMessage(
         const val TYPE_GROUP_DISBANDED = "groupDisbanded"
 
         /**
+         * A member became an admin, or stopped being one -- derived like the lines
+         * above, from the group's admin set before and after a commit, on every
+         * device that applies it. docs/member-admin-promotion.md, Phase 2.
+         */
+        const val TYPE_ADMIN_ADDED = "adminAdded"
+        const val TYPE_ADMIN_REMOVED = "adminRemoved"
+
+        /**
          * A change this device asked for that every relay refused, so the line
          * written when it was asked for -- a removal, a disband -- did not come
          * true. The invite's own version is [TYPE_MEMBER_INVITE_FAILED].
@@ -938,6 +946,8 @@ data class ChatMessage(
             TYPE_MEMBER_ADDED,
             TYPE_MEMBER_LEFT,
             TYPE_GROUP_DISBANDED,
+            TYPE_ADMIN_ADDED,
+            TYPE_ADMIN_REMOVED,
             TYPE_CHANGE_REJECTED,
             TYPE_FOUNDING_ADMINS_MISSING,
         )

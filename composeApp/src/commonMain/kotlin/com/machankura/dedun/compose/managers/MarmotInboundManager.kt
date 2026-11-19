@@ -128,12 +128,18 @@ object MarmotInboundManager {
      * the room out. Both are a terminal state on the other side too -- a removed
      * member cannot decrypt the next epoch, and a disbanded group refuses every
      * later event -- so nothing is lost by closing here.
+     *
+     * [priorAdmins] is the group's admin set before the commit, read off the
+     * group's state by the caller. With it, promotions and demotions are captioned
+     * too; without it, the flags are corrected and nothing is said about them. See
+     * docs/member-admin-promotion.md, Phase 2.
      */
     suspend fun processGroupMembershipChanges(
         database: DedunDatabase,
         localChatRoom: LocalChatRoom,
         mlsGroup: MlsGroup,
         announceAdditions: Boolean = true,
+        priorAdmins: Set<HexKey>? = null,
     ) {
         logger.d("processGroupMembershipChanges")
 
@@ -245,6 +251,24 @@ object MarmotInboundManager {
                 announceLine(database, localChatRoom, ChatMessage.TYPE_MEMBER_LEFT,
                     "${memberName(database, participant.participantPublicKey)} left the group")
             }
+
+        // Who governs the room, from the group's admin set before and after this
+        // commit -- never from the `adminAt` flags, which a room made before
+        // Phase 1 could have wrong. Only for accounts still in the tree: one that
+        // left took its admin rights with it, and "left the group" says so already.
+        if (priorAdmins != null && !disbanded && !removedUs) {
+            val members = committedGroupMembersPublicKeys.toSet()
+            (priorAdmins - adminPublicKeys).filter { it in members }.sorted().forEach { demoted ->
+                announceLine(database, localChatRoom, ChatMessage.TYPE_ADMIN_REMOVED,
+                    if (demoted == userPublicKey) "You are no longer an admin"
+                    else "${memberName(database, demoted)} is no longer an admin")
+            }
+            (adminPublicKeys - priorAdmins).filter { it in members }.sorted().forEach { promoted ->
+                announceLine(database, localChatRoom, ChatMessage.TYPE_ADMIN_ADDED,
+                    if (promoted == userPublicKey) "You are now an admin"
+                    else "${memberName(database, promoted)} is now an admin")
+            }
+        }
 
         when {
             disbanded -> announceLine(database, localChatRoom, ChatMessage.TYPE_GROUP_DISBANDED, "The group was disbanded")
