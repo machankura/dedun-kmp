@@ -238,23 +238,37 @@ class ChatRoomDetailViewModel(
         }
     }
 
+    /**
+     * Leaves the group, then leaves the screen. A refusal -- an admin, who has to
+     * hand over admin first -- goes to [onFailed] in the words the refusal used, and
+     * the screen stays. It used to escape the coroutine, which nobody saw and which
+     * on Android is a crash. See docs/member-admin-promotion.md, Phase 10.
+     */
     fun leaveGroup(
         localChatRoom: LocalChatRoom,
-        onPopBackToRoute: (Route) -> Unit
+        onPopBackToRoute: (Route) -> Unit,
+        onFailed: (String?) -> Unit = {},
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            chatRepository.leaveChatRoom(
-                localChatRoom,
-                onCompletion = {
-                    viewModelScope.launch(Dispatchers.Main) {
-                        onPopBackToRoute.invoke(
-                            HomeRoute(
-                                activeUserPublicKey = activeUserPublicKey,
+            val failure = runCatching {
+                chatRepository.leaveChatRoom(
+                    localChatRoom,
+                    onCompletion = {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            onPopBackToRoute.invoke(
+                                HomeRoute(
+                                    activeUserPublicKey = activeUserPublicKey,
+                                )
                             )
-                        )
+                        }
                     }
-                }
-            )
+                )
+            }.exceptionOrNull()
+            if (failure is CancellationException) throw failure
+            if (failure != null) {
+                logger.w(throwable = failure) { "Couldn't leave $chatRoomId" }
+                viewModelScope.launch(Dispatchers.Main) { onFailed(failure.message) }
+            }
         }
     }
 

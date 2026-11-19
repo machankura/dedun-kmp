@@ -192,6 +192,7 @@ import com.machankura.dedun.compose.ui.view.model.ChatRoomDetailViewModel
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
+import dedun.composeapp.generated.resources.couldn_t_leave_the_group
 import dedun.composeapp.generated.resources.run_by_members
 import dedun.composeapp.generated.resources.parent_group
 import dedun.composeapp.generated.resources.a_subgroup
@@ -280,6 +281,7 @@ fun ChatRoomDetailScreen(
     val removalRequested = stringResource(Res.string.member_removal_requested)
     val removalLeavesLightningShare = stringResource(Res.string.member_removal_requested_lightning)
     val removalLeavesWavelengthShare = stringResource(Res.string.member_removal_requested_wavelength)
+    val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
 
     ScreenStateTransition(chatRoomDetailViewModel.chatRoomDetailUIState) { uiState ->
     when (val chatRoomDetailUIState = uiState) {
@@ -1045,7 +1047,8 @@ fun ChatRoomDetailScreen(
                                     onClick = {
                                         chatRoomDetailViewModel.leaveGroup(
                                             localChatRoom = chatRoomDetailUIState.localChatRoom,
-                                            onPopBackToRoute = onPopBackToRoute
+                                            onPopBackToRoute = onPopBackToRoute,
+                                            onFailed = { failure -> notify(failure ?: couldNotLeave) },
                                         )
                                     }
                                 ) {

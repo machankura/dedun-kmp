@@ -108,6 +108,7 @@
     <string name="key_recovery">Key recovery</string>
     <string name="learn_more">Learn more</string>
     <string name="leave_group">Leave group</string>
+    <string name="couldn_t_leave_the_group">Couldn't leave the group</string>
     <string name="remove_from_group">Remove from group</string>
     <string name="disband_group">Disband group</string>
     <string name="group_disbanded">This group was disbanded. Nothing more can be sent into it, and nobody can rejoin.</string>
