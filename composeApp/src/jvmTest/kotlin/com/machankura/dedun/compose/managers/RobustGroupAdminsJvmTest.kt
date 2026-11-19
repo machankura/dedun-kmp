@@ -13,7 +13,6 @@ import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import com.vitorpamplona.quartz.nip59Giftwrap.rumors.RumorAssembler
 import com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent
 import com.vitorpamplona.quartz.nip59Giftwrap.wraps.GiftWrapEvent
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertEquals
@@ -179,9 +178,8 @@ class RobustGroupAdminsJvmTest {
     /**
      * The rows, which are what the screens label members with. The creator's are
      * caught up by `MarmotGroupCreation`; a joiner's come from the Welcome, which
-     * writes none of them.
+     * wrote none of them until Phase 2 put `AdminFlags.reconcile` on that path.
      */
-    @Ignore("Phase 2: the Welcome writes no admin flags")
     @Test
     fun `every device flags every founding member as an admin`() = onEveryProfile { profile, phones ->
         val founders = phones.map { it.publicKey }.toSet()

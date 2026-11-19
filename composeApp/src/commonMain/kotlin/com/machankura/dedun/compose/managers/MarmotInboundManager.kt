@@ -3,7 +3,6 @@ package com.machankura.dedun.compose.managers
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
-import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.mip03GroupMessages.GroupEventEncryption
 import com.vitorpamplona.mls.codec.TlsReader
@@ -136,7 +135,6 @@ object MarmotInboundManager {
         announceAdditions: Boolean = true,
     ) {
         logger.d("processGroupMembershipChanges")
-        val adminPublicKeys = mlsGroup.currentAdminIdentities()
 
         val commitedGroupMembers = Participant.fromMlsGroup(
             mlsGroup = mlsGroup,
@@ -153,35 +151,13 @@ object MarmotInboundManager {
         }
         logger.d("excludedParticipants: $excludedParticipants")
         val existingParticipantPublicKeys = localChatRoom.localParticipants.map { it.participant.participantPublicKey }
+        // Admin flags are not written here: `AdminFlags.reconcile` below reads the
+        // rows this function leaves and flags them from the group's policy, the
+        // same call the Welcome and the room's creation make.
         val newParticipants = commitedGroupMembers.filter { committedGroupMember ->
             existingParticipantPublicKeys.contains(committedGroupMember.participantPublicKey).not()
-        }.map { newParticipant ->
-            newParticipant.copy(
-                adminAt = if (adminPublicKeys.contains(newParticipant.participantPublicKey)) {
-                    Clock.System.now()
-                } else {
-                    null
-                }
-            )
         }
         logger.d("newParticipants: $newParticipants")
-        val removedAdmins = localChatRoom.localParticipants.filter { localParticipant ->
-            localParticipant.participant.adminAt != null && !adminPublicKeys.contains(localParticipant.participant.participantPublicKey)
-        }.map { localParticipant ->
-            localParticipant.participant.copy(
-                adminAt = null
-            )
-        }
-        logger.d("removedAdmins: $removedAdmins")
-
-        val graduatedAdmins = localChatRoom.localParticipants.filter { localParticipant ->
-            localParticipant.participant.adminAt == null && adminPublicKeys.contains(localParticipant.participant.participantPublicKey)
-        }.map { localParticipant ->
-            localParticipant.participant.copy(
-                adminAt = Clock.System.now()
-            )
-        }
-        logger.d("graduatedAdmins: $graduatedAdmins")
 
         // Placeholder profiles for new participants...
         newParticipants.forEach { newParticipant ->
@@ -246,10 +222,9 @@ object MarmotInboundManager {
             )
         }
         // Handle membership changes...
-        database.participantDao().upsert(removedAdmins)
         database.participantDao().delete(excludedParticipants)
         database.participantDao().upsert(newParticipants)
-        database.participantDao().upsert(graduatedAdmins)
+        AdminFlags.reconcile(database, localChatRoom.chatRoom.id, mlsGroup)
 
         val userPublicKey = localChatRoom.chatRoom.userPublicKey
         val disbanded = mlsGroup.currentGroupState().isDisbanded

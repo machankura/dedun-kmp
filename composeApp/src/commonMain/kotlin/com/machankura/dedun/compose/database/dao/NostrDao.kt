@@ -72,6 +72,7 @@ import com.machankura.dedun.compose.exceptions.MarmotMissingKeyPackageBundleExce
 import com.machankura.dedun.compose.exceptions.MarmotMissingNostrGroupDataExtension
 import com.machankura.dedun.compose.exceptions.MarmotNotMemberOfChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.managers.AdminFlags
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.ShareRepairManager
@@ -909,6 +910,17 @@ abstract class NostrDao(
 
                                     database.participantDao().upsert(
                                         participants
+                                    )
+
+                                    // The admins, from the group context this device
+                                    // was welcomed into. Without it a joiner's rows
+                                    // flagged nobody until some later commit arrived,
+                                    // which in a robust group's admin room may be
+                                    // never -- docs/robust-group-admins.md, Phase 2.
+                                    AdminFlags.reconcile(
+                                        database = database,
+                                        chatRoomId = nostrGroupId,
+                                        mlsGroup = group,
                                     )
 
                                     // Save ChatRoom Relays...

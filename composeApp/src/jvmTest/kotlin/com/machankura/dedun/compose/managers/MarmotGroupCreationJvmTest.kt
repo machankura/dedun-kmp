@@ -30,6 +30,7 @@ import com.machankura.dedun.compose.database.model.MarmotKeyPackage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.NostrEvent
+import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.extensions.toHex
@@ -158,6 +159,47 @@ class MarmotGroupCreationJvmTest {
         // its room list, and the group data is what every other member reads.
         assertEquals("#Ekklesia", room.chatRoom.subject)
         assertEquals("#Ekklesia", data.name)
+    }
+
+    /**
+     * One writer for the flags, from the group's policy, both ways: a row the
+     * policy names is flagged, and a row it does not name loses a flag it had.
+     * docs/robust-group-admins.md, Phase 2.
+     */
+    @Test
+    fun `admin flags follow the group's policy, both ways`(): Unit = runBlocking {
+        seedProfile(user)
+        MarmotGroupCreation.create(
+            database = db,
+            chatRepository = repository,
+            groupId = groupId,
+            name = "#Ekklesia",
+            purpose = "Admins of Ekklesia.",
+            adminPublicKeys = setOf(user),
+            userPublicKey = user,
+            keyPair = keyPair,
+        )
+
+        val stranger = KeyPair().pubKey.toHexKey()
+        seedProfile(stranger)
+        val creatorRow = db.chatRoomDao().findChatRoomById(groupId)!!.localParticipants
+            .single { it.participant.participantPublicKey == user }.participant
+        db.participantDao().upsert(
+            listOf(
+                creatorRow.copy(adminAt = null),
+                Participant(participantPublicKey = stranger, chatRoomId = groupId, relayHint = null, adminAt = Clock.System.now()),
+            )
+        )
+
+        val group = assertNotNull(db.chatRoomDao().findChatRoomById(groupId)!!.chatRoom.toMlsGroup())
+        assertEquals(2, AdminFlags.reconcile(db, groupId, group))
+
+        val rows = db.chatRoomDao().findChatRoomById(groupId)!!.localParticipants.associate {
+            it.participant.participantPublicKey to it.participant.adminAt
+        }
+        assertNotNull(rows[user], "the policy names the creator")
+        assertNull(rows[stranger], "the policy does not name the stranger")
+        assertEquals(0, AdminFlags.reconcile(db, groupId, group), "and a second pass changes nothing")
     }
 
     // ---- From a ceremony: docs/robust-group-admins.md, Phase 1 ----------------
