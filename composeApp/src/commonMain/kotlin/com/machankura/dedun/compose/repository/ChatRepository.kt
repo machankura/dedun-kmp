@@ -416,6 +416,13 @@ interface ChatRepository {
     suspend fun reconcileAdmins(chatRoomId: String): Boolean
 
     /**
+     * The fewest admins the room may be left with: one in a convenient room, at
+     * least three -- and never fewer than its quorum -- in a keyed one.
+     * docs/member-admin-promotion.md, R3.
+     */
+    suspend fun adminFloor(chatRoomId: String): Int
+
+    /**
      * Removes [memberPublicKey] from a current-profile room this device administers:
      * a commit through the publish gate, applied when a relay accepts it. See
      * docs/marmot-v2.md, Phase 7.
@@ -745,6 +752,8 @@ interface ChatRepository {
             }
 
             override suspend fun reconcileAdmins(chatRoomId: String): Boolean = false
+
+            override suspend fun adminFloor(chatRoomId: String): Int = 1
 
             override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
 

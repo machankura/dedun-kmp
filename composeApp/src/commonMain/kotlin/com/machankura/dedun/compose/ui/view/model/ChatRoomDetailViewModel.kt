@@ -207,7 +207,7 @@ class ChatRoomDetailViewModel(
                     } else {
                         emptySet()
                     },
-                    memberActions = group?.takeIf { canGovern }?.let { AdminGovernance.memberActions(it, me) }.orEmpty(),
+                    memberActions = group?.takeIf { canGovern }?.let { AdminGovernance.memberActions(it, me, chatRepository.adminFloor(chatRoomId)) }.orEmpty(),
                     adminLeave = group?.takeIf { roomIsOpen }?.let { AdminGovernance.adminLeave(it, me) },
                 )
             }

@@ -269,6 +269,36 @@ class AdminChangesJvmTest {
     }
 
     @Test
+    fun `a robust group keeps at least three admins, and never fewer than its quorum`() {
+        assertEquals(3, com.machankura.dedun.compose.database.model.types.ChatRoomType.minimumAdmins(threshold = null))
+        assertEquals(3, com.machankura.dedun.compose.database.model.types.ChatRoomType.minimumAdmins(threshold = 2))
+        assertEquals(4, com.machankura.dedun.compose.database.model.types.ChatRoomType.minimumAdmins(threshold = 4))
+    }
+
+    @Test
+    fun `a keyed room's floor comes from its own ceremony, a convenient room's is one`() = runBlocking {
+        val keyed = GroupFixtures.signingRoom(db, GroupFixtures.keyMaterial("f1001" + "0".repeat(57) + "f6"), members = listOf("a1".repeat(32), "b2".repeat(32)))
+        assertEquals(3, AdminGovernance.adminFloor(db, keyed.chatRoom.id, keyed.chatRoom.toMlsGroup()!!))
+
+        convenientRoomWithMember()
+        assertEquals(1, AdminGovernance.adminFloor(db, roomId, appGroup()))
+    }
+
+    @Test
+    fun `removing an admin is not offered, or allowed, where it would break the floor`() = runBlocking {
+        convenientRoomWithMember()
+        chatRepository.promoteMember(room(), member.hex)
+        okTheLatestCommit()
+
+        assertTrue(AdminGovernance.keepsFloor(appGroup(), member.hex, floor = 1))
+        assertFalse(AdminGovernance.keepsFloor(appGroup(), member.hex, floor = 2), "two admins down to one kept a floor of two")
+        assertFalse(
+            MemberAction.REMOVE_FROM_GROUP in AdminGovernance.memberActions(appGroup(), user, floor = 2)[member.hex].orEmpty(),
+            "the menu offered a removal the floor forbids",
+        )
+    }
+
+    @Test
     fun `a keyed room's admins are not changed by one admin's commit`() = runBlocking<Unit> {
         seedProfile(user, "us")
         val keyedRoomId = SharedKeyDerivation.marmotGroupId("02" + KeyPair().pubKey.toHexKey())

@@ -882,6 +882,13 @@ abstract class MarmotOutboundDao(
             ?.first
             ?: throw IllegalArgumentException("$memberPublicKey is not in the group")
 
+        // A robust group keeps at least three admins, and never fewer than its
+        // quorum: they are its share holders. docs/member-admin-promotion.md, R3.
+        val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
+        if (!AdminGovernance.keepsFloor(group, memberPublicKey, floor)) {
+            throw IllegalStateException("A group with a shared key needs at least $floor admins, so ${memberName(memberPublicKey)} can't be removed")
+        }
+
         if (memberPublicKey in group.currentAdminIdentities()) {
             thenAfterConfirmed(localChatRoom, publish = { publishAdmins(localChatRoom) { admins -> admins - memberPublicKey } }) {
                 database.chatRoomDao().findChatRoomById(localChatRoom.chatRoom.id)

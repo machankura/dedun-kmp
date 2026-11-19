@@ -49,6 +49,16 @@ enum class ChatRoomType {
          */
         fun quorumRange(adminCount: Int): IntRange = MINIMUM_QUORUM..adminCount
 
+        /**
+         * The fewest admins a [ROBUST] group may ever have: [MINIMUM_ROBUST_GROUP_SIZE],
+         * or its quorum [threshold] when that is higher. In a group around a key the
+         * admins are its share holders, so fewer than [threshold] of them is a key
+         * that can never sign again -- and nothing about the group could change after
+         * that. Null [threshold] means this device does not know it, and the size
+         * floor alone applies. docs/member-admin-promotion.md, R3 and D8.
+         */
+        fun minimumAdmins(threshold: Int?): Int = maxOf(MINIMUM_ROBUST_GROUP_SIZE, threshold ?: 0)
+
         /** Whether a group of [memberCount] people can be run as [ROBUST]. */
         fun isRobustAvailable(memberCount: Int): Boolean = memberCount >= MINIMUM_ROBUST_GROUP_SIZE
     }

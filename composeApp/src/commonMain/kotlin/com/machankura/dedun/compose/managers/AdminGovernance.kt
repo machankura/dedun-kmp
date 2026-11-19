@@ -4,6 +4,9 @@ import com.vitorpamplona.marmot.groups.MarmotGroupPermissions
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.types.ChatRoomType
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
 import com.machankura.dedun.compose.ui.view.state.MemberAction
 
@@ -30,6 +33,32 @@ object AdminGovernance {
      * Until it is, a keyed room's admin list is changed by nothing here.
      */
     fun isKeyedRoom(group: MlsGroup): Boolean = SharedKeyDerivation.parsePath(group.roomDescription()) != null
+
+    /**
+     * The fewest admins [chatRoomId] may be left with: one in a convenient room,
+     * where the library's depletion guard is the whole rule, and
+     * [ChatRoomType.minimumAdmins] of the room's quorum in a keyed one (R3). The
+     * quorum is the completed ceremony's; a device that holds none -- a member
+     * welcomed after the founding -- applies the size floor alone.
+     */
+    suspend fun adminFloor(database: DedunDatabase, chatRoomId: String, group: MlsGroup): Int {
+        if (!isKeyedRoom(group)) return 1
+        val key = GroupKeyStateManager.keyStateFor(database, chatRoomId)?.dkgSessionId
+            ?.let { database.dkgSessionDao().getSessionById(it) }
+            ?.takeIf { it.stage == DkgRitualStage.COMPLETE }
+            ?: FrostSigningManager.completedKey(database, chatRoomId)
+        return ChatRoomType.minimumAdmins(key?.threshold)
+    }
+
+    /**
+     * Whether taking [target]'s admin rights away -- by demotion or by removing
+     * them -- leaves [group] at least [floor] admins among its members. True for
+     * someone who is not an admin, whose going changes nothing.
+     */
+    fun keepsFloor(group: MlsGroup, target: HexKey, floor: Int): Boolean {
+        val activeAdmins = group.currentAdminIdentities() intersect members(group)
+        return target !in activeAdmins || activeAdmins.size - 1 >= floor
+    }
 
     /** The accounts holding a leaf in [group] now. */
     fun members(group: MlsGroup): Set<HexKey> = group.currentMemberIdentities()
@@ -59,10 +88,10 @@ object AdminGovernance {
     /**
      * What [me] may do to each member of [group], for the member rows' menus. Empty
      * when [me] does not govern the room. Removal stays offered in a keyed room,
-     * where it always was; promotion and demotion are not, for [isKeyedRoom]'s
-     * reason.
+     * where it always was, unless it would take the room below [floor] admins
+     * ([adminFloor]); promotion and demotion are not, for [isKeyedRoom]'s reason.
      */
-    fun memberActions(group: MlsGroup, me: HexKey): Map<HexKey, Set<MemberAction>> {
+    fun memberActions(group: MlsGroup, me: HexKey, floor: Int = 1): Map<HexKey, Set<MemberAction>> {
         if (!MarmotGroupPermissions.canManage(group.currentAdminIdentities(), me)) return emptyMap()
         return members(group).associateWith { member ->
             buildSet {
@@ -71,7 +100,9 @@ object AdminGovernance {
                 } else {
                     if (canPromote(group, me, member)) add(MemberAction.MAKE_ADMIN)
                     if (canDemote(group, me, member)) add(MemberAction.REMOVE_AS_ADMIN)
-                    if (MarmotGroupPermissions.canRemove(group.currentAdminIdentities(), me, member)) add(MemberAction.REMOVE_FROM_GROUP)
+                    if (MarmotGroupPermissions.canRemove(group.currentAdminIdentities(), me, member) && keepsFloor(group, member, floor)) {
+                        add(MemberAction.REMOVE_FROM_GROUP)
+                    }
                 }
             }
         }.filterValues { it.isNotEmpty() }

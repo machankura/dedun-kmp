@@ -48,6 +48,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 import com.machankura.dedun.compose.managers.AdminFlags
 import com.machankura.dedun.compose.managers.FoundingAdmins
@@ -833,6 +834,12 @@ class DatabaseChatRepository(
         // A row whose state this build cannot read has no admin set to agree with.
         val group = runCatching { room.chatRoom.toMlsGroup() }.getOrNull() ?: return false
         return MarmotInboundManager.reconcileAdmins(database, chatRoomId, group)
+    }
+
+    override suspend fun adminFloor(chatRoomId: String): Int {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return 1
+        val group = runCatching { room.chatRoom.toMlsGroup() }.getOrNull() ?: return 1
+        return AdminGovernance.adminFloor(database, chatRoomId, group)
     }
 
     override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
