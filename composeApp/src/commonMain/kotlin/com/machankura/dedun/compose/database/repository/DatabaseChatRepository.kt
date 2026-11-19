@@ -843,6 +843,10 @@ class DatabaseChatRepository(
         database.marmotOutboundDao().demote(localChatRoom, adminPublicKey)
     }
 
+    override suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) {
+        database.marmotOutboundDao().stepDownAndLeave(localChatRoom, heir)
+    }
+
     override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         database.marmotOutboundDao().removeMember(localChatRoom, memberPublicKey)
     }

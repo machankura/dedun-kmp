@@ -4,6 +4,8 @@ import com.vitorpamplona.marmot.groups.MarmotGroupPermissions
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.ui.view.state.AdminLeave
+import com.machankura.dedun.compose.ui.view.state.MemberAction
 
 /**
  * Who may change who governs a room, in one place, so the screen that offers an
@@ -53,4 +55,34 @@ object AdminGovernance {
     fun canDemote(group: MlsGroup, actor: HexKey, target: HexKey): Boolean =
         !isKeyedRoom(group) &&
             MarmotGroupPermissions.canDemote(group.currentAdminIdentities(), members(group), actor, target)
+
+    /**
+     * What [me] may do to each member of [group], for the member rows' menus. Empty
+     * when [me] does not govern the room. Removal stays offered in a keyed room,
+     * where it always was; promotion and demotion are not, for [isKeyedRoom]'s
+     * reason.
+     */
+    fun memberActions(group: MlsGroup, me: HexKey): Map<HexKey, Set<MemberAction>> {
+        if (!MarmotGroupPermissions.canManage(group.currentAdminIdentities(), me)) return emptyMap()
+        return members(group).associateWith { member ->
+            buildSet {
+                if (member == me) {
+                    if (canDemote(group, me, me)) add(MemberAction.STEP_DOWN)
+                } else {
+                    if (canPromote(group, me, member)) add(MemberAction.MAKE_ADMIN)
+                    if (canDemote(group, me, member)) add(MemberAction.REMOVE_AS_ADMIN)
+                    if (MarmotGroupPermissions.canRemove(group.currentAdminIdentities(), me, member)) add(MemberAction.REMOVE_FROM_GROUP)
+                }
+            }
+        }.filterValues { it.isNotEmpty() }
+    }
+
+    /** How **Leave group** goes for [me] in [group]: null when [me] is not an admin. */
+    fun adminLeave(group: MlsGroup, me: HexKey): AdminLeave? = when {
+        me !in group.currentAdminIdentities() -> null
+        isKeyedRoom(group) -> AdminLeave.CANNOT
+        canDemote(group, me, me) -> AdminLeave.STEP_DOWN_FIRST
+        (members(group) - me).isEmpty() -> AdminLeave.CANNOT
+        else -> AdminLeave.PICK_HEIR
+    }
 }

@@ -883,8 +883,7 @@ abstract class MarmotOutboundDao(
             ?: throw IllegalArgumentException("$memberPublicKey is not in the group")
 
         if (memberPublicKey in group.currentAdminIdentities()) {
-            publishAdmins(localChatRoom) { admins -> admins - memberPublicKey }
-            engine.afterConfirmed(localChatRoom.routingId) {
+            thenAfterConfirmed(localChatRoom, publish = { publishAdmins(localChatRoom) { admins -> admins - memberPublicKey } }) {
                 database.chatRoomDao().findChatRoomById(localChatRoom.chatRoom.id)
                     ?.let { removeMember(it, memberPublicKey) }
             }
@@ -966,6 +965,56 @@ abstract class MarmotOutboundDao(
         }
 
         publishAdmins(localChatRoom) { admins -> admins - adminPublicKey }
+    }
+
+    /**
+     * Leaves a convenient room this device administers, which an admin cannot do
+     * directly: the library refuses an admin's SelfRemove. Steps down first and
+     * leaves once that commit is accepted -- and, for the only admin, makes [heir]
+     * an admin before that, so the room is never left with nobody to govern it.
+     *
+     * The chain is held in memory ([MarmotEngine.afterConfirmed]). A restart part
+     * way through leaves this device a member that has not left, possibly no
+     * longer an admin, and **Leave group** finishes it. See
+     * docs/member-admin-promotion.md, Phase 10.
+     */
+    @Transaction
+    open suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) {
+        val me = localChatRoom.chatRoom.userPublicKey
+        val roomId = localChatRoom.chatRoom.id
+        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+            ?: throw MarmotMissingChatGroupException("No live group for $roomId")
+        suspend fun fresh() = database.chatRoomDao().findChatRoomById(roomId)
+        val leaveOnceAccepted: suspend () -> Unit = { fresh()?.let { leave(it) } }
+        val admins = group.currentAdminIdentities()
+
+        when {
+            // Nothing to step down from: leave as any member does.
+            me !in admins -> leave(localChatRoom)
+
+            heir == null || heir in admins ->
+                thenAfterConfirmed(localChatRoom, publish = { demote(localChatRoom, me) }, step = leaveOnceAccepted)
+
+            else -> thenAfterConfirmed(localChatRoom, publish = { promote(localChatRoom, heir) }) {
+                fresh()?.let { room -> thenAfterConfirmed(room, publish = { demote(room, me) }, step = leaveOnceAccepted) }
+            }
+        }
+    }
+
+    /**
+     * Publishes a commit with [publish] and runs [step] once a relay accepts it. The
+     * step is registered first, so the acceptance cannot overtake it, and taken back
+     * if [publish] throws, so a refused change leaves nothing waiting.
+     */
+    private suspend fun thenAfterConfirmed(localChatRoom: LocalChatRoom, publish: suspend () -> Unit, step: suspend () -> Unit) {
+        val engine = database.marmotEngine
+        engine.afterConfirmed(localChatRoom.routingId, step)
+        try {
+            publish()
+        } catch (e: Throwable) {
+            engine.cancelFollowUp(localChatRoom.routingId)
+            throw e
+        }
     }
 
     /** The room's live group, when this device may change who administers it. */

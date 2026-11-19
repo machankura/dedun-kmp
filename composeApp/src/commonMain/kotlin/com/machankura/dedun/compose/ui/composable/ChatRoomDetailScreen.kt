@@ -158,6 +158,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -210,6 +211,12 @@ import dedun.composeapp.generated.resources.make_them_admins
 import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_are_not_admins
 import dedun.composeapp.generated.resources.founding_members_are_not_admins
 import dedun.composeapp.generated.resources.admin
+import dedun.composeapp.generated.resources.admin_change_requested
+import dedun.composeapp.generated.resources.stepping_down_to_leave
+import dedun.composeapp.generated.resources.admin_badge
+import dedun.composeapp.generated.resources.holds_a_share
+import com.machankura.dedun.compose.ui.view.state.AdminLeave
+import com.machankura.dedun.compose.ui.view.state.MemberAction
 import dedun.composeapp.generated.resources.run_by_members
 import dedun.composeapp.generated.resources.parent_group
 import dedun.composeapp.generated.resources.a_subgroup
@@ -273,7 +280,6 @@ import dedun.composeapp.generated.resources.rotation_proposing_is_taking_part
 import dedun.composeapp.generated.resources.rotation_taking_part
 import dedun.composeapp.generated.resources.rotation_no_key
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
-import androidx.compose.runtime.remember
 import dedun.composeapp.generated.resources.waiting_on_s_since_s
 import dedun.composeapp.generated.resources.rotation_ended
 import dedun.composeapp.generated.resources.abandon_rotation_body
@@ -360,6 +366,10 @@ fun ChatRoomDetailScreen(
     val removalLeavesLightningShare = stringResource(Res.string.member_removal_requested_lightning)
     val removalLeavesWavelengthShare = stringResource(Res.string.member_removal_requested_wavelength)
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
+    val adminChangeRequested = stringResource(Res.string.admin_change_requested)
+    val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
+    val adminLabel = stringResource(Res.string.admin_badge)
+    val shareLabel = stringResource(Res.string.holds_a_share)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
     val sharesActionSent = stringResource(Res.string.shares_action_sent)
     val keyStateRequested = stringResource(Res.string.key_state_requested)
@@ -480,6 +490,66 @@ fun ChatRoomDetailScreen(
                 }
             }
             is ChatRoomDetailUIState.Loaded -> {
+                // The change a member row's menu asked for, while its dialog asks first.
+                var confirmingAdminChange by remember { mutableStateOf<Pair<MemberAction, HexKey>?>(null) }
+                var isLeavingAsAdmin by remember { mutableStateOf(false) }
+                val nameOf = { publicKey: HexKey ->
+                    chatRoomDetailUIState.localChatRoom.localParticipants
+                        .firstOrNull { it.participant.participantPublicKey == publicKey }
+                        ?.profile?.humanReadableNameOrPubkey()
+                        ?: publicKey.take(8)
+                }
+
+                confirmingAdminChange?.let { (action, memberPublicKey) ->
+                    ConfirmAdminChangeDialog(
+                        action = action,
+                        memberName = nameOf(memberPublicKey),
+                        onDismiss = { confirmingAdminChange = null },
+                        onConfirm = {
+                            confirmingAdminChange = null
+                            val room = chatRoomDetailUIState.localChatRoom
+                            val onDone = { failure: String? -> notify(failure ?: adminChangeRequested) }
+                            when (action) {
+                                MemberAction.MAKE_ADMIN -> chatRoomDetailViewModel.makeAdmin(room, memberPublicKey, onDone)
+                                MemberAction.REMOVE_AS_ADMIN, MemberAction.STEP_DOWN ->
+                                    chatRoomDetailViewModel.removeAsAdmin(room, memberPublicKey, onDone)
+                                MemberAction.REMOVE_FROM_GROUP -> Unit
+                            }
+                        },
+                    )
+                }
+
+                chatRoomDetailUIState.adminLeave?.takeIf { isLeavingAsAdmin }?.let { adminLeave ->
+                    LeaveAsAdminDialog(
+                        adminLeave = adminLeave,
+                        candidates = chatRoomDetailUIState.localChatRoom.localParticipants
+                            .map { it.participant.participantPublicKey }
+                            .filter { it != chatRoomDetailUIState.localChatRoom.chatRoom.userPublicKey }
+                            .map { it to nameOf(it) },
+                        onDismiss = { isLeavingAsAdmin = false },
+                        onDisband = {
+                            isLeavingAsAdmin = false
+                            chatRoomDetailViewModel.disbandGroup(
+                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                onPopBackToRoute = onPopBackToRoute,
+                                onFailed = { failure -> notify(failure ?: couldNotLeave) },
+                            )
+                        },
+                        onStepDownAndLeave = { heir ->
+                            isLeavingAsAdmin = false
+                            chatRoomDetailViewModel.stepDownAndLeave(
+                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                heir = heir,
+                                onPopBackToRoute = { route ->
+                                    notify(steppingDownToLeave)
+                                    onPopBackToRoute(route)
+                                },
+                                onFailed = { failure -> notify(failure ?: couldNotLeave) },
+                            )
+                        },
+                    )
+                }
+
                 Scaffold(
                     snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
                     topBar = {
@@ -1381,12 +1451,15 @@ fun ChatRoomDetailScreen(
                                         },
                                         trailingContent = {
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
-                                            if (chatRoomDetailUIState.canGovern && memberPublicKey != activeUserPublicKey) {
-                                                // An admin's removal of a member: a commit through the
-                                                // publish gate, applied when a relay accepts it, which is
-                                                // why the row stays until then. See docs/marmot-v2.md, Phase 7.
-                                                IconButton(
-                                                    onClick = {
+                                            val actions = chatRoomDetailUIState.memberActions[memberPublicKey].orEmpty()
+                                            if (actions.isNotEmpty()) {
+                                                // What this device may do to this member, decided by the
+                                                // view model from the group's state. Every one is a commit
+                                                // through the publish gate, applied when a relay accepts
+                                                // it, which is why the row stays as it is until then. See
+                                                // docs/member-admin-promotion.md, Phase 11.
+                                                MemberActionsMenu(actions = actions) { action ->
+                                                    if (action == MemberAction.REMOVE_FROM_GROUP) {
                                                         chatRoomDetailViewModel.removeMember(
                                                             localChatRoom = chatRoomDetailUIState.localChatRoom,
                                                             memberPublicKey = memberPublicKey,
@@ -1404,12 +1477,9 @@ fun ChatRoomDetailScreen(
                                                                 }
                                                             )
                                                         }
+                                                    } else {
+                                                        confirmingAdminChange = action to memberPublicKey
                                                     }
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.PersonRemove,
-                                                        contentDescription = stringResource(Res.string.remove_from_group)
-                                                    )
                                                 }
                                             } else {
                                                 Icon(
@@ -1424,13 +1494,18 @@ fun ChatRoomDetailScreen(
                                             )
                                         },
                                         supportingContent = {
+                                            // Two facts, shown apart: when they disagree, a share is
+                                            // still owed or still to be rotated away.
+                                            // docs/member-admin-promotion.md, D2.
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
+                                            val roles = listOfNotNull(
+                                                adminLabel.takeIf { memberPublicKey in chatRoomDetailUIState.adminPublicKeys },
+                                                shareLabel.takeIf { memberPublicKey in chatRoomDetailUIState.shareHolders },
+                                            )
                                             Column {
-                                                // From the group's admin policy, through
-                                                // `AdminFlags` -- docs/robust-group-admins.md.
-                                                if (localParticipant.participant.adminAt != null) {
+                                                if (roles.isNotEmpty()) {
                                                     Text(
-                                                        text = stringResource(Res.string.admin),
+                                                        text = roles.joinToString(" · "),
                                                         style = MaterialTheme.typography.labelMedium,
                                                         color = MaterialTheme.colorScheme.primary,
                                                     )
@@ -1568,11 +1643,17 @@ fun ChatRoomDetailScreen(
                                     // Disabled after we leave, and after the group ends.
                                     enabled = chatRoomDetailUIState.localChatRoom.chatRoom.leftGroupAt == null && !chatRoomDetailUIState.isDisbanded,
                                     onClick = {
-                                        chatRoomDetailViewModel.leaveGroup(
-                                            localChatRoom = chatRoomDetailUIState.localChatRoom,
-                                            onPopBackToRoute = onPopBackToRoute,
-                                            onFailed = { failure -> notify(failure ?: couldNotLeave) },
-                                        )
+                                        // An admin cannot simply leave; they step down first, and
+                                        // the only admin hands over. A keyed room's admin has no way
+                                        // to yet, and is told so by the refusal leaveGroup reports.
+                                        when (chatRoomDetailUIState.adminLeave) {
+                                            AdminLeave.STEP_DOWN_FIRST, AdminLeave.PICK_HEIR -> isLeavingAsAdmin = true
+                                            else -> chatRoomDetailViewModel.leaveGroup(
+                                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                                onPopBackToRoute = onPopBackToRoute,
+                                                onFailed = { failure -> notify(failure ?: couldNotLeave) },
+                                            )
+                                        }
                                     }
                                 ) {
                                     Icon(

@@ -107,9 +107,18 @@ class MarmotEngine(
     private val followUps = mutableMapOf<HexKey, suspend () -> Unit>()
     private val followUpsMutex = Mutex()
 
-    /** Runs [step] once [routingId]'s commit now in flight is confirmed. */
+    /**
+     * Runs [step] once [routingId]'s next commit is confirmed. Registered *before*
+     * that commit is published, so a relay's OK cannot arrive ahead of it; a caller
+     * whose publish then fails takes it back with [cancelFollowUp].
+     */
     suspend fun afterConfirmed(routingId: HexKey, step: suspend () -> Unit) {
         followUpsMutex.withLock { followUps[routingId] = step }
+    }
+
+    /** Drops the step [afterConfirmed] registered for [routingId], if any. */
+    suspend fun cancelFollowUp(routingId: HexKey) {
+        takeFollowUp(routingId)
     }
 
     private suspend fun takeFollowUp(routingId: HexKey): (suspend () -> Unit)? =

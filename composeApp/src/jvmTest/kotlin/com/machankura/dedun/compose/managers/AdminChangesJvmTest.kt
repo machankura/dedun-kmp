@@ -17,6 +17,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,8 @@ import com.machankura.dedun.compose.exceptions.MarmotCommitPendingException
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
+import com.machankura.dedun.compose.ui.view.state.AdminLeave
+import com.machankura.dedun.compose.ui.view.state.MemberAction
 
 /**
  * Promoting and demoting in a convenient room, which has no key to sign with and
@@ -210,6 +213,62 @@ class AdminChangesJvmTest {
     }
 
     @Test
+    fun `the member rows offer what the group would accept, and leaving says how it will go`() = runBlocking {
+        convenientRoomWithMember()
+
+        assertEquals(mapOf(member.hex to setOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_FROM_GROUP)), AdminGovernance.memberActions(appGroup(), user))
+        assertEquals(AdminLeave.PICK_HEIR, AdminGovernance.adminLeave(appGroup(), user))
+        assertEquals(emptyMap(), AdminGovernance.memberActions(member.manager.getGroup(routingId)!!, member.hex), "a member who is not an admin was offered something")
+
+        chatRepository.promoteMember(room(), member.hex)
+        okTheLatestCommit()
+
+        assertEquals(
+            mapOf(user to setOf(MemberAction.STEP_DOWN), member.hex to setOf(MemberAction.REMOVE_AS_ADMIN, MemberAction.REMOVE_FROM_GROUP)),
+            AdminGovernance.memberActions(appGroup(), user),
+        )
+        assertEquals(AdminLeave.STEP_DOWN_FIRST, AdminGovernance.adminLeave(appGroup(), user))
+    }
+
+    @Test
+    fun `an admin with another admin beside them steps down, then leaves`() = runBlocking {
+        convenientRoomWithMember()
+        chatRepository.promoteMember(room(), member.hex)
+        okTheLatestCommit()
+
+        chatRepository.stepDownAndLeave(room(), heir = null)
+        assertEquals(null, room().chatRoom.leftGroupAt, "left before the step-down was accepted")
+        okTheLatestCommit() // the step-down; its acceptance sends the leave
+
+        assertNotNull(room().chatRoom.leftGroupAt, "the leave did not follow the step-down")
+        assertEquals(setOf(member.hex), member.manager.getGroup(routingId)!!.currentAdminIdentities())
+    }
+
+    @Test
+    fun `the only admin hands over to the member they pick, then leaves`() = runBlocking {
+        convenientRoomWithMember()
+
+        chatRepository.stepDownAndLeave(room(), heir = member.hex)
+        okTheLatestCommit() // the promotion
+        assertNull(room().chatRoom.leftGroupAt)
+        okTheLatestCommit() // the step-down
+
+        assertNotNull(room().chatRoom.leftGroupAt, "the leave did not follow the hand-over")
+        assertEquals(setOf(member.hex), member.manager.getGroup(routingId)!!.currentAdminIdentities())
+        assertTrue(member.manager.getGroup(routingId)!!.isLocalAdmin())
+    }
+
+    @Test
+    fun `the only admin who names nobody is refused, and nothing waits`() = runBlocking {
+        convenientRoomWithMember()
+
+        assertFailsWith<IllegalStateException> { chatRepository.stepDownAndLeave(room(), heir = null) }
+
+        assertNull(room().chatRoom.leftGroupAt)
+        assertTrue(db.marmotPublishObligationDao().getAll().isEmpty())
+    }
+
+    @Test
     fun `a keyed room's admins are not changed by one admin's commit`() = runBlocking<Unit> {
         seedProfile(user, "us")
         val keyedRoomId = SharedKeyDerivation.marmotGroupId("02" + KeyPair().pubKey.toHexKey())
@@ -225,5 +284,7 @@ class AdminChangesJvmTest {
         val refusal = assertFailsWith<IllegalStateException> { chatRepository.demoteMember(keyedRoom, user) }
         assertEquals(com.machankura.dedun.compose.database.dao.MarmotOutboundDao.KEYED_ROOM_REFUSAL, refusal.message)
         assertTrue(db.marmotPublishObligationDao().getAll().isEmpty())
+        val keyedGroup = db.marmotEngine.groupFor(keyedRoom.routingId)!!
+        assertEquals(AdminLeave.CANNOT, AdminGovernance.adminLeave(keyedGroup, user))
     }
 }

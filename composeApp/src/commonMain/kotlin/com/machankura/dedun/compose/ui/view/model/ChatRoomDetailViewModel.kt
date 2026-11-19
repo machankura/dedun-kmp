@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.isLocalAdmin
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -41,6 +42,8 @@ import com.machankura.dedun.compose.network.LightningAddressResolver
 import fr.acinq.lightning.MilliSatoshi
 import kotlinx.coroutines.withContext
 import com.machankura.dedun.compose.database.model.types.ShareStanding
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
@@ -140,6 +143,13 @@ class ChatRoomDetailViewModel(
                     .orEmpty()
                 val uninvitedFounders = chatRepository.uninvitedFounders(localChatRoom)
 
+                val shares = chatRepository.sharesSummary(localChatRoom)
+                // Who governs, and what this device may do about it, from the group's
+                // state through the same rules the commits are made by.
+                // docs/member-admin-promotion.md, Phase 11.
+                val me = localChatRoom.chatRoom.userPublicKey
+                val roomIsOpen = !isDisbanded && localChatRoom.chatRoom.leftGroupAt == null
+
                 ChatRoomDetailUIState.Loaded(
                     localChatRoom = localChatRoom,
                     groupKeyState = chatRepository.groupKeyState(chatRoomId),
@@ -183,7 +193,6 @@ class ChatRoomDetailViewModel(
                             .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }
                             .toSet()
                     } else emptySet(),
-                    shares = chatRepository.sharesSummary(localChatRoom),
                     missingFoundingAdmins = missingFoundingAdmins,
                     uninvitedFounders = uninvitedFounders,
                     founderNames = (missingFoundingAdmins + uninvitedFounders).associateWith { publicKey ->
@@ -191,6 +200,15 @@ class ChatRoomDetailViewModel(
                             ?: publicKey.take(SHORTENED_PUBLIC_KEY_LENGTH)
                     },
                     adminRoomId = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.adminRoomOf(chatRoomId) else null,
+                    shares = shares,
+                    adminPublicKeys = group?.currentAdminIdentities().orEmpty(),
+                    shareHolders = if (ExperimentalFeatures.shareRefresh) {
+                        shares?.members.orEmpty().filter { it.standing == ShareStanding.LIVE }.map { it.publicKey }.toSet()
+                    } else {
+                        emptySet()
+                    },
+                    memberActions = group?.takeIf { canGovern }?.let { AdminGovernance.memberActions(it, me) }.orEmpty(),
+                    adminLeave = group?.takeIf { roomIsOpen }?.let { AdminGovernance.adminLeave(it, me) },
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
@@ -339,6 +357,49 @@ class ChatRoomDetailViewModel(
             viewModelScope.launch(Dispatchers.Main) {
                 isActionPending.value = false
                 onDone(invite)
+            }
+        }
+    }
+
+    /**
+     * Runs one change to who administers the room, reloads the screen, and
+     * reports: null when the commit went out, or why it could not. The change
+     * itself lands when a relay accepts it, and the room says so then.
+     * docs/member-admin-promotion.md, Phase 11.
+     */
+    private fun adminAction(onDone: (String?) -> Unit, action: suspend () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = runCatching { action() }.exceptionOrNull()
+            if (failure is CancellationException) throw failure
+            initiateChatRoomDetail()
+            viewModelScope.launch(Dispatchers.Main) { onDone(failure?.let { it.message ?: "Couldn't make that change" }) }
+        }
+    }
+
+    fun makeAdmin(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.promoteMember(localChatRoom, memberPublicKey) }
+
+    /** Removes [adminPublicKey] as an admin; this device's own account is stepping down. */
+    fun removeAsAdmin(localChatRoom: LocalChatRoom, adminPublicKey: HexKey, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.demoteMember(localChatRoom, adminPublicKey) }
+
+    /**
+     * Leaves as an admin: steps down, after making [heir] an admin when this device
+     * is the only one, and leaves once that is accepted. Leaves the screen as soon
+     * as the first step is sent; a refusal stays on it and goes to [onFailed].
+     */
+    fun stepDownAndLeave(
+        localChatRoom: LocalChatRoom,
+        heir: HexKey?,
+        onPopBackToRoute: (Route) -> Unit,
+        onFailed: (String?) -> Unit,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = runCatching { chatRepository.stepDownAndLeave(localChatRoom, heir) }.exceptionOrNull()
+            if (failure is CancellationException) throw failure
+            viewModelScope.launch(Dispatchers.Main) {
+                if (failure == null) onPopBackToRoute(HomeRoute(activeUserPublicKey = activeUserPublicKey))
+                else onFailed(failure.message)
             }
         }
     }

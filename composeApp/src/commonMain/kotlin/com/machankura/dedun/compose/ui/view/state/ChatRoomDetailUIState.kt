@@ -188,6 +188,23 @@ sealed interface ChatRoomDetailUIState {
          * Phase 5.
          */
         val adminRoomId: String? = null,
+        /**
+         * Who administers the room, read off the group's state rather than the
+         * participants' `adminAt` flags. Labels each member row **Admin**.
+         * docs/member-admin-promotion.md, D1 and Phase 11.
+         */
+        val adminPublicKeys: Set<HexKey> = emptySet(),
+        /**
+         * Who holds a live share of the room's key, for the **Holds a share**
+         * label. Shown apart from [adminPublicKeys] on purpose: when the two
+         * disagree, an enrollment or a rotation is still owed. Empty while share
+         * rotation is behind its flag.
+         */
+        val shareHolders: Set<HexKey> = emptySet(),
+        /** What this device may do to each member, by public key; absent means nothing. */
+        val memberActions: Map<HexKey, Set<MemberAction>> = emptyMap(),
+        /** How **Leave group** goes when this device is an admin; null when it is not. */
+        val adminLeave: AdminLeave? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

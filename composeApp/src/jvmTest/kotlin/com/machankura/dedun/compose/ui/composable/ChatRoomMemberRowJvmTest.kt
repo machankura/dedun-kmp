@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -20,6 +23,7 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
+import com.machankura.dedun.compose.ui.view.state.MemberAction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -66,6 +70,40 @@ class ChatRoomMemberRowJvmTest {
         assertEquals(ProfilePreviewRoute(activeUserPublicKey, stillLoading), opened)
     }
 
+    /**
+     * An admin's row menu offers what the view model decided, and promotion asks
+     * first, saying what it gives away. docs/member-admin-promotion.md, Phase 11.
+     */
+    @Test
+    fun `an admin makes a member an admin from the row's menu, after being told what it gives`() {
+        render(
+            onNavigateToRoute = {},
+            state = state().copy(
+                adminPublicKeys = setOf(activeUserPublicKey),
+                memberActions = mapOf(named to setOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_FROM_GROUP)),
+            ),
+        ) {
+            onAllNodesWithContentDescription("Member actions").assertCountEquals(1)
+            onNodeWithContentDescription("Member actions").performClick()
+            onNodeWithText("Remove from group").assertExists()
+            onNodeWithText("Make admin").performClick()
+
+            onNodeWithText("Make Nomvula an admin?").assertExists()
+            onNodeWithText("including you", substring = true).assertExists()
+        }
+    }
+
+    @Test
+    fun `an admin's row says so, and a share holder's says that apart`() {
+        render(
+            onNavigateToRoute = {},
+            state = state().copy(adminPublicKeys = setOf(named), shareHolders = setOf(stillLoading)),
+        ) {
+            onNodeWithText("Admin").assertExists()
+            onNodeWithText("Holds a share").assertExists()
+        }
+    }
+
     private fun member(publicKey: String, profile: Profile?) = LocalParticipant(
         participant = Participant(
             participantPublicKey = publicKey,
@@ -98,6 +136,7 @@ class ChatRoomMemberRowJvmTest {
      */
     private fun render(
         onNavigateToRoute: (Route) -> Unit,
+        state: ChatRoomDetailUIState.Loaded = state(),
         assertions: ComposeUiTest.() -> Unit,
     ) = runDesktopComposeUiTest(width = 400, height = 4000) {
         setContent {
@@ -108,7 +147,7 @@ class ChatRoomMemberRowJvmTest {
                             activeUserPublicKey = activeUserPublicKey,
                             chatRoomId = chatRoomId,
                             relayHint = null,
-                            initialChatRoomDetailUIState = state(),
+                            initialChatRoomDetailUIState = state,
                             nostrRepository = NostrRepository.NO_OP_NOSTR_REPOSITORY,
                             chatRepository = ChatRepository.NO_OP_CHAT_REPOSITORY,
                             onNavigateToRoute = onNavigateToRoute,
