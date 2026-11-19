@@ -63,6 +63,7 @@ silent, or a decision that looked arbitrary and was not.
 | [group-wavelength-unconfirmed-deposits.md](./group-wavelength-unconfirmed-deposits.md) | money on its way into the group's Wavelength wallet -- an onchain payment to a boarding address, from the mempool until the round that takes it in -- built (phases 1-5; the spikes and the real deposit, 0 and 7, not run). Covers the three states of a deposit's life no screen showed and how long they last on mainnet, why the watch needs nothing from the operator when every device already holds the checked address and has its own connection to the chain, why an arriving coin must never reach the deposit ledger (where one replaceable payment would halve every other member's payable balance), why it is a table rather than memory and keyed so that one id spans all four states, and the first sight of money the receive screen's paid panel was always meant to have |
 | [marmot-kmp.md](./marmot-kmp.md) | moving the group layer off quartz's engine and onto marmot-kmp, mls-kmp and crypto-kmp — why staying on quartz 1.15.2 is staying on an engine that left, the 228 import lines and the one rule that places all but two of them, the group state on a device that must still open afterwards, and eight phases that put the swap in one commit and the evidence around it |
 | [marmot-kmp.md](./marmot-kmp.md) | moving the group layer off quartz's engine and onto marmot-kmp, mls-kmp and crypto-kmp — why staying on quartz 1.15.2 is staying on an engine that left, the 228 import lines and the one rule that places all but two of them, the group state on a device that must still open afterwards, nine phases that put the swap in one commit and the evidence around it, and how often this app persists a group once a sent message no longer rewrites it |
+| [marmot-kmp.md](./marmot-kmp.md) | moving the group layer off quartz's engine and onto marmot-kmp, mls-kmp and crypto-kmp — why staying on quartz 1.15.2 is staying on an engine that left, the 228 import lines and the one rule that places all but two of them, the group state on a device that must still open afterwards, nine phases that put the swap in one commit and the evidence around it, how often this app persists a group once a sent message no longer rewrites it, and the schema change that followed, opened from the version the app ships |
 
 Start with the ceremony if you are new to this area; the Marmot notes all assume it.
 Read the skipped-keys note before debugging any "the other device never got it"
@@ -157,19 +158,20 @@ The group send-an-amount note is a phased plan that has been built, and reads
 as the third gate of the group chain wallet note's Phase 10: why that gate
 could not lift as written, and what stands in for it now that it is gone. Read
 its list of what the gated code got wrong before its phases.
-The marmot-kmp note is a phased plan that has been built, phases 0 to 8, and reads
+The marmot-kmp note is a phased plan that has been built, phases 0 to 9, and reads
 as the Marmot v2 note's Phase 0 come round again: quartz took the engine out, so
 the version the v2 work was built on is the last one that has it. Read the v2 note
 first — this plan happens entirely on the current-profile side of its first row —
 and read this one's two constraints before any phase: the group state already on
 devices is what decides whether the move can ship at all, and Phase 4 is where it
-is measured rather than argued. Phase 8 is the one phase that was not in the plan
-as written, and is the one to read if you are changing when a group is saved: it
-is where a sent message stopped rewriting the whole state, where the ordering that
-decision hangs on is spelled out, and where the skipped-keys note's diagnosis is
-corrected. What it does not claim is in its status note: no manual upgrade of a
-profile with real rooms has been done, and that is the last check before a release,
-now over a schema change as well.
+is measured rather than argued. Phases 8 and 9 were not in the plan as written and
+are the pair to read if you are changing when a group is saved or what the database
+holds: 8 is where a sent message stopped rewriting the whole state, where the
+ordering that decision hangs on is spelled out, and where the skipped-keys note's
+diagnosis is corrected; 9 is the schema change 8 made necessary, opened from a
+database at the version the app ships. What they do not claim is in the status note:
+no manual upgrade of a profile with rooms that have real histories has been done, and
+that is still the last check before a release.
 The ceremony-creation note is a phased plan that has been built. It reads as
 the subgroups note's Phase 10 followed through to the screens: read it after
 that phase, and its table of findings before any phase. Its second half

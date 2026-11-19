@@ -20,18 +20,19 @@ everything here happens on the current-profile side of that branch.
 [mls-skipped-keys.md](./mls-skipped-keys.md) second — it is the gap this move closes, and
 the only one it closes for free.
 
-**Built**, phases 0 to 8, one commit each but for 5 and 6, which share one because the
-fork probe produced no code. Phase 8 was the piece Phase 7 deferred and is the only one
-that was not in the plan as written. Written against the code as it stood at `8b066795`,
+**Built**, phases 0 to 9, one commit each but for 5 and 6, which share one because the
+fork probe produced no code. Phases 8 and 9 were not in the plan as written: 8 is the
+piece Phase 7 deferred, and 9 is the schema change 8 made necessary, checked. Written against the code as it stood at `8b066795`,
 against marmot-kmp `2.2.1`, mls-kmp `1.3.0`, crypto-kmp `2.1.0` and quartz `2.7.3`. The
 phases are kept as they were written, with what each one turned out to be recorded under
 it, because the reasoning is the point and the code reads better against the argument it
 came from.
 
 Two things it does not claim. **The manual upgrade has not been done** — Phase 4 proves a
-real version-4 blob opens, and a profile with real rooms in it is still the last check
-before a release, now over a schema change as well (36 → 37 in Giza, 35 → 36 in Bennu). **And the authored fork is
-still not settled** — Phase 6 probed it and the gap is the library's, unchanged.
+real version-4 blob opens and Phase 9 proves a database at the version before the move (Giza v36, Bennu v35) carrying one opens at the next, but
+a profile with rooms that have real histories in them is still the last check before a
+release. **And the authored fork is still not settled** — Phase 6 probed it and the gap is
+the library's, unchanged.
 
 | phase | what it was |
 |---|---|
@@ -44,6 +45,7 @@ still not settled** — Phase 6 probed it and the gap is the library's, unchange
 | 6 | the authored fork, probed: still open, and the fix now visible |
 | 7 | the guard, so the engine cannot come back from quartz |
 | 8 | the sender ratchet as its own row, and the receive-side write beside it |
+| 9 | the schema change that followed, opened from the version the app ships |
 
 ## Where the engine went
 
@@ -453,7 +455,9 @@ is inside it, and schema 36 stands.
 group at epoch 0 with one member. The rooms that matter have been through several epochs,
 several members and a retained-epoch window, and the only way to know they open is to open
 one. That check needs a device or desktop profile with real rooms in it, and it is the last
-thing between this work and a release.
+thing between this work and a release. Phase 9 takes half of it: the *database* a v36
+install has, opened at v37 with this blob inside it, is a test now. The histories in a real
+profile still are not.
 
 ## Phase 5 — the skipped keys, closed
 
@@ -735,6 +739,71 @@ What this phase does **not** do: encryption at rest. The record holds two 32-byt
 secrets, so it is exactly as sensitive as the state beside it, and it carries the same
 `TODO(security)` the rest of the store does. Phase 8 moves those bytes into one more table
 and does not change what guards them.
+
+## Phase 9 — the upgrade, made runnable
+
+Phase 4 settled the blob and left the database alone, because there was no schema change
+to worry about. Phase 8 added a table, and that turns "does an existing install still
+open?" from a question about MLS into a question about Room. The two fail differently. A
+blob the engine cannot read costs one room. A migration Room cannot find costs the app:
+every device that has ever had it, on the first launch after the update, with an
+`IllegalStateException` and no rooms at all.
+
+That second failure is also the easiest one in this repository to ship by accident. An
+entity added to the `@Database` list without an `AutoMigration` beside it compiles, and
+it installs perfectly on a phone that has never had the app — a fresh install creates
+every table at the current version and never migrates anything. Only a database that is
+already there asks for the path that is missing. It was worth knowing how much of the
+suite would notice, so the `AutoMigration(from = 36, to = 37)` line was commented out and
+the database tests run: **32 tests, 4 failures, and all four of them the new ones.** Every
+other migration test and every test over an in-memory database passed with the migration
+gone.
+
+So, `ShippedProfileUpgradeJvmTest`. A v36 database, built on disk from the exported v36
+schema — its tables, its indices, its `room_master_table` identity hash and its
+`user_version`, which together are what make Room read the file as a v36 install rather
+than as a corrupt one — with a profile in it, two rooms, and the Phase 4 blob in one of
+them. Then the app's own `getRoomDatabase` over that file, and four claims:
+
+| | |
+|---|---|
+| it opens at v37, with the table this branch adds | `user_version` 37, the v37 identity hash stamped by Room, and every table's columns and indices equal to `37.json`'s |
+| the legacy room survives and the engine opens it | the blob comes back out of the migrated file byte for byte, `MarmotEngine.groupFor` restores it, `0xF2EE` intact and a 32-byte kind:445 key, while the room beside it with no state comes back as no group |
+| opening the profile rewrites nothing | the restore picks the room up and leaves its bytes exactly as they were |
+| the added table takes a row keyed to a room that predates it | the one direction an added table's foreign key can be wrong in: it points at `ChatRoom`, which was already there with rows in it |
+
+The third one is the one worth arguing for, because it asserts an absence. Restoring a
+group re-derives its key schedule and could just as well save the result at the current
+state version — and the first thing that persists each room will do exactly that, which
+is what Phase 4's re-save test pins. Doing it to *every* room at once, on the first launch
+after an upgrade, is a different thing: it is the one moment when every room's only copy
+is being rewritten, and a crash in the middle of it has nothing underneath. The absence is
+the claim, so the test first asserts the restore actually held the room — otherwise it
+would be the absence of a write by an engine holding nothing, which is not the same
+sentence.
+
+**One gotcha, which cost the first run.** `Room.databaseBuilder(...).build()` does not
+touch the file. Room opens lazily and the migration runs on the first query, so a test
+that builds a database and closes it has migrated nothing; the helper has to ask it
+something. The first version of this test did exactly that and failed on `user_version`
+still reading 36.
+
+**And the fixture moved.** The Phase 4 blob is now `OldEngineBlob` in `commonTest`, used
+by both tests rather than copied into the second. The point of those bytes is that they
+are *old* ones, and a blob living in two files can be regenerated in one of them — after
+which the copy that was left alone is the only evidence, with nothing on either saying
+which is which.
+
+**Built.** 1171 tests across 157 classes, 0 failures; the four audits unchanged. The tool
+in `docs/tools/old-state-blob/` is untouched: its job was always provenance for those
+bytes, and this phase gives them a second reader rather than a new source.
+
+**What is still manual.** A fixture is a profile with two rooms in it, one of them a group
+at epoch 0 with a single member. A real profile has rooms that have been through several
+epochs, several members and a retained-epoch window, and rows in forty-odd other tables
+that this plants placeholders in. The schema path is now covered on every launch of
+`./gradlew check`; the data is not, and opening one real profile is still the last check
+before a release.
 
 ## Out of scope
 

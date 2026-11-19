@@ -5,8 +5,10 @@ import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 
 /**
  * Writes an MLS group state blob with the engine the app shipped before it moved to
- * marmot-kmp: quartz 1.15.2, STATE_VERSION 4. The blob is the fixture
- * `MlsGroupStateCompatibilityJvmTest` then decodes with mls-kmp. docs/marmot-kmp.md, Phase 4.
+ * marmot-kmp: quartz 1.15.2, STATE_VERSION 4. The blob is pinned as `OldEngineBlob` and read
+ * by `MlsGroupStateCompatibilityTest`, which decodes it with mls-kmp, and by
+ * `ShippedProfileUpgradeJvmTest`, which opens a v36 database holding it.
+ * docs/marmot-kmp.md, Phases 4 and 9.
  *
  * Deterministic where it can be: the identity and the group id are fixed, so re-running
  * this prints a blob of the same shape. The keys inside are random by construction.
