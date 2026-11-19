@@ -215,7 +215,6 @@ import dedun.composeapp.generated.resources.leave_group
 import dedun.composeapp.generated.resources.remove_from_group
 import dedun.composeapp.generated.resources.shares_action_sent
 import dedun.composeapp.generated.resources.pending_repair_help
-import dedun.composeapp.generated.resources.pending_rotation_confirm
 import dedun.composeapp.generated.resources.pending_rotation_deal
 import dedun.composeapp.generated.resources.abandon
 import dedun.composeapp.generated.resources.approve
@@ -253,6 +252,23 @@ import dedun.composeapp.generated.resources.rotation_proposing_is_taking_part
 import dedun.composeapp.generated.resources.rotation_taking_part
 import dedun.composeapp.generated.resources.rotation_no_key
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
+import androidx.compose.runtime.remember
+import androidx.compose.material3.CardDefaults
+import dedun.composeapp.generated.resources.waiting_on_s_since_s
+import dedun.composeapp.generated.resources.rotation_ended
+import dedun.composeapp.generated.resources.abandon_rotation_body
+import dedun.composeapp.generated.resources.abandon_rotation_question
+import dedun.composeapp.generated.resources.abandon_rotation
+import dedun.composeapp.generated.resources.rotation_abandon_explainer
+import dedun.composeapp.generated.resources.rotation_step_signing
+import dedun.composeapp.generated.resources.rotation_step_storing
+import dedun.composeapp.generated.resources.rotation_step_dealing
+import dedun.composeapp.generated.resources.rotation_running
+import dedun.composeapp.generated.resources.pending_rotation_commits
+import dedun.composeapp.generated.resources.rotation_withheld_for_good
+import dedun.composeapp.generated.resources.rotation_withheld_until_back
+import dedun.composeapp.generated.resources.pending_rotation_without
+import dedun.composeapp.generated.resources.pending_rotation_everyone
 import androidx.compose.material3.AlertDialog
 import dedun.composeapp.generated.resources.disband_group
 import dedun.composeapp.generated.resources.disband_group_explainer
@@ -358,6 +374,33 @@ fun ChatRoomDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { chatRoomDetailViewModel.dismissRotationOffer() }) {
+                    Text(stringResource(Res.string.not_now))
+                }
+            },
+        )
+    }
+
+    var abandoningRotation by remember { mutableStateOf<String?>(null) }
+    abandoningRotation?.let { sessionId ->
+        AlertDialog(
+            onDismissRequest = { abandoningRotation = null },
+            title = { Text(stringResource(Res.string.abandon_rotation_question)) },
+            text = { Text(stringResource(Res.string.abandon_rotation_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        abandoningRotation = null
+                        (chatRoomDetailViewModel.chatRoomDetailUIState as? ChatRoomDetailUIState.Loaded)?.let { loaded ->
+                            chatRoomDetailViewModel.abandonRotation(loaded.localChatRoom, sessionId) { failure -> notify(failure ?: sharesActionSent) }
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(Res.string.abandon_rotation))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { abandoningRotation = null }) {
                     Text(stringResource(Res.string.not_now))
                 }
             },
@@ -668,6 +711,28 @@ fun ChatRoomDetailScreen(
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
+                                // Above the members: with nothing left to approve, this is
+                                // where a member who took part sees a rotation stall, and the
+                                // only way out of one (docs/rotate-shares-single-approval.md).
+                                shares.running?.let { running ->
+                                    item(key = "rotation-running") {
+                                        RotationRunningCard(
+                                            running = running,
+                                            onAbandon = { abandoningRotation = running.sessionId },
+                                        )
+                                    }
+                                }
+                                if (shares.running == null) {
+                                    shares.lastFailure?.let { reason ->
+                                        item(key = "rotation-ended") {
+                                            Text(
+                                                text = stringResource(Res.string.rotation_ended, reason),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
                                 items(items = shares.members, key = { member -> "share-${member.publicKey}" }) { member ->
                                     ListItem(
                                         headlineContent = {
@@ -693,11 +758,17 @@ fun ChatRoomDetailScreen(
                                                 stringResource(
                                                     when (approval.kind) {
                                                         SharesSummary.PendingApproval.Kind.REFRESH_DEAL -> Res.string.pending_rotation_deal
-                                                        SharesSummary.PendingApproval.Kind.REFRESH_CONFIRM -> Res.string.pending_rotation_confirm
                                                         SharesSummary.PendingApproval.Kind.REPAIR_HELP -> Res.string.pending_repair_help
                                                     }
                                                 )
                                             )
+                                        },
+                                        // Taking part is agreeing to who is left out, and it is the
+                                        // only thing this rotation will ask: so the row says both.
+                                        supportingContent = if (approval.kind == SharesSummary.PendingApproval.Kind.REFRESH_DEAL) {
+                                            { RotationTakingPart(approval.withheld) }
+                                        } else {
+                                            null
                                         },
                                         trailingContent = {
                                             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
@@ -2255,5 +2326,72 @@ private fun RotationLeftOut(preview: RotationPreview) {
     }
     if (preview.forGood.isNotEmpty()) {
         Text(stringResource(Res.string.rotation_left_out_for_good, preview.forGood.joinToString(", ")))
+    }
+}
+
+/** What taking part in a rotation agrees to: who it leaves out, and that nothing more will be asked. */
+@Composable
+private fun RotationTakingPart(withheld: List<SharesSummary.Withheld>) {
+    val leftOut = withheld.map { entry ->
+        stringResource(
+            if (entry.standing == ShareStanding.RETIRED) Res.string.rotation_withheld_for_good else Res.string.rotation_withheld_until_back,
+            entry.name
+        )
+    }
+    Column {
+        Text(
+            if (leftOut.isEmpty()) stringResource(Res.string.pending_rotation_everyone)
+            else stringResource(Res.string.pending_rotation_without, leftOut.joinToString(", "))
+        )
+        Text(stringResource(Res.string.pending_rotation_commits))
+    }
+}
+
+/**
+ * A rotation past its one approval: the step it is on, who it waits on and since
+ * when, and abandon for a member taking part. Shown whether or not it has
+ * stalled -- unlike a ceremony, a rotation has no screen of its own to show it.
+ */
+@Composable
+private fun RotationRunningCard(running: SharesSummary.Running, onAbandon: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.containerPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)
+        ) {
+            Text(stringResource(Res.string.rotation_running), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(
+                    when (running.step) {
+                        SharesSummary.Running.Step.DEALING -> Res.string.rotation_step_dealing
+                        SharesSummary.Running.Step.STORING -> Res.string.rotation_step_storing
+                        SharesSummary.Running.Step.SIGNING -> Res.string.rotation_step_signing
+                    }
+                ),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (running.waitingOn.isNotEmpty()) {
+                Text(
+                    stringResource(Res.string.waiting_on_s_since_s, running.waitingOn.joinToString(", "), running.since.toFormattedTimeAndDateString()),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            if (running.canAbandon) {
+                Text(stringResource(Res.string.rotation_abandon_explainer), style = MaterialTheme.typography.bodyMedium)
+                TextButton(
+                    onClick = onAbandon,
+                    modifier = Modifier.align(Alignment.End),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(Res.string.abandon_rotation))
+                }
+            }
+        }
     }
 }

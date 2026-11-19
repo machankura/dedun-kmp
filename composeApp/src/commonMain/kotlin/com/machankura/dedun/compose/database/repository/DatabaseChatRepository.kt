@@ -34,6 +34,9 @@ import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
+import com.machankura.dedun.compose.database.model.ShareRefreshSession
+import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
+import com.vitorpamplona.quartz.nip01Core.core.Event
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -761,22 +764,50 @@ class DatabaseChatRepository(
         val shares = ShareGenerations.active(database, key)
         if (shares.roster.isEmpty()) return null
         val names = localChatRoom.localParticipants.associate { it.participant.participantPublicKey to it.profile?.humanReadableNameOrPubkey() }
+        fun nameOf(member: HexKey) = names[member] ?: member.take(8)
         val refreshes = database.shareRefreshDao().getSessionsForKey(key.id)
         val repairs = database.shareRepairDao().getSessionsForKey(key.id)
         val pending = refreshes.mapNotNull { session ->
             when (ShareRefreshManager.pendingApproval(database, session)) {
-                ShareRefreshApprovalStep.DEAL -> SharesSummary.PendingApproval(session.id, SharesSummary.PendingApproval.Kind.REFRESH_DEAL)
-                ShareRefreshApprovalStep.CONFIRM -> SharesSummary.PendingApproval(session.id, SharesSummary.PendingApproval.Kind.REFRESH_CONFIRM)
-                null -> null
+                ShareRefreshApprovalStep.DEAL -> {
+                    val roster = ShareGenerations.at(database, key, session.baseGeneration)?.roster.orEmpty()
+                        .associate { it.participantId to it.memberPublicKey }
+                    SharesSummary.PendingApproval(
+                        sessionId = session.id,
+                        kind = SharesSummary.PendingApproval.Kind.REFRESH_DEAL,
+                        withheld = session.withheldStandings().map { (id, standing) ->
+                            SharesSummary.Withheld(roster[id]?.let(::nameOf) ?: id.toString(), standing)
+                        },
+                    )
+                }
+                // Never pending since docs/rotate-shares-single-approval.md.
+                ShareRefreshApprovalStep.CONFIRM, null -> null
             }
         } + repairs.filter { ShareRepairManager.isAwaitingApproval(database, it) }
             .map { SharesSummary.PendingApproval(it.id, SharesSummary.PendingApproval.Kind.REPAIR_HELP) }
+        val runningRefresh = refreshes.firstOrNull { it.stage != ShareRefreshStage.COMPLETE && it.stage != ShareRefreshStage.FAILED }
+        val running = runningRefresh?.let { session ->
+            // The approval row covers a member not yet asked; this is everything after it.
+            if (ShareRefreshManager.pendingApproval(database, session) != null) return@let null
+            ShareRefreshManager.progress(database, session)?.let { progress ->
+                SharesSummary.Running(
+                    sessionId = session.id,
+                    step = when (progress.step) {
+                        ShareRefreshManager.Progress.Step.DEALING -> SharesSummary.Running.Step.DEALING
+                        ShareRefreshManager.Progress.Step.STORING -> SharesSummary.Running.Step.STORING
+                    },
+                    waitingOn = progress.waitingOn.map(::nameOf),
+                    since = progress.since,
+                    canAbandon = progress.canAbandon,
+                )
+            }
+        } ?: signingNewGeneration(localChatRoom, key, shares.generation, refreshes)
         val mine = shares.roster.firstOrNull { it.memberPublicKey == me }
         val repairing = repairs.any { it.targetPublicKey == me && it.stage != ShareRepairStage.FAILED && it.stage != ShareRepairStage.COMPLETE }
         SharesSummary(
             generation = shares.generation,
             members = shares.roster.map { entry ->
-                SharesSummary.Member(entry.memberPublicKey, names[entry.memberPublicKey] ?: entry.memberPublicKey.take(8), entry.standing, entry.memberPublicKey == me)
+                SharesSummary.Member(entry.memberPublicKey, nameOf(entry.memberPublicKey), entry.standing, entry.memberPublicKey == me)
             },
             pending = if (ExperimentalFeatures.shareRefresh) pending else emptyList(),
             rotation = if (!ExperimentalFeatures.shareRefresh || shares.secretShare == null) {
@@ -793,6 +824,9 @@ class DatabaseChatRepository(
                 }
             },
             canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,
+            running = running.takeIf { ExperimentalFeatures.shareRefresh },
+            lastFailure = refreshes.firstOrNull()?.takeIf { it.stage == ShareRefreshStage.FAILED }?.failureReason
+                ?.takeIf { ExperimentalFeatures.shareRefresh },
         )
     }.getOrNull()
 
@@ -801,6 +835,35 @@ class DatabaseChatRepository(
         database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId),
         database.shareRefreshDao().observeSessionsForRoom(chatRoomId),
     ) { _, _, _ -> }
+
+    /**
+     * The last step of a rotation: complete, and the group signing the new
+     * generation's key state, which the old shares wait on before they are
+     * deleted. Shown only while that signature is actually open, so a key state
+     * nobody is asking for does not read as one under way.
+     */
+    private suspend fun signingNewGeneration(
+        localChatRoom: LocalChatRoom,
+        key: DkgSession,
+        generation: Int,
+        refreshes: List<ShareRefreshSession>,
+    ): SharesSummary.Running? {
+        val refresh = refreshes.firstOrNull { it.stage == ShareRefreshStage.COMPLETE && it.baseGeneration + 1 == generation } ?: return null
+        val signed = GroupKeyStateManager.signedStateFor(database, localChatRoom.chatRoom.id)
+        if ((signed?.generation ?: 0) >= generation) return null
+        val signing = database.frostSigningSessionDao()
+        val open = signing.getOpenSessionsForKey(key.id).firstOrNull { session ->
+            (session.generation ?: 0) == generation && signing.getItems(session.id).singleOrNull()
+                ?.let { Event.fromJsonOrNull(it.unsignedEventJson)?.kind } == GroupKeyStateEvent.KIND
+        } ?: return null
+        return SharesSummary.Running(
+            sessionId = refresh.id,
+            step = SharesSummary.Running.Step.SIGNING,
+            waitingOn = emptyList(),
+            since = open.createdAt,
+            canAbandon = false,
+        )
+    }
 
     private fun failureOf(t: Throwable?): String? = t?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
 
@@ -834,7 +897,7 @@ class DatabaseChatRepository(
         val (_, privateKey) = privateKeyOrNull() ?: return "This identity cannot sign"
         return failureOf(runCatching {
             when (approval.kind) {
-                SharesSummary.PendingApproval.Kind.REFRESH_DEAL, SharesSummary.PendingApproval.Kind.REFRESH_CONFIRM ->
+                SharesSummary.PendingApproval.Kind.REFRESH_DEAL ->
                     ShareRefreshManager.approve(database, localChatRoom, approval.sessionId, privateKey)
                 SharesSummary.PendingApproval.Kind.REPAIR_HELP ->
                     ShareRepairManager.approve(database, localChatRoom, approval.sessionId, privateKey)

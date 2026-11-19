@@ -409,26 +409,6 @@ class ShareRefreshRitualJvmTest {
         assertTrue(all.drop(1).any { it.refresh(refresh.id)!!.failureReason!!.contains("Share refresh") }, "an honest recipient has to say what it found")
     }
 
-    /**
-     * Two members open a rotation from the same generation at once. With every
-     * owner saying yes to everything, the group never splits: at most one
-     * completes, and every device that moved holds the same table.
-     */
-    @Test
-    fun `two rotations opened at once never split the group`() = runBlocking<Unit> {
-        val group = Group(4, 2)
-        val all = devicesFor(group)
-        val first = propose(all[0])
-        val second = propose(all[1])
-        pump(all)
-        answerEverything(all, first.id)
-        answerEverything(all, second.id)
-
-        val completed = listOf(first.id, second.id).filter { id -> all.any { it.refresh(id)?.stage == ShareRefreshStage.COMPLETE } }
-        assertTrue(completed.size <= 1, "two rotations from one generation both completed")
-        val tables = all.map { it.active().generation to it.active().publicShares }.toSet()
-        assertEquals(1, tables.size, "devices disagree about the group's table: $tables")
-    }
 
     /**
      * The upgrade: an older build stored the coordinator's sum and stopped, asking
@@ -660,6 +640,147 @@ class ShareRefreshRitualJvmTest {
         assertEquals(1, FrostSigningManager.resumeVouched(member.db, member.publicKey))
         assertNotNull(member.db.frostSigningSessionDao().getSessionById(filed.id)?.signApprovedAt)
         assertEquals(0, FrostSigningManager.resumeVouched(member.db, member.publicKey), "once")
+    }
+
+    // ---- Phase 6 of rotate-shares-single-approval: the Shares section ------------------------------------------------
+
+    private suspend fun summaryOn(device: Device): com.machankura.dedun.compose.ui.view.state.SharesSummary {
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined + kotlinx.coroutines.Job())
+        return try {
+            assertNotNull(com.machankura.dedun.compose.database.repository.DatabaseChatRepository(device.db, scope).sharesSummary(device.room), "device ${device.index}")
+        } finally {
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
+    private fun nameOf(device: Device) = device.publicKey.take(8)
+
+    @Test
+    fun `a rotation asks one thing, to take part`() {
+        assertEquals(
+            listOf(com.machankura.dedun.compose.ui.view.state.SharesSummary.PendingApproval.Kind.REFRESH_DEAL, com.machankura.dedun.compose.ui.view.state.SharesSummary.PendingApproval.Kind.REPAIR_HELP),
+            com.machankura.dedun.compose.ui.view.state.SharesSummary.PendingApproval.Kind.entries.toList(),
+        )
+    }
+
+    /** Taking part is agreeing to who is left out, so the row that asks it names them. */
+    @Test
+    fun `the taking-part row names who is left out, and the withheld member sees the rotation run`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        propose(all[0], mapOf(group.idOf[2] to ShareStanding.STALE))
+        pump(all)
+
+        val asked = summaryOn(all[1])
+        val row = asked.pending.single()
+        assertEquals(com.machankura.dedun.compose.ui.view.state.SharesSummary.PendingApproval.Kind.REFRESH_DEAL, row.kind)
+        assertEquals(listOf(com.machankura.dedun.compose.ui.view.state.SharesSummary.Withheld(nameOf(all[2]), ShareStanding.STALE)), row.withheld)
+        assertNull(asked.running, "the row covers a member not yet asked")
+
+        val withheld = summaryOn(all[2])
+        assertTrue(withheld.pending.isEmpty())
+        val running = assertNotNull(withheld.running)
+        assertEquals(listOf(nameOf(all[1])), running.waitingOn)
+        assertTrue(!running.canAbandon, "only a member taking part may end it")
+    }
+
+    /**
+     * Once a member has taken part there is nothing left to approve, so the
+     * running rotation is what they see: the step, who it waits on, and abandon.
+     */
+    @Test
+    fun `a running rotation names who it waits on at each step`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol) = all
+        val refresh = propose(alice)
+        pump(all)
+        ShareRefreshManager.approve(bob.db, bob.room, refresh.id, bob.privateKey)
+        pump(all)
+
+        val dealing = assertNotNull(summaryOn(bob).running)
+        assertEquals(com.machankura.dedun.compose.ui.view.state.SharesSummary.Running.Step.DEALING, dealing.step)
+        assertEquals(listOf(nameOf(carol)), dealing.waitingOn)
+        assertTrue(dealing.canAbandon, "a member who took part can still end it")
+        assertTrue(summaryOn(bob).pending.isEmpty())
+        assertTrue(summaryOn(bob).rotation is com.machankura.dedun.compose.ui.view.state.SharesSummary.Rotation.Held)
+
+        // Carol takes part; her confirmation is slow to arrive.
+        ShareRefreshManager.approve(carol.db, carol.room, refresh.id, carol.privateKey)
+        pump(all, hold = { it.kind == ShareRefreshEvents.ROUND_2 && it.publicKey == carol.publicKey })
+        val storing = assertNotNull(summaryOn(bob).running)
+        assertEquals(com.machankura.dedun.compose.ui.view.state.SharesSummary.Running.Step.STORING, storing.step)
+        assertEquals(listOf(nameOf(carol)), storing.waitingOn)
+
+        // A relay repeating itself is not progress. Dated a day back first, so a
+        // redelivery that rewrote a row would show, whatever the clock's precision.
+        val dao = bob.db.shareRefreshDao()
+        val dayAgo = kotlin.time.Clock.System.now() - kotlin.time.Duration.parse("1d")
+        dao.getMessagesForSession(refresh.id).forEach { dao.upsert(it.copy(createdAt = dayAgo, updatedAt = dayAgo, savedAt = dayAgo)) }
+        val since = assertNotNull(summaryOn(bob).running).since
+        assertTrue(kotlin.time.Clock.System.now() - since > kotlin.time.Duration.parse("23h"))
+        bob.received.clear()
+        pump(all, hold = { it.kind == ShareRefreshEvents.ROUND_2 && it.publicKey == carol.publicKey })
+        assertEquals(since, summaryOn(bob).running?.since, "a redelivered message moved the stall clock")
+    }
+
+    @Test
+    fun `the last step is the group signing the new key state, which nobody abandons`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        all.forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
+        pump(all, hold = { FrostSigningEvents.isProposal(it.kind) })
+
+        val signing = assertNotNull(summaryOn(all[0]).running, "the coordinator's own key state is open")
+        assertEquals(com.machankura.dedun.compose.ui.view.state.SharesSummary.Running.Step.SIGNING, signing.step)
+        assertTrue(!signing.canAbandon)
+
+        pump(all)
+        all.forEach { assertNull(summaryOn(it).running, "device ${it.index}: nothing is running once it is signed") }
+    }
+
+    @Test
+    fun `an abandoned rotation says why until the next one`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        ShareRefreshManager.approve(all[1].db, all[1].room, refresh.id, all[1].privateKey)
+        ShareRefreshManager.abandon(all[1].db, all[1].room, refresh.id)
+        pump(all)
+
+        all.forEach { device ->
+            val summary = summaryOn(device)
+            assertNull(summary.running)
+            assertTrue(summary.lastFailure!!.contains("Abandoned"), summary.lastFailure)
+            assertEquals(com.machankura.dedun.compose.ui.view.state.SharesSummary.Rotation.Available, summary.rotation)
+        }
+    }
+
+    /**
+     * Two members propose from one base before either hears of the other. Each is
+     * approved for its own and refuses the other on arrival, as a recipient,
+     * out loud -- so neither stalls and nothing forks.
+     */
+    @Test
+    fun `two proposals crossing on the wire end with neither stuck and at most one generation`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val first = propose(all[0])
+        val second = propose(all[1])
+        pump(all)
+        approveAll(all, first.id)
+        approveAll(all, second.id)
+
+        all.forEach { device ->
+            val stages = listOf(first.id, second.id).map { device.refresh(it)?.stage }
+            assertTrue(stages.none { it != null && it != ShareRefreshStage.COMPLETE && it != ShareRefreshStage.FAILED }, "device ${device.index} left one running: $stages")
+            assertTrue(stages.count { it == ShareRefreshStage.COMPLETE } <= 1, "device ${device.index}: $stages")
+            assertTrue(ShareRefreshManager.rotationHold(device.db, device.room, device.key()) !is RotationHold.Running, "device ${device.index}")
+        }
+        assertEquals(1, all.map { it.active().publicShares }.toSet().size, "every device on one table")
     }
 
     @Test
@@ -915,6 +1036,20 @@ class ShareRefreshRitualJvmTest {
 
     // ---- a rotation waits for the last one to be signed (docs/rotation-waits-for-key-state.md) -------------------
 
+    /**
+     * Signing proposals arrive, and nothing after them: a key state stays open,
+     * approved or not. Since docs/rotate-shares-single-approval.md the new
+     * generation's key state signs itself, so a test that looks at a rotation
+     * whose key state is not yet signed has to hold it there.
+     */
+    private val signingHeldOpen: (MarmotInnerEvent) -> Boolean = { it.kind in FrostSigningEvents.ALL && !FrostSigningEvents.isProposal(it.kind) }
+
+    /** Every recipient takes part and the rotation completes; its key state is proposed and left open. */
+    private suspend fun takePart(all: List<Device>, refreshId: String) {
+        all.forEach { ShareRefreshManager.approve(it.db, it.room, refreshId, it.privateKey) }
+        pump(all, hold = signingHeldOpen)
+    }
+
     @Test
     fun `the next rotation waits until the group has signed the last one`() = runBlocking<Unit> {
         val group = Group(3, 2)
@@ -925,7 +1060,7 @@ class ShareRefreshRitualJvmTest {
         val first = propose(alice)
         pump(all)
         assertEquals(RotationHold.Running(first.id), ShareRefreshManager.rotationHold(bob.db, bob.room, bob.key()))
-        approveAll(all, first.id)
+        takePart(all, first.id)
 
         // The refresh is complete and its key state is out for signatures: everyone waits.
         all.forEach { device ->
@@ -948,7 +1083,7 @@ class ShareRefreshRitualJvmTest {
         val (alice, _, carol) = all
         val first = propose(alice)
         pump(all)
-        approveAll(all, first.id)
+        takePart(all, first.id)
 
         val refused = assertFailsWith<IllegalStateException> {
             ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, carol.publicKey)
@@ -962,7 +1097,7 @@ class ShareRefreshRitualJvmTest {
         val all = devicesFor(group)
         val first = propose(all[0])
         pump(all)
-        approveAll(all, first.id)
+        takePart(all, first.id)
         // The coordinator's key-state proposal failed, or its device went away.
         all.forEach { device ->
             device.db.frostSigningSessionDao().getSessionsForChatRoom(group.roomId).forEach {
@@ -1039,7 +1174,7 @@ class ShareRefreshRitualJvmTest {
         pump(all)
         assertEquals(SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ROTATION_RUNNING), rotation(bob))
 
-        approveAll(all, refresh.id)
+        takePart(all, refresh.id)
         val awaiting = SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.AWAITING_SIGNATURES, canAskForSignature = false)
         assertEquals(awaiting, rotation(bob), "the coordinator is already asking")
 
@@ -1051,7 +1186,7 @@ class ShareRefreshRitualJvmTest {
         }
         assertEquals(awaiting.copy(canAskForSignature = true), rotation(bob))
         val asked = ShareRefreshManager.proposeOwedKeyState(bob.db, bob.room, bob.publicKey, bob.key())
-        pump(all)
+        pump(all, hold = signingHeldOpen)
         assertEquals(awaiting, rotation(bob))
         assertFailsWith<IllegalStateException>("one ask at a time") {
             ShareRefreshManager.proposeOwedKeyState(alice.db, alice.room, alice.publicKey, alice.key())

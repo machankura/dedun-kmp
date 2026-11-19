@@ -1,12 +1,13 @@
 package com.machankura.dedun.compose.ui.view.state
 
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import kotlin.time.Instant
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 
 /**
  * A room's key, as the Shares section shows it (docs/frost-share-refresh.md,
  * Phase 11): the generation the group signs with, who holds what, what this
- * device is being asked, and what it may start.
+ * device is being asked, what is running, and what it may start.
  */
 data class SharesSummary(
     val generation: Int,
@@ -16,6 +17,10 @@ data class SharesSummary(
     val rotation: Rotation,
     /** This device's own id is stale and nothing is bringing it back yet. */
     val canAskToBeRepaired: Boolean,
+    /** A rotation under way, from its one approval until the group signs the new generation. */
+    val running: Running? = null,
+    /** Why the newest rotation ended, when it ended without completing and nothing has run since. */
+    val lastFailure: String? = null,
 ) {
     data class Member(val publicKey: HexKey, val name: String, val standing: ShareStanding, val isSelf: Boolean)
 
@@ -40,8 +45,31 @@ data class SharesSummary(
         enum class Reason { ROTATION_RUNNING, AWAITING_SIGNATURES, BEHIND }
     }
 
-    /** Something this device's owner is being asked, and the session it is for. */
-    data class PendingApproval(val sessionId: String, val kind: Kind) {
-        enum class Kind { REFRESH_DEAL, REFRESH_CONFIRM, REPAIR_HELP }
+    /**
+     * Something this device's owner is being asked, and the session it is for.
+     * A rotation's carries who it leaves out, because agreeing to that is what
+     * taking part is (docs/rotate-shares-single-approval.md, Phase 6).
+     */
+    data class PendingApproval(val sessionId: String, val kind: Kind, val withheld: List<Withheld> = emptyList()) {
+        /** A rotation asks one thing, to take part; storing the new share stopped being a question. */
+        enum class Kind { REFRESH_DEAL, REPAIR_HELP }
+    }
+
+    data class Withheld(val name: String, val standing: ShareStanding)
+
+    /**
+     * A rotation running past its one approval. With nothing left to approve,
+     * this is the only place a member who took part sees it stall, and the only
+     * way out of one.
+     */
+    data class Running(
+        val sessionId: String,
+        val step: Step,
+        val waitingOn: List<String>,
+        val since: Instant,
+        /** This device is a recipient of a rotation not yet certified, so it may end it for everyone. */
+        val canAbandon: Boolean,
+    ) {
+        enum class Step { DEALING, STORING, SIGNING }
     }
 }

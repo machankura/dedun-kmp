@@ -44,6 +44,9 @@ abstract class ShareRefreshDao {
     @Upsert
     abstract suspend fun upsert(message: ShareRefreshMessage)
 
+    @Query("SELECT * FROM ShareRefreshMessage WHERE sessionId = :sessionId")
+    abstract suspend fun getMessagesForSession(sessionId: String): List<ShareRefreshMessage>
+
     @Query("SELECT * FROM ShareRefreshMessage WHERE sessionId = :sessionId AND kind = :kind")
     abstract suspend fun getMessagesByKind(sessionId: String, kind: Kind): List<ShareRefreshMessage>
 

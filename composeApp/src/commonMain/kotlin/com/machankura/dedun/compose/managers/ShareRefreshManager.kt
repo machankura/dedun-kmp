@@ -168,7 +168,7 @@ object ShareRefreshManager {
         return Preview(
             takingPart = plan.recipients.mapNotNull { memberOf[it] },
             withheld = plan.withheld.mapNotNull { (id, standing) -> memberOf[id]?.let { it to standing } }.toMap(),
-            refusal = plan.refusal ?: running(database, key)?.let { "a rotation of this key is already running" },
+            refusal = plan.refusal ?: rotationHold(database, localChatRoom, key)?.reason,
         )
     }
 
@@ -181,7 +181,13 @@ object ShareRefreshManager {
      * device deals at once, and its owner is not asked again. That is safe only
      * because the proposal is made from a dialog that named everyone it leaves
      * out ([preview]) -- proposing is agreeing to withhold whoever the form
-     * showed, never whoever it defaulted to unseen.
+     * showed, never whoever it defaulted to unseen. Every other recipient is
+     * asked the one thing, to take part (docs/rotate-shares-single-approval.md,
+     * which also made storing the new share automatic for everyone, and
+     * docs/rotation-waits-for-key-state.md, Phase 4).
+     *
+     * Refused while [rotationHold] holds: a rotation stacked on a generation the
+     * group has not yet signed is what D6 exists to prevent.
      */
     suspend fun proposeRefresh(
         database: DedunDatabase,
@@ -496,10 +502,14 @@ object ShareRefreshManager {
                     logger.w("Refresh ${session.id}: kind ${innerEvent.kind} from ${innerEvent.pubKey.take(8)}, who is not a recipient; ignoring")
                     return true
                 }
+                // Stored once, on first arrival: its time is when the rotation last
+                // moved, and a relay repeating itself is not progress ([progress]).
                 val known = database.shareRefreshDao().getMessage(session.id, innerEvent.kind, innerEvent.pubKey) != null
-                database.shareRefreshDao().upsert(ShareRefreshMessage(session.id, innerEvent.pubKey, innerEvent.kind, innerEvent.content))
-                if (!known && innerEvent.pubKey != session.userPublicKey) {
-                    announce(database, session, stepType(innerEvent.kind), stepLine(innerEvent.kind), innerEvent.pubKey)
+                if (!known) {
+                    database.shareRefreshDao().upsert(ShareRefreshMessage(session.id, innerEvent.pubKey, innerEvent.kind, innerEvent.content))
+                    if (innerEvent.pubKey != session.userPublicKey) {
+                        announce(database, session, stepType(innerEvent.kind), stepLine(innerEvent.kind), innerEvent.pubKey)
+                    }
                 }
             }
 
@@ -756,6 +766,43 @@ object ShareRefreshManager {
         return if (session.dealApprovedAt == null) ShareRefreshApprovalStep.DEAL else null
     }
 
+    /**
+     * Where a running refresh stands, as the Shares section shows it once its one
+     * approval is given: which step, who it waits on, since when, and whether
+     * this device may abandon it (docs/rotate-shares-single-approval.md, Phase 6).
+     * Null once it has finished.
+     *
+     * With nothing left to approve, this is the only place a member who took part
+     * can see a rotation stall, and the only way they can end it.
+     */
+    suspend fun progress(database: DedunDatabase, session: ShareRefreshSession): Progress? {
+        if (session.stage == ShareRefreshStage.COMPLETE || session.stage == ShareRefreshStage.FAILED) return null
+        val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return null
+        val base = ShareGenerations.at(database, key, session.baseGeneration) ?: return null
+        val memberOf = base.roster.associate { it.participantId to it.memberPublicKey }
+        val recipients = session.recipientIdList()
+        val messages = database.shareRefreshDao().getMessagesForSession(session.id)
+        fun missing(kind: Kind) = recipients
+            .filter { id -> messages.none { it.kind == kind && it.participantPublicKey == memberOf[id] } }
+            .mapNotNull { memberOf[it] }
+        val (step, waitingOn) = when {
+            session.coordinatorRound1 == null -> Progress.Step.DEALING to missing(ShareRefreshEvents.ROUND_1).ifEmpty { listOf(session.coordinatorPublicKey) }
+            else -> Progress.Step.STORING to missing(ShareRefreshEvents.ROUND_2).ifEmpty { listOf(session.coordinatorPublicKey) }
+        }
+        val myId = memberOf.entries.firstOrNull { it.value == session.userPublicKey }?.key
+        return Progress(
+            step = step,
+            waitingOn = waitingOn,
+            since = messages.maxOfOrNull { it.createdAt } ?: session.createdAt,
+            canAbandon = myId != null && myId in recipients,
+        )
+    }
+
+    /** See [progress]. */
+    data class Progress(val step: Step, val waitingOn: List<HexKey>, val since: Instant, val canAbandon: Boolean) {
+        enum class Step { DEALING, STORING }
+    }
+
     /** Approves the step this device's owner is being asked for, and moves on. */
     suspend fun approve(database: DedunDatabase, localChatRoom: LocalChatRoom, sessionId: String, nostrPrivateKey: ByteArray) {
         val session = database.shareRefreshDao().getSessionById(sessionId) ?: return
@@ -806,9 +853,9 @@ object ShareRefreshManager {
     /** Queues this device's own message and records it, so the coordinator's own is in its sums. */
     private suspend fun publishOwn(database: DedunDatabase, localChatRoom: LocalChatRoom, session: ShareRefreshSession, kind: Kind, content: String) {
         broadcast(database, localChatRoom, session, kind, content, ShareRefreshEvents.assembleTags(session.id))
-        val known = ownMessage(database, session, kind) != null
+        if (ownMessage(database, session, kind) != null) return
         database.shareRefreshDao().upsert(ShareRefreshMessage(session.id, session.userPublicKey, kind, content))
-        if (!known) announce(database, session, stepType(kind), stepLine(kind), session.userPublicKey)
+        announce(database, session, stepType(kind), stepLine(kind), session.userPublicKey)
     }
 
     /** One of this device's messages, as an inner event of the key's Marmot room. */
