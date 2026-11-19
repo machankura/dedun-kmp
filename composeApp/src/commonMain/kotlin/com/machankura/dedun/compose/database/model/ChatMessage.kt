@@ -70,6 +70,7 @@ import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleRequestEvent
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -274,6 +275,35 @@ data class ChatMessage(
             TYPE_DKG_APPROVAL_NEEDED_ROUND_1,
             TYPE_DKG_APPROVAL_NEEDED_ROUND_2,
             TYPE_DKG_APPROVAL_NEEDED_LEGACY,
+        )
+
+        /**
+         * A share refresh, as lines in the group's chat (docs/frost-share-refresh.md,
+         * Phase 7). Not anybody's words, so drawn as system lines; the step lines name
+         * the member whose device took the step, the request line is addressed to the
+         * reader, and the last two report.
+         */
+        const val TYPE_SHARE_REFRESH_STARTED = "shareRefreshStarted"
+        const val TYPE_SHARE_REFRESH_DEALT = "shareRefreshDealt"
+        const val TYPE_SHARE_REFRESH_CONFIRMED = "shareRefreshConfirmed"
+        const val TYPE_SHARE_REFRESH_APPROVAL_NEEDED = "shareRefreshApprovalNeeded"
+        const val TYPE_SHARE_REFRESH_COMPLETE = "shareRefreshComplete"
+        const val TYPE_SHARE_REFRESH_FAILED = "shareRefreshFailed"
+
+        val SHARE_REFRESH_TYPES = setOf(
+            TYPE_SHARE_REFRESH_STARTED,
+            TYPE_SHARE_REFRESH_DEALT,
+            TYPE_SHARE_REFRESH_CONFIRMED,
+            TYPE_SHARE_REFRESH_APPROVAL_NEEDED,
+            TYPE_SHARE_REFRESH_COMPLETE,
+            TYPE_SHARE_REFRESH_FAILED,
+        )
+
+        /** The share refresh lines a named member's device did. */
+        val SHARE_REFRESH_AUTHORED_TYPES = setOf(
+            TYPE_SHARE_REFRESH_STARTED,
+            TYPE_SHARE_REFRESH_DEALT,
+            TYPE_SHARE_REFRESH_CONFIRMED,
         )
 
         val DKG_TYPES = setOf(
@@ -1144,7 +1174,8 @@ data class ChatMessage(
                         event.kind in DkgRitualEvents.ALL ||
                             event.kind in FrostSigningEvents.ALL ||
                             event.kind in GroupLightningEvents.PROTOCOL ||
-                            MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL
+                            MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL ||
+                            ShareRefreshEvents.isShareRefresh(event)
                     )
 
                     database.marmotInnerEventDao().upsert(
@@ -1559,6 +1590,12 @@ data class ChatMessage(
 
                 // The Wavelength wallet's traffic.
                 in GroupWavelengthEvents.ALL -> null
+
+                // A share refresh's protocol messages. `ShareRefreshManager` applies them and writes the
+                // lines that report them. Dispatch is on the kind's current number, so a refresh round at
+                // 30340-30343 -- the legacy numbers of Dedun's own ledger kinds until K3 -- has already gone
+                // to those kinds' arms above, which refuse it; only 30344 and 30345 arrive here.
+                in ShareRefreshEvents.ALL -> null
 
                 ChatEvent.KIND -> {
                     ChatMessage(

@@ -40,11 +40,21 @@ object ShareGenerations {
         val publicShares: List<PublicKey>?,
         val signerIds: Map<HexKey, Int>,
         val participantIds: Map<HexKey, Int>,
+        /** Every participant id of the key in order, retired ones included: who holds it, their host key, and what they hold. */
+        val roster: List<RosterEntry> = emptyList(),
     ) {
         override fun toString(): String =
             "Shares(generation=$generation, secretShare=${if (secretShare == null) "null" else "<secret>"}, " +
                 "signers=${signerIds.size}/${participantIds.size})"
     }
+
+    /** One participant id at one generation. */
+    data class RosterEntry(
+        val participantId: Int,
+        val memberPublicKey: HexKey,
+        val hostPublicKey: HexKey,
+        val standing: ShareStanding,
+    )
 
     /**
      * The generation the group signs with, by this device's account: the newest
@@ -79,7 +89,7 @@ object ShareGenerations {
 
     /** [member]'s participant id in [key], whatever their standing. */
     suspend fun participantIdOf(database: DedunDatabase, key: DkgSession, member: HexKey): Int? =
-        active(database, key).participantIds[member] ?: ceremonyIds(database, key)[member]
+        active(database, key).participantIds[member] ?: ceremonyIds(ceremonyHostKeys(database, key))[member]
 
     /**
      * Generation 0: the ceremony's own output, read where the ceremony wrote it.
@@ -91,27 +101,32 @@ object ShareGenerations {
      * the ceremony that made the key.
      */
     private suspend fun ceremony(database: DedunDatabase, key: DkgSession): Shares {
-        val ids = ceremonyIds(database, key)
+        val hostKeys = ceremonyHostKeys(database, key)
+        val ids = ceremonyIds(hostKeys)
         return Shares(
             generation = 0,
             secretShare = key.secretShare?.let { PrivateKey(ByteVector32(it)) },
             publicShares = key.publicShareList(),
             signerIds = ids,
             participantIds = ids,
+            roster = ids.entries
+                .sortedBy { it.value }
+                .map { (member, id) -> RosterEntry(id, member, hostKeys.getValue(member), ShareStanding.LIVE) },
         )
     }
 
-    private suspend fun ceremonyIds(database: DedunDatabase, key: DkgSession): Map<HexKey, Int> {
-        val hostKeys = database.dkgSessionDao()
+    private suspend fun ceremonyHostKeys(database: DedunDatabase, key: DkgSession): Map<HexKey, HexKey> =
+        database.dkgSessionDao()
             .getMessagesByKind(key.id, DkgRitualEvents.HOST_KEY)
             .associate { it.participantPublicKey to it.payload.lowercase() }
 
+    private fun ceremonyIds(hostKeys: Map<HexKey, HexKey>): Map<HexKey, Int> {
         val order = hostKeys.values.sorted()
-
         return hostKeys.mapNotNull { (member, hostKey) ->
             order.indexOf(hostKey).takeIf { it >= 0 }?.let { member to it }
         }.toMap()
     }
+
 
     private suspend fun fromRow(database: DedunDatabase, row: KeyShareGeneration): Shares {
         val members = database.keyShareDao().getMembers(row.dkgSessionId, row.generation)
@@ -127,6 +142,9 @@ object ShareGenerations {
             participantIds = members
                 .filter { it.standing != ShareStanding.RETIRED }
                 .associate { it.memberPublicKey to it.participantId },
+            roster = members
+                .sortedBy { it.participantId }
+                .map { RosterEntry(it.participantId, it.memberPublicKey, it.hostPublicKey.lowercase(), it.standing) },
         )
     }
 }

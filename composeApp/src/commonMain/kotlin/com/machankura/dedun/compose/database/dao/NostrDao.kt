@@ -73,6 +73,7 @@ import com.machankura.dedun.compose.exceptions.MarmotMissingNostrGroupDataExtens
 import com.machankura.dedun.compose.exceptions.MarmotNotMemberOfChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
+import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.CommitOrdering
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
@@ -88,6 +89,7 @@ import com.machankura.dedun.compose.managers.routingId
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 
 @Dao
@@ -1697,6 +1699,19 @@ abstract class NostrDao(
                         // it runs where the onchain wallet it closes to already is.
                         innerEvent.kind in GroupLightningEvents.CEREMONY ->
                             IcebergRitualManager.processCeremonyPayload(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // A share refresh runs in the room its key derives, and
+                        // nowhere else (docs/frost-share-refresh.md, D7). By its session
+                        // tag as well as its kind: until K3, a 30342 can also be a
+                        // transfer request's carrier (docs/giza-into-dedun.md, Phase K).
+                        ShareRefreshEvents.isShareRefresh(innerEvent) ->
+                            ShareRefreshManager.processRefreshPayload(
                                 database = database,
                                 localChatRoom = localChatRoom,
                                 innerEvent = innerEvent,

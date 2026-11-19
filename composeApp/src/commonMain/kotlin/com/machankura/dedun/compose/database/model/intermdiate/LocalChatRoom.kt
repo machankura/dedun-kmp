@@ -141,6 +141,7 @@ data class LocalChatRoom(
         if (lastChatMessage.messageType in ChatMessage.DKG_TYPES ||
             lastChatMessage.messageType in ChatMessage.ICEBERG_TYPES ||
             lastChatMessage.messageType in ChatMessage.FROST_TYPES ||
+            lastChatMessage.messageType in ChatMessage.SHARE_REFRESH_TYPES ||
             lastChatMessage.messageType in ChatMessage.CHRONICLE_TYPES ||
             lastChatMessage.messageType in ChatMessage.MEMBERSHIP_TYPES ||
             lastChatMessage.messageType in ChatMessage.SUBGROUP_TYPES ||
@@ -148,6 +149,7 @@ data class LocalChatRoom(
         ) {
             val isAuthored = lastChatMessage.messageType in ChatMessage.DKG_AUTHORED_TYPES ||
                 lastChatMessage.messageType in ChatMessage.ICEBERG_AUTHORED_TYPES ||
+                lastChatMessage.messageType in ChatMessage.SHARE_REFRESH_AUTHORED_TYPES ||
                 lastChatMessage.messageType in ChatMessage.FROST_AUTHORED_TYPES
 
             return if (isAuthored) {

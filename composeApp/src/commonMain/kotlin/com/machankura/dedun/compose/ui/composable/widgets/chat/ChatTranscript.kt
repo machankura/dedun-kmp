@@ -370,6 +370,21 @@ fun ChatTranscript(
                                 // settled for the same reason the chronicle's are
                                 // -- these report rather than ask, so they stay in
                                 // the quiet tint and offer nothing to review.
+                                // A share refresh reports like a membership change:
+                                // a system line, never a bubble. Its request line
+                                // leads nowhere yet -- the refresh screen is
+                                // docs/frost-share-refresh.md, Phase 11.
+                                if (localChatMessage.chatMessage.messageType in ChatMessage.SHARE_REFRESH_TYPES) {
+                                    RitualNotice(
+                                        localChatMessage = localChatMessage,
+                                        isAnswered = true,
+                                        isSettled = true,
+                                        onClick = null,
+                                        opens = null,
+                                    )
+                                    return@items
+                                }
+
                                 if (localChatMessage.chatMessage.messageType in ChatMessage.MEMBERSHIP_TYPES) {
                                     RitualNotice(
                                         localChatMessage = localChatMessage,
