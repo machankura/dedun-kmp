@@ -8,6 +8,8 @@ import kotlin.time.Instant
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.FrostSigningItem
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -441,7 +443,85 @@ object GroupKeyStateManager {
         )
     }
 
-    fun stateFrom(chatRoomId: String, innerEvent: Event): GroupKeyState? {
+    fun stateFrom(chatRoomId: String, innerEvent: Event): GroupKeyState? =
+        read(chatRoomId, innerEvent, requireGroupSignature = true)
+
+    /**
+     * The state an event would amount to once the group signs it, or null if it
+     * would amount to none: every check [stateFrom] makes except the signature.
+     *
+     * For a statement still being asked for -- the unsigned event a signing
+     * session carries. `FrostSigningManager` reads it to decide whether this
+     * device can vouch for a key state without asking its owner
+     * ([vouchesFor]), and has to judge it by exactly the rules the group's
+     * signature will later be judged by, or it would sign states nobody keeps.
+     */
+    fun claimFrom(chatRoomId: String, innerEvent: Event): GroupKeyState? =
+        read(chatRoomId, innerEvent, requireGroupSignature = false)
+
+    /**
+     * Whether this device can put its share to [session] without asking its owner:
+     * true only when what is being signed is the one key state that could be true
+     * for a ceremony this device finished.
+     *
+     * A ceremony makes one key. Walked to the admin path it reaches one room, and
+     * for a subgroup there is one certificate the parent's quorum signed over that
+     * room. So for a ceremony this device took part in there is exactly one correct
+     * statement of what its room signs with, and a person shown it has nothing to
+     * check that the device has not (docs/automatic-key-ceremony.md, Phase 7).
+     *
+     * Every one of these has to hold, and anything else is asked about as before.
+     * Failing one is not a reason to refuse -- it means this device cannot vouch
+     * for the statement on its own, so its owner decides:
+     *
+     * 1. the session signs exactly one event, a key state -- never a batch;
+     * 2. the key it signs with is a ceremony this user finished on this device;
+     * 3. the state is about that ceremony and names its key;
+     * 4. at the admin path, in the state and in the session alike;
+     * 5. naming the room that key and path derive, and signed as that room --
+     *    [claimFrom] checks the derivation, the same check [stateFrom] makes;
+     * 6. claiming the parent the ceremony was run for, or none for a group's own,
+     *    with a certificate that parent's quorum signed -- [claimFrom] again;
+     * 7. and with no state for that room already signed on this device.
+     */
+    suspend fun vouchesFor(
+        database: DedunDatabase,
+        session: FrostSigningSession,
+        items: List<FrostSigningItem>,
+    ): Boolean {
+        // 1
+        val item = items.singleOrNull() ?: return false
+        val unsigned = Event.fromJsonOrNull(item.unsignedEventJson) ?: return false
+        if (unsigned.kind != GroupKeyStateEvent.KIND) return false
+
+        // 2
+        val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return false
+        if (key.userPublicKey != session.userPublicKey || key.stage != DkgRitualStage.COMPLETE) return false
+        val thresholdPublicKey = key.thresholdPublicKey ?: return false
+
+        // 3, 5 and 6's certificate
+        val claim = claimFrom(session.chatRoomId, unsigned) ?: return false
+        if (claim.dkgSessionId != key.id) return false
+        if (!claim.thresholdPublicKey.equals(thresholdPublicKey, ignoreCase = true)) return false
+
+        // 4
+        val adminPath = SharedKeyDerivation.formatPath(SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH)
+        if (claim.derivationPath != adminPath || session.derivationPath != adminPath) return false
+
+        // 5's author: the room speaks for itself, under the key that derives it
+        if (unsigned.pubKey != claim.chatRoomId) return false
+
+        // 6's parent
+        if (claim.parentChatRoomId != key.parentChatRoomId) return false
+
+        // 7
+        val signed = stateAmong(database.groupSignedEventDao().getByKind(GroupKeyStateEvent.KIND), claim.chatRoomId)
+        if (signed != null) return false
+
+        return true
+    }
+
+    private fun read(chatRoomId: String, innerEvent: Event, requireGroupSignature: Boolean): GroupKeyState? {
         val announced = GroupKeyStateEvent.parseChatRoomId(innerEvent.tags) ?: chatRoomId
 
         val thresholdPublicKey = GroupKeyStateEvent.parseThresholdPublicKey(innerEvent.content)
@@ -466,7 +546,7 @@ object GroupKeyStateManager {
         // single share cannot produce this signature, so nothing short of a
         // quorum can put a room's key state on the record -- not even a member
         // saying something true.
-        if (!GroupKeyStateEvent.isSignedByGroup(innerEvent, thresholdPublicKey, path)) {
+        if (requireGroupSignature && !GroupKeyStateEvent.isSignedByGroup(innerEvent, thresholdPublicKey, path)) {
             logger.w(
                 "Key state in $chatRoomId from ${innerEvent.pubKey} carries no signature by " +
                     "the group holding $thresholdPublicKey; dropping"

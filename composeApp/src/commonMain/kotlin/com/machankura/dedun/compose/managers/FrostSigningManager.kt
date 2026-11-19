@@ -450,6 +450,16 @@ object FrostSigningManager {
             return
         }
 
+        // The one answer a device gives on its owner's behalf, and only to one
+        // question: what the room a ceremony it finished signs with. For that there
+        // is exactly one true statement, and `vouchesFor` signs nothing else --
+        // any other proposal, a key state included, is asked about as before.
+        // docs/automatic-key-ceremony.md, Phase 7.
+        if (FrostSigningEvents.isProposal(innerEvent.kind) && signsAsItsOwnKeyState(database, session)) {
+            logger.i("Session ${session.id} is the key state of a ceremony this device finished; signing")
+            update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
+        }
+
         if (session.stage == FrostSigningStage.FAILED) {
             logger.i("Session $sessionId already failed; ignoring kind ${innerEvent.kind}")
             return
@@ -1921,6 +1931,19 @@ object FrostSigningManager {
         }
 
         return true
+    }
+
+    /** Whether [session] is waiting on this device and is a key state it can vouch for. */
+    private suspend fun signsAsItsOwnKeyState(database: DedunDatabase, session: FrostSigningSession): Boolean {
+        val current = database.frostSigningSessionDao().getSessionById(session.id) ?: return false
+        if (current.signApprovedAt != null || current.signDeclinedAt != null) return false
+        if (current.stage == FrostSigningStage.COMPLETE || current.stage == FrostSigningStage.FAILED) return false
+
+        return GroupKeyStateManager.vouchesFor(
+            database = database,
+            session = current,
+            items = database.frostSigningSessionDao().getItems(current.id),
+        )
     }
 
     private fun isFromCoordinator(

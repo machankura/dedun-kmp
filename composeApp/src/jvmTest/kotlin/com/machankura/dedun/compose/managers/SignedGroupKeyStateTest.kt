@@ -21,6 +21,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -464,8 +465,15 @@ class SignedGroupKeyStateTest {
         assertEquals(session.derivationPath, received.derivationPath)
     }
 
+    /**
+     * The one signature a device gives without asking its owner: the key state of
+     * a ceremony it finished, which is the only true statement there is about the
+     * room that key derives. Joining the ceremony was the decision. Anything else
+     * still waits on its owner -- docs/automatic-key-ceremony.md, Phase 7, and
+     * `KeyStateSignsItselfJvmTest` for the rule broken every way it can be.
+     */
     @Test
-    fun `nothing of a member's own goes out before they approve`() = runBlocking {
+    fun `a member's device signs its own ceremony's key state without being asked`(): Unit = runBlocking {
         val creator = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
 
@@ -477,17 +485,11 @@ class SignedGroupKeyStateTest {
         )
         pump(creator, other)
 
-        assertTrue(
-            FrostSigningManager.isAwaitingApproval(
-                other.session(session.id)!!,
-                other.items(session.id)
-            )
-        )
-        assertTrue(
-            outbox(other).isEmpty(),
-            "a device that has not been asked yet must publish nothing"
-        )
-        assertNull(other.keyState())
+        val received = assertNotNull(other.session(session.id))
+        assertNotNull(received.signApprovedAt, "signed on the member's behalf")
+        assertFalse(FrostSigningManager.isAwaitingApproval(received, other.items(session.id)))
+        assertEquals(FrostSigningStage.COMPLETE, received.stage)
+        assertNotNull(other.keyState(), "and the group's state is on the member's device")
     }
 
     @Test
@@ -574,15 +576,14 @@ class SignedGroupKeyStateTest {
             userPublicKey = creator.publicKey,
             key = ceremonyOn(creator)
         )
+        // Two of the three finish it between them, which is the point of a 2-of-3
+        // key; the third hears everything only afterwards.
+        pump(creator, other)
         pump(creator, other, absent)
 
-        // Only two of the three approve, which is the point of a 2-of-3 key.
-        FrostSigningManager.approve(other.db, other.room, session.id)
-        pump(creator, other, absent)
-
-        assertNull(
-            absent.session(session.id)?.signApprovedAt,
-            "the third member must not have been made to sign"
+        assertTrue(
+            outbox(absent).none { it.kind == FrostSigningEvents.PARTIAL_SIGNATURE },
+            "the third member's share was not part of the signature"
         )
         assertNotNull(
             absent.keyState(),

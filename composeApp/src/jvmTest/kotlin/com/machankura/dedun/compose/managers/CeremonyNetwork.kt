@@ -24,9 +24,11 @@ import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 
 /**
- * Several devices running one key ceremony, with the relay played by a loop.
+ * Several devices running one key ceremony, and the signing sessions after it, with
+ * the relay played by a loop.
  *
  * Each member has a database of their own, as on a phone, and nothing is shared
  * between them but the ceremony's messages. The ritual queues what a device sends
@@ -140,13 +142,22 @@ class CeremonyNetwork private constructor(
             val event = tamper(sender, receiver, sent)
 
             store(receiver, event)
-            ChillDkgRitualManager.processRitualPayload(
-                database = receiver.db,
-                localChatRoom = room(receiver),
-                innerEvent = event,
-                userPublicKey = receiver.publicKey,
-                nostrPrivateKey = receiver.privateKey,
-            )
+            if (event.kind in DkgRitualEvents.ALL) {
+                ChillDkgRitualManager.processRitualPayload(
+                    database = receiver.db,
+                    localChatRoom = room(receiver),
+                    innerEvent = event,
+                    userPublicKey = receiver.publicKey,
+                    nostrPrivateKey = receiver.privateKey,
+                )
+            } else {
+                FrostSigningManager.processSigningPayload(
+                    database = receiver.db,
+                    localChatRoom = room(receiver),
+                    innerEvent = event,
+                    userPublicKey = receiver.publicKey,
+                )
+            }
         }
 
         return handings.size
@@ -162,7 +173,9 @@ class CeremonyNetwork private constructor(
 
     /** What [sender] has queued for its room, as the rumors the others receive. */
     private suspend fun outboundOf(sender: Device): List<Event> {
-        val kinds = DkgRitualEvents.ALL.toList()
+        // The ceremony's own messages, and the signing sessions that follow it --
+        // the key state the group signs once it has a key.
+        val kinds = (DkgRitualEvents.ALL + FrostSigningEvents.ALL).toList()
 
         return when (transport) {
             Transport.NIP17 -> sender.db.giftWrapPayloadDao()
