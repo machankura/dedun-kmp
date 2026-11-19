@@ -208,4 +208,23 @@ class TranscriptRequestStateTest {
 
         assertEquals(setOf(hostKey.id), ChatMessage.answeredRequests(transcript))
     }
+
+    /**
+     * A round request written by a build that still asked reads as answered once
+     * the round goes out on its own. The line the round writes is the same one a
+     * tapped approval wrote, so nothing told the transcript the gate had gone.
+     */
+    @Test
+    fun `a round request from an older build is answered by the automatic round`() {
+        val roundOne = line(ChatMessage.TYPE_DKG_APPROVAL_NEEDED_ROUND_1, at = 10)
+        val roundTwo = line(ChatMessage.TYPE_DKG_APPROVAL_NEEDED_ROUND_2, at = 12)
+        val transcript = listOf(
+            roundOne,
+            line(ChatMessage.TYPE_DKG_ROUND_1, at = 11),
+            roundTwo,
+            line(ChatMessage.TYPE_DKG_ROUND_2, at = 13),
+        )
+
+        assertEquals(setOf(roundOne.id, roundTwo.id), ChatMessage.answeredRequests(transcript))
+    }
 }

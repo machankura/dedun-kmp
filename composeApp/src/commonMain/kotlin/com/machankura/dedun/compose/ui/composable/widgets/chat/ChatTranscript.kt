@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AccountTree
 import dedun.composeapp.generated.resources.open
 import dedun.composeapp.generated.resources.the_group_has_its_key_finish_setting_it_up
-import dedun.composeapp.generated.resources.check_the_combined_result
-import dedun.composeapp.generated.resources.send_your_contribution_to_the_key
 import dedun.composeapp.generated.resources.join_the_ceremony_by_publishing_your_key
 import dedun.composeapp.generated.resources.the_subgroups_key_ceremony_needs_you
 import dedun.composeapp.generated.resources.the_key_ceremony_needs_you
@@ -703,17 +701,18 @@ private fun CeremoniesAwaitingYouNotice(
         else -> stringResource(Res.string.the_key_ceremony_needs_you)
     }
 
-    // What it wants, in the words the approval screens use for the same step, so
+    // What it wants, in the words the approval screen uses for the same step, so
     // a member is not asked twice in two vocabularies. The gate comes first: an
     // approval is owed by this member and cannot be done by anybody else, while
-    // finishing the setup is work the coordinator can come back to. The Lightning
-    // wallet's gates are buttons on its ceremony screen, and say what those say.
+    // finishing the setup is work the coordinator can come back to.
+    //
+    // Joining is the only gate a ceremony has (docs/automatic-key-ceremony.md).
+    // The two rounds after it are never asked for, so they say nothing here.
     val detail = single?.let {
         when (val ask = it.ask) {
             is ChatMessageListViewModel.Ask.SharedKeyStep -> when (ask.step) {
                 DkgApprovalStep.HOST_KEY -> stringResource(Res.string.join_the_ceremony_by_publishing_your_key)
-                DkgApprovalStep.ROUND_1 -> stringResource(Res.string.send_your_contribution_to_the_key)
-                DkgApprovalStep.ROUND_2 -> stringResource(Res.string.check_the_combined_result)
+                DkgApprovalStep.ROUND_1, DkgApprovalStep.ROUND_2 -> null
             }
             is ChatMessageListViewModel.Ask.RoomCreation -> stringResource(Res.string.the_group_has_its_key_finish_setting_it_up)
             is ChatMessageListViewModel.Ask.LightningKeyStep -> when (ask.step) {

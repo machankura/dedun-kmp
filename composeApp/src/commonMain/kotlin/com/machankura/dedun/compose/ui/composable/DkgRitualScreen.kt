@@ -76,8 +76,6 @@ import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgJoinApprovalRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SelectSubgroupAdminsRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateSharedKeyRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRound1ApprovalRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRound2ApprovalRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.view.model.DkgRitualViewModel
 import com.machankura.dedun.compose.ui.view.state.DkgRitualUIState
@@ -101,9 +99,9 @@ import dedun.composeapp.generated.resources.the_parent_group_has_certified_this_
 import dedun.composeapp.generated.resources.key
 import dedun.composeapp.generated.resources.members
 import dedun.composeapp.generated.resources.nothing_was_created_and_no_key_exists_it_is
-import dedun.composeapp.generated.resources.review_and_confirm
-import dedun.composeapp.generated.resources.review_and_contribute
 import dedun.composeapp.generated.resources.review_and_join
+import dedun.composeapp.generated.resources.once_everyone_has_joined_each_member_s_device_commits
+import dedun.composeapp.generated.resources.each_member_s_device_checks_the_combined_result_against
 import dedun.composeapp.generated.resources.shared_key
 import dedun.composeapp.generated.resources.the_ceremony_was_abandoned
 import dedun.composeapp.generated.resources.the_group_has_a_shared_key
@@ -206,40 +204,23 @@ fun DkgRitualScreen(
                         )
                     },
                     bottomBar = {
-                        val pending = dkgRitualUIState.pendingApproval
-
                         // The ceremony is stopped, waiting on this member, and will stay
                         // stopped until they act -- so this outranks everything else the
-                        // bar could offer.
-                        if (pending != null) {
+                        // bar could offer. Joining is the only thing a ceremony asks, so
+                        // it is the only thing this can be (docs/automatic-key-ceremony.md).
+                        if (dkgRitualUIState.pendingApproval == DkgApprovalStep.HOST_KEY) {
                             BottomAppBar(
                                 floatingActionButton = {
                                     ExtendedFab(
-                                        label = when (pending) {
-                                            DkgApprovalStep.HOST_KEY -> stringResource(Res.string.review_and_join)
-                                            DkgApprovalStep.ROUND_1 -> stringResource(Res.string.review_and_contribute)
-                                            DkgApprovalStep.ROUND_2 -> stringResource(Res.string.review_and_confirm)
-                                        },
+                                        label = stringResource(Res.string.review_and_join),
                                         icon = { Icon(Icons.Default.Key, contentDescription = Decorative) },
                                         onClick = {
                                             onNavigateToRoute(
-                                                when (pending) {
-                                                    DkgApprovalStep.HOST_KEY -> DkgJoinApprovalRoute(
-                                                        activeUserPublicKey = activeUserPublicKey,
-                                                        chatRoomId = chatRoomId,
-                                                        dkgSessionId = session.id
-                                                    )
-                                                    DkgApprovalStep.ROUND_1 -> DkgRound1ApprovalRoute(
-                                                        activeUserPublicKey = activeUserPublicKey,
-                                                        chatRoomId = chatRoomId,
-                                                        dkgSessionId = session.id
-                                                    )
-                                                    DkgApprovalStep.ROUND_2 -> DkgRound2ApprovalRoute(
-                                                        activeUserPublicKey = activeUserPublicKey,
-                                                        chatRoomId = chatRoomId,
-                                                        dkgSessionId = session.id
-                                                    )
-                                                }
+                                                DkgJoinApprovalRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    dkgSessionId = session.id
+                                                )
                                             )
                                         }
                                     )
@@ -471,9 +452,12 @@ private fun RitualProgress(
         isDone = stage != DkgRitualStage.COLLECTING_HOST_KEYS
     )
 
+    // Said as something each device does rather than something each member is
+    // waiting to be asked: nobody is asked after joining, and a rung that read as a
+    // task would send the reader looking for a button that is not there.
     RitualStep(
         title = "Round one",
-        detail = "Each member commits to their part of the key.",
+        detail = stringResource(Res.string.once_everyone_has_joined_each_member_s_device_commits),
         count = round1Count,
         total = participantCount,
         isDone = stage == DkgRitualStage.COLLECTING_ROUND_2 || stage == DkgRitualStage.COMPLETE
@@ -481,7 +465,7 @@ private fun RitualProgress(
 
     RitualStep(
         title = "Round two",
-        detail = "Each member confirms everyone else's part.",
+        detail = stringResource(Res.string.each_member_s_device_checks_the_combined_result_against),
         count = round2Count,
         total = participantCount,
         isDone = stage == DkgRitualStage.COMPLETE

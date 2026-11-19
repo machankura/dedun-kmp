@@ -141,10 +141,13 @@ class DkgRitualViewModelJvmTest {
             signingSessions
 
         // A deliberately slow answer, so a read-modify-write around it would have
-        // the widest possible window to lose somebody else's write in.
+        // the widest possible window to lose somebody else's write in. Shaped like
+        // the real one: joining is the only thing asked, and it is asked until this
+        // member's host key is out.
         override suspend fun pendingApproval(session: DkgSession): DkgApprovalStep? {
             delay(5)
-            return if (messages.value.size >= session.participantCount) DkgApprovalStep.ROUND_1 else null
+            val joined = messages.value.any { it.participantPublicKey == session.userPublicKey }
+            return if (joined) null else DkgApprovalStep.HOST_KEY
         }
 
         override suspend fun approve(
@@ -266,7 +269,7 @@ class DkgRitualViewModelJvmTest {
         val settled = viewModel.awaitLoaded {
             it.session?.stage == DkgRitualStage.COLLECTING_ROUND_1 &&
                 it.hostKeyParticipants.size == 3 &&
-                it.pendingApproval == DkgApprovalStep.ROUND_1
+                it.pendingApproval == null
         }
         assertEquals(sessionId, settled.session?.id)
         assertEquals(setOf(ada, bob, "c".repeat(64)), settled.hostKeyParticipants)

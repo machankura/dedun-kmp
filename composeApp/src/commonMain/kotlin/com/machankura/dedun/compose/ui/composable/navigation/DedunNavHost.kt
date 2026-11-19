@@ -122,8 +122,6 @@ import com.machankura.dedun.compose.ui.composable.CreateProfileScreen
 import com.machankura.dedun.compose.ui.composable.DkgJoinApprovalScreen
 import com.machankura.dedun.compose.ui.composable.CreateSharedKeyScreen
 import com.machankura.dedun.compose.ui.composable.DkgRitualScreen
-import com.machankura.dedun.compose.ui.composable.DkgRound1ApprovalScreen
-import com.machankura.dedun.compose.ui.composable.DkgRound2ApprovalScreen
 import com.machankura.dedun.compose.ui.composable.GroupWalletScreen
 import com.machankura.dedun.compose.ui.composable.GroupWalletAddressesScreen
 import com.machankura.dedun.compose.ui.composable.HomeScreen
@@ -161,8 +159,6 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateProfil
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgJoinApprovalRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateSharedKeyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRitualRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRound1ApprovalRoute
-import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRound2ApprovalRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyPackageManagementRoute
@@ -1250,32 +1246,6 @@ fun DedunNavHost(
                 val route = backStackEntry.toRoute<DkgJoinApprovalRoute>()
 
                 DkgJoinApprovalScreen(
-                    activeUserPublicKey = route.activeUserPublicKey,
-                    chatRoomId = route.chatRoomId,
-                    dkgSessionId = route.dkgSessionId,
-                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
-                    chatRepository = databaseChatRepository,
-                    dkgRepository = databaseDkgRepository,
-                    onDone = { navController.popBackStack() }
-                )
-            }
-            composable<DkgRound1ApprovalRoute> { backStackEntry ->
-                val route = backStackEntry.toRoute<DkgRound1ApprovalRoute>()
-
-                DkgRound1ApprovalScreen(
-                    activeUserPublicKey = route.activeUserPublicKey,
-                    chatRoomId = route.chatRoomId,
-                    dkgSessionId = route.dkgSessionId,
-                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
-                    chatRepository = databaseChatRepository,
-                    dkgRepository = databaseDkgRepository,
-                    onDone = { navController.popBackStack() }
-                )
-            }
-            composable<DkgRound2ApprovalRoute> { backStackEntry ->
-                val route = backStackEntry.toRoute<DkgRound2ApprovalRoute>()
-
-                DkgRound2ApprovalScreen(
                     activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
                     dkgSessionId = route.dkgSessionId,

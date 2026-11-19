@@ -49,13 +49,13 @@ import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.theme.readableContent
 
 /**
- * The frame every ChillDKG approval screen sits in: the view model, the states
- * where there is nothing to approve, and the approve/decline bar.
+ * The frame a ChillDKG approval screen sits in: the view model, the states where
+ * there is nothing to approve, and the approve/decline bar.
  *
- * The three screens are separate because each is asking for something different
- * and has its own case to make. What they share is only the chrome and, more
- * importantly, the guard below — which is a correctness concern rather than a
- * cosmetic one and should not be re-argued three times.
+ * There is one such screen now, the join (docs/automatic-key-ceremony.md); there
+ * were three, and the frame stays apart from it because the guard below is a
+ * correctness concern rather than a cosmetic one, and is the same whatever step a
+ * screen asks about.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -22,16 +22,33 @@ import com.machankura.dedun.compose.repository.DkgRepository
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.identity.Identity
 import kotlinx.coroutines.flow.StateFlow
+import dedun.composeapp.generated.resources.join_the_ceremony
+import dedun.composeapp.generated.resources.join_the_key_ceremony_question
+import dedun.composeapp.generated.resources.nothing_has_been_published_from_this_device_yet_declining
+import dedun.composeapp.generated.resources.once_everyone_has_joined_your_device_contributes_to
+import dedun.composeapp.generated.resources.s_is_creating_a_shared_key_that_takes
+import dedun.composeapp.generated.resources.taking_part_with_these_members
+import dedun.composeapp.generated.resources.the_ceremony_cannot_finish_until_every_member_has
+import dedun.composeapp.generated.resources.this_group
+import dedun.composeapp.generated.resources.you
+import dedun.composeapp.generated.resources.your_device_publishes_the_key_it_will_be
+import dedun.composeapp.generated.resources.your_share_of_the_key_never_leaves_this
 import com.machankura.dedun.compose.ui.theme.spacing
 
 /**
  * Asks whether to join a shared key ceremony somebody else opened.
  *
- * The first and most consequential of the three approvals. Publishing a host key
- * is what puts this member in the participant set, and the set is what `n` is
- * counted over — so a member who joins and then stops answering does not merely
- * fail to help, they hold the ceremony open for everybody else. Saying that
+ * The one approval a ceremony asks for (docs/automatic-key-ceremony.md). Publishing
+ * a host key is what puts this member in the participant set, and the set is what
+ * `n` is counted over — so a member who joins and then stops answering does not
+ * merely fail to help, they hold the ceremony open for everybody else. Saying that
  * plainly here is the point of the screen.
+ *
+ * Everything after it runs without asking: the device contributes once everyone
+ * has joined, checks the combined result itself and confirms it. So this screen
+ * carries what the round-one screen used to, the members in particular. Who the
+ * key is being made with was settled by the proposal before anyone joined, so it
+ * was never something a later screen knew and this one could not.
  *
  * Until this is approved nothing has left the device, which is worth stating
  * outright: the member is being asked to start, not to continue.
@@ -48,8 +65,8 @@ fun DkgJoinApprovalScreen(
 ) {
     DkgApprovalScaffold(
         step = DkgApprovalStep.HOST_KEY,
-        title = "Join the key ceremony?",
-        approveLabel = "Join the ceremony",
+        title = stringResource(Res.string.join_the_key_ceremony_question),
+        approveLabel = stringResource(Res.string.join_the_ceremony),
         activeUserPublicKey = activeUserPublicKey,
         chatRoomId = chatRoomId,
         dkgSessionId = dkgSessionId,
@@ -59,11 +76,15 @@ fun DkgJoinApprovalScreen(
         onDone = onDone
     ) { state ->
         val session = state.session
-        val group = state.localChatRoom.chatRoom.subject ?: "this group"
+        val group = state.localChatRoom.chatRoom.subject ?: stringResource(Res.string.this_group)
 
         Text(
-            text = "$group is creating a shared key that takes " +
-                "${session.threshold} of ${state.participantCount} members to sign with.",
+            text = stringResource(
+                Res.string.s_is_creating_a_shared_key_that_takes,
+                group,
+                session.threshold,
+                state.participantCount
+            ),
             style = MaterialTheme.typography.bodyLarge
         )
 
@@ -92,17 +113,41 @@ fun DkgJoinApprovalScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)
         ) {
-            DkgApprovalPoint("Your device publishes the key it will be identified by for the rest of the ceremony.")
-            DkgApprovalPoint("You will be asked twice more before anything of your key material goes out.")
-            DkgApprovalPoint(
-                "The ceremony cannot finish until every member has taken part, so joining and " +
-                    "then stopping leaves the group waiting."
-            )
+            DkgApprovalPoint(stringResource(Res.string.your_device_publishes_the_key_it_will_be))
+            DkgApprovalPoint(stringResource(Res.string.once_everyone_has_joined_your_device_contributes_to))
+            DkgApprovalPoint(stringResource(Res.string.your_share_of_the_key_never_leaves_this))
+            DkgApprovalPoint(stringResource(Res.string.the_ceremony_cannot_finish_until_every_member_has))
+        }
+
+        // The members, named: this is the last moment "who am I making a key
+        // with" is a question the member can act on, and from here it is the
+        // only one they are asked.
+        Text(
+            text = stringResource(Res.string.taking_part_with_these_members),
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)
+        ) {
+            state.ritualMembers.forEach { member ->
+                val key = member.participant.participantPublicKey
+
+                Text(
+                    text = if (key == activeUserPublicKey) {
+                        stringResource(Res.string.you)
+                    } else {
+                        member.profile?.humanReadableNameOrPubkey() ?: key.take(12)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Text(
-            text = "Nothing has been published from this device yet. Declining leaves the ceremony " +
-                "for the others to abandon or wait on, and you can join later from the shared key screen.",
+            text = stringResource(Res.string.nothing_has_been_published_from_this_device_yet_declining),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
