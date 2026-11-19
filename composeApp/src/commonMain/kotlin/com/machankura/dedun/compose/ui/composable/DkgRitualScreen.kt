@@ -26,6 +26,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
 import dedun.composeapp.generated.resources.the_ceremony_has_stalled
+import dedun.composeapp.generated.resources.open_the_room
 import dedun.composeapp.generated.resources.waiting_on_s_since_s
 import dedun.composeapp.generated.resources.if_they_have_stopped_answering_any_member_can_abandon
 import androidx.compose.material3.BottomAppBar
@@ -306,6 +307,7 @@ fun DkgRitualScreen(
                                 adminGroupBlockedOn = dkgRitualUIState.adminGroupBlockedOn,
                                 keyStateSession = dkgRitualUIState.keyStateSession,
                                 isKeyStateSigned = dkgRitualUIState.isKeyStateSigned,
+                                isRoomCreated = dkgRitualUIState.isRoomCreated,
                                 parentChatRoomId = dkgRitualUIState.parentChatRoomId,
                                 isCertified = dkgRitualUIState.isCertified,
                                 certificateSession = dkgRitualUIState.certificateSession,
@@ -481,6 +483,7 @@ private fun RitualProgress(
     adminGroupBlockedOn: List<String>,
     keyStateSession: FrostSigningSession?,
     isKeyStateSigned: Boolean,
+    isRoomCreated: Boolean,
     parentChatRoomId: String?,
     isCertified: Boolean,
     certificateSession: FrostSigningSession?,
@@ -745,11 +748,28 @@ private fun RitualProgress(
                     )
                 }
 
-                // Offered to whoever ran the ceremony. Any member's device could
-                // derive the same room id and create it, but one of them has to go
-                // first, and the coordinator is the member the group already watched
-                // do the work.
-                if (session.isCoordinator()) {
+                // The coordinator's device makes the room on its own once the group
+                // has signed (docs/automatic-key-ceremony.md, Phase 6), so the rung
+                // usually ends here: a way in, for anyone the room has reached. The
+                // same action as creating it -- an existing room is opened.
+                if (isRoomCreated) {
+                    Button(
+                        onClick = { onCreateAdminGroup() },
+                        enabled = !isActionPending,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Groups, contentDescription = Decorative)
+                        Spacer(modifier = Modifier.width(MaterialTheme.spacing.space100))
+                        Text(text = stringResource(Res.string.open_the_room))
+                    }
+                }
+
+                // Offered to whoever ran the ceremony, as the way to retry what the
+                // device did not manage on its own. Any member's device could derive
+                // the same room id and create it, but one of them has to go first,
+                // and the coordinator is the member the group already watched do
+                // the work.
+                if (session.isCoordinator() && !isRoomCreated) {
                     // Nothing is created until every member's key package is in
                     // hand, so this is the whole reason there is no room yet.
                     if (adminGroupBlockedOn.isNotEmpty()) {

@@ -285,6 +285,14 @@ interface ChatRepository {
     ): MarmotGroupCreation.Outcome
 
     /**
+     * Takes every key ceremony [keyPair] coordinated from a key to a working room,
+     * until cancelled: asks the group to sign its key state (a subgroup's parent to
+     * certify it first) and creates the room. See `CeremonyFollowThrough` and
+     * docs/automatic-key-ceremony.md, Phase 6.
+     */
+    suspend fun followThroughCeremonies(keyPair: KeyPair)
+
+    /**
      * Sends [text] to the room, or -- when [directMessageRecipientPublicKey] is given --
      * to that one member of it.
      *
@@ -511,6 +519,8 @@ interface ChatRepository {
                 parentChatRoomId: HexKey?,
             ): MarmotGroupCreation.Outcome =
                 MarmotGroupCreation.Outcome.Failed("No database")
+
+            override suspend fun followThroughCeremonies(keyPair: KeyPair) = Unit
 
 
             override suspend fun sendChatMessage(

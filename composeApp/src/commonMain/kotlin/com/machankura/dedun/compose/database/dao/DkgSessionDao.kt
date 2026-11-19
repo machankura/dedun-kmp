@@ -170,6 +170,17 @@ interface DkgSessionDao {
     )
     suspend fun getRunningSessionsFor(userPublicKey: HexKey): List<DkgSession>
 
+    /**
+     * Every ceremony [userPublicKey] opened that has finished with a key: what
+     * `CeremonyFollowThrough` takes on to a working room.
+     */
+    @Query(
+        "SELECT * FROM DkgSession WHERE userPublicKey = :userPublicKey AND " +
+            "coordinatorPublicKey = :userPublicKey AND stage = 'COMPLETE' AND " +
+            "thresholdPublicKey IS NOT NULL ORDER BY createdAt ASC"
+    )
+    fun observeCompletedSessionsCoordinatedBy(userPublicKey: HexKey): Flow<List<DkgSession>>
+
     @Upsert
     suspend fun upsert(dkgSession: DkgSession)
 

@@ -37,6 +37,14 @@ interface MarmotKeyPackageDao {
     @Query("SELECT * FROM MarmotKeyPackage WHERE id = :id ORDER BY createdAt DESC")
     suspend fun getMarmotKeyPackageById(id: HexKey): MarmotKeyPackage?
 
+    /**
+     * How many key packages this device holds, as a signal that one arrived.
+     * `CeremonyFollowThrough` watches it to retry a room that was blocked on a
+     * member's missing package; it reads the packages themselves when it does.
+     */
+    @Query("SELECT COUNT(*) FROM MarmotKeyPackage")
+    fun observeCount(): Flow<Int>
+
     @Upsert
     suspend fun upsert(marmotKeyPackage: MarmotKeyPackage)
 }

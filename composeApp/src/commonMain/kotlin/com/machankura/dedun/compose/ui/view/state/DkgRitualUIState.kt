@@ -89,6 +89,12 @@ sealed interface DkgRitualUIState {
          */
         val lastProgressAt: Instant? = null,
         /**
+         * Whether the room this ceremony's key derives is on this device yet.
+         * The coordinator's device creates it without being asked, so the ladder's
+         * last rung is usually a way into the room rather than a button to make it.
+         */
+        val isRoomCreated: Boolean = false,
+        /**
          * The session asking the parent to certify, while it is running.
          *
          * Runs in the *parent's* room rather than this one, so it is watched

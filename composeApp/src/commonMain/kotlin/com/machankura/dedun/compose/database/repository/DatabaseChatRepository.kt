@@ -41,6 +41,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.machankura.dedun.compose.managers.CeremonyFollowThrough
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
@@ -91,6 +92,10 @@ class DatabaseChatRepository(
         path = path,
         parentChatRoomId = parentChatRoomId,
     )
+
+    override suspend fun followThroughCeremonies(keyPair: KeyPair) =
+        CeremonyFollowThrough.observe(database = database, chatRepository = this, keyPair = keyPair)
+
     override suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>> {
         return database.chatRoomDao().observeChatRoomListByUserPublicKey(publicKey)
     }

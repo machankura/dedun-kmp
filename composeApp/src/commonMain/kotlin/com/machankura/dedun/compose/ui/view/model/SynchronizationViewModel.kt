@@ -251,6 +251,19 @@ class SynchronizationViewModel(
                             // belongs here for the same reason the pumps do: it needs the
                             // active wallet's key pair, and a wallet switch must tear it down.
                             launch(Dispatchers.IO) { liveSubscriptionManager.observe(keyPair) }
+                            // A key ceremony this profile opened, taken from a key to a
+                            // working room without anybody pressing a button: the key
+                            // state proposed, a subgroup's certificate asked for, the
+                            // room created. Here for the reason the live subscription
+                            // is -- it needs the active key pair and must stop with it.
+                            // docs/automatic-key-ceremony.md, Phase 6.
+                            launch(Dispatchers.IO) {
+                                runCatching { chatRepository.followThroughCeremonies(keyPair) }
+                                    .onFailure {
+                                        if (it is CancellationException) throw it
+                                        logger.e("Following key ceremonies through stopped", it)
+                                    }
+                            }
                         }
                     }
                 }

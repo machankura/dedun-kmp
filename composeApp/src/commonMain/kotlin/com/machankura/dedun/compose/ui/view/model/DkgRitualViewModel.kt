@@ -41,6 +41,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import com.machankura.dedun.compose.database.model.DkgSession
@@ -50,6 +53,7 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalFrostSigning
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Instant
+import com.machankura.dedun.compose.managers.CeremonyFollowThrough
 
 /**
  * Watches one ChillDKG ritual, and the steps that follow it.
@@ -156,13 +160,22 @@ class DkgRitualViewModel(
             .distinctUntilChanged()
             .flatMapLatest { (sessionId, parent, key) -> ceremonyParts(sessionId, parent, key) }
 
+        // Which rooms this member is in, so the ladder can tell a room the
+        // coordinator's device made on its own from one still to be made. Starts
+        // empty: a repository with nothing to say must not hold the screen back.
+        val roomIds = flow { emitAll(chatRepository.observeChatRoomListByPublicKey(activeUserPublicKey)) }
+            .map { rooms -> rooms.map { it.chatRoom.id }.toSet() }
+            .onStart { emit(emptySet()) }
+            .distinctUntilChanged()
+
         return combine(
             sessions,
             parts,
             keyStateSession,
             adminGroupBlockedOn,
-        ) { session, ceremony, keyState, blockedOn ->
-            Snapshot(session, ceremony, keyState, blockedOn)
+            roomIds,
+        ) { session, ceremony, keyState, blockedOn, rooms ->
+            Snapshot(session, ceremony, keyState, blockedOn, rooms)
         }
             // The parts lag the session by one emission when the ceremony changes;
             // a state that drew one ceremony's counts under another's name is the
@@ -193,6 +206,9 @@ class DkgRitualViewModel(
                     isCertified = ceremony.isCertified,
                     certificateSession = ceremony.certificateSession,
                     lastProgressAt = ceremony.lastProgressAt,
+                    isRoomCreated = session.thresholdPublicKey
+                        ?.let { runCatching { SharedKeyDerivation.marmotGroupId(it) }.getOrNull() }
+                        ?.let { it in snapshot.roomIds } == true,
                 )
             }
     }
@@ -297,6 +313,7 @@ class DkgRitualViewModel(
         val ceremony: CeremonyParts,
         val keyStateSession: FrostSigningSession?,
         val adminGroupBlockedOn: List<String>,
+        val roomIds: Set<String>,
     )
 
     /**
@@ -533,10 +550,12 @@ class DkgRitualViewModel(
         // own to be given. Either way the bare name goes down and
         // `MarmotGroupCreation` puts it under `MarmotGroupName`, so a NIP-17 room
         // called `Ekklesia` stands up a Marmot room called `#Ekklesia`.
+        // The same name and description the coordinator's device uses when it
+        // creates the room on its own -- see `CeremonyFollowThrough` -- so the two
+        // ways of making it cannot make two different rooms.
         val subgroupParent = loaded.parentChatRoomId
 
-        val name = session.subject
-            ?: if (subgroupParent != null) "Subgroup" else "Group"
+        val name = CeremonyFollowThrough.roomName(session)
 
         isActionPending.value = true
         adminGroupBlockedOn.value = emptyList()
@@ -545,11 +564,7 @@ class DkgRitualViewModel(
             val outcome = chatRepository.createMarmotGroup(
                 groupId = groupId,
                 name = name,
-                purpose = if (subgroupParent != null) {
-                    "A subgroup of the group that certified it."
-                } else {
-                    "Admins of ${session.subject ?: "the group"}."
-                },
+                purpose = CeremonyFollowThrough.roomPurpose(session),
                 adminPublicKeys = members,
                 userPublicKey = activeUserPublicKey,
                 keyPair = keyPair,
