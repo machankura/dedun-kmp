@@ -31,7 +31,9 @@ fun getRoomDatabase(
         // renders any more, and 32->33 deletes the raw-JSON rows the Lightning
         // wallet's own messages left.
         .addMigrations(MIGRATION_3_4, MIGRATION_9_10, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_26_27, MIGRATION_32_33)
-        .setDriver(BundledSQLiteDriver())
+        // secure_delete on every connection: a share this device deletes has to be gone
+        // from the file, not only from the query results. See SecureDeleteDriver.
+        .setDriver(SecureDeleteDriver(BundledSQLiteDriver()))
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 }

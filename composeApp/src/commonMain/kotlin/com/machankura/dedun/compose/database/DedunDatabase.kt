@@ -645,6 +645,27 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun unsignedNostrEventDao(): UnsignedNostrEventDao
     abstract fun zapDao(): ZapDao
 
+    /**
+     * Folds the write-ahead log into the database file and truncates it to nothing.
+     *
+     * `secure_delete` (see [com.machankura.dedun.compose.database.builder.SecureDeleteDriver]) zeroes freed
+     * content in the database's own pages, but in WAL mode every change first goes to `-wal` as a
+     * whole page image, and those images stay in the file after a checkpoint until a later write
+     * happens to reuse the space. A share written last week can still be sitting in a frame there
+     * after its row has been overwritten. A truncating checkpoint is what removes them.
+     *
+     * Call it after deleting a secret, never inside a transaction: SQLite refuses to checkpoint
+     * from one. It is cheap but not free, so it is for the moment a secret is deleted rather than
+     * for every write.
+     */
+    suspend fun scrubFreedPages() {
+        useWriterConnection { transactor ->
+            transactor.usePrepared("PRAGMA wal_checkpoint(TRUNCATE)") { statement ->
+                while (statement.step()) Unit
+            }
+        }
+    }
+
     suspend fun wipeData() {
         useWriterConnection { transactor ->
             transactor.immediateTransaction {
