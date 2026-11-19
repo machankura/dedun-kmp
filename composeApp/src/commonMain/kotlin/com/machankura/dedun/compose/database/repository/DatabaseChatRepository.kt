@@ -109,6 +109,33 @@ class DatabaseChatRepository(
         parentChatRoomId = parentChatRoomId,
     )
 
+    override suspend fun finishFoundingInvite(
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
+    ): MarmotGroupCreation.FoundingInvite = MarmotGroupCreation.finishFoundingInvite(
+        database = database,
+        chatRepository = this,
+        ceremony = ceremony,
+        ceremonyRoom = ceremonyRoom,
+    )
+
+    override suspend fun finishFoundingInvite(chatRoomId: String): MarmotGroupCreation.FoundingInvite {
+        val (ceremony, ceremonyRoom) = FoundingAdmins.ceremonyOf(database, chatRoomId)
+            ?: return MarmotGroupCreation.FoundingInvite.NothingToDo
+        return finishFoundingInvite(ceremony, ceremonyRoom)
+    }
+
+    override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = try {
+        FoundingAdmins.ceremonyOf(database, localChatRoom.chatRoom.id)
+            ?.let { (ceremony, ceremonyRoom) ->
+                MarmotGroupCreation.uninvitedFounders(database, localChatRoom, ceremony, ceremonyRoom)
+            }
+            .orEmpty()
+    } catch (e: Throwable) {
+        logger.e("Error reading who ${localChatRoom.chatRoom.id}'s founding invite missed", e)
+        emptySet()
+    }
+
     override suspend fun followThroughCeremonies(keyPair: KeyPair) =
         CeremonyFollowThrough.observe(database = database, chatRepository = this, keyPair = keyPair)
 

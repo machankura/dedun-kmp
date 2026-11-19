@@ -52,6 +52,7 @@ class CeremonyFollowThroughJvmTest {
     /** The room creations asked for, and what the next one answers. */
     private val created = mutableListOf<Pair<String, Set<HexKey>>>()
     private var outcome: (String) -> MarmotGroupCreation.Outcome = { MarmotGroupCreation.Outcome.Failed("unset") }
+    private var foundingInvite: MarmotGroupCreation.FoundingInvite = MarmotGroupCreation.FoundingInvite.NothingToDo
 
     private val chatRepository = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
         override suspend fun createMarmotGroup(
@@ -65,6 +66,8 @@ class CeremonyFollowThroughJvmTest {
             created += groupId to adminPublicKeys
             return outcome(groupId)
         }
+
+        override suspend fun finishFoundingInvite(ceremony: DkgSession, ceremonyRoom: LocalChatRoom) = foundingInvite
     }
 
     private val material = keyMaterial("5eed0000000000000000000000000000000000000000000000000000000000e5")
@@ -203,6 +206,28 @@ class CeremonyFollowThroughJvmTest {
 
         assertEquals(CeremonyFollowThrough.Step.NothingToDo, next(session))
         assertTrue(created.isEmpty())
+    }
+
+    /** docs/robust-group-admins.md, Phase 4: a room that exists is asked whether its founding invite went out. */
+    @Test
+    fun `a room whose founding invite never went out has it finished`(): Unit = runBlocking {
+        val session = finishedCeremony()
+        signKeyState(session)
+        GroupFixtures.seedRoom(db, roomOf(material))
+        foundingInvite = MarmotGroupCreation.FoundingInvite.Sent(roomOf(material), invited = listOf(alice, bob), notAdded = listOf(bob))
+
+        assertEquals(CeremonyFollowThrough.Step.Invited(roomOf(material), listOf(bob)), next(session))
+        assertTrue(created.isEmpty(), "and no second room")
+    }
+
+    @Test
+    fun `a founding invite waiting on key packages says on whom`(): Unit = runBlocking {
+        val session = finishedCeremony()
+        signKeyState(session)
+        GroupFixtures.seedRoom(db, roomOf(material))
+        foundingInvite = MarmotGroupCreation.FoundingInvite.BlockedOn(listOf(alice))
+
+        assertEquals(CeremonyFollowThrough.Step.BlockedOn(listOf(alice)), next(session))
     }
 
     /**

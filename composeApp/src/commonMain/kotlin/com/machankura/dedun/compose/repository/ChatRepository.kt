@@ -340,6 +340,19 @@ interface ChatRepository {
     ): MarmotGroupCreation.Outcome
 
     /**
+     * Invites the founding members [ceremony]'s room never reached, when its
+     * founding invite never went out. See `MarmotGroupCreation.finishFoundingInvite`
+     * and docs/robust-group-admins.md, Phase 4.
+     */
+    suspend fun finishFoundingInvite(ceremony: DkgSession, ceremonyRoom: LocalChatRoom): MarmotGroupCreation.FoundingInvite
+
+    /** [finishFoundingInvite] for the room [chatRoomId], through the ceremony its key state names. */
+    suspend fun finishFoundingInvite(chatRoomId: String): MarmotGroupCreation.FoundingInvite
+
+    /** The founders [localChatRoom]'s founding invite never reached; empty when there are none to reach. */
+    suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey>
+
+    /**
      * Takes every key ceremony [keyPair] coordinated from a key to a working room,
      * until cancelled: asks the group to sign its key state (a subgroup's parent to
      * certify it first) and creates the room. See `CeremonyFollowThrough` and
@@ -649,6 +662,14 @@ interface ChatRepository {
                 MarmotGroupCreation.Outcome.Failed("No database")
 
             override suspend fun followThroughCeremonies(keyPair: KeyPair) = Unit
+
+            override suspend fun finishFoundingInvite(ceremony: DkgSession, ceremonyRoom: LocalChatRoom) =
+                MarmotGroupCreation.FoundingInvite.NothingToDo
+
+            override suspend fun finishFoundingInvite(chatRoomId: String) =
+                MarmotGroupCreation.FoundingInvite.NothingToDo
+
+            override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = emptySet()
 
 
             override suspend fun sendChatMessage(

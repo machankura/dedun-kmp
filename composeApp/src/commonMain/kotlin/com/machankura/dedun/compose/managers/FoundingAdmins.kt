@@ -6,6 +6,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 
 /**
@@ -92,6 +93,18 @@ object FoundingAdmins {
             )
         )
         return check
+    }
+
+    /**
+     * The ceremony that made [chatRoomId]'s key, as this device holds it, and the
+     * room it ran in -- or null where this device holds no key state for the room,
+     * no record of that ceremony, or no longer the room it ran in.
+     */
+    suspend fun ceremonyOf(database: DedunDatabase, chatRoomId: String): Pair<DkgSession, LocalChatRoom>? {
+        val state = database.groupKeyStateDao().getByChatRoomId(chatRoomId) ?: return null
+        val ceremony = database.dkgSessionDao().getSessionById(state.dkgSessionId) ?: return null
+        val ceremonyRoom = database.chatRoomDao().findChatRoomById(ceremony.chatRoomId) ?: return null
+        return ceremony to ceremonyRoom
     }
 
     /** The ceremony's participants, or null when this device holds no record of them. */

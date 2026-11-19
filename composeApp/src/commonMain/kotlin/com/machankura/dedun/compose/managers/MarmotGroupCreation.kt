@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.mls.group.MlsGroup
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.MarmotKeyPackage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -177,8 +179,16 @@ object MarmotGroupCreation {
         // there is a row to file it against.
         GroupKeyStateManager.adopt(database, groupId)
 
+        // Read again now the routing is on file. The row above predates it, and a
+        // room with no routing row is addressed by its own id -- so on the current
+        // profile the invite went to a second copy of the group the engine adopted
+        // under the room id, and the copy at the real address still held only its
+        // creator. Every later invite then took the founding path: no commit, and
+        // nobody already in the room told. docs/robust-group-admins.md, Phase 4.
+        val routedRoom = chatRepository.getChatRoomByIdentifier(groupId) ?: localChatRoom
+
         val notAdded = runCatching {
-            chatRepository.addMembers(localChatRoom = localChatRoom, peers = addable)
+            chatRepository.addMembers(localChatRoom = routedRoom, peers = addable)
         }.onFailure {
             logger.e("Failed to add members to $groupId", it)
         }.getOrElse { addable.map { (publicKey, _) -> publicKey } }
@@ -256,6 +266,96 @@ object MarmotGroupCreation {
             profile = profile,
         )
     }
+
+    /** What [finishFoundingInvite] did. */
+    sealed interface FoundingInvite {
+        /** Every founding member holds a leaf, or the room is past its founding. */
+        data object NothingToDo : FoundingInvite
+
+        /** The founders who were missing were invited; [notAdded] could not be. */
+        data class Sent(val chatRoomId: String, val invited: List<HexKey>, val notAdded: List<HexKey>) : FoundingInvite
+
+        /** Some founders have no published key package, so nobody was invited. */
+        data class BlockedOn(val missing: List<HexKey>) : FoundingInvite
+
+        data class Failed(val reason: String) : FoundingInvite
+    }
+
+    /**
+     * The founding members of [room] its founding invite never reached: listed as
+     * admins, holding no leaf, in a room nothing has been committed to since it was
+     * made.
+     *
+     * Only at epoch 0. A room is created at epoch 0 and its founding invite is the
+     * commit that leaves it -- so a room still there is one whose invite failed
+     * outright, and nobody in it has left or been removed, because either would
+     * have been a commit. Past epoch 0 a founder without a leaf might be one who
+     * left, and inviting them back is not this function's to decide
+     * (docs/robust-group-admins.md, Out of scope).
+     *
+     * A device holds a room at epoch 0 only if it made it: everybody else's copy
+     * comes from a Welcome, which is already past the founding commit.
+     */
+    suspend fun uninvitedFounders(
+        database: DedunDatabase,
+        room: LocalChatRoom,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
+    ): Set<HexKey> {
+        val group = liveGroupOf(database, room) ?: return emptySet()
+        if (group.epoch != 0L) return emptySet()
+
+        val holdingLeaves = Participant.fromMlsGroup(group, room.chatRoom.id, null).map { it.participantPublicKey }.toSet()
+        return ChillDkgRitualManager.participantsOf(ceremony, ceremonyRoom) - holdingLeaves
+    }
+
+    /**
+     * Invites the founding members [room]'s founding invite never reached -- see
+     * [uninvitedFounders] -- in one commit, as [create] would have.
+     *
+     * Every key package first, as at creation: a founder who cannot be invited yet
+     * holds the rest back rather than leaving the room to a second, partial
+     * founding. docs/robust-group-admins.md, Phase 4.
+     */
+    suspend fun finishFoundingInvite(
+        database: DedunDatabase,
+        chatRepository: ChatRepository,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
+        keyPackageLookupTimeout: Long = KEY_PACKAGE_LOOKUP_TIMEOUT,
+    ): FoundingInvite {
+        val thresholdPublicKey = ceremony.thresholdPublicKey ?: return FoundingInvite.NothingToDo
+        val groupId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey)
+        val room = chatRepository.getChatRoomByIdentifier(groupId) ?: return FoundingInvite.NothingToDo
+
+        val uninvited = uninvitedFounders(database, room, ceremony, ceremonyRoom)
+        if (uninvited.isEmpty()) return FoundingInvite.NothingToDo
+
+        val keyPackages = keyPackagesFor(chatRepository, uninvited.toList(), keyPackageLookupTimeout, room.chatRoom.marmotProfile())
+        val missing = keyPackages.filter { it.second == null }.map { it.first }
+        if (missing.isNotEmpty()) {
+            logger.w("Not finishing $groupId's founding invite: no key package for $missing")
+            return FoundingInvite.BlockedOn(missing)
+        }
+        val addable = keyPackages.mapNotNull { (publicKey, keyPackage) -> keyPackage?.let { publicKey to it } }
+
+        val notAdded = runCatching {
+            chatRepository.addMembers(localChatRoom = room, peers = addable)
+        }.onFailure {
+            logger.e("Failed to finish $groupId's founding invite", it)
+        }.getOrElse { return FoundingInvite.Failed(it.message ?: "Couldn't invite them. Please try again.") }
+
+        flagAdmins(database, groupId)
+        logger.i("Finished $groupId's founding invite: ${addable.size - notAdded.size} invited, ${notAdded.size} not")
+        return FoundingInvite.Sent(groupId, addable.map { it.first }, notAdded)
+    }
+
+    /** The room's live group: the row's on the legacy profile, the engine's on the current one. */
+    private suspend fun liveGroupOf(database: DedunDatabase, room: LocalChatRoom): MlsGroup? =
+        when (room.chatRoom.marmotProfile()) {
+            MarmotProfile.LEGACY -> room.chatRoom.toMlsGroup()
+            MarmotProfile.CURRENT -> database.marmotEngine.groupFor(room.routingId)
+        }
 
     /**
      * Writes `adminAt` on the rows of the members this room was created with as

@@ -26,6 +26,12 @@ import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.MarmotKeyPackage
+import com.machankura.dedun.compose.nostr.Relays
+import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
@@ -84,7 +90,8 @@ class RobustGroupAdminsJvmTest {
         override fun toString() = publicKey.take(8)
     }
 
-    private val roomId = SharedKeyDerivation.marmotGroupId("02" + KeyPair().pubKey.toHexKey())
+    private val foundingThresholdPublicKey = "02" + KeyPair().pubKey.toHexKey()
+    private val roomId = SharedKeyDerivation.marmotGroupId(foundingThresholdPublicKey)
 
     /**
      * Three phones; the first creates the admin room with all three as its admins,
@@ -118,7 +125,7 @@ class RobustGroupAdminsJvmTest {
     }
 
     /** Hands [to] the Welcome [from] queued for it, wrapped as a relay would carry it. */
-    private suspend fun welcome(from: Phone, to: Phone) {
+    private suspend fun welcome(from: Phone, to: Phone, roomId: String = this.roomId) {
         val payload = from.db.giftWrapPayloadDao().getAllGiftWrapUnsigned()
             .filter { it.kind == WelcomeEvent.KIND }
             .single { payload -> payload.tags.any { it.size > 1 && it[1] == to.keyPackage.id } }
@@ -192,13 +199,14 @@ class RobustGroupAdminsJvmTest {
     /**
      * The boundary docs/robust-group-admins.md, D1 draws: founding, not present.
      *
-     * Legacy only until Phase 4. On the current profile `MarmotGroupCreation` invites
-     * the founders through a room read before its routing id was recorded, so the
-     * engine's group at the real address still holds only the creator, and a later
-     * invite takes the founding path -- no commit, and nobody else told.
+     * On both profiles since Phase 4. Before it, `MarmotGroupCreation` invited the
+     * founders on the current profile through a room read before its routing id was
+     * recorded, so the engine's group at the real address still held only the
+     * creator, and this later invite took the founding path -- no commit, and
+     * nobody else told.
      */
     @Test
-    fun `a member added after the founding is not an admin`() = onEveryProfile(listOf(MarmotProfile.LEGACY)) { profile, phones ->
+    fun `a member added after the founding is not an admin`() = onEveryProfile { profile, phones ->
         val founders = phones.map { it.publicKey }.toSet()
         val creator = phones.first()
 
@@ -217,6 +225,119 @@ class RobustGroupAdminsJvmTest {
             }
             assertFalse(assertNotNull(later.room().chatRoom.toMlsGroup()).isLocalAdmin(), "the later member governs ($profile)")
         }
+    }
+
+    // ---- The founding invite: docs/robust-group-admins.md, Phase 4 -------------
+
+    private val ceremonyRoomId = "ce1e".repeat(16)
+
+    /** The ceremony [phones] ran, as [owner]'s device holds it: everyone in it, and its key [roomId]'s. */
+    private suspend fun ceremonyOn(owner: Phone, phones: List<Phone>, thresholdPublicKey: HexKey): Pair<DkgSession, LocalChatRoom> {
+        owner.db.chatRoomDao().upsert(
+            ChatRoom(id = ceremonyRoomId, userPublicKey = owner.publicKey, subject = "Ekklesia", description = null, mlsGroupState = null)
+        )
+        val session = DkgSession(
+            id = "the-ceremony",
+            chatRoomId = ceremonyRoomId,
+            coordinatorPublicKey = owner.publicKey,
+            userPublicKey = owner.publicKey,
+            threshold = 2,
+            participantCount = phones.size,
+            participantPublicKeys = DkgSession.formatParticipants(phones.map { it.publicKey }.toSet()),
+            subject = "Ekklesia",
+            stage = DkgRitualStage.COMPLETE,
+            hostPublicKey = owner.publicKey,
+            round1Random = "aa".repeat(32),
+            round2AuxRandom = "bb".repeat(32),
+            thresholdPublicKey = thresholdPublicKey,
+            secretShare = "cc".repeat(32),
+        )
+        owner.db.dkgSessionDao().upsert(session)
+        return session to assertNotNull(owner.db.chatRoomDao().findChatRoomById(ceremonyRoomId))
+    }
+
+    /**
+     * A room whose founding invite never went out: made, with every founder in
+     * its policy, and nobody but its creator in its tree -- what `create` leaves
+     * when `addMembers` throws.
+     */
+    private suspend fun roomWithoutItsInvite(profile: MarmotProfile, phones: List<Phone>, roomId: String) {
+        val creator = phones.first()
+        val created = MarmotGroupFactory.create(
+            creator = creator.keyPair,
+            roomId = roomId,
+            name = "#Ekklesia",
+            description = SharedKeyDerivation.describe("Admins of Ekklesia."),
+            adminPublicKeys = phones.map { it.publicKey },
+            relays = Relays.DefaultDMRelayList.map { it.url },
+            profile = profile,
+        )
+        assertNotNull(
+            creator.chatRepository.getOrCreateChatRoom(
+                chatRoomId = roomId,
+                activeUserPublicKey = creator.publicKey,
+                relayHint = null,
+                defaultSubject = "#Ekklesia",
+                description = null,
+                mlsGroupState = created.group.saveState().encodeTls().toHex(),
+            )
+        )
+        creator.chatRepository.recordMarmotRouting(chatRoomId = roomId, routingId = created.routingId)
+    }
+
+    @Test
+    fun `a founding invite that never went out is finished, and every founder is an admin`(): Unit = runBlocking {
+        listOf(MarmotProfile.LEGACY, MarmotProfile.CURRENT).forEach { profile ->
+            val phones = List(3) { Phone(profile) }
+            try {
+                phones.forEach { it.ready() }
+                phones.forEach { phone -> phones.forEach { MarmotStandIn.seedProfile(phone.db, it.publicKey) } }
+                val creator = phones.first()
+                phones.drop(1).forEach { creator.db.marmotKeyPackageDao().upsert(it.keyPackage) }
+
+                val thresholdPublicKey = "02" + KeyPair().pubKey.toHexKey()
+                val roomId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey)
+                roomWithoutItsInvite(profile, phones, roomId)
+                val (session, ceremonyRoom) = ceremonyOn(creator, phones, thresholdPublicKey)
+
+                val invite = MarmotGroupCreation.finishFoundingInvite(
+                    creator.db, creator.chatRepository, session, ceremonyRoom, keyPackageLookupTimeout = 2_000L,
+                )
+                val sent = assertIs<MarmotGroupCreation.FoundingInvite.Sent>(invite, "($profile)")
+                assertEquals(phones.drop(1).map { it.publicKey }.toSet(), sent.invited.toSet(), "($profile)")
+                assertTrue(sent.notAdded.isEmpty(), "($profile)")
+
+                assertEquals(
+                    MarmotGroupCreation.FoundingInvite.NothingToDo,
+                    MarmotGroupCreation.finishFoundingInvite(creator.db, creator.chatRepository, session, ceremonyRoom, 2_000L),
+                    "and a second run invites nobody ($profile)",
+                )
+
+                phones.drop(1).forEach { welcome(from = creator, to = it, roomId = roomId) }
+                val founders = phones.map { it.publicKey }.toSet()
+                phones.forEach { phone ->
+                    val room = assertNotNull(phone.db.chatRoomDao().findChatRoomById(roomId), "$phone has no room ($profile)")
+                    val group = assertNotNull(room.chatRoom.toMlsGroup(), "$phone holds no group ($profile)")
+                    assertEquals(founders, group.currentAdminIdentities(), "$phone's admin policy ($profile)")
+                    assertTrue(group.isLocalAdmin(), "$phone is not an admin ($profile)")
+                }
+            } finally {
+                phones.forEach { it.close() }
+            }
+        }
+    }
+
+    /** Past epoch 0 a founder without a leaf may be one who left; that is not this step's to undo. */
+    @Test
+    fun `a room past its founding invites nobody`() = onEveryProfile { profile, phones ->
+        val creator = phones.first()
+        val (session, ceremonyRoom) = ceremonyOn(creator, phones, foundingThresholdPublicKey)
+
+        assertEquals(
+            MarmotGroupCreation.FoundingInvite.NothingToDo,
+            MarmotGroupCreation.finishFoundingInvite(creator.db, creator.chatRepository, session, ceremonyRoom, 2_000L),
+            "($profile)",
+        )
     }
 
     // ---- The ceremony ------------------------------------------------------------

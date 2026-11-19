@@ -30,7 +30,9 @@ import com.machankura.dedun.compose.repository.ChatRepository
  * 1. a subgroup's parent certifies the room the key derives -- proposed here, and
  *    signed by the parent's own quorum, which stays their decision;
  * 2. the group signs what that room will sign with, its key state;
- * 3. the room is created and the members welcomed into it.
+ * 3. the room is created and the members welcomed into it;
+ * 4. a room whose founding invite never went out has it finished
+ *    (docs/robust-group-admins.md, Phase 4).
  *
  * None of the three proposals asks anybody anything: each is a request to the
  * group, and the coordinator agreed to make it when they opened the ceremony. So
@@ -62,7 +64,7 @@ object CeremonyFollowThrough {
 
     /** What one call to [takeNextStep] did. */
     sealed interface Step {
-        /** Not this device's to do, or nothing left: not the coordinator, not finished, or the room exists. */
+        /** Not this device's to do, or nothing left: not the coordinator, not finished, or the room exists with its founders. */
         data object NothingToDo : Step
 
         /** Waiting on signatures somebody else gives. */
@@ -73,6 +75,12 @@ object CeremonyFollowThrough {
 
         /** The room exists now. */
         data class Created(val chatRoomId: String) : Step
+
+        /**
+         * The room existed without its founders, whose invite never went out, and
+         * now they have been invited; [notAdded] could not be.
+         */
+        data class Invited(val chatRoomId: String, val notAdded: List<HexKey>) : Step
 
         /** The room cannot be created until these members' devices publish a key package. */
         data class BlockedOn(val missing: List<HexKey>) : Step
@@ -166,10 +174,23 @@ object CeremonyFollowThrough {
         val thresholdPublicKey = current.thresholdPublicKey ?: return@withLock Step.NothingToDo
         val roomId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey)
 
-        if (database.chatRoomDao().findChatRoomById(roomId) != null) return@withLock Step.NothingToDo
-
         val ceremonyRoom = database.chatRoomDao().findChatRoomById(current.chatRoomId)
             ?: return@withLock Step.Stuck("The room ceremony ${current.id} ran in is gone")
+
+        // 4. The room exists: finish its founding invite if it never went out.
+        // Only a room still at epoch 0 has anything to finish, so nobody who
+        // left is ever invited back -- see `MarmotGroupCreation.uninvitedFounders`.
+        if (database.chatRoomDao().findChatRoomById(roomId) != null) {
+            return@withLock when (val invite = chatRepository.finishFoundingInvite(current, ceremonyRoom)) {
+                MarmotGroupCreation.FoundingInvite.NothingToDo -> Step.NothingToDo
+                is MarmotGroupCreation.FoundingInvite.Sent -> {
+                    logger.i("Ceremony ${current.id}: invited ${invite.invited.size} founder(s) to $roomId")
+                    Step.Invited(roomId, invite.notAdded)
+                }
+                is MarmotGroupCreation.FoundingInvite.BlockedOn -> Step.BlockedOn(invite.missing)
+                is MarmotGroupCreation.FoundingInvite.Failed -> Step.Stuck(invite.reason)
+            }
+        }
 
         val participants = ChillDkgRitualManager.participantsOf(current, ceremonyRoom)
         val parent = current.parentChatRoomId
