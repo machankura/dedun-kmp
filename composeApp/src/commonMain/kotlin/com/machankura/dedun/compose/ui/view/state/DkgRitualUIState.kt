@@ -10,6 +10,9 @@ import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 
 sealed interface DkgRitualUIState {
     data class Loaded(
@@ -80,6 +83,12 @@ sealed interface DkgRitualUIState {
         /** Whether the parent has certified the room this ceremony's key derives. */
         val isCertified: Boolean = false,
         /**
+         * When this device last heard anything of the ceremony: the newest of its
+         * stored messages, each dated by its first arrival. Null before any.
+         * What [stalledSince] dates a stall from.
+         */
+        val lastProgressAt: Instant? = null,
+        /**
          * The session asking the parent to certify, while it is running.
          *
          * Runs in the *parent's* room rather than this one, so it is watched
@@ -140,6 +149,61 @@ sealed interface DkgRitualUIState {
             get() = session.stage != DkgRitualStage.COMPLETE &&
                 session.stage != DkgRitualStage.FAILED &&
                 session.userPublicKey in ChillDkgRitualManager.participantsOf(session, localChatRoom)
+
+        /**
+         * Who the ceremony is waiting on, as far as this device can tell.
+         *
+         * Once a member has joined nobody is asked anything, so a ceremony that is
+         * not moving is waiting on somebody's device: a member who has not joined,
+         * or one whose device has not been opened since the step before. Those
+         * missing from the step this device is at -- or, once everyone has sent
+         * theirs, the coordinator, whose device combines them.
+         */
+        val waitingOn: Set<HexKey>
+            get() {
+                val participants = ChillDkgRitualManager.participantsOf(session, localChatRoom)
+
+                fun missingOr(coordinatorStep: Boolean, sent: Set<HexKey>): Set<HexKey> {
+                    val missing = participants - sent
+                    return when {
+                        missing.isNotEmpty() -> missing
+                        coordinatorStep -> setOf(session.coordinatorPublicKey)
+                        else -> emptySet()
+                    }
+                }
+
+                return when (session.stage) {
+                    DkgRitualStage.COLLECTING_HOST_KEYS -> participants - hostKeyParticipants
+                    DkgRitualStage.COLLECTING_ROUND_1 ->
+                        missingOr(session.coordinatorRound1 == null, round1Participants)
+                    DkgRitualStage.COLLECTING_ROUND_2 ->
+                        missingOr(session.certificate == null, round2Participants)
+                    DkgRitualStage.COMPLETE, DkgRitualStage.FAILED -> emptySet()
+                }
+            }
+
+        /**
+         * When the ceremony stopped moving, if it has been still for at least
+         * [STALL_AFTER] by [now] and this member can do something about it -- or
+         * null if it is moving, finished, or not theirs to end.
+         *
+         * Abandoning is the way out of a stall, because the rounds run themselves
+         * and the only thing a running ceremony can wait on is a device that is not
+         * answering. This is what tells the screen to say so beside the person it is
+         * waiting on. It never abandons anything itself: whether a day is too long
+         * is the group's call.
+         */
+        fun stalledSince(now: Instant): Instant? {
+            if (!canAbandon) return null
+
+            val since = lastProgressAt ?: session.createdAt
+            return since.takeIf { now - it >= STALL_AFTER && waitingOn.isNotEmpty() }
+        }
+
+        companion object {
+            /** How long a ceremony sits still before the screen calls it stalled. */
+            val STALL_AFTER: Duration = 1.days
+        }
 
         /**
          * The `n` of the t-of-n, as the session has it, because that is the count

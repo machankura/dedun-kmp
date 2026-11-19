@@ -19,6 +19,15 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
+import kotlin.time.Clock
+import kotlin.time.Instant
+import com.machankura.dedun.compose.extensions.toFormattedTimeAndDateString
+import dedun.composeapp.generated.resources.the_ceremony_has_stalled
+import dedun.composeapp.generated.resources.waiting_on_s_since_s
+import dedun.composeapp.generated.resources.if_they_have_stopped_answering_any_member_can_abandon
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -264,6 +273,27 @@ fun DkgRitualScreen(
                             .padding(MaterialTheme.spacing.space125),
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space125)
                     ) {
+                            // Re-read once a minute, so a screen left open notices the
+                            // day go by rather than waiting for a message that, being
+                            // stalled, is not coming.
+                            val now by produceState(Clock.System.now()) {
+                                while (true) {
+                                    delay(60_000)
+                                    value = Clock.System.now()
+                                }
+                            }
+
+                            dkgRitualUIState.stalledSince(now)?.let { since ->
+                                StalledCeremonyCard(
+                                    waitingOn = dkgRitualUIState.waitingOn
+                                        .sorted()
+                                        .map { it.memberName(dkgRitualUIState.ritualMembers, activeUserPublicKey) },
+                                    since = since,
+                                    isActionPending = isActionPending,
+                                    onAbandon = { isConfirmingAbandon = true },
+                                )
+                            }
+
                             RitualProgress(
                                 session = session,
                                 participantCount = participantCount,
@@ -372,6 +402,72 @@ internal fun retryRoute(activeUserPublicKey: HexKey, chatRoomId: String, session
         ?: CreateSharedKeyRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
 
 /** The ladder, and the members it is climbing. */
+/**
+ * Says a ceremony has stopped moving, on whom, and that abandoning it is how it
+ * ends.
+ *
+ * Once everyone has joined the rounds run themselves, so a ceremony that sits
+ * still is waiting on a device that is not answering -- a member who never
+ * joined, or one whose phone has not been opened since. Nothing on this device
+ * can make that member answer. What it can do is put the way out beside the
+ * name, rather than leave it at the foot of the screen for a member to wonder
+ * whether it is too soon to use. The button opens the same confirmation the
+ * other one does.
+ */
+@Composable
+private fun StalledCeremonyCard(
+    waitingOn: List<String>,
+    since: Instant,
+    isActionPending: Boolean,
+    onAbandon: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.space200),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space125),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.HourglassEmpty, contentDescription = Decorative)
+                Text(
+                    text = stringResource(Res.string.the_ceremony_has_stalled),
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+
+            Text(
+                text = stringResource(
+                    Res.string.waiting_on_s_since_s,
+                    waitingOn.joinToString(", "),
+                    since.toFormattedTimeAndDateString()
+                ),
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Text(
+                text = stringResource(Res.string.if_they_have_stopped_answering_any_member_can_abandon),
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            TextButton(
+                onClick = onAbandon,
+                enabled = !isActionPending,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(stringResource(Res.string.abandon_ceremony))
+            }
+        }
+    }
+}
+
 @Composable
 private fun RitualProgress(
     session: DkgSession,

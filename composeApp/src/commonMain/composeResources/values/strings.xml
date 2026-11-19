@@ -1567,4 +1567,7 @@
     <string name="nothing_has_been_published_from_this_device_yet_declining">Nothing has been published from this device yet. Declining leaves the ceremony for the others to abandon or wait on, and you can join later from the shared key screen.</string>
     <string name="once_everyone_has_joined_each_member_s_device_commits">Once everyone has joined, each member's device commits to its part of the key. Nobody is asked.</string>
     <string name="each_member_s_device_checks_the_combined_result_against">Each member's device checks the combined result against what it sent, and confirms it if they match.</string>
+    <string name="the_ceremony_has_stalled">The ceremony has stalled</string>
+    <string name="waiting_on_s_since_s">Waiting on %1$s since %2$s.</string>
+    <string name="if_they_have_stopped_answering_any_member_can_abandon">If they have stopped answering, any member can abandon the ceremony. No key is made, and the group can start again.</string>
 </resources>

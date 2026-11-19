@@ -49,6 +49,7 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.intermdiate.LocalFrostSigningSession
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlin.time.Instant
 
 /**
  * Watches one ChillDKG ritual, and the steps that follow it.
@@ -183,9 +184,7 @@ class DkgRitualViewModel(
                     round1Participants = ceremony.round1Participants,
                     round2Participants = ceremony.round2Participants,
                     // Computed here, before the one write, rather than read and
-                    // written around a suspension: whether round 1 can be asked
-                    // for depends on how many host keys have arrived, which only
-                    // the messages flow sees.
+                    // written around a suspension.
                     pendingApproval = dkgRepository.pendingApproval(session),
                     adminGroupBlockedOn = snapshot.adminGroupBlockedOn,
                     keyStateSession = snapshot.keyStateSession,
@@ -193,6 +192,7 @@ class DkgRitualViewModel(
                     parentChatRoomId = session.parentChatRoomId,
                     isCertified = ceremony.isCertified,
                     certificateSession = ceremony.certificateSession,
+                    lastProgressAt = ceremony.lastProgressAt,
                 )
             }
     }
@@ -257,6 +257,9 @@ class DkgRitualViewModel(
                 isKeyStateSigned = isKeyStateSigned,
                 isCertified = isCertified,
                 certificateSession = certificate,
+                // Each row is dated by its first arrival, so the newest is when
+                // the ceremony last moved on this device.
+                lastProgressAt = messages.maxOfOrNull { it.createdAt },
             )
         }
     }
@@ -286,6 +289,7 @@ class DkgRitualViewModel(
         val isKeyStateSigned: Boolean = false,
         val isCertified: Boolean = false,
         val certificateSession: FrostSigningSession? = null,
+        val lastProgressAt: Instant? = null,
     )
 
     private data class Snapshot(

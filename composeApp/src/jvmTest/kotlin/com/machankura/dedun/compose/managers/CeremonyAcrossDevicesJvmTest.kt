@@ -141,6 +141,39 @@ class CeremonyAcrossDevicesJvmTest {
             }
         }
 
+    /**
+     * A message is dated by when it first arrived. The ritual screen dates a stall
+     * from the newest of them, and a relay repeating itself is not the ceremony
+     * moving.
+     */
+    @Test
+    fun `a redelivered message keeps the time it first arrived`(): Unit = runBlocking {
+        CeremonyNetwork.nip17(size = 3).use { network ->
+            val member = network.devices[1]
+            val session = network.propose(threshold = 2)
+            network.deliverUntilQuiet()
+
+            fun stored() = runBlocking {
+                assertNotNull(
+                    member.db.dkgSessionDao()
+                        .getMessage(session.id, DkgRitualEvents.HOST_KEY, network.coordinator.publicKey)
+                )
+            }
+            val first = stored().createdAt
+
+            kotlinx.coroutines.delay(20)
+            ChillDkgRitualManager.processRitualPayload(
+                database = member.db,
+                localChatRoom = network.room(member),
+                innerEvent = network.sent(network.coordinator, DkgRitualEvents.HOST_KEY).single(),
+                userPublicKey = member.publicKey,
+                nostrPrivateKey = member.privateKey,
+            )
+
+            assertEquals(first, stored().createdAt)
+        }
+    }
+
     /** A round approval from a screen left open across the upgrade publishes nothing. */
     @Test
     fun `approving a round does nothing`(): Unit = runBlocking {

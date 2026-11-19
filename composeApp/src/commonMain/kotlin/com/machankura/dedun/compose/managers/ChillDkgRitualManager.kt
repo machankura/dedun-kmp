@@ -726,16 +726,22 @@ object ChillDkgRitualManager {
                 val known = database.dkgSessionDao()
                     .getMessage(session.id, innerEvent.kind, innerEvent.pubKey) != null
 
-                database.dkgSessionDao().upsert(
-                    DkgParticipantMessage(
-                        sessionId = session.id,
-                        participantPublicKey = innerEvent.pubKey,
-                        kind = innerEvent.kind,
-                        payload = innerEvent.content
-                    )
-                )
-
+                // Written once, on first arrival. Its `createdAt` is when this
+                // device first heard from that member at that step, and the ritual
+                // screen dates a stall from the newest of them -- rewriting the row
+                // on every redelivery would restart that clock each time a relay
+                // repeated itself. A member's message for a step is the same bytes
+                // every time it is sent, so keeping the first loses nothing.
                 if (!known) {
+                    database.dkgSessionDao().upsert(
+                        DkgParticipantMessage(
+                            sessionId = session.id,
+                            participantPublicKey = innerEvent.pubKey,
+                            kind = innerEvent.kind,
+                            payload = innerEvent.content
+                        )
+                    )
+
                     announceStep(database, session, innerEvent.kind, innerEvent.pubKey)
                 }
             }
@@ -1501,16 +1507,20 @@ object ChillDkgRitualManager {
         // fall back on, so the check that matters lives next to the write.
         val known = ownMessage(database, session, kind) != null
 
-        database.dkgSessionDao().upsert(
-            DkgParticipantMessage(
-                sessionId = session.id,
-                participantPublicKey = session.userPublicKey,
-                kind = kind,
-                payload = content
+        // Once, as [record] does and for the same reason: the row's time is when
+        // this step first went out.
+        if (!known) {
+            database.dkgSessionDao().upsert(
+                DkgParticipantMessage(
+                    sessionId = session.id,
+                    participantPublicKey = session.userPublicKey,
+                    kind = kind,
+                    payload = content
+                )
             )
-        )
 
-        if (!known) announceStep(database, session, kind, session.userPublicKey)
+            announceStep(database, session, kind, session.userPublicKey)
+        }
     }
 
     /**
