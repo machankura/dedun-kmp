@@ -94,6 +94,12 @@ class SelectChatRoomTypeViewModel(
     /**
      * Everyone who administers the group under [ChatRoomType.ROBUST]: the picked
      * members plus the creator.
+     *
+     * Counted here only to offer a quorum. The admins themselves are read off
+     * the ceremony this screen opens -- `ChillDkgRitualManager.proposeRitual`
+     * builds its participants by the same rule, the room's members plus the
+     * creator -- and `MarmotGroupCreation.createFor` makes the admin room from
+     * those. See docs/robust-group-admins.md, Phase 1.
      */
     val adminCount: Int = (memberPublicKeys + activeUserPublicKey).distinct().size
 

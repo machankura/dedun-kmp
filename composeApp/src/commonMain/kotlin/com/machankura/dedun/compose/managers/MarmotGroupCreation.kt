@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlin.time.Clock
 import kotlinx.coroutines.withTimeoutOrNull
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.MarmotKeyPackage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.extensions.toHex
@@ -192,6 +193,68 @@ object MarmotGroupCreation {
         return Outcome.Created(
             room = chatRepository.getChatRoomByIdentifier(groupId) ?: localChatRoom,
             notAdded = notAdded
+        )
+    }
+
+    /**
+     * Creates the room [ceremony]'s key derives, with the ceremony's participants
+     * as its admins.
+     *
+     * The only way the app makes such a room, and the reason [create] takes a list
+     * of admins nobody outside this file supplies. The founding members of a
+     * robust group are the participants of the ceremony that made its key --
+     * every one of their devices built that set from the proposal it agreed to --
+     * and a room's epoch-0 admin list is fixed for good at an address derived from
+     * the key. Two callers computing it was two chances to compute it differently.
+     * See docs/robust-group-admins.md, D1 and Phase 1.
+     *
+     * The room's id, name and description come off the ceremony too, so the
+     * coordinator's device creating it on its own and a member pressing the
+     * button make the same room.
+     *
+     * [ceremonyRoom] is the room the ceremony ran in: the participant set falls
+     * back to its members for a ceremony that predates its own participant list,
+     * as [ChillDkgRitualManager.participantsOf] does everywhere.
+     *
+     * A device that was not in the ceremony is refused. It holds no key state for
+     * the room and no share of the key, and listing itself as the room's
+     * creator would put an admin into the room the group never chose.
+     */
+    suspend fun createFor(
+        database: DedunDatabase,
+        chatRepository: ChatRepository,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
+        keyPair: KeyPair,
+        parentChatRoomId: HexKey? = null,
+        keyPackageLookupTimeout: Long = KEY_PACKAGE_LOOKUP_TIMEOUT,
+        profile: MarmotProfile = MarmotProfile.DEFAULT_FOR_NEW_ROOMS,
+    ): Outcome {
+        val thresholdPublicKey = ceremony.thresholdPublicKey
+            ?: return Outcome.Failed("This ceremony has no key yet.")
+
+        val founders = ChillDkgRitualManager.participantsOf(ceremony, ceremonyRoom)
+        if (ceremony.participantPublicKeySet() == null) {
+            logger.w("Ceremony ${ceremony.id} predates its participant list; its room's members are its founders")
+        }
+
+        if (ceremony.userPublicKey !in founders) {
+            logger.e("Not creating the room for ${ceremony.id}: ${ceremony.userPublicKey} was not in it")
+            return Outcome.Failed("Only someone who took part in the key ceremony can create its room.")
+        }
+
+        return create(
+            database = database,
+            chatRepository = chatRepository,
+            groupId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey),
+            name = CeremonyFollowThrough.roomName(ceremony),
+            purpose = CeremonyFollowThrough.roomPurpose(ceremony),
+            adminPublicKeys = founders,
+            userPublicKey = ceremony.userPublicKey,
+            keyPair = keyPair,
+            parentChatRoomId = parentChatRoomId,
+            keyPackageLookupTimeout = keyPackageLookupTimeout,
+            profile = profile,
         )
     }
 

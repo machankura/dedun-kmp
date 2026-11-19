@@ -66,6 +66,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
@@ -75,7 +76,6 @@ import com.machankura.dedun.compose.database.model.types.ShareRepairStage
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
-import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareGenerations
 import com.machankura.dedun.compose.managers.ShareRepairManager
 import com.machankura.dedun.compose.ExperimentalFeatures
@@ -94,24 +94,16 @@ class DatabaseChatRepository(
     val logger = Logger.withTag(TAG)
 
     override suspend fun createMarmotGroup(
-        groupId: String,
-        name: String,
-        purpose: String,
-        adminPublicKeys: Set<HexKey>,
-        userPublicKey: HexKey,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
         keyPair: KeyPair,
-        path: List<Long>,
         parentChatRoomId: HexKey?,
-    ): MarmotGroupCreation.Outcome = MarmotGroupCreation.create(
+    ): MarmotGroupCreation.Outcome = MarmotGroupCreation.createFor(
         database = database,
         chatRepository = this,
-        groupId = groupId,
-        name = name,
-        purpose = purpose,
-        adminPublicKeys = adminPublicKeys,
-        userPublicKey = userPublicKey,
+        ceremony = ceremony,
+        ceremonyRoom = ceremonyRoom,
         keyPair = keyPair,
-        path = path,
         parentChatRoomId = parentChatRoomId,
     )
 

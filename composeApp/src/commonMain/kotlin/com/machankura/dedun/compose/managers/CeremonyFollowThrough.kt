@@ -240,14 +240,13 @@ object CeremonyFollowThrough {
             }
         }
 
-        // 3. The room, with everyone the ceremony was run with as its admins.
+        // 3. The room, with everyone the ceremony was run with as its admins --
+        // which `MarmotGroupCreation.createFor` reads off the ceremony itself, so
+        // there is no list here to get wrong (docs/robust-group-admins.md, Phase 1).
         when (
             val outcome = chatRepository.createMarmotGroup(
-                groupId = roomId,
-                name = roomName(current),
-                purpose = roomPurpose(current),
-                adminPublicKeys = participants,
-                userPublicKey = current.userPublicKey,
+                ceremony = current,
+                ceremonyRoom = ceremonyRoom,
                 keyPair = keyPair,
                 // Verified by the time it is written: the key state this room was
                 // gated on carries the certificate, and `stateFrom` refused it

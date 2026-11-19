@@ -15,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
@@ -54,15 +55,13 @@ class CeremonyFollowThroughJvmTest {
 
     private val chatRepository = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
         override suspend fun createMarmotGroup(
-            groupId: String,
-            name: String,
-            purpose: String,
-            adminPublicKeys: Set<HexKey>,
-            userPublicKey: HexKey,
+            ceremony: DkgSession,
+            ceremonyRoom: LocalChatRoom,
             keyPair: KeyPair,
-            path: List<Long>,
             parentChatRoomId: HexKey?,
         ): MarmotGroupCreation.Outcome {
+            val groupId = SharedKeyDerivation.marmotGroupId(ceremony.thresholdPublicKey!!)
+            val adminPublicKeys = ChillDkgRitualManager.participantsOf(ceremony, ceremonyRoom)
             created += groupId to adminPublicKeys
             return outcome(groupId)
         }

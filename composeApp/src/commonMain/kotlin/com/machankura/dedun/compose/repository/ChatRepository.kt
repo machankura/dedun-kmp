@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import com.machankura.dedun.compose.database.model.ChatRoom
+import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
@@ -26,7 +27,6 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
-import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.nostr.GroupPost
@@ -311,26 +311,30 @@ interface ChatRepository {
     ): List<HexKey>
 
     /**
-     * Creates a Marmot room at an id the group's key derives, with
-     * [adminPublicKeys] as its admins, and welcomes them into it.
+     * Creates the Marmot room [ceremony]'s key derives, with everyone the ceremony
+     * was run with as its admins, and welcomes them into it.
      *
      * Two flows want exactly this: the admin room a group opens after its
      * ceremony, and a subgroup. See `MarmotGroupCreation`, which holds the rules
      * -- every key package before anything exists, the admins baked into epoch 0,
      * and the key state filed before the members are added.
      *
+     * Takes the ceremony rather than a list of admins on purpose. The room's id
+     * is derived, so its epoch-0 admin list is fixed at that address for good, and
+     * the founding members of a robust group are exactly the ceremony's
+     * participants -- so the one place that set is read is the one place a room is
+     * made. [ceremonyRoom] is the room the ceremony ran in, read only for a
+     * ceremony that predates its own participant list. See
+     * docs/robust-group-admins.md, Phase 1.
+     *
      * Refuses rather than half-creates: the id is derived, so a partly created
      * room occupies that address permanently and there is no second id to retry
      * with.
      */
     suspend fun createMarmotGroup(
-        groupId: String,
-        name: String,
-        purpose: String,
-        adminPublicKeys: Set<HexKey>,
-        userPublicKey: HexKey,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
         keyPair: KeyPair,
-        path: List<Long> = SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH,
         parentChatRoomId: HexKey? = null,
     ): MarmotGroupCreation.Outcome
 
@@ -615,13 +619,9 @@ interface ChatRepository {
             ): List<HexKey> = peers.map { it.first }
 
             override suspend fun createMarmotGroup(
-                groupId: String,
-                name: String,
-                purpose: String,
-                adminPublicKeys: Set<HexKey>,
-                userPublicKey: HexKey,
+                ceremony: DkgSession,
+                ceremonyRoom: LocalChatRoom,
                 keyPair: KeyPair,
-                path: List<Long>,
                 parentChatRoomId: HexKey?,
             ): MarmotGroupCreation.Outcome =
                 MarmotGroupCreation.Outcome.Failed("No database")
