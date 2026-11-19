@@ -334,6 +334,19 @@ interface ChatRepository {
     suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey)
 
     /**
+     * Whether [memberPublicKey] holds a live share of the room's key, and so
+     * whether a removal leaves them able to help sign until the shares are
+     * rotated without them (docs/frost-share-refresh.md, Phase 9).
+     */
+    suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean
+
+    /**
+     * Proposes rotating the room's shares without [memberPublicKey], withheld for
+     * good. Returns null when the proposal went out, or why it could not.
+     */
+    suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String?
+
+    /**
      * Disbands a current-profile room this device administers. Absorbing: once the
      * disband commit is applied nobody rejoins, and a replacement conversation is a
      * new group.
@@ -555,6 +568,10 @@ interface ChatRepository {
             }
 
             override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
+
+            override suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean = false
+
+            override suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String? = null
 
             override suspend fun disbandChatRoom(localChatRoom: LocalChatRoom) = Unit
 

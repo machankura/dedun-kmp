@@ -116,6 +116,11 @@
     <string name="disband_group_explainer">Ends the group for everyone. Nobody can rejoin; a new conversation is a new group.</string>
     <string name="member_removal_requested">Removal sent; it takes effect once a relay accepts it</string>
     <string name="member_removal_requested_lightning">Removal sent; it takes effect once a relay accepts it. They still hold a share of the Lightning wallet's key and its node's seed until the group opens a new Lightning wallet without them.</string>
+    <string name="rotate_shares_without_title">Rotate shares without them?</string>
+    <string name="rotate_shares_without_body">They are out of the room, but their share of the group key still helps sign until the shares are rotated without them. Rotating asks every remaining member to take part. Shares held before the rotation stop working once every device has deleted them.</string>
+    <string name="rotate_shares">Rotate shares</string>
+    <string name="rotate_shares_does_not_reach_lightning">Rotating does not reach the Lightning wallet: they keep their share of its key and its node's seed until the group opens a new Lightning wallet without them.</string>
+    <string name="share_rotation_requested">Share rotation proposed; every remaining member is asked to take part</string>
     <string name="library">Library</string>
     <string name="lightning_invoice">Lightning invoice</string>
     <string name="live">LIVE</string>

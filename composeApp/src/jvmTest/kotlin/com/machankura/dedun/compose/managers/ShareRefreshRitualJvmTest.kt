@@ -396,4 +396,76 @@ class ShareRefreshRitualJvmTest {
         assertEquals(1, dao.replace(older).generation)
         assertEquals(1, dao.getByChatRoomId(group.roomId)?.generation)
     }
+
+    // ---- Phase 9: rotating without a removed member --------------------------------------------------------------
+
+    /**
+     * A removed member is out of the room but still holds a share. Rotating
+     * without them, withheld for good, leaves the other two signing at the new
+     * generation -- and the removed member's share, which their device still has,
+     * combines with nothing of it.
+     */
+    @Test
+    fun `rotating without a removed member leaves their share useless`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol) = all
+        val carolId = group.idOf[2]
+        assertEquals(carolId, ShareRefreshManager.liveIdOf(alice.db, alice.room, carol.publicKey))
+
+        val refresh = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, carol.publicKey)
+        assertEquals(mapOf(carolId to ShareStanding.RETIRED), refresh.withheldStandings())
+        pump(all)
+        approveAll(all, refresh.id)
+        approveSigning(all)
+
+        listOf(alice, bob).forEach { device ->
+            val active = device.active()
+            assertEquals(1, active.generation)
+            assertEquals(ShareStanding.RETIRED, active.roster.single { it.participantId == carolId }.standing)
+            assertNull(active.signerIds[carol.publicKey], "carol must not be a signer")
+            assertNull(ShareRefreshManager.liveIdOf(device.db, device.room, carol.publicKey))
+        }
+        // Retired is not stale: carol's id is gone from the ids that count.
+        assertNull(alice.active().participantIds[carol.publicKey])
+
+        // Alice and Bob sign at generation 1.
+        val session = FrostSigningManager.proposeSigning(alice.db, alice.room, alice.publicKey, kind = 1, tags = arrayOf(), content = "Without carol")
+        assertEquals(1, session.generation)
+        pump(all)
+        approveSigning(all)
+        assertEquals(FrostSigningStage.COMPLETE, alice.db.frostSigningSessionDao().getSessionById(session.id)?.stage)
+
+        // Carol's old share and Alice's new one: no signature.
+        val table = alice.active().publicShares!!
+        val aliceId = group.idOf[0]
+        val mixed = (0 until 3).map { id ->
+            when (id) {
+                carolId -> group.keyMaterial.secretShares[carolId]
+                aliceId -> alice.active().secretShare!!
+                else -> bob.active().secretShare!!
+            }
+        }
+        val km = KeyMaterial(group.keyMaterial.thresholdPublicKey, mixed, table, 2)
+        val signers = listOf(aliceId, carolId).sorted().map { it.toUInt() }
+        val msg = ByteVector32("5a".repeat(32))
+        val signs = runCatching {
+            val nonces = signers.map { id -> Frost.generateNonce(ByteVector32("0${id}".padEnd(64, '7')), km.secretShares[id.toInt()], km.publicShares[id.toInt()], km.tweakCache().tweakedPublicKey, msg, null) }
+            val publicNonces = nonces.map { it.second }
+            val partials = signers.mapIndexed { i, id -> Frost.sign(km.secretShares[id.toInt()], nonces[i].first, id, msg, signers, km, publicNonces).right!! }
+            val sig = Frost.aggregatePartialSignatures(partials, msg, signers, km, publicNonces).right!!
+            fr.acinq.bitcoin.Crypto.verifySignatureSchnorr(msg, sig, km.tweakCache().tweakedPublicKey)
+        }.getOrDefault(false)
+        assertTrue(!signs, "a removed member's old share must not sign with a new one")
+    }
+
+    @Test
+    fun `rotating without a member is refused when too few would be left to sign`() = runBlocking<Unit> {
+        val group = Group(2, 2)
+        val (alice, bob) = devicesFor(group)
+        val error = assertFailsWith<IllegalStateException> {
+            ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, bob.publicKey)
+        }
+        assertTrue(error.message!!.contains("fewer than the 2 it takes to sign"), error.message)
+    }
 }

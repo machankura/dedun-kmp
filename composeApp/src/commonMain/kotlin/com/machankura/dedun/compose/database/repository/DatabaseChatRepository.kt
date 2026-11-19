@@ -57,6 +57,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import com.machankura.dedun.compose.managers.ShareRefreshManager
 
 /**
  * @param activeIdentity the identity the app runs as. Read by the one write here that
@@ -726,6 +727,17 @@ class DatabaseChatRepository(
 
     override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         database.marmotOutboundDao().removeMember(localChatRoom, memberPublicKey)
+    }
+
+    override suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean =
+        runCatching { ShareRefreshManager.liveIdOf(database, localChatRoom, memberPublicKey) != null }.getOrDefault(false)
+
+    override suspend fun rotateSharesWithout(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): String? {
+        val identity = activeIdentity.value ?: return "No identity is signed in"
+        val nostrPrivateKey = identity.toKeyPair().privKey ?: return "This identity cannot sign"
+        return runCatching {
+            ShareRefreshManager.proposeWithout(database, localChatRoom, identity.nostrPublicKey, nostrPrivateKey, memberPublicKey)
+        }.exceptionOrNull()?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
     }
 
     override suspend fun disbandChatRoom(localChatRoom: LocalChatRoom) {

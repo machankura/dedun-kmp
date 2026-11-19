@@ -86,7 +86,8 @@ object ShareRefreshManager {
         }
         if (withheld.values.any { it == ShareStanding.LIVE }) return "a withheld participant cannot stay live"
         if (recipients.size < key.threshold) {
-            return "${recipients.size} recipients cannot carry a ${key.threshold}-of-${key.participantCount} key"
+            return "it would leave ${recipients.size} members holding shares, fewer than the ${key.threshold} it takes to sign; " +
+                "the group could not sign at all, and only a new ceremony goes on from there"
         }
         if (recipients.size * 2 <= notRetired.size) {
             return "${recipients.size} of ${notRetired.size} is not a majority, so two such refreshes could both complete"
@@ -163,6 +164,41 @@ object ShareRefreshManager {
         )
         advance(database, localChatRoom, session.id, nostrPrivateKey)
         return session
+    }
+
+    /**
+     * The participant id [memberPublicKey] holds a live share of [localChatRoom]'s
+     * key under, or null when they hold none -- the question a removal asks
+     * before offering to rotate without them (docs/frost-share-refresh.md, Phase 9).
+     */
+    suspend fun liveIdOf(database: DedunDatabase, localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Int? {
+        val key = FrostSigningManager.completedKey(database, localChatRoom.chatRoom.id) ?: return null
+        if (!isKeysRoom(database, localChatRoom, key)) return null
+        return ShareGenerations.active(database, key).signerIds[memberPublicKey]
+    }
+
+    /**
+     * Opens a refresh that withholds [memberPublicKey] for good, after they were
+     * removed from the room (docs/frost-share-refresh.md, Phase 9). The removal is
+     * one admin's commit; this needs every remaining holder, so it is a second
+     * act, never folded into the first.
+     *
+     * Refused, with a reason, when it would leave fewer than t live ids -- the
+     * group could not sign at all, and only a new ceremony goes on from there --
+     * or when the remaining recipients are not a majority (remove fewer at a time).
+     */
+    suspend fun proposeWithout(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        userPublicKey: HexKey,
+        nostrPrivateKey: ByteArray,
+        memberPublicKey: HexKey,
+    ): ShareRefreshSession {
+        val key = FrostSigningManager.completedKey(database, localChatRoom.chatRoom.id)
+            ?: throw IllegalStateException("This group has no shared key this device can rotate")
+        val id = ShareGenerations.active(database, key).signerIds[memberPublicKey]
+            ?: throw IllegalStateException("They hold no share of the group's key")
+        return proposeRefresh(database, localChatRoom, userPublicKey, nostrPrivateKey, key, mapOf(id to ShareStanding.RETIRED))
     }
 
     /** A refresh of [key] still running on this device, if there is one. One at a time per key. */

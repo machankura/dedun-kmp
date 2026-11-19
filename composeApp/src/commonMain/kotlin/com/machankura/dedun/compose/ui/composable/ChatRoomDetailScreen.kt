@@ -213,6 +213,13 @@ import dedun.composeapp.generated.resources.direct_message_functionality_will_be
 import dedun.composeapp.generated.resources.invite_new_member
 import dedun.composeapp.generated.resources.leave_group
 import dedun.composeapp.generated.resources.remove_from_group
+import dedun.composeapp.generated.resources.share_rotation_requested
+import dedun.composeapp.generated.resources.not_now
+import dedun.composeapp.generated.resources.rotate_shares
+import dedun.composeapp.generated.resources.rotate_shares_does_not_reach_lightning
+import dedun.composeapp.generated.resources.rotate_shares_without_body
+import dedun.composeapp.generated.resources.rotate_shares_without_title
+import androidx.compose.material3.AlertDialog
 import dedun.composeapp.generated.resources.disband_group
 import dedun.composeapp.generated.resources.disband_group_explainer
 import dedun.composeapp.generated.resources.group_disbanded
@@ -283,6 +290,35 @@ fun ChatRoomDetailScreen(
     val removalLeavesLightningShare = stringResource(Res.string.member_removal_requested_lightning)
     val removalLeavesWavelengthShare = stringResource(Res.string.member_removal_requested_wavelength)
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
+    val rotationRequested = stringResource(Res.string.share_rotation_requested)
+
+    // Offered after removing a member who still holds a share of the room's key:
+    // the removal took them out of the room, not out of the key
+    // (docs/frost-share-refresh.md, Phase 9).
+    chatRoomDetailViewModel.rotationOffer?.let { offer ->
+        AlertDialog(
+            onDismissRequest = { chatRoomDetailViewModel.dismissRotationOffer() },
+            title = { Text(stringResource(Res.string.rotate_shares_without_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+                    Text(stringResource(Res.string.rotate_shares_without_body))
+                    if (offer.holdsLightningShare) {
+                        Text(stringResource(Res.string.rotate_shares_does_not_reach_lightning))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { chatRoomDetailViewModel.rotateSharesWithout(offer) { failure -> notify(failure ?: rotationRequested) } }) {
+                    Text(stringResource(Res.string.rotate_shares))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { chatRoomDetailViewModel.dismissRotationOffer() }) {
+                    Text(stringResource(Res.string.not_now))
+                }
+            },
+        )
+    }
 
     ScreenStateTransition(chatRoomDetailViewModel.chatRoomDetailUIState) { uiState ->
     when (val chatRoomDetailUIState = uiState) {

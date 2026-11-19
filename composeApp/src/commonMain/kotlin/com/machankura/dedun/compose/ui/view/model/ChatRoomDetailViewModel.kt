@@ -224,10 +224,48 @@ class ChatRoomDetailViewModel(
      */
     fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (String?) -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
+            // Asked before the removal, while they are still in the room's roster.
+            val heldShare = chatRepository.holdsShare(localChatRoom, memberPublicKey)
+            // Dedun's: a rotation renews the onchain key's shares and cannot touch the
+            // Lightning wallet's Iceberg key, which has no refresh. The offer says so
+            // for a member who holds a share of that too. docs/giza-into-dedun.md, Phase 7.
+            val heldLightningShare = GroupLightningRollout.ENABLED &&
+                memberPublicKey.lowercase() in chatRepository.lightningParticipants(localChatRoom.chatRoom.id, GroupLightningRollout.NETWORK)
             val failure = runCatching { chatRepository.removeMember(localChatRoom, memberPublicKey) }
                 .exceptionOrNull()
             initiateChatRoomDetail()
-            viewModelScope.launch(Dispatchers.Main) { onDone(failure?.message) }
+            viewModelScope.launch(Dispatchers.Main) {
+                onDone(failure?.message)
+                // The removal takes them out of the room, not out of the key: they
+                // can still help sign until the shares are rotated without them.
+                // A second act, offered rather than folded in -- it needs every
+                // remaining holder (docs/frost-share-refresh.md, Phase 9).
+                if (failure == null && heldShare) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, heldLightningShare)
+            }
+        }
+    }
+
+    /** A removed member who still holds a share of the room's key, for the offer to rotate without them. */
+    data class RotationOffer(
+        val localChatRoom: LocalChatRoom,
+        val memberPublicKey: HexKey,
+        /** They also hold a share of the Lightning wallet's key, which no rotation reaches. */
+        val holdsLightningShare: Boolean = false,
+    )
+
+    var rotationOffer: RotationOffer? by mutableStateOf(null)
+        private set
+
+    fun dismissRotationOffer() {
+        rotationOffer = null
+    }
+
+    /** Proposes the rotation [rotationOffer] offered. [onDone] gets null on success, or why it could not. */
+    fun rotateSharesWithout(offer: RotationOffer, onDone: (String?) -> Unit) {
+        rotationOffer = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = chatRepository.rotateSharesWithout(offer.localChatRoom, offer.memberPublicKey)
+            viewModelScope.launch(Dispatchers.Main) { onDone(failure) }
         }
     }
 
