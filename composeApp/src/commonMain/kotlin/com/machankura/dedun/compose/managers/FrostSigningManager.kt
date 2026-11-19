@@ -65,6 +65,7 @@ import com.machankura.dedun.compose.database.model.MarmotInnerEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
+import com.machankura.dedun.compose.database.model.types.ShareGenerationState
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
@@ -525,7 +526,8 @@ object FrostSigningManager {
      * A wallet proposal at a generation this device holds no share of, filed as a
      * declined session so [advance] says so out loud with [GENERATION_REFUSAL] -- the
      * rule [acceptProposal] applies to events, applied to a spend or a sweep. Null
-     * when this device can sign at [generation], which is the ordinary case.
+     * when this device can sign at [generation], which is the ordinary case, or is
+     * waiting on that generation's certificate.
      *
      * Declined before the spend is checked or written: nothing is reserved for a
      * transaction this device cannot help sign, and its items are never made.
@@ -543,6 +545,12 @@ object FrostSigningManager {
     ): FrostSigningSession? {
         val signable = generation?.let { ShareGenerations.at(database, key, it) }
         if (generation != null && signable?.secretShare != null && signable.signerIds[userPublicKey] != null) return null
+        // A generation this device has confirmed and waits on the certificate for is
+        // not one it lacks, as in [acceptProposal]: the spend is recorded, and the
+        // refresh resumes it when the generation activates.
+        if (generation != null && signable == null &&
+            database.keyShareDao().getGeneration(key.id, generation)?.state == ShareGenerationState.PENDING
+        ) return null
 
         logger.w(
             "${subject.name.lowercase()} proposal $sessionId signs with generation ${generation ?: "(unreadable)"} " +
@@ -820,7 +828,16 @@ object FrostSigningManager {
         // Withheld from a refresh, or never told of one, this device declines.
         // docs/frost-share-refresh.md, Phase 6.
         val signable = generation?.let { ShareGenerations.at(database, key, it) }
-        if (generation == null || signable?.secretShare == null || signable.signerIds[userPublicKey] == null) {
+        // A generation this device has confirmed and is waiting on the
+        // certificate for is not one it lacks: the proposal routinely arrives
+        // first, since the coordinator asks the group to sign the moment its own
+        // refresh completes. The session waits, and the refresh resumes it when
+        // the generation activates (ShareRefreshManager).
+        val awaitingCertificate = generation != null && signable == null &&
+            database.keyShareDao().getGeneration(key.id, generation)?.state == ShareGenerationState.PENDING
+        if (!awaitingCertificate &&
+            (generation == null || signable?.secretShare == null || signable.signerIds[userPublicKey] == null)
+        ) {
             logger.w(
                 "Signing proposal $sessionId signs with generation ${generation ?: "(unreadable)"} of key " +
                     "${key.id}, of which this device holds no share; declining"
@@ -843,7 +860,7 @@ object FrostSigningManager {
             }
         }
 
-        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation)
+        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
         database.frostSigningSessionDao().upsert(session)
         database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
         announceStarted(database, session)
@@ -3026,6 +3043,37 @@ object FrostSigningManager {
      * a refusal that tips the count writes its own, because what happened there
      * is that a member declined, and the abandonment is the arithmetic of it.
      */
+    /**
+     * Takes another pass at every session of [dkgSessionId] still running at
+     * [generation], which has just become signable here. A session proposed while
+     * this device still waited on that generation's certificate stops at the share
+     * it did not yet have; nothing else would wake it until the next message.
+     */
+    suspend fun resumeAt(database: DedunDatabase, localChatRoom: LocalChatRoom, dkgSessionId: String, generation: Int) {
+        database.frostSigningSessionDao().getOpenSessionsForKey(dkgSessionId)
+            .filter { (it.generation ?: 0) == generation && it.chatRoomId == localChatRoom.chatRoom.id }
+            .forEach { advance(database, localChatRoom, it.id) }
+    }
+
+    /**
+     * Ends every session of [dkgSessionId] still running at a generation older than
+     * [generation], whose shares are about to be deleted (docs/frost-share-refresh.md,
+     * Phase 8). Out loud: a session that would otherwise stall on a share that no
+     * longer exists says why, and it is safe to ask again.
+     */
+    suspend fun failRotated(database: DedunDatabase, dkgSessionId: String, generation: Int) {
+        database.frostSigningSessionDao().getOpenSessionsForKey(dkgSessionId)
+            .filter { (it.generation ?: 0) < generation }
+            .forEach { session ->
+                fail(
+                    database = database,
+                    session = session,
+                    reason = "This share was rotated before the session finished",
+                    content = "was asked to sign with shares the group has since rotated. Nothing was signed, and it is safe to ask again."
+                )
+            }
+    }
+
     private suspend fun fail(
         database: DedunDatabase,
         session: FrostSigningSession,

@@ -82,6 +82,10 @@ interface FrostSigningSessionDao {
     @Query("SELECT * FROM FrostSigningSession WHERE chatRoomId = :chatRoomId ORDER BY createdAt DESC")
     suspend fun getSessionsForChatRoom(chatRoomId: String): List<FrostSigningSession>
 
+    /** Sessions of one key still running: what a share rotation has to end. */
+    @Query("SELECT * FROM FrostSigningSession WHERE dkgSessionId = :dkgSessionId AND stage NOT IN ('COMPLETE', 'FAILED')")
+    suspend fun getOpenSessionsForKey(dkgSessionId: String): List<FrostSigningSession>
+
     @Upsert
     suspend fun upsert(frostSigningSession: FrostSigningSession)
 

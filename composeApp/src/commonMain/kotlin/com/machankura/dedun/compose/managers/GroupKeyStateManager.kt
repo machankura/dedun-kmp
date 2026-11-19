@@ -13,6 +13,7 @@ import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupParentage
@@ -214,7 +215,80 @@ object GroupKeyStateManager {
             return null
         }
 
-        return database.groupKeyStateDao().replace(state)
+        val filed = database.groupKeyStateDao().replace(state)
+        // `replace` re-stamps what it files, so the row is compared on what it says.
+        if (filed.generation == state.generation && filed.announcedAt == state.announcedAt) retireOlderShares(database, state)
+        return filed
+    }
+
+    /**
+     * The group has signed with generation [state]'s generation, which proves t
+     * members hold working shares of it: the older generations' shares go
+     * (docs/frost-share-refresh.md, D6). Only when this device holds that
+     * generation, active, with the same public-share table the group signed --
+     * a device behind the group, or one that disagrees with it about who holds
+     * what, keeps what it has and says so.
+     */
+    private suspend fun retireOlderShares(database: DedunDatabase, state: GroupKeyState) {
+        val generation = state.generation ?: return
+        val key = database.dkgSessionDao().getSessionById(state.dkgSessionId) ?: return
+        val shares = ShareGenerations.at(database, key, generation)
+        if (shares == null || ShareGenerations.active(database, key).generation != generation) {
+            logger.w("The group signs with generation $generation of ${key.id}, which this device does not hold; keeping what it has")
+            return
+        }
+        val local = shares.publicShares?.let(ShareGenerations::publicSharesHash)
+        if (local != state.publicSharesHash) {
+            logger.w("The group's generation $generation of ${key.id} has a public-share table this device disagrees with; keeping what it has")
+            return
+        }
+        FrostSigningManager.failRotated(database, key.id, generation)
+        ShareGenerations.wipeBefore(database, key, generation)
+    }
+
+    /**
+     * Asks the group to sign the key state at the generation it now signs with,
+     * after a refresh (docs/frost-share-refresh.md, Phase 8). The same room, key
+     * and path, and the same parentage if the room has one, plus what the
+     * refresh changed. Signed with the new shares, which makes it the proof that
+     * they work -- and what every device waits on before deleting the old ones.
+     */
+    suspend fun proposeGeneration(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        userPublicKey: HexKey,
+        key: DkgSession,
+        refreshId: String?,
+    ): FrostSigningSession {
+        val shares = ShareGenerations.active(database, key)
+        check(shares.generation >= 1) { "Generation 0 is the ceremony's, and needs no new key state" }
+        val publicShares = requireNotNull(shares.publicShares) { "Generation ${shares.generation} has no public shares" }
+        val current = keyStateFor(database, localChatRoom.chatRoom.id)
+        val path = current?.pathIndices() ?: SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH
+        val parent = current?.parentChatRoomId?.let { parentId ->
+            current.birthCertificateJson?.let { Event.fromJsonOrNull(it) }?.let { SubgroupParentage(parentId, it) }
+        }
+        val thresholdPublicKey = requireNotNull(key.thresholdPublicKey)
+        return FrostSigningManager.proposeSigning(
+            database = database,
+            localChatRoom = localChatRoom,
+            userPublicKey = userPublicKey,
+            kind = GroupKeyStateEvent.KIND,
+            tags = GroupKeyStateEvent.assembleTags(
+                chatRoomId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey, path),
+                dkgSessionId = key.id,
+                path = path,
+                parent = parent,
+                generation = GroupKeyStateEvent.ShareGenerationTags(
+                    generation = shares.generation,
+                    publicSharesHash = ShareGenerations.publicSharesHash(publicShares),
+                    refreshId = refreshId,
+                    retiredIds = shares.roster.filter { it.standing == ShareStanding.RETIRED }.map { it.participantId },
+                ),
+            ),
+            content = thresholdPublicKey,
+            key = key,
+        )
     }
 
     /**
@@ -308,7 +382,10 @@ object GroupKeyStateManager {
             // every room at once, so a state that names no room names nothing.
             .filter { GroupKeyStateEvent.parseChatRoomId(it.tags) == chatRoomId }
             .mapNotNull { signed -> stateFrom(chatRoomId, signed.toEvent())?.let { signed to it } }
-            .maxByOrNull { (_, state) -> state.announcedAt }
+            // The highest generation, then the newest: `created_at` is the
+            // author's to choose, and a state at an older generation is still
+            // validly signed by the group (docs/frost-share-refresh.md, Phase 8).
+            .maxWithOrNull(compareBy({ (_, state) -> state.generation ?: 0 }, { (_, state) -> state.announcedAt }))
 
     /**
      * The state an event amounts to, or null if it amounts to none.
@@ -556,6 +633,11 @@ object GroupKeyStateManager {
 
         val parent = parentageOf(announced, thresholdPublicKey, innerEvent) ?: return null
 
+        val shareGeneration = GroupKeyStateEvent.parseShareGeneration(innerEvent.tags).getOrElse {
+            logger.w("Key state in $chatRoomId names a share generation this device cannot read (${it.message}); dropping")
+            return null
+        }
+
         val state = GroupKeyState(
             chatRoomId = announced,
             dkgSessionId = dkgSessionId,
@@ -564,7 +646,9 @@ object GroupKeyStateManager {
             announcedBy = innerEvent.pubKey,
             announcedAt = Instant.fromEpochSeconds(innerEvent.createdAt),
             parentChatRoomId = parent.value?.parentChatRoomId,
-            birthCertificateJson = parent.value?.certificate?.toJson()
+            birthCertificateJson = parent.value?.certificate?.toJson(),
+            generation = shareGeneration?.generation,
+            publicSharesHash = shareGeneration?.publicSharesHash
         )
 
         // Half the trust model, in one line, and the half that does not care who

@@ -62,7 +62,15 @@ abstract class GroupKeyStateDao {
     open suspend fun replace(groupKeyState: GroupKeyState): GroupKeyState {
         val known = getByChatRoomId(groupKeyState.chatRoomId)
 
-        if (known != null && known.announcedAt >= groupKeyState.announcedAt) return known
+        // The highest generation wins, then the newest: an older generation's
+        // state is still validly signed, and `created_at` is the author's to
+        // choose (docs/frost-share-refresh.md, Phase 8).
+        if (known != null) {
+            val knownGeneration = known.generation ?: 0
+            val newGeneration = groupKeyState.generation ?: 0
+            if (knownGeneration > newGeneration) return known
+            if (knownGeneration == newGeneration && known.announcedAt >= groupKeyState.announcedAt) return known
+        }
 
         val stamped = groupKeyState.copy(
             createdAt = known?.createdAt ?: groupKeyState.createdAt,

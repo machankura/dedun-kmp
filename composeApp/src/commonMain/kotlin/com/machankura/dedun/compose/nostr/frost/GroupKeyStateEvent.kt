@@ -110,12 +110,13 @@ object GroupKeyStateEvent {
         chatRoomId: String,
         dkgSessionId: String,
         path: List<Long> = SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH,
-        parent: SubgroupParentage? = null
+        parent: SubgroupParentage? = null,
+        generation: ShareGenerationTags? = null
     ): Array<Array<String>> = arrayOf(
         DTag.assemble(chatRoomId),
         FrostKeyTag.assemble(dkgSessionId),
         FrostDerivationPathTag.assemble(path)
-    ) + (
+    ) + (generation?.toTags() ?: emptyArray()) + (
         parent?.let {
             // Both or neither, which is why this arrives as one value rather
             // than as two nullable parameters a caller could half-fill. A state
@@ -135,6 +136,49 @@ object GroupKeyStateEvent {
      * Read alongside [parseBirthCertificate] and never on its own -- see
      * `GroupKeyStateManager.stateFrom`.
      */
+    /**
+     * What a state says about the key's shares, from generation 1
+     * (docs/frost-share-refresh.md, Phase 8): the generation the group signs with,
+     * a hash of its public-share table, the refresh that made it, and the ids
+     * retired for good. A state from before shares could change carries none of
+     * these and reads as generation 0.
+     */
+    data class ShareGenerationTags(
+        val generation: Int,
+        val publicSharesHash: String,
+        val refreshId: String?,
+        val retiredIds: List<Int>,
+    ) {
+        fun toTags(): Array<Array<String>> = (
+            listOf(arrayOf(GENERATION_TAG, generation.toString()), arrayOf(PUBSHARES_TAG, publicSharesHash)) +
+                listOfNotNull(refreshId?.let { arrayOf(REFRESH_TAG, it) }) +
+                retiredIds.sorted().map { arrayOf(RETIRED_TAG, it.toString()) }
+            ).toTypedArray()
+    }
+
+    private const val GENERATION_TAG = "frost_generation"
+    private const val PUBSHARES_TAG = "frost_pubshares"
+    private const val REFRESH_TAG = "frost_refresh"
+    private const val RETIRED_TAG = "frost_retired"
+
+    /**
+     * The share generation a state names: null for none (generation 0), and a
+     * failure for a tag present but unreadable -- which names a generation this
+     * device cannot tell, and is not the same as naming none.
+     */
+    fun parseShareGeneration(tags: Array<Array<String>>): Result<ShareGenerationTags?> {
+        val value = { name: String -> tags.firstOrNull { it.size >= 2 && it[0] == name }?.get(1) }
+        val rawGeneration = value(GENERATION_TAG) ?: return Result.success(null)
+        val generation = rawGeneration.toIntOrNull()?.takeIf { it >= 1 }
+            ?: return Result.failure(IllegalArgumentException("unreadable generation $rawGeneration"))
+        val hash = value(PUBSHARES_TAG)?.takeIf { it.length == 64 }
+            ?: return Result.failure(IllegalArgumentException("generation $generation without a public-share hash"))
+        val retired = tags.filter { it.size >= 2 && it[0] == RETIRED_TAG }.map {
+            it[1].toIntOrNull() ?: return Result.failure(IllegalArgumentException("unreadable retired id ${it[1]}"))
+        }
+        return Result.success(ShareGenerationTags(generation, hash, value(REFRESH_TAG), retired))
+    }
+
     fun parseParentChatRoomId(tags: Array<Array<String>>): HexKey? =
         tags.firstNotNullOfOrNull(SubgroupParentTag::parse)?.parentChatRoomId
 

@@ -244,7 +244,8 @@ class ShareRefreshRitualJvmTest {
 
         val session = FrostSigningManager.proposeSigning(all[0].db, all[0].room, all[0].publicKey, kind = 1, tags = arrayOf(), content = "Without them")
         pump(all)
-        assertEquals(FrostSigningManager.GENERATION_REFUSAL, outbox(withheldDevice).single { it.kind == FrostSigningEvents.DECLINE }.content)
+        val decline = outbox(withheldDevice).single { it.kind == FrostSigningEvents.DECLINE && FrostSigningEvents.parseSessionId(it.tags) == session.id }
+        assertEquals(FrostSigningManager.GENERATION_REFUSAL, decline.content)
     }
 
     @Test
@@ -300,5 +301,99 @@ class ShareRefreshRitualJvmTest {
 
         assertEquals(before, all.map { it.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).size to it.active().secretShare })
         all.forEach { assertEquals(ShareRefreshStage.COMPLETE, it.refresh(refresh.id)?.stage) }
+    }
+
+    // ---- Phase 8: the cutover ----------------------------------------------------------------------------------
+
+    /** Every owner approves every signing session waiting on them, until none is. */
+    private suspend fun approveSigning(between: List<Device>) {
+        var asked = true
+        while (asked) {
+            asked = false
+            for (device in between) {
+                device.db.frostSigningSessionDao().getSessionsForChatRoom(device.group.roomId)
+                    .filter { it.signApprovedAt == null && it.signDeclinedAt == null && it.stage != FrostSigningStage.COMPLETE && it.stage != FrostSigningStage.FAILED }
+                    .forEach { FrostSigningManager.approve(device.db, device.room, it.id); asked = true }
+            }
+            pump(between)
+        }
+    }
+
+    /**
+     * The point of the phase. The coordinator asks the group to sign the new
+     * generation's key state as the refresh completes; once a quorum has, every
+     * device that holds the new generation deletes the ceremony's share and the
+     * randomness that rebuilds it, and keeps signing with the new one.
+     */
+    @Test
+    fun `once the group signs the new generation, every device deletes its old share`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        approveAll(all, refresh.id)
+
+        // Not yet: the old share stays until the new ones have signed something.
+        all.forEach { assertNotNull(it.key().secretShare, "device ${it.index} deleted before the group signed") }
+
+        approveSigning(all)
+
+        all.forEach { device ->
+            val state = assertNotNull(device.db.groupKeyStateDao().getByChatRoomId(group.roomId), "device ${device.index} filed no key state")
+            assertEquals(1, state.generation)
+            assertEquals(ShareGenerations.publicSharesHash(device.active().publicShares!!), state.publicSharesHash)
+            val key = device.key()
+            assertNull(key.secretShare, "device ${device.index} kept the ceremony's share")
+            assertEquals("", key.round1Random, "the randomness that rebuilds the share has to go too")
+            assertEquals("", key.round2AuxRandom)
+            assertNull(ShareGenerations.at(device.db, key, 0)!!.secretShare)
+            assertNotNull(device.active().secretShare, "and the new share stays")
+        }
+
+        // The group still signs, with the new shares.
+        val session = FrostSigningManager.proposeSigning(all[1].db, all[1].room, all[1].publicKey, kind = 1, tags = arrayOf(), content = "Still the room")
+        pump(all)
+        approveSigning(all)
+        assertEquals(FrostSigningStage.COMPLETE, all[1].db.frostSigningSessionDao().getSessionById(session.id)?.stage)
+    }
+
+    @Test
+    fun `a session left at the old generation fails out loud when its shares go`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val old = FrostSigningManager.proposeSigning(all[0].db, all[0].room, all[0].publicKey, kind = 1, tags = arrayOf(), content = "Before the rotation")
+        assertEquals(0, old.generation)
+        pump(all)
+
+        val refresh = propose(all[0])
+        pump(all)
+        approveAll(all, refresh.id)
+        // Approve only the key state's session, not the old one.
+        all.forEach { device ->
+            device.db.frostSigningSessionDao().getSessionsForChatRoom(group.roomId)
+                .filter { it.id != old.id && it.signApprovedAt == null && it.signDeclinedAt == null }
+                .forEach { FrostSigningManager.approve(device.db, device.room, it.id) }
+        }
+        pump(all)
+
+        val failed = all[0].db.frostSigningSessionDao().getSessionById(old.id)!!
+        assertEquals(FrostSigningStage.FAILED, failed.stage)
+        assertEquals("This share was rotated before the session finished", failed.failureReason)
+    }
+
+    @Test
+    fun `a key state at an older generation loses whatever its timestamp`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val device = devicesFor(group).first()
+        val dao = device.db.groupKeyStateDao()
+        val base = com.machankura.dedun.compose.database.model.GroupKeyState(
+            chatRoomId = group.roomId, dkgSessionId = ceremonyId, thresholdPublicKey = group.thresholdPublicKey,
+            derivationPath = SharedKeyDerivation.formatPath(), announcedBy = device.publicKey,
+            announcedAt = kotlin.time.Instant.fromEpochSeconds(2_000), generation = 1, publicSharesHash = "aa".repeat(32),
+        )
+        dao.replace(base)
+        val older = base.copy(announcedAt = kotlin.time.Instant.fromEpochSeconds(9_000), generation = null, publicSharesHash = null)
+        assertEquals(1, dao.replace(older).generation)
+        assertEquals(1, dao.getByChatRoomId(group.roomId)?.generation)
     }
 }

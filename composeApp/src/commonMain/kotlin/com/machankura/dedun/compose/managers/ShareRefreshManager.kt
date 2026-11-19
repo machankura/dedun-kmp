@@ -420,6 +420,20 @@ object ShareRefreshManager {
                 session.coordinatorPublicKey
             )
             logger.i("Refresh ${session.id} complete: ${key.id} is at generation ${session.baseGeneration + 1}")
+
+            // The coordinator asks the group to sign the new generation's key state:
+            // its first signature with the new shares, and what every device waits on
+            // before deleting the old ones (D6). Anyone can propose it again if this
+            // device is gone.
+            if (session.isCoordinator() && isRecipient) {
+                // Its own failure is not the refresh's, which is complete: logged,
+                // and anyone can propose the key state again.
+                runCatching { GroupKeyStateManager.proposeGeneration(database, localChatRoom, session.userPublicKey, key, session.id) }
+                    .onFailure { if (it is CancellationException) throw it; logger.e("Could not propose generation ${session.baseGeneration + 1}'s key state", it) }
+            }
+            // A signing session at the new generation that arrived before the
+            // certificate has been waiting on the share it now has.
+            if (isRecipient) FrostSigningManager.resumeAt(database, localChatRoom, key.id, session.baseGeneration + 1)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

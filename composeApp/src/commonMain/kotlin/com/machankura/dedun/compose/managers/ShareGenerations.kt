@@ -2,6 +2,9 @@ package com.machankura.dedun.compose.managers
 
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.Crypto
+import kotlin.time.Clock
+import com.machankura.dedun.compose.extensions.toHex
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.PublicKey
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -81,6 +84,41 @@ object ShareGenerations {
         if (row.state == ShareGenerationState.PENDING) return null
 
         return fromRow(database, row)
+    }
+
+    /**
+     * The hash of a public-share table that a signed key state carries, so a
+     * device can check its own table against the one the group signed: SHA-256
+     * of the 33-byte shares in participant order.
+     */
+    fun publicSharesHash(publicShares: List<PublicKey>): String =
+        Crypto.sha256(publicShares.fold(ByteArray(0)) { acc, p -> acc + p.value.toByteArray() }).toHex()
+
+    /**
+     * Deletes this device's shares of every generation of [key] older than
+     * [generation] (docs/frost-share-refresh.md, Phase 8, and D6). The public
+     * tables stay; the secrets go, and so does the ceremony randomness that
+     * rebuilds generation 0's share on its own -- a wipe that left it would wipe
+     * nothing. Then the write-ahead log is scrubbed, since it keeps page images
+     * of everything written (`DedunDatabase.scrubFreedPages`).
+     *
+     * Nothing here proves deletion to anybody else. Each member's wipe is on
+     * their own device, on trust.
+     */
+    suspend fun wipeBefore(database: DedunDatabase, key: DkgSession, generation: Int) {
+        val now = Clock.System.now()
+        database.keyShareDao().getGenerations(key.id)
+            .filter { it.generation < generation && (it.secretShare != null || it.state != ShareGenerationState.WIPED) }
+            .forEach { row ->
+                database.keyShareDao().upsert(row.copy(secretShare = null, state = ShareGenerationState.WIPED, wipedAt = now, updatedAt = now))
+            }
+        if (generation >= 1 && (key.secretShare != null || key.round1Random.isNotEmpty() || key.round2AuxRandom.isNotEmpty())) {
+            // Emptied rather than nulled: the columns are not nullable, and a
+            // COMPLETE ceremony never reads them again (ChillDkgRitualManager.advance
+            // returns before it would).
+            database.dkgSessionDao().upsert(key.copy(secretShare = null, round1Random = "", round2AuxRandom = ""))
+        }
+        database.scrubFreedPages()
     }
 
     /** Whether this device can sign with [key] today: it holds a share of the generation the group signs with. */
