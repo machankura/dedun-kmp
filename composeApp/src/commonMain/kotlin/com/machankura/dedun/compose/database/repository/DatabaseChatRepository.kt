@@ -49,6 +49,7 @@ import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.managers.MarmotInboundManager
+import com.machankura.dedun.compose.managers.FoundingAdmins
 import com.machankura.dedun.compose.managers.CeremonyFollowThrough
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -792,6 +793,19 @@ class DatabaseChatRepository(
 
     override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         database.marmotOutboundDao().removeMember(localChatRoom, memberPublicKey)
+    }
+
+    override suspend fun addAdmins(localChatRoom: LocalChatRoom, publicKeys: Set<HexKey>) {
+        database.marmotOutboundDao().addAdmins(localChatRoom, publicKeys)
+    }
+
+    override suspend fun foundingAdmins(chatRoomId: String): FoundingAdmins.Check = try {
+        FoundingAdmins.check(database, chatRoomId)
+    } catch (e: Throwable) {
+        // A room whose check threw is shown without the warning rather than not
+        // at all; the check is a label on the room, not a gate in front of it.
+        logger.e("Error checking the founding admins of $chatRoomId", e)
+        FoundingAdmins.Check.CannotCheck
     }
 
     override suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean =

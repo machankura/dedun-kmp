@@ -26,6 +26,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import com.machankura.dedun.compose.managers.FoundingAdmins
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
@@ -175,6 +176,9 @@ class ChatRoomDetailViewModel(
                             .toSet()
                     } else emptySet(),
                     shares = chatRepository.sharesSummary(localChatRoom),
+                    missingFoundingAdmins = (chatRepository.foundingAdmins(chatRoomId) as? FoundingAdmins.Check.Missing)
+                        ?.publicKeys
+                        .orEmpty(),
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
@@ -285,6 +289,19 @@ class ChatRoomDetailViewModel(
                 // remaining holder (docs/frost-share-refresh.md, Phase 9).
                 if (rotation == SharesSummary.Rotation.Available) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, preview, heldLightningShare)
             }
+        }
+    }
+
+    /**
+     * Adds the founding members the room's admin policy is missing, as an admin,
+     * and reloads the screen. One commit, applied when a relay accepts it, so the
+     * warning stays until then. docs/robust-group-admins.md, Phase 3.
+     */
+    fun addMissingFoundingAdmins(localChatRoom: LocalChatRoom, missing: Set<HexKey>, onDone: (String?) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = runCatching { chatRepository.addAdmins(localChatRoom, missing) }.exceptionOrNull()
+            initiateChatRoomDetail()
+            viewModelScope.launch(Dispatchers.Main) { onDone(failure?.message) }
         }
     }
 

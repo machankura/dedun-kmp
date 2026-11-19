@@ -918,6 +918,14 @@ data class ChatMessage(
         const val TYPE_CHANGE_REJECTED = "changeRejected"
 
         /**
+         * The admin room this device was welcomed into does not name every member
+         * of the ceremony that made its key as an admin. Derived at the Welcome
+         * from this device's own record of the ceremony, never received, and
+         * written once. docs/robust-group-admins.md, Phase 3.
+         */
+        const val TYPE_FOUNDING_ADMINS_MISSING = "foundingAdminsMissing"
+
+        /**
          * Every membership line, for the one check the transcript dispatches on.
          *
          * A type missing from here renders as a chat bubble -- silently, and looking
@@ -931,6 +939,7 @@ data class ChatMessage(
             TYPE_MEMBER_LEFT,
             TYPE_GROUP_DISBANDED,
             TYPE_CHANGE_REJECTED,
+            TYPE_FOUNDING_ADMINS_MISSING,
         )
 
         const val TYPE_UNDECRYPTABLE_OUTER_LAYER = "undecryptableOuterLayer"

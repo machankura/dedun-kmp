@@ -39,6 +39,7 @@ import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.marmot.appComponents.AppComponentIds
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.marmot.groups.MlsGroupManager
+import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.isLocalAdmin
@@ -871,6 +872,31 @@ abstract class MarmotOutboundDao(
             ?: throw IllegalArgumentException("$memberPublicKey is not in the group")
 
         publishGatedCommit(localChatRoom) { manager, id -> manager.stageRemoveMember(id, leafIndex) }
+    }
+
+    /**
+     * Adds [publicKeys] to a current-profile room's admin policy, as an admin.
+     *
+     * Additions only. The policy committed is the one the group holds now plus
+     * these -- never a list built somewhere else -- so an admin already there is
+     * never dropped by it. One commit for all of them, through the publish gate
+     * like every other governance change. Nothing to do when every one is already
+     * listed. docs/robust-group-admins.md, Phase 3.
+     */
+    @Transaction
+    open suspend fun addAdmins(localChatRoom: LocalChatRoom, publicKeys: Set<HexKey>) {
+        require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room can change its admins" }
+        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+            ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
+
+        val current = group.currentAdminIdentities()
+        val added = publicKeys - current
+        if (added.isEmpty()) return
+
+        val policy = AdminPolicyV1.ofHex(current + added).encode()
+        publishGatedCommit(localChatRoom) { manager, id ->
+            manager.stageAppDataUpdate(id, AdminPolicyV1.COMPONENT_ID, policy)
+        }
     }
 
     /**

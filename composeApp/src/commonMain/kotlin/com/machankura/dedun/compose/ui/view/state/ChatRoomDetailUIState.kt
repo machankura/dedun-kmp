@@ -161,6 +161,13 @@ sealed interface ChatRoomDetailUIState {
          * room has no key (docs/frost-share-refresh.md, Phase 11).
          */
         val shares: SharesSummary? = null,
+        /**
+         * Members of the ceremony that made this room's key whom its admin policy
+         * does not name -- empty when it names them all, and when this device has
+         * no record of the ceremony to check against. Read through
+         * `FoundingAdmins.check`; docs/robust-group-admins.md, Phase 3.
+         */
+        val missingFoundingAdmins: Set<HexKey> = emptySet(),
     ): ChatRoomDetailUIState
 
     data class Error(
