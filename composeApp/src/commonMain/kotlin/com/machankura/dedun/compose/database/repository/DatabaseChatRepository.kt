@@ -49,6 +49,8 @@ import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.managers.AdminGovernance
+import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 import com.machankura.dedun.compose.managers.AdminFlags
 import com.machankura.dedun.compose.managers.FoundingAdmins
@@ -74,6 +76,7 @@ import kotlinx.coroutines.flow.map
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.RotationHold
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import com.machankura.dedun.compose.database.model.types.ShareStanding
@@ -840,6 +843,22 @@ class DatabaseChatRepository(
         val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return 1
         val group = runCatching { room.chatRoom.toMlsGroup() }.getOrNull() ?: return 1
         return AdminGovernance.adminFloor(database, chatRoomId, group)
+    }
+
+    override suspend fun governanceStatus(chatRoomId: String): GovernanceStatus? {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return null
+        if (room.chatRoom.marmotProfile() != MarmotProfile.CURRENT) return null
+        val group = database.marmotEngine.groupFor(room.routingId) ?: return null
+        if (!AdminGovernance.isKeyedRoom(group)) return null
+        GovernanceGate.minimumAdmins(group)?.let { return GovernanceStatus.Governed(it) }
+        if (room.chatRoom.leftGroupAt == null) GovernanceSupport.announce(database, chatRoomId, group, room.chatRoom.userPublicKey)
+        val missing = GovernanceSupport.missing(database, chatRoomId, group)
+        return if (missing.isEmpty()) GovernanceStatus.Ready(AdminGovernance.adminFloor(database, chatRoomId, group))
+        else GovernanceStatus.Waiting(missing)
+    }
+
+    override suspend fun requireSignatures(localChatRoom: LocalChatRoom) {
+        database.marmotOutboundDao().requireSignatures(localChatRoom)
     }
 
     override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {

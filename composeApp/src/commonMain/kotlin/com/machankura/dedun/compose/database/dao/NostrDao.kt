@@ -19,6 +19,8 @@ import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceSupport
+import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
 import com.machankura.dedun.compose.nostr.frost.OwnCommitEvent
@@ -1710,6 +1712,15 @@ abstract class NostrDao(
                         // Before the Wavelength arms: until K3, 30371 and 30373 are also the
                         // legacy numbers of the Wavelength operator statement and signing
                         // request, and the envelope's shape is what tells them apart.
+                        // Another member says their device follows signed commits:
+                        // this one says so back, once, so that a member who never
+                        // opens the room's screen is still counted (Phase 4b).
+                        innerEvent.kind == GovernanceSupportEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
+                            if (localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) {
+                                database.marmotEngine.groupFor(localChatRoom.routingId)?.let { group ->
+                                    GovernanceSupport.announce(database, localChatRoom.chatRoom.id, group, activeKeyPair.pubKey.toHex())
+                                }
+                            }
                         innerEvent.kind == OwnCommitEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
                             admitEnvelopedCommit(localChatRoom, innerEvent, activeKeyPair)
                         innerEvent.kind == GovernanceCarrierEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->

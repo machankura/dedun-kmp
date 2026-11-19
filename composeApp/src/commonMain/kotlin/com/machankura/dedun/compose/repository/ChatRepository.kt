@@ -32,6 +32,7 @@ import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 
@@ -423,6 +424,16 @@ interface ChatRepository {
     suspend fun adminFloor(chatRoomId: String): Int
 
     /**
+     * Where a keyed room stands on needing the group's signature, or null for any
+     * other room. Says, for this device, that it follows signed commits, if it has
+     * not yet. docs/member-admin-promotion.md, Phase 4b.
+     */
+    suspend fun governanceStatus(chatRoomId: String): GovernanceStatus?
+
+    /** Makes a keyed room's changes need the group's signature. Throws with words a person can act on. */
+    suspend fun requireSignatures(localChatRoom: LocalChatRoom)
+
+    /**
      * Removes [memberPublicKey] from a current-profile room this device administers:
      * a commit through the publish gate, applied when a relay accepts it. See
      * docs/marmot-v2.md, Phase 7.
@@ -754,6 +765,10 @@ interface ChatRepository {
             override suspend fun reconcileAdmins(chatRoomId: String): Boolean = false
 
             override suspend fun adminFloor(chatRoomId: String): Int = 1
+
+            override suspend fun governanceStatus(chatRoomId: String): GovernanceStatus? = null
+
+            override suspend fun requireSignatures(localChatRoom: LocalChatRoom) = Unit
 
             override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
 

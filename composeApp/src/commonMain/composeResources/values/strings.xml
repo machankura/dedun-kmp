@@ -129,6 +129,11 @@
     <string name="pick_heir_body">You're the only admin. Pick someone to make an admin before you leave.</string>
     <string name="make_admin_and_leave">Make admin and leave</string>
     <string name="disband_group_instead">Disband group instead</string>
+    <string name="governance_on">Changes to who is in this group need the group's signature. It always keeps at least %1$d admins.</string>
+    <string name="require_signatures">Require the group's signature for changes</string>
+    <string name="require_signatures_explainer">From then on, adding or removing a member, or changing who the admins are, is proposed and has to be signed by the group before it happens.</string>
+    <string name="governance_waiting">Before changes can need the group's signature, %1$s need to update Dedun.</string>
+    <string name="require_signatures_sent">Sent; changes will need the group's signature once a relay accepts it</string>
     <string name="stepping_down_to_leave">Stepping down; you'll leave once a relay accepts it</string>
     <string name="remove_from_group">Remove from group</string>
     <string name="disband_group">Disband group</string>

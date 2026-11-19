@@ -38,6 +38,7 @@ import co.touchlab.kermit.Logger
 import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
 import com.vitorpamplona.marmot.appComponents.AppComponentIds
+import com.vitorpamplona.marmot.appComponents.GroupProfileV1
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.marmot.groups.MlsGroupManager
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
@@ -68,6 +69,9 @@ import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Instant
 import com.machankura.dedun.compose.managers.AdminGovernance
+import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceMarker
+import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 
 @Dao
@@ -1021,6 +1025,42 @@ abstract class MarmotOutboundDao(
         } catch (e: Throwable) {
             engine.cancelFollowUp(localChatRoom.routingId)
             throw e
+        }
+    }
+
+    /**
+     * Makes a keyed room's changes need the group's signature from the next epoch:
+     * one ordinary commit adding [GovernanceMarker]'s line to the profile
+     * description, with the floor the room's quorum sets. It is the room's last bare
+     * commit, and every device that applies it enforces the rule from the state it
+     * just applied. docs/member-admin-promotion.md, D4 and Phase 4b.
+     *
+     * Refused while any member has not said their device can follow signed commits
+     * -- they would be left in a different group by the first change -- and while
+     * the room has fewer admins than the floor it would set.
+     */
+    @Transaction
+    open suspend fun requireSignatures(localChatRoom: LocalChatRoom) {
+        val group = governedGroup(localChatRoom)
+        val roomId = localChatRoom.chatRoom.id
+        check(AdminGovernance.isKeyedRoom(group)) { "Only a group with a shared key can require its signature" }
+        if (GovernanceGate.isGoverned(group)) return
+        val missing = GovernanceSupport.missing(database, roomId, group)
+        if (missing.isNotEmpty()) {
+            throw IllegalStateException("Waiting for ${missing.map { memberName(it) }.sorted().joinToString()} to update Dedun")
+        }
+        val floor = AdminGovernance.adminFloor(database, roomId, group)
+        val admins = group.currentAdminIdentities() intersect AdminGovernance.members(group)
+        check(admins.size >= floor) { "A group with a shared key needs at least $floor admins first" }
+
+        publishGatedCommit(localChatRoom) { manager, id ->
+            val live = manager.getGroup(id) ?: throw MarmotMissingChatGroupException("No live group for $id")
+            val profile = live.currentGroupState().profile ?: throw IllegalStateException("The group has no profile to record the rule in")
+            manager.stageAppDataUpdate(
+                id,
+                GroupProfileV1.COMPONENT_ID,
+                GroupProfileV1(profile.name, GovernanceMarker.describe(profile.description, floor)).encode(),
+            )
         }
     }
 

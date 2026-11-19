@@ -205,6 +205,8 @@ sealed interface ChatRoomDetailUIState {
         val memberActions: Map<HexKey, Set<MemberAction>> = emptyMap(),
         /** How **Leave group** goes when this device is an admin; null when it is not. */
         val adminLeave: AdminLeave? = null,
+        /** Where a keyed room stands on needing the group's signature; null for any other room. */
+        val governance: GovernanceStatus? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

@@ -209,6 +209,9 @@ class ChatRoomDetailViewModel(
                     },
                     memberActions = group?.takeIf { canGovern }?.let { AdminGovernance.memberActions(it, me, chatRepository.adminFloor(chatRoomId)) }.orEmpty(),
                     adminLeave = group?.takeIf { roomIsOpen }?.let { AdminGovernance.adminLeave(it, me) },
+                    governance = runCatching { chatRepository.governanceStatus(chatRoomId) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull(),
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
@@ -375,6 +378,10 @@ class ChatRoomDetailViewModel(
             viewModelScope.launch(Dispatchers.Main) { onDone(failure?.let { it.message ?: "Couldn't make that change" }) }
         }
     }
+
+    /** Makes the room's changes need the group's signature. docs/member-admin-promotion.md, Phase 4b. */
+    fun requireSignatures(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.requireSignatures(localChatRoom) }
 
     fun makeAdmin(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (String?) -> Unit) =
         adminAction(onDone) { chatRepository.promoteMember(localChatRoom, memberPublicKey) }

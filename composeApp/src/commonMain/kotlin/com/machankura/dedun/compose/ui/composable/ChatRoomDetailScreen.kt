@@ -213,6 +213,7 @@ import dedun.composeapp.generated.resources.founding_members_are_not_admins
 import dedun.composeapp.generated.resources.admin
 import dedun.composeapp.generated.resources.admin_change_requested
 import dedun.composeapp.generated.resources.stepping_down_to_leave
+import dedun.composeapp.generated.resources.require_signatures_sent
 import dedun.composeapp.generated.resources.admin_badge
 import dedun.composeapp.generated.resources.holds_a_share
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
@@ -368,6 +369,7 @@ fun ChatRoomDetailScreen(
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
     val adminChangeRequested = stringResource(Res.string.admin_change_requested)
     val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
+    val requireSignaturesSent = stringResource(Res.string.require_signatures_sent)
     val adminLabel = stringResource(Res.string.admin_badge)
     val shareLabel = stringResource(Res.string.holds_a_share)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
@@ -1577,6 +1579,23 @@ fun ChatRoomDetailScreen(
                                             horizontal = MaterialTheme.spacing.containerPadding,
                                             vertical = MaterialTheme.spacing.compactPadding,
                                         )
+                                    )
+                                }
+                            }
+
+                            // Whether the room's changes need the group's signature, and the
+                            // switch that makes them. docs/member-admin-promotion.md, Phase 4b.
+                            chatRoomDetailUIState.governance?.let { governance ->
+                                item {
+                                    GovernanceSection(
+                                        governance = governance,
+                                        canGovern = chatRoomDetailUIState.canGovern,
+                                        nameOf = nameOf,
+                                        onRequireSignatures = {
+                                            chatRoomDetailViewModel.requireSignatures(chatRoomDetailUIState.localChatRoom) { failure ->
+                                                notify(failure ?: requireSignaturesSent)
+                                            }
+                                        },
                                     )
                                 }
                             }

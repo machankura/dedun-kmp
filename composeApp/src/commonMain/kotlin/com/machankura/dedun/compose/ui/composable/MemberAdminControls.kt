@@ -9,6 +9,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,6 +32,10 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.cancel
 import dedun.composeapp.generated.resources.disband_group_instead
+import dedun.composeapp.generated.resources.governance_on
+import dedun.composeapp.generated.resources.governance_waiting
+import dedun.composeapp.generated.resources.require_signatures
+import dedun.composeapp.generated.resources.require_signatures_explainer
 import dedun.composeapp.generated.resources.make_admin
 import dedun.composeapp.generated.resources.make_admin_and_leave
 import dedun.composeapp.generated.resources.make_admin_body
@@ -49,7 +54,9 @@ import dedun.composeapp.generated.resources.step_down_as_admin
 import dedun.composeapp.generated.resources.step_down_body
 import dedun.composeapp.generated.resources.step_down_title
 import com.machankura.dedun.compose.ui.theme.spacing
+import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.MemberAction
 import org.jetbrains.compose.resources.stringResource
 
@@ -187,4 +194,53 @@ internal fun LeaveAsAdminDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
+}
+
+/**
+ * Whether a keyed room's changes need the group's signature. Once they do, a line
+ * saying so; before, for an admin, the switch -- or who it is still waiting on,
+ * since switching it on with a member whose device cannot follow would leave them
+ * in a different group from the first change. docs/member-admin-promotion.md, Phase 4b.
+ */
+@Composable
+internal fun GovernanceSection(
+    governance: GovernanceStatus,
+    canGovern: Boolean,
+    nameOf: (HexKey) -> String,
+    onRequireSignatures: () -> Unit,
+) {
+    val explainer = Modifier.padding(
+        horizontal = MaterialTheme.spacing.containerPadding,
+        vertical = MaterialTheme.spacing.compactPadding,
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when (governance) {
+            is GovernanceStatus.Governed -> Text(
+                text = stringResource(Res.string.governance_on, governance.minimumAdmins),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = explainer,
+            )
+            is GovernanceStatus.Ready -> if (canGovern) {
+                TextButton(onClick = onRequireSignatures) {
+                    Icon(Icons.Default.Verified, contentDescription = Decorative)
+                    Text(stringResource(Res.string.require_signatures), modifier = Modifier.padding(start = MaterialTheme.spacing.relatedGap))
+                }
+                Text(
+                    text = stringResource(Res.string.require_signatures_explainer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = explainer,
+                )
+            }
+            is GovernanceStatus.Waiting -> if (canGovern) {
+                Text(
+                    text = stringResource(Res.string.governance_waiting, governance.missing.map(nameOf).sorted().joinToString()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = explainer,
+                )
+            }
+        }
+    }
 }

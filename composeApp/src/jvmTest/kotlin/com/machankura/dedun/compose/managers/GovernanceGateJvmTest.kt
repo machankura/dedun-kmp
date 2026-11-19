@@ -12,6 +12,12 @@ import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import kotlin.test.AfterTest
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
+import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
+import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
+import kotlin.test.assertIs
+import kotlin.test.assertFailsWith
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,6 +48,8 @@ class GovernanceGateJvmTest {
 
     private val db: DedunDatabase = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
     private val marmotRepository = DatabaseMarmotRepository(db, CoroutineScope(Dispatchers.Default))
+    private val chatRepository = DatabaseChatRepository(db, CoroutineScope(Dispatchers.Default))
+    private val nostrRepository = DatabaseNostrRepository(db, CoroutineScope(Dispatchers.Default))
 
     @AfterTest
     fun closeDb() = db.close()
@@ -206,5 +214,97 @@ class GovernanceGateJvmTest {
 
         assertEquals(epoch + 1, appGroup().epoch)
         assertEquals(setOf(dana.hex, userHex), appGroup().currentAdminIdentities())
+    }
+
+    // --- Phase 4b: who can follow, and the switch ---------------------------------
+
+    private val erin = MarmotStandIn()
+
+    /** Erin joins Dana's room, by Dana's bare commit; the app applies it. */
+    private suspend fun erinJoins() {
+        MarmotStandIn.seedProfile(db, erin.hex, "Erin")
+        erin.makeBundle()
+        val add = dana.commitLocally(routingId) { dana.manager.addMember(routingId, erin.bundle.keyPackage.toTlsBytes()) }
+        erin.manager.processWelcome(assertNotNull(add.welcomeBytes), erin.bundle)
+        erin.inbound.trackGroup(routingId)
+        MarmotStandIn.storeInApp(db, user, commitEvent(add))
+    }
+
+    /** Dana makes [admins] the admin list by a bare commit, which Erin and the app apply. */
+    private suspend fun danaSetsAdminsBare(admins: List<String>) {
+        val commit = dana.commitLocally(routingId) {
+            val staged = dana.manager.stageAppDataUpdate(routingId, AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(admins).encode())
+            dana.manager.installState(routingId, staged.pendingState)
+            staged.result
+        }
+        val event = commitEvent(commit)
+        erin.inbound.processGroupEvent(event)
+        MarmotStandIn.storeInApp(db, user, event)
+    }
+
+    /** [member] says, in the room, that their device follows signed commits. */
+    private suspend fun says(member: MarmotStandIn) {
+        val payload = MarmotAppEvent.build(
+            pubKey = member.hex, kind = GovernanceSupportEvent.KIND, content = "", createdAt = 1_700_000_002,
+            tags = GovernanceSupportEvent.assembleTags(roomId),
+        ).encodeToPayload()
+        MarmotStandIn.storeInApp(db, user, member.outbound.buildGroupEventFromBytes(routingId, payload).signedEvent)
+    }
+
+    private suspend fun room() = db.chatRoomDao().findChatRoomById(roomId)!!
+
+    /** The relay's OK on the newest commit this device put on the wire. */
+    private suspend fun okTheLatestCommit(): GroupEvent {
+        val event = db.nostrEventDao().getMLSGroupEvents(since = kotlin.time.Instant.fromEpochSeconds(0), limit = 50)
+            .filter { it.kind == GroupEvent.KIND }
+            .filter { db.marmotCommitResultDao().getMarmotCommitRequestById(it.id) != null }
+            .first { db.broadcastNostrEventRequestDao().getFirstBroadcastNostrEventRequestByNostrEventId(it.id)?.status == "pending" }
+        nostrRepository.broadcastProcessed(db.broadcastNostrEventRequestDao().getFirstBroadcastNostrEventRequestByNostrEventId(event.id)!!, "published")
+        return event.toGroupEvent(userHex)!!
+    }
+
+    @Test
+    fun `hearing another member say it, this device says it back`() = runBlocking {
+        governedRoom(governed = false)
+        assertFalse(userHex in GovernanceSupport.supporters(db, roomId))
+
+        says(dana)
+
+        assertTrue(userHex in GovernanceSupport.supporters(db, roomId), "the app did not answer")
+        assertTrue(dana.hex in GovernanceSupport.supporters(db, roomId))
+    }
+
+    @Test
+    fun `the switch waits for every member, then turns the rule on for everyone`() = runBlocking {
+        governedRoom(governed = false)
+        erinJoins()
+        danaSetsAdminsBare(listOf(dana.hex, userHex, erin.hex))
+        says(dana)
+
+        val waiting = assertIs<GovernanceStatus.Waiting>(chatRepository.governanceStatus(roomId))
+        assertEquals(setOf(erin.hex), waiting.missing)
+        val refusal = assertFailsWith<IllegalStateException> { chatRepository.requireSignatures(room()) }
+        assertTrue("Erin" in refusal.message.orEmpty(), refusal.message)
+
+        says(erin)
+        assertEquals(GovernanceStatus.Ready(minimumAdmins = 3), chatRepository.governanceStatus(roomId))
+
+        chatRepository.requireSignatures(room())
+        val switch = okTheLatestCommit()
+
+        assertEquals(3, GovernanceGate.minimumAdmins(appGroup()), "the rule is not on here")
+        dana.inbound.processGroupEvent(switch)
+        assertEquals(3, GovernanceMarker.minimumAdmins(dana.manager.getGroup(routingId)!!.roomDescription()), "the rule did not reach Dana")
+        assertEquals(GovernanceStatus.Governed(3), chatRepository.governanceStatus(roomId))
+
+        // And from here, Dana's bare commit is refused.
+        val epoch = appGroup().epoch
+        val bare = dana.commitLocally(routingId) {
+            val staged = dana.manager.stageAppDataUpdate(routingId, AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(listOf(dana.hex, userHex)).encode())
+            dana.manager.installState(routingId, staged.pendingState)
+            staged.result
+        }
+        MarmotStandIn.storeInApp(db, user, commitEvent(bare))
+        assertEquals(epoch, appGroup().epoch, "a bare commit landed after the switch")
     }
 }
