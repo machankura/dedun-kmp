@@ -244,6 +244,8 @@ class SynchronizationViewModel(
                             // a message and acting on it -- would sit still for good.
                             // After the reopen, since what that opened may be what it
                             // was waiting for. docs/automatic-key-ceremony.md, Phase 3.
+                            // A share rotation is the same, past its one approval
+                            // (docs/rotate-shares-single-approval.md, Phase 3).
                             runCatching { nostrRepository.resumeRunningCeremonies(keyPair) }
                                 .onFailure { logger.e("Could not resume running key ceremonies", it) }
                             launch(Dispatchers.IO) { observePendingBroadcastNostrEventRequests(keyPair) }

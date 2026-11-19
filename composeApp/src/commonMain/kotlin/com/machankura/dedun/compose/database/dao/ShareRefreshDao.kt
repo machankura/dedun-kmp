@@ -28,6 +28,13 @@ abstract class ShareRefreshDao {
     @Query("SELECT * FROM ShareRefreshSession WHERE dkgSessionId = :dkgSessionId ORDER BY createdAt DESC")
     abstract suspend fun getSessionsForKey(dkgSessionId: String): List<ShareRefreshSession>
 
+    /**
+     * Every refresh [userPublicKey] is in that has not finished, oldest first:
+     * what `ShareRefreshManager.resumeRunning` moves on.
+     */
+    @Query("SELECT * FROM ShareRefreshSession WHERE userPublicKey = :userPublicKey AND stage NOT IN ('COMPLETE', 'FAILED') ORDER BY createdAt ASC")
+    abstract suspend fun getRunningSessionsFor(userPublicKey: HexKey): List<ShareRefreshSession>
+
     @Query("SELECT * FROM ShareRefreshSession WHERE chatRoomId = :chatRoomId ORDER BY createdAt DESC")
     abstract fun observeSessionsForRoom(chatRoomId: String): Flow<List<ShareRefreshSession>>
 

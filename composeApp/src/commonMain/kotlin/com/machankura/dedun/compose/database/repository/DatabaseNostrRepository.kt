@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
+import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.identity.Identity
 
@@ -144,9 +145,14 @@ class DatabaseNostrRepository(
         // Under the same lock as the inbound path that otherwise drives a ritual, so
         // a message arriving mid-sweep is not acted on twice at once.
         return storeNostrEventMutex.withLock {
+            val userPublicKey = activeKeyPair.pubKey.toHexKey()
             ChillDkgRitualManager.resumeRunning(
                 database = database,
-                userPublicKey = activeKeyPair.pubKey.toHexKey(),
+                userPublicKey = userPublicKey,
+                nostrPrivateKey = privateKey
+            ) + ShareRefreshManager.resumeRunning(
+                database = database,
+                userPublicKey = userPublicKey,
                 nostrPrivateKey = privateKey
             )
         }

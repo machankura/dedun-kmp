@@ -139,14 +139,19 @@ class ShareRefreshRitualJvmTest {
             .filter { it.publicKey == device.publicKey }
             .sortedWith(compareBy({ it.createdAt }, { it.kind }))
 
-    private suspend fun pump(between: List<Device>, tamper: (MarmotInnerEvent) -> MarmotInnerEvent = { it }) {
+    private suspend fun pump(
+        between: List<Device>,
+        hold: (MarmotInnerEvent) -> Boolean = { false },
+        tamper: (MarmotInnerEvent) -> MarmotInnerEvent = { it },
+    ) {
         var moved = true
         while (moved) {
             moved = false
             for (from in between) for (to in between) {
                 if (from === to) continue
                 outbox(from).forEach { queued ->
-                    if (!to.received.add(queued.id)) return@forEach
+                    if (queued.id in to.received || hold(queued)) return@forEach
+                    to.received += queued.id
                     moved = true
                     val delivered = tamper(queued)
                     to.db.marmotInnerEventDao().upsert(delivered.copy(chatRoomId = to.group.roomId))
@@ -375,10 +380,10 @@ class ShareRefreshRitualJvmTest {
         val refresh = propose(all[0])
         pump(all)
         all.forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
-        pump(all) { event ->
+        pump(all, tamper = { event ->
             if (event.kind != ShareRefreshEvents.COORDINATOR_ROUND_1) event
             else event.copy(content = event.content.dropLast(2) + if (event.content.endsWith("00")) "01" else "00")
-        }
+        })
 
         all.forEach { device ->
             val session = device.refresh(refresh.id)!!
@@ -407,6 +412,73 @@ class ShareRefreshRitualJvmTest {
         assertTrue(completed.size <= 1, "two rotations from one generation both completed")
         val tables = all.map { it.active().generation to it.active().publicShares }.toSet()
         assertEquals(1, tables.size, "devices disagree about the group's table: $tables")
+    }
+
+    /**
+     * The upgrade: an older build stored the coordinator's sum and stopped, asking
+     * its owner to store the new share. Nothing more will arrive, so only the
+     * sweep can move it -- and it does, once, and the rotation completes.
+     */
+    @Test
+    fun `a rotation left waiting on the old second approval resumes from the sweep`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val (coordinator, others) = all.first() to all.drop(1)
+        val refresh = propose(coordinator)
+        pump(all)
+        all.forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
+        // The sum goes out, but the others' build files it and stops.
+        pump(all, hold = { it.kind == ShareRefreshEvents.COORDINATOR_ROUND_1 })
+        val sum = outbox(coordinator).single { it.kind == ShareRefreshEvents.COORDINATOR_ROUND_1 }
+        others.forEach { device ->
+            device.received += sum.id
+            device.db.marmotInnerEventDao().upsert(sum.copy(chatRoomId = group.roomId))
+            device.db.shareRefreshDao().upsert(
+                device.refresh(refresh.id)!!.copy(
+                    coordinatorRound1 = sum.content,
+                    stage = ShareRefreshStage.COLLECTING_ROUND_2,
+                    approvalRequestedThrough = com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.CONFIRM,
+                )
+            )
+            assertTrue(outbox(device).none { it.kind == ShareRefreshEvents.ROUND_2 }, "device ${device.index}")
+        }
+        pump(all)
+        others.forEach { assertTrue(outbox(it).none { e -> e.kind == ShareRefreshEvents.ROUND_2 }, "nothing arrives to move device ${it.index}") }
+
+        others.forEach { assertEquals(1, ShareRefreshManager.resumeRunning(it.db, it.publicKey, it.privateKey)) }
+        others.forEach { assertEquals(1, outbox(it).count { e -> e.kind == ShareRefreshEvents.ROUND_2 }, "device ${it.index} confirmed from the sweep") }
+        pump(all)
+        all.forEach { assertEquals(ShareRefreshStage.COMPLETE, it.refresh(refresh.id)?.stage, "device ${it.index}") }
+
+        // Twice more: nothing runs, nothing goes out.
+        val sent = all.map { outbox(it).size }
+        repeat(2) { all.forEach { device -> assertEquals(0, ShareRefreshManager.resumeRunning(device.db, device.publicKey, device.privateKey)) } }
+        assertEquals(sent, all.map { outbox(it).size })
+    }
+
+    /** A rotation nobody has taken part in yet is looked at by the sweep and sends nothing. */
+    @Test
+    fun `the sweep sends nothing for a member who has not taken part`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        val member = all[1]
+        assertEquals(1, ShareRefreshManager.resumeRunning(member.db, member.publicKey, member.privateKey))
+        assertTrue(outbox(member).isEmpty())
+        assertEquals(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(member.db, member.refresh(refresh.id)!!))
+        val asked = member.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).count { it.chatMessage.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED }
+        assertEquals(1, asked, "asked once, however often the sweep looks")
+    }
+
+    @Test
+    fun `a build without rotation resumes nothing`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        propose(all[0])
+        pump(all)
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = false
+        assertEquals(0, ShareRefreshManager.resumeRunning(all[1].db, all[1].publicKey, all[1].privateKey))
     }
 
     /**

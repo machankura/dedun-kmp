@@ -58,10 +58,12 @@ interface NostrRepository {
     suspend fun reopenInbox(activeKeyPair: KeyPair): Int
 
     /**
-     * Moves every key ceremony [activeKeyPair] has joined as far as the messages
-     * already stored allow. Run once per activation, after [reopenInbox], since what
-     * that opens may be what a ceremony was waiting for. Returns how many it looked
-     * at. See docs/automatic-key-ceremony.md, Phase 3.
+     * Moves every key ceremony [activeKeyPair] has joined, and every share rotation
+     * it is in, as far as the messages already stored allow. Run once per
+     * activation, after [reopenInbox], since what that opens may be what one was
+     * waiting for. Returns how many it looked at. See
+     * docs/automatic-key-ceremony.md and docs/rotate-shares-single-approval.md,
+     * Phase 3 of each.
      */
     suspend fun resumeRunningCeremonies(activeKeyPair: KeyPair): Int
 

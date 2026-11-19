@@ -289,6 +289,36 @@ object ShareRefreshManager {
             it.stage != ShareRefreshStage.COMPLETE && it.stage != ShareRefreshStage.FAILED
         }
 
+    // ---- resuming ------------------------------------------------------------------------------------------------
+
+    /**
+     * Moves every running refresh of this user's as far as its stored messages
+     * allow. What a tap on "Store your new share" used to do, for refreshes that
+     * already have everything they need and will receive nothing more -- one an
+     * older build left waiting on that tap, or one the app died in between
+     * storing a message and acting on it (docs/rotate-shares-single-approval.md,
+     * Phase 3).
+     *
+     * Not only the approved ones: a coordinator waiting on everyone's round 1 and
+     * a withheld device waiting on the certificate may also hold what they need,
+     * and [advance] stops at the one gate for anyone who has not taken part.
+     * Safe to run as often as the caller likes: [advance] repeats no work.
+     */
+    suspend fun resumeRunning(database: DedunDatabase, userPublicKey: HexKey, nostrPrivateKey: ByteArray): Int {
+        if (!ExperimentalFeatures.shareRefresh) return 0
+        val running = database.shareRefreshDao().getRunningSessionsFor(userPublicKey)
+        running.forEach { session ->
+            val localChatRoom = database.chatRoomDao().findChatRoomById(session.chatRoomId)
+            if (localChatRoom == null) {
+                logger.w("Refresh ${session.id} is in ${session.chatRoomId}, which is gone; not resuming it")
+                return@forEach
+            }
+            advance(database, localChatRoom, session.id, nostrPrivateKey)
+        }
+        if (running.isNotEmpty()) logger.i("Resumed ${running.size} running refresh(es)")
+        return running.size
+    }
+
     // ---- inbound ---------------------------------------------------------------------------------------------------
 
     /**
