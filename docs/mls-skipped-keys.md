@@ -7,12 +7,15 @@ This is a conformance gap in quartz's MLS implementation, not in this app. What
 this app can do about it from outside the library is partial, and is described
 at the end.
 
-**Half of it is closed.** The engine left quartz for mls-kmp
-([marmot-kmp.md](./marmot-kmp.md)), and mls-kmp's state format carries the skipped
-keys -- steps 1 to 3 of "The fix, in quartz" below, landed in the library the app now
-depends on. What is left is not the same gap, and the last section says what it is.
-Everything between here and there is the account as it stood, and is kept because it
-is still why any of it matters.
+**This is closed.** The engine left quartz for mls-kmp
+([marmot-kmp.md](./marmot-kmp.md)), and mls-kmp's state format carries the skipped keys
+beside the ratchet positions they belong to -- steps 1 to 3 of "The fix, in quartz" below,
+landed in the library the app now depends on. Step 4, the replay guard, is still not
+persisted by anyone, and that is the one thing here that is still open. The last section
+says what landed where, and corrects one thing this note has wrong about why the bug bit.
+Everything between here and there is the account as it stood, and is kept because it is
+still why any of it matters -- and because the diagnosis, not just the fix, is what makes
+the next state format reviewable.
 
 ## Symptom
 
@@ -240,21 +243,37 @@ So the test this note asked for -- "save and restore a group between the two mes
 of an out-of-order pair, and assert the older one still decrypts" -- now passes, and it
 is `SkippedGenerationJvmTest`.
 
-**What is still broken, for a different reason.** `MlsGroupManager.decrypt` persists
-only when the message was a commit that advanced the epoch. An application message is
-decrypted and nothing is written, so the secret reaches the live group's state and never
-reaches `ChatRoom.mlsGroupState` -- and a process that dies between the two messages
-still loses the late one. The mitigation section above therefore still stands, word for
-word, including its three bullets; only its first sentence has a new cause. It is no
-longer "the cache is never written" but "the state is not saved after a receive", which
-is a decision about write amplification rather than an oversight: persisting per inbound
-message re-encodes the ratchet tree, the group context and every epoch secret, per
-message, growing with the group. `MlsGroupStateStore.saveSenderRatchet` is the shape of
-the answer on the send side, and the receive side wants the same treatment.
+**And the row keeps up with it.** `MlsGroupManager.decrypt` persists only when the
+message was a commit that advanced the epoch, so an application message reached the live
+group's state and nothing else. `MarmotEngine.processGroupEvent` writes the state after
+one now ([marmot-kmp.md](./marmot-kmp.md), Phase 8), which is why `NostrDao` reads inbound
+events through the engine rather than through the library's processor directly.
 
-`SkippedGenerationJvmTest` pins all of it: the secret is in the state the engine would
-save, a group rebuilt from those bytes reads the late message, and the stored state does
-not carry it yet. Its last test says what to do the day that changes.
+**A correction to this note, while closing it.** Step 2 above is not merely half the fix
+-- it is the whole of it, and this note's account of *why* the bug bit needs one word
+changed. The losing pair was not "the cache is dropped" on its own. It was that the cache
+was dropped *while the positions were kept*: `exportSenderStates` wrote that the ratchet
+had passed generation N, and nothing carried N's secret, so the restored state refused a
+message it had told itself it was past. mls-kmp writes both or neither, so a state saved
+without the skipped keys is now an older **coherent** state, and a coherent state that has
+not passed the late generation derives it forward. The three bullets of the mitigation
+section above are therefore no longer describing a lost message. What an unwritten row
+costs is the deriving -- every generation since the last full save, re-derived on each
+restart, against `SecretTree`'s thousand-step forward cap -- and replay protection, which
+step 4 does not give us in any case.
+
+Which leaves the reason the receive-side write landed when it did, and it is not this note's
+bug. Until Phase 8 every sent message wrote the whole group state, so the row could not
+fall far behind inside an epoch. Phase 8 replaced that with a ~100-byte sender-ratchet
+record, and from then on nothing would have updated the row between epoch changes: a
+long-lived room could drift an unbounded number of generations from what the device had
+actually read. The write keeps it current. The two halves are one change for that reason,
+not for this one.
+
+`SkippedGenerationJvmTest` pins what is true: the secret is in the state the engine would
+save, a group rebuilt from those bytes reads the late message, the row carries what the
+live group holds, and -- the one that matters for the paragraph above -- the row's ratchet
+positions move with the secrets it keeps, so the two can never disagree again.
 
 One thing this does not change: a device that loses a message this way can still be sent
 a new one, which is encrypted at a generation it has not passed. That is still the

@@ -20,19 +20,18 @@ everything here happens on the current-profile side of that branch.
 [mls-skipped-keys.md](./mls-skipped-keys.md) second — it is the gap this move closes, and
 the only one it closes for free.
 
-**Built**, phases 0 to 7, one commit each but for 5 and 6, which share one because the
-fork probe produced no code. Written against the code as it stood at `8b066795`, against
-marmot-kmp `2.2.1`, mls-kmp `1.3.0`, crypto-kmp `2.1.0` and quartz `2.7.3`. The phases are
-kept as they were written, with what each one turned out to be recorded under it, because
-the reasoning is the point and the code reads better against the argument it came from.
+**Built**, phases 0 to 8, one commit each but for 5 and 6, which share one because the
+fork probe produced no code. Phase 8 was the piece Phase 7 deferred and is the only one
+that was not in the plan as written. Written against the code as it stood at `8b066795`,
+against marmot-kmp `2.2.1`, mls-kmp `1.3.0`, crypto-kmp `2.1.0` and quartz `2.7.3`. The
+phases are kept as they were written, with what each one turned out to be recorded under
+it, because the reasoning is the point and the code reads better against the argument it
+came from.
 
-Three things it does not claim. **The manual upgrade has not been done** — Phase 4 proves
-a real version-4 blob opens, and a profile with real rooms in it is still the last check
-before a release. **The sender ratchet record and the receive-side write are deferred**,
-both deliberately and for the same reason: they are one decision about how often this app
-persists a group, they want a schema change, and Phase 7 says why that is its own piece of
-work rather than this one's tail. **And the authored fork is still not settled** — Phase 6
-probed it and the gap is the library's, unchanged.
+Two things it does not claim. **The manual upgrade has not been done** — Phase 4 proves a
+real version-4 blob opens, and a profile with real rooms in it is still the last check
+before a release, now over a schema change as well (36 → 37 in Giza, 35 → 36 in Bennu). **And the authored fork is
+still not settled** — Phase 6 probed it and the gap is the library's, unchanged.
 
 | phase | what it was |
 |---|---|
@@ -44,6 +43,7 @@ probed it and the gap is the library's, unchanged.
 | 5 | the skipped keys: the format carries them, the app's row does not yet |
 | 6 | the authored fork, probed: still open, and the fix now visible |
 | 7 | the guard, so the engine cannot come back from quartz |
+| 8 | the sender ratchet as its own row, and the receive-side write beside it |
 
 ## Where the engine went
 
@@ -619,6 +619,11 @@ no new behaviour inside the swap. It is the obvious next task, and it is the sam
 the receive-side write Phase 5 pinned — worth doing as one piece of work that decides how
 often this app persists a group, for both directions at once.
 
+*That became Phase 8, as its own piece of work and its own commit, and the reason to do
+both halves together turned out to be stronger than this paragraph guessed: the send-side
+record is what stops the row being written, so the receive-side write is what keeps it
+current afterwards. See below.*
+
 **Durable ingest dedup: not reachable without `MarmotManager`.**
 `MarmotIngestDedupStore` is taken by the client, not by `MarmotInboundProcessor`, so the
 follow-up marmot-v2.md's Phase 5 asked for is only available by adopting the client — the
@@ -626,6 +631,110 @@ question D1 deferred. Phase 3 is where that stopped being hypothetical: a `Marmo
 now runs in this repo's tests and the app's own orchestration agrees with it. What is left
 is a decision about what owns the stores and the publisher in the app, not a question
 about whether the library's client works.
+
+## Phase 8 — how often this app persists a group
+
+The piece Phase 7 deferred, as one change in both directions, because they are one
+question: a group's state is a few kilobytes of ratchet tree, group context and epoch
+secrets, and the app was rewriting all of it to record things that moved a counter.
+
+**What moves, and what has to be written for it.**
+
+| what happened | what actually changed | what the app writes now |
+|---|---|---|
+| an epoch change — a commit applied, a Welcome processed, a convergence rewind | nearly everything | the whole state, by the manager, as it applies it (unchanged) |
+| this device **sent** an application message | this leaf's own entry in the secret tree (RFC 9420 §9) | a `MarmotSenderRatchet` row, ~100 bytes |
+| this device **received** an application message | the sender's receive ratchet, and any generations it skipped past | the whole state, by `MarmotEngine.processGroupEvent` |
+| a standalone proposal staged | the pending-proposal pool | the whole state, by the manager (unchanged) |
+
+The send side is the library's own split — `MlsGroupStateStore.saveSenderRatchet`, in the
+spirit of OpenMLS keeping `message_secrets` apart from `group_state`. The receive side has
+no equivalent and cannot have the same one: the skipped keys are `(leafIndex, generation)`
+pairs for *other* members' ratchets, they live in `MlsGroupState` and nowhere else, and
+`OwnSenderRatchet` is this leaf's position only.
+
+**The table is `MarmotSenderRatchet`: one row per room, the record opaque.** `chatRoomId`
+as the primary key, and the FK to `ChatRoom` with `CASCADE` the way
+`MarmotRetainedEpochSecret` has it. The bytes are stored as the library wrote them, which
+is the opposite of what the retained-epoch store does — it decodes `RetainedEpochSecrets`
+into five columns — and the precedent followed instead is `MarmotPublishObligation`, whose
+KDoc says the bytes are "opaque here, because the gate decodes them". The reason to choose
+that way round here: the retained-epoch rows already existed, written by the outbound path
+for another purpose, and `RetainedEpochSecrets` is RFC-shaped. `OwnSenderRatchet` is the
+library's own invention, it carries both the handshake and the application chain because
+it already grew once, and a record whose entire job is to never go backwards is safest
+when nothing in this app re-encodes it. `epoch`, `leafIndex` and `applicationGeneration`
+are kept beside it, read off the same bytes as they are written: they cannot drift from the
+blob, and "where does this device think its ratchet is" is the first question a lost
+message asks.
+
+**Schema 36 → 37 in Giza, 35 → 36 in Bennu, one `AutoMigration`.** A new table, so Room generates it. A room that
+existed before the upgrade has no row, which reads as "has not sent since its last full
+save" — true of every one of them at that moment, because the build before this one saved
+the whole state on every send.
+
+**The ordering hazard, which is the real content of this phase.** `MlsGroupManager`
+applies the record itself in `restoreAll`. The app has a second way in — a room joined
+*after* the engine restored is loaded from its row the first time it is asked for, which
+is the common way round in a running app — and `MarmotEngine.groupFor` is that path. It
+has to apply the record **before** `groupManager.adoptGroup`, because adopting persists,
+and persisting rewrites the ratchet row from the group being adopted. Apply it afterwards
+and the row has already been overwritten with the restored state's older position: the
+group in memory looks right for the rest of the process, and the next restart re-emits
+generations that have already been published, under AEAD keys and nonces that have already
+been used.
+
+`SenderRatchetPersistenceJvmTest` has it both ways round, and finding the test that could
+tell them apart took two goes. The first version asserted the row after a lazy load and
+passed with the order inverted — because a state saved before this leaf ever sent has no
+ratchet entry at all, `exportOwnSenderRatchet` returns null for it, and the adopt writes
+nothing. The order cannot matter until the stored state holds a position of its own that is
+behind the record's, and what puts one there is a *receive*: it is a full save, so it
+captures wherever the sender ratchet had got to, and the sends after it move the record
+past that. With one received message in the middle the inverted order fails with
+`expected:<2> but was:<1>`, which is the rewind, in the row, in one line.
+
+The same file has the A/B that says the record is load-bearing at all: with the row, a
+restarted engine's next message is read by the peer; with the row deleted, the same message
+is refused, because the peer's ratchet for this leaf has consumed that generation and RFC
+9420 §9 does not allow it twice.
+
+**A correction to Phase 5.** That phase pinned the receive-side gap and said a restart
+between two messages still lost the late one. That is not what an unwritten row costs
+here, and the difference is worth stating because it is the whole reason the original bug
+was a bug. quartz's engine saved the ratchet *positions* and dropped the skipped keys, so
+the saved state said the ratchet had passed generation N while carrying nothing for it —
+incoherent, and a message lost. mls-kmp writes both or neither, so an unwritten row is
+simply an older *coherent* snapshot, and a snapshot that has not passed the late generation
+derives it forward. What the gap actually cost was the deriving — every generation since
+the last full save, re-derived after each restart, against `SecretTree`'s thousand-step
+forward cap — plus replay protection, which `consumedGenerations` does not persist in any
+case.
+
+So the receive-side write is not a lost-message fix, and this phase does not claim it is.
+Its reason is the send side: until this change every send wrote the whole state, so the row
+could not fall far behind inside an epoch. Once sends write a ratchet record instead,
+nothing updates the row between epoch changes, and a long-lived room could drift an
+unbounded number of generations from what this device has actually read. That is what
+`MarmotEngine.processGroupEvent` closes, and it is why the two halves are one change.
+
+**One more seam.** `NostrDao` now reads inbound events through `MarmotEngine.processGroupEvent`
+rather than `engine.inbound.processGroupEvent`, so the write cannot be forgotten by a
+second caller; the engine's KDoc says so, and the one test that used the processor directly
+was moved to the same door.
+
+**Built.** 1167 tests across 156 classes, 0 failures; Android and JVM compile clean; the
+four audits unchanged. Six new tests — five in `SenderRatchetPersistenceJvmTest`, one more
+in `SkippedGenerationJvmTest`, whose third test is now inverted from what Phase 5 left and
+whose KDoc carries the correction above. `IdentitySwitchJvmTest`'s profile test failed once
+during this phase on a 5-second DataStore timeout and did not reproduce in four later runs,
+including the full gate; it passes in isolation on this commit and on the one before it,
+and its own KDoc says it depends on a DataStore cache that is per-process and per-test-order.
+
+What this phase does **not** do: encryption at rest. The record holds two 32-byte chain
+secrets, so it is exactly as sensitive as the state beside it, and it carries the same
+`TODO(security)` the rest of the store does. Phase 8 moves those bytes into one more table
+and does not change what guards them.
 
 ## Out of scope
 

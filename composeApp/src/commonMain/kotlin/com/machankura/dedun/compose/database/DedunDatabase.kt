@@ -75,6 +75,7 @@ import com.machankura.dedun.compose.database.dao.MarmotRoutingDao
 import com.machankura.dedun.compose.database.dao.MarmotPublishObligationDao
 import com.machankura.dedun.compose.database.dao.MarmotKeyPackageDao
 import com.machankura.dedun.compose.database.dao.MarmotRetainedEpochSecretDao
+import com.machankura.dedun.compose.database.dao.MarmotSenderRatchetDao
 import com.machankura.dedun.compose.database.dao.MentionDao
 import com.machankura.dedun.compose.database.dao.NegentropySynchronizeRequestDao
 import com.machankura.dedun.compose.database.dao.NegentropySynchronizeResultDao
@@ -120,6 +121,7 @@ import com.machankura.dedun.compose.managers.MarmotEngine
 import com.machankura.dedun.compose.database.model.MarmotRetainedEpochSecret
 import com.machankura.dedun.compose.database.model.MemberWallet
 import com.machankura.dedun.compose.database.model.MemberWalletSpend
+import com.machankura.dedun.compose.database.model.MarmotSenderRatchet
 import com.machankura.dedun.compose.database.model.Mention
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeResult
@@ -211,6 +213,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         MarmotRetainedEpochSecret::class,
         MemberWallet::class,
         MemberWalletSpend::class,
+        MarmotSenderRatchet::class,
         Mention::class,
         NegentropySynchronizeRequest::class,
         NegentropySynchronizeResult::class,
@@ -229,7 +232,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 45,
+    version = 46,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -502,6 +505,15 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // (docs/group-wavelength-unconfirmed-deposits.md, Phase 1). A new table, which Room migrates itself, and nothing
         // can be in it yet. Deliberately not a DepositRow: a row there is a payable balance the moment it exists.
         AutoMigration(from = 44, to = 45),
+        // v46 adds the MarmotSenderRatchet table: where this device's own sender ratchet has
+        // got to in a current-profile room, as its own row instead of a whole group state
+        // rewritten per sent message (docs/marmot-kmp.md, Phase 8). A new table, so Room
+        // migrates it itself. A room that existed before this has no row, which reads as "has
+        // not sent since its last full save" -- true of every one of them at the moment of the
+        // upgrade, because the build before this one saved the whole state on every send.
+        // Giza's v37 and Bennu's v36: Giza's v36 removed its wallets, which Dedun keeps, and Dedun's own
+        // 36-45 came before it (docs/giza-into-dedun.md, "The schema numbers").
+        AutoMigration(from = 45, to = 46),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -580,6 +592,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun marmotOutboundDao(): MarmotOutboundDao
 
     abstract fun marmotRetainedEpochSecretDao(): MarmotRetainedEpochSecretDao
+
+    abstract fun marmotSenderRatchetDao(): MarmotSenderRatchetDao
 
     abstract fun mentionDao(): MentionDao
 

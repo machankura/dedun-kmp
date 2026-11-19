@@ -27,34 +27,40 @@ import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.extensions.exporterSecret
 
 /**
- * The bug docs/mls-skipped-keys.md is about: half closed by the move, and the other half
- * pinned here, because it is no longer the same half.
+ * The bug docs/mls-skipped-keys.md is about, closed in two places.
  *
  * RFC 9420 §9.1 says a receiver handed generation N+1 before N derives the intermediate
  * keys and keeps them, so the older message still opens when it turns up. quartz's engine
- * derived and cached them in a `SecretTree` field that `saveState` never wrote, so two
- * messages published in the same second reliably lost one across a restart -- silently:
- * the kind:445 row was stored and no inner event came out of it.
+ * derived and cached them in a `SecretTree` field that `saveState` never wrote -- while
+ * `exportSenderStates` did write the position the ratchet had reached. That pair is what
+ * made it a bug rather than a cost: the saved state said the ratchet had passed generation
+ * N and carried nothing for it, so two messages published in the same second reliably lost
+ * one across a restart, silently -- the kind:445 row was stored and no inner event came out
+ * of it.
  *
- * **What the move fixed.** mls-kmp's state format carries them. `MlsGroupState` has
- * `skippedApplicationSecrets` and `skippedHandshakeSecrets` from its STATE_VERSION 5,
- * `saveState` exports them from the secret tree and `restore` imports them back. The
- * engine-level gap the note describes is gone, and the first two tests here are that.
+ * **The format closed it.** `MlsGroupState` has `skippedApplicationSecrets` and
+ * `skippedHandshakeSecrets` from its STATE_VERSION 5, `saveState` exports them from the
+ * secret tree beside the positions, and `restore` imports them back. Saved together, they
+ * can no longer disagree, and the first two tests here are that.
  *
- * **What it did not fix, and this is the finding.** `MlsGroupManager.decrypt` persists
- * only when the message was a COMMIT that advanced the epoch; an application message is
- * decrypted and nothing is written. So the secret reaches the live group's state and never
- * reaches the blob on disk, and a restart between two messages still loses the late one --
- * for a different reason than before. Not "the cache is never written" but "the state is
- * not saved after an application message", which is a decision about write amplification
- * rather than an oversight: persisting per inbound message re-encodes the ratchet tree,
- * the group context and every epoch secret, per message, growing with the group. The same
- * trade-off `MlsGroupStateStore.saveSenderRatchet` exists to solve on the send side.
+ * **And the row keeps up.** Phase 5 left the other half pinned: `MlsGroupManager.decrypt`
+ * persists only when the message was a COMMIT that advanced the epoch, so an application
+ * message reached the live group's state and never the blob on disk.
+ * `MarmotEngine.processGroupEvent` writes it now, and the third test is that, the other way
+ * round from how Phase 5 left it.
  *
- * The third test pins that, in the style of `ConvergenceForkJvmTest`'s authored fork: it
- * asserts the gap, and says in its message what to do the day it stops holding.
+ * One correction while inverting it. Phase 5's note said a restart between two messages
+ * still lost the late one, and that is not what an unwritten row costs here: an older
+ * *coherent* snapshot -- positions and skipped keys saved together, or neither -- restores
+ * a ratchet that has not passed the late generation yet, and derives it forward. What it
+ * costs is the deriving: every generation since the last full save, re-derived after each
+ * restart, against `SecretTree`'s thousand-step forward cap. The reason to close it in this
+ * change rather than the next is that until this change every send wrote the whole state,
+ * so the row could not fall far behind. Now sends write a ratchet record instead
+ * (`SenderRatchetPersistenceJvmTest`), and this is what keeps the row current inside an
+ * epoch.
  *
- * See docs/marmot-kmp.md, Phase 5.
+ * See docs/marmot-kmp.md, Phases 5 and 8.
  */
 class SkippedGenerationJvmTest {
 
@@ -153,37 +159,60 @@ class SkippedGenerationJvmTest {
     }
 
     /**
-     * The half the move did not close, pinned.
+     * And the row carries it, which is what Phase 5 left undone.
      *
-     * `MlsGroupManager.decrypt` writes nothing for an application message -- only a COMMIT
-     * that advanced the epoch is persisted -- so the secret above never reaches
-     * `ChatRoom.mlsGroupState`, and a process that dies between the two messages still
-     * loses the late one.
+     * The write is `MarmotEngine.processGroupEvent`, not the manager: the library persists
+     * an epoch change as it applies it and a proposal as it stages it, and an application
+     * message is the one result that moves state and writes nothing, because there is no
+     * small record for the receive side the way there is for the send side -- the skipped
+     * keys live in the group state and nowhere else.
      *
-     * The day this assertion fails, the manager has started persisting after a receive
-     * (or the app has), docs/mls-skipped-keys.md can drop its mitigation section, and this
-     * test becomes the other way round: assert the stored state carries the secret, and
-     * add the restart that `MarmotEngine(db)` makes -- which is NOT asserted here on
-     * purpose, because a rebuilt engine reads generation 0 happily today for the wrong
-     * reason. It restores a blob whose sender ratchet never moved, so generation 0 is
-     * simply the next one it expects, and the test would pass while testing nothing.
+     * `store(...)` is the app's own ingest, so this goes through the door the app uses. A
+     * test that reached for `engine.inbound.processGroupEvent` instead would read the
+     * message and write nothing, which is the one way to make this fail without a bug.
      */
     @Test
-    fun `the stored state does not yet carry it, so a restart still loses the message`() = runBlocking {
+    fun `the stored state carries it too, so a restart starts where this device left off`() = runBlocking {
         val roomId = joinedRoom()
         theirMessage(roomId, "generation 0")
         val second = theirMessage(roomId, "generation 1")
 
         store(second)
 
-        assertTrue(
-            liveState(roomId).skippedApplicationSecrets.isNotEmpty(),
-            "the live group lost the secret too, which is a worse bug than this one",
+        assertEquals(
+            liveState(roomId).skippedApplicationSecrets.size,
+            storedState(roomId).skippedApplicationSecrets.size,
+            "the row does not carry what the live group holds -- the receive path is not persisting",
         )
-        assertTrue(
-            storedState(roomId).skippedApplicationSecrets.isEmpty(),
-            "the stored state carries the skipped secret -- the receive path now persists; " +
-                "invert this test and see its KDoc",
+        assertEquals(
+            1,
+            storedState(roomId).skippedApplicationSecrets.size,
+            "the skipped generation's secret is not on the row",
         )
+    }
+
+    /**
+     * The positions move with it, which is the half that makes the pair coherent.
+     *
+     * A state that said the ratchet had passed generation 0 while carrying nothing for it
+     * is the original bug, so the thing to assert is not that each is saved but that
+     * neither is saved without the other.
+     */
+    @Test
+    fun `the row's ratchet positions move with the secrets it keeps`() = runBlocking {
+        val roomId = joinedRoom()
+        theirMessage(roomId, "generation 0")
+        store(theirMessage(roomId, "generation 1"))
+
+        val live = liveState(roomId).senderRatchetStates
+        val stored = storedState(roomId).senderRatchetStates
+        assertEquals(live.keys, stored.keys, "the row knows a different set of senders")
+        live.forEach { (leafIndex, state) ->
+            assertEquals(
+                state.applicationGeneration,
+                assertNotNull(stored[leafIndex]).applicationGeneration,
+                "leaf $leafIndex is at a different generation on the row than in the group",
+            )
+        }
     }
 }

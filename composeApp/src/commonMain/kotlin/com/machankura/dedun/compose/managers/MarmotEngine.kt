@@ -11,6 +11,8 @@ import com.vitorpamplona.marmot.protocolCore.MarmotPublishGate
 import com.vitorpamplona.marmot.protocolCore.PublishOutcome
 import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.mls.group.MlsGroupState
+import com.vitorpamplona.mls.group.OwnSenderRatchet
+import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,15 +53,23 @@ import com.machankura.dedun.compose.exceptions.MarmotConvergencePendingException
  * and matched by reference since Phase 1, and the processor reads the rotation
  * manager only on its own Welcome path, which the app does not use.
  *
- * Two gaps the app's own pipeline had are not closed by moving to this one, and
- * should not be read as closed. A late application message decrypted under a
- * retained prior epoch is decrypted without the sender's leaf signature being
- * verified -- the library's `tryDecryptWithRetainedEpoch` has the same gap the
- * app's had. And the secret tree's skipped keys reach the state the manager would
- * save -- mls-kmp carries them, which quartz's engine did not -- but an application
- * message is decrypted without anything being written, so they still do not reach
- * the row (docs/mls-skipped-keys.md). The manager holding the live group covers
- * that within a process, exactly as `MlsGroupCache` did, and no further.
+ * One gap the app's own pipeline had is not closed by moving to this one, and should
+ * not be read as closed: a late application message decrypted under a retained prior
+ * epoch is decrypted without the sender's leaf signature being verified -- the
+ * library's `tryDecryptWithRetainedEpoch` has the same gap the app's had.
+ *
+ * The other one is closed. The secret tree's skipped keys reach the state the
+ * manager would save -- mls-kmp carries them, which quartz's engine did not -- and
+ * [processGroupEvent] writes that state after an application message, so they reach
+ * the row as well (docs/mls-skipped-keys.md). Read inbound events through that
+ * rather than through [inbound] directly, or the write is lost.
+ *
+ * Which state is written where is now split by what moved. An epoch change is a full
+ * save, by the manager, as it applies. An application message received is a full
+ * save, here. An application message *sent* moves only this leaf's place in the
+ * secret tree, and that is a `MarmotSenderRatchet` row rather than the group --
+ * which is why [groupFor] has to put the record back before the manager adopts a
+ * group, and says there what goes wrong if it does not.
  */
 class MarmotEngine(
     private val database: DedunDatabase,
@@ -114,9 +124,80 @@ class MarmotEngine(
         groupManager.getGroup(routingId)?.let { return it }
         val bytes = store.load(routingId) ?: return null
         val group = MlsGroup.restore(MlsGroupState.decodeTls(bytes), MarmotGroupPolicy)
+        applySenderRatchetRecord(routingId, group)
         groupManager.adoptGroup(routingId, group)
         inbound.trackGroup(routingId)
         return group
+    }
+
+    /**
+     * Move [group] up to the sender ratchet position its own row records, as
+     * `MlsGroupManager.restoreAll` does for the groups it loads.
+     *
+     * **Before `adoptGroup`, not after.** Adopting persists, and persisting rewrites
+     * the ratchet row from the group it was handed -- so a group adopted at the
+     * restored state's older position overwrites the record with that position, and
+     * the generations between the two are published a second time under keys and
+     * nonces already used. This is the half of the split the library cannot do for
+     * the app: `restoreAll` is its own path and applies the record itself, while this
+     * one is the app's, for a room first touched after that restore.
+     *
+     * The library decides whether the record applies at all: it is accepted only for
+     * the epoch, the leaf and the exact secret tree it was taken from, and then only
+     * where it moves a chain forward. So a record that does not belong to this state
+     * is simply not applied.
+     */
+    private suspend fun applySenderRatchetRecord(routingId: HexKey, group: MlsGroup) {
+        val bytes = store.loadSenderRatchet(routingId) ?: return
+        val record = OwnSenderRatchet.decodeTlsOrNull(bytes) ?: return
+        if (group.restoreOwnSenderRatchet(record)) {
+            logger.d("${routingId.take(8)}… resumes at application generation ${record.applicationGeneration}")
+        }
+    }
+
+    /**
+     * Read one kind:445 against this database's groups, and write what the library
+     * leaves in memory.
+     *
+     * The processor's own persistence is the manager's: a commit that advanced the
+     * epoch is saved as it is applied, a staged proposal is saved as it is staged.
+     * An application message is the one result that moves state and writes nothing,
+     * because the manager has no small record for the receive side the way it has for
+     * the send side -- decrypting generation N+1 before N derives N's key and keeps it
+     * (RFC 9420 §9.1), and those keys are `(leafIndex, generation)` pairs for other
+     * members' ratchets, which live in the group state and nowhere else.
+     *
+     * Not writing them does not lose the late message, and it is worth being exact
+     * about that, because the opposite is what the original bug was.
+     * `MlsGroupState` carries the skipped keys beside the ratchet positions they
+     * belong to, so a state saved without a receive is an older *coherent* state, and
+     * a position that has not passed the late generation derives it forward. quartz's
+     * engine saved the positions and dropped the keys, which is the pair that lost
+     * messages. What an unwritten row costs is the deriving -- every generation since
+     * the last full save, re-derived on each restart, against `SecretTree`'s
+     * thousand-step forward cap.
+     *
+     * The reason the write is here is the send side. Until the sender ratchet became
+     * its own row, every sent message wrote the whole state, so the row could not
+     * fall far behind inside an epoch; now nothing else would update it between epoch
+     * changes, and a long-lived room would drift. It is a full save, which is the cost
+     * the legacy pipeline has always paid -- `MlsGroupCache` saves the whole state
+     * after every inbound event -- and it is paid on the receive path, where the
+     * device is already doing an AEAD open and a database write for the event itself.
+     *
+     * The snapshot is taken through `readGroup`, under the lock the manager applies
+     * commits under, so it cannot catch a commit half applied.
+     *
+     * See docs/mls-skipped-keys.md and docs/marmot-kmp.md, Phase 8.
+     */
+    suspend fun processGroupEvent(groupEvent: GroupEvent): GroupEventResult {
+        ensureRestored()
+        val result = inbound.processGroupEvent(groupEvent)
+        if (result is GroupEventResult.ApplicationMessage) {
+            val encoded = groupManager.readGroup(result.groupId) { it.saveState().encodeTls() }
+            if (encoded != null) store.save(result.groupId, encoded)
+        }
+        return result
     }
 
     /**

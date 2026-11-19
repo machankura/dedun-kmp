@@ -1414,9 +1414,11 @@ abstract class NostrDao(
 
         upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
 
-        // The processor names the group by its address; every row below is keyed by
-        // the room, so the result is re-addressed once.
-        val groupEventResult = engine.inbound.processGroupEvent(groupEvent).inRoom(chatRoomId)
+        // Through the engine, not the processor: an application message is the one
+        // result that moves state the library writes nothing for, and the engine is
+        // where that write is. The processor names the group by its address; every
+        // row below is keyed by the room, so the result is re-addressed once.
+        val groupEventResult = engine.processGroupEvent(groupEvent).inRoom(chatRoomId)
         logger.d("groupEventResult: $groupEventResult")
 
         fileGroupEventResult(

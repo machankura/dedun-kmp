@@ -151,7 +151,7 @@ class CurrentProfileInteropJvmTest {
 
         val rebuilt = MarmotEngine(db)
         assertNotNull(rebuilt.groupFor(roomId), "the rebuilt engine does not restore the room")
-        val result = assertIs<GroupEventResult.ApplicationMessage>(rebuilt.inbound.processGroupEvent(late))
+        val result = assertIs<GroupEventResult.ApplicationMessage>(rebuilt.processGroupEvent(late))
         assertTrue(result.innerEventJson.contains("sent before the commit"))
     }
 }
