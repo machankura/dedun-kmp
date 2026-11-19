@@ -669,6 +669,12 @@ re-deriving:
 - **`adopt` before the members are added**, because filing the key state is local
   and certain and adding members is neither.
 
+> **Since [robust-group-admins.md](./robust-group-admins.md):** the repository's
+> `createMarmotGroup` takes the ceremony and the room it ran in instead of
+> `adminPublicKeys`, and `MarmotGroupCreation.createFor` reads the admins, the id and the name
+> off the ceremony. A subgroup's founding admins are its ceremony's participants, as a
+> group's are, so the same rule makes both.
+
 `parentChatRoomId` is the one genuinely new parameter, written onto the
 `ChatRoom` row. The subgroup's description carries the path through
 `SharedKeyDerivation.describe`, exactly as the admin room's does — MIP-01 has no

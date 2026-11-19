@@ -1,11 +1,27 @@
 # Every founding member of a robust group is its admin
 
 A robust group promises, on the screen that makes it, that "everyone administers the
-group together". This note is the plan that makes the promise true on every device from
+group together". This note is the plan that made the promise true on every device from
 the moment the group exists: what "founding member" means, the four places the promise
-breaks today, and seven phases that close them.
+broke before, and the eight phases that closed them.
 
-**Planned, not built.** Written against `fc437d05`.
+**Built**, phases 0-7, one commit each. The phases below are kept as written,
+because they are the reasoning; where the build chose differently the table says
+so, and it did nine times worth reading:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| a new `ChillDkgRitualManager.foundingMembersOf` | never built. `participantsOf` already was that function, fallback and all; Phase 1 made `MarmotGroupCreation.createFor` its one caller on the way to a room, and took the list off `ChatRepository.createMarmotGroup` altogether |
+| Phase 2's `stampAdmins` replaced by `AdminFlags.reconcile` with the creation's list | with the group's policy instead. Reading the list back would have kept two sources for one flag, which is the drift D2 is about |
+| Phase 2's Welcome test in `WelcomeBundleMatchJvmTest` | in `RobustGroupAdminsJvmTest`, where Phase 0 already delivers real gift-wrapped Welcomes between three app devices. The bundle test is about which key package a Welcome names, not what it leaves behind |
+| Phase 3 reports `Differs(missing, unexpected)` and offers removing unexpected admins | `Missing` only. Removing an admin is out of scope, so an admin the ceremony did not have is not this plan's to act on |
+| Phase 3's repair on every room | on the current profile only. The app makes no governance commit on a legacy room -- no removal, no disband -- so a legacy room gets the warning and the transcript line and not the button |
+| Phase 4 invites founders "who have never had a row in the room, not even a soft-deleted one" | founders without a leaf in a room still at **epoch 0**. Rows are hard-deleted when a member leaves, so "never had a row" cannot be told from "left"; epoch 0 can, because leaving is a commit and the founding invite is the commit that ends epoch 0 |
+| Phase 4 is about `notAdded` | it also fixed what Phase 0 found: on the current profile `MarmotGroupCreation` invited the founders through a room read before its routing id was recorded, so the engine adopted a second copy of the group under the room id, and every later invite into that room took the founding path -- no commit, and nobody already in the room told |
+| Phase 4's "Invite again" for any other active admin | only on the device holding the room at epoch 0, which is its creator's: nobody else holds the room until the invite reaches them. The coordinator's device does it on its own as step 4 |
+| Phase 6 reconciles behind a stored "reconciled" preference | on every start, with no flag. `AdminFlags.reconcile` writes nothing when the rows already agree, so running it again costs one decode per room and a preference would only be a second thing to keep right |
+
+Written against `fc437d05`.
 
 Read [shared-key-ceremony.md](./shared-key-ceremony.md) and
 [ceremony-creation.md](./ceremony-creation.md) first.

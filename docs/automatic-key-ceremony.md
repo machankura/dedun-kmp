@@ -388,6 +388,11 @@ on a COMPLETE ceremony this device coordinated:
   room does not exist                                     -> create it
 ```
 
+> **Since [robust-group-admins.md](./robust-group-admins.md), Phase 4:** a fifth line, after
+> the room exists -- a room still at epoch 0 without its founders, whose founding invite never
+> went out, has it finished. And the room's admins are no longer the caller's to pass: the
+> repository takes the ceremony and reads them off it.
+
 - **What it calls:** the code behind `DkgRitualViewModel.proposeBirthCertificate`,
   `proposeKeyState` and `createAdminGroup`. That code moves from the view model
   into the manager (and `DkgRepository`), along with each one's "already asked"
