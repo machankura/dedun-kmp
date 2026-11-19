@@ -148,18 +148,39 @@ object GroupKeyStateEvent {
         val publicSharesHash: String,
         val refreshId: String?,
         val retiredIds: List<Int>,
+        /** Ids bound to a new identity (Phase 10b). */
+        val bindings: List<MemberBinding> = emptyList(),
     ) {
         fun toTags(): Array<Array<String>> = (
             listOf(arrayOf(GENERATION_TAG, generation.toString()), arrayOf(PUBSHARES_TAG, publicSharesHash)) +
                 listOfNotNull(refreshId?.let { arrayOf(REFRESH_TAG, it) }) +
-                retiredIds.sorted().map { arrayOf(RETIRED_TAG, it.toString()) }
+                retiredIds.sorted().map { arrayOf(RETIRED_TAG, it.toString()) } +
+                bindings.sortedBy { it.participantId }.map { arrayOf(MEMBER_TAG, it.encode()) }
             ).toTypedArray()
+    }
+
+    /** Participant id [participantId] is held by [memberPublicKey], under ChillDKG host key [hostPublicKey]. */
+    data class MemberBinding(val participantId: Int, val memberPublicKey: HexKey, val hostPublicKey: HexKey) {
+        fun encode(): String = "$participantId:$memberPublicKey:$hostPublicKey"
+
+        companion object {
+            fun decode(value: String): MemberBinding? {
+                val parts = value.split(":").takeIf { it.size == 3 } ?: return null
+                val id = parts[0].toIntOrNull()?.takeIf { it >= 0 } ?: return null
+                if (parts[1].length != 64 || parts[2].length != 66) return null
+                return MemberBinding(id, parts[1].lowercase(), parts[2].lowercase())
+            }
+
+            fun decodeAll(value: String?): List<MemberBinding> =
+                value?.split(",")?.mapNotNull { decode(it.trim()) }.orEmpty()
+        }
     }
 
     private const val GENERATION_TAG = "frost_generation"
     private const val PUBSHARES_TAG = "frost_pubshares"
     private const val REFRESH_TAG = "frost_refresh"
     private const val RETIRED_TAG = "frost_retired"
+    private const val MEMBER_TAG = "frost_member"
 
     /**
      * The share generation a state names: null for none (generation 0), and a
@@ -176,7 +197,10 @@ object GroupKeyStateEvent {
         val retired = tags.filter { it.size >= 2 && it[0] == RETIRED_TAG }.map {
             it[1].toIntOrNull() ?: return Result.failure(IllegalArgumentException("unreadable retired id ${it[1]}"))
         }
-        return Result.success(ShareGenerationTags(generation, hash, value(REFRESH_TAG), retired))
+        val bindings = tags.filter { it.size >= 2 && it[0] == MEMBER_TAG }.map {
+            MemberBinding.decode(it[1]) ?: return Result.failure(IllegalArgumentException("unreadable member binding ${it[1]}"))
+        }
+        return Result.success(ShareGenerationTags(generation, hash, value(REFRESH_TAG), retired, bindings))
     }
 
     fun parseParentChatRoomId(tags: Array<Array<String>>): HexKey? =

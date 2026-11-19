@@ -71,6 +71,7 @@ import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleRequestEvent
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
+import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -290,6 +291,12 @@ data class ChatMessage(
         const val TYPE_SHARE_REFRESH_COMPLETE = "shareRefreshComplete"
         const val TYPE_SHARE_REFRESH_FAILED = "shareRefreshFailed"
 
+        /** A share repair -- re-enrollment -- as lines in the chat (docs/frost-share-refresh.md, Phase 10). */
+        const val TYPE_SHARE_REPAIR_REQUESTED = "shareRepairRequested"
+        const val TYPE_SHARE_REPAIR_APPROVAL_NEEDED = "shareRepairApprovalNeeded"
+        const val TYPE_SHARE_REPAIRED = "shareRepaired"
+        const val TYPE_SHARE_REPAIR_FAILED = "shareRepairFailed"
+
         val SHARE_REFRESH_TYPES = setOf(
             TYPE_SHARE_REFRESH_STARTED,
             TYPE_SHARE_REFRESH_DEALT,
@@ -297,6 +304,10 @@ data class ChatMessage(
             TYPE_SHARE_REFRESH_APPROVAL_NEEDED,
             TYPE_SHARE_REFRESH_COMPLETE,
             TYPE_SHARE_REFRESH_FAILED,
+            TYPE_SHARE_REPAIR_REQUESTED,
+            TYPE_SHARE_REPAIR_APPROVAL_NEEDED,
+            TYPE_SHARE_REPAIRED,
+            TYPE_SHARE_REPAIR_FAILED,
         )
 
         /** The share refresh lines a named member's device did. */
@@ -304,6 +315,8 @@ data class ChatMessage(
             TYPE_SHARE_REFRESH_STARTED,
             TYPE_SHARE_REFRESH_DEALT,
             TYPE_SHARE_REFRESH_CONFIRMED,
+            TYPE_SHARE_REPAIR_REQUESTED,
+            TYPE_SHARE_REPAIRED,
         )
 
         val DKG_TYPES = setOf(
@@ -1175,7 +1188,8 @@ data class ChatMessage(
                             event.kind in FrostSigningEvents.ALL ||
                             event.kind in GroupLightningEvents.PROTOCOL ||
                             MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL ||
-                            ShareRefreshEvents.isShareRefresh(event)
+                            ShareRefreshEvents.isShareRefresh(event) ||
+                            event.kind in ShareRepairEvents.ALL
                     )
 
                     database.marmotInnerEventDao().upsert(
@@ -1596,6 +1610,8 @@ data class ChatMessage(
                 // 30340-30343 -- the legacy numbers of Dedun's own ledger kinds until K3 -- has already gone
                 // to those kinds' arms above, which refuse it; only 30344 and 30345 arrive here.
                 in ShareRefreshEvents.ALL -> null
+                // Re-enrolling a stale member: 30346-30349, which Dedun never used.
+                in ShareRepairEvents.ALL -> null
 
                 ChatEvent.KIND -> {
                     ChatMessage(

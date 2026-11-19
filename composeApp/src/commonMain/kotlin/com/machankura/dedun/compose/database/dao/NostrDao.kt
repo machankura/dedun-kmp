@@ -74,6 +74,7 @@ import com.machankura.dedun.compose.exceptions.MarmotNotMemberOfChatGroupExcepti
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.ShareRepairManager
 import com.machankura.dedun.compose.managers.CommitOrdering
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
@@ -90,6 +91,7 @@ import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
+import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 
 @Dao
@@ -1712,6 +1714,16 @@ abstract class NostrDao(
                         // transfer request's carrier (docs/giza-into-dedun.md, Phase K).
                         ShareRefreshEvents.isShareRefresh(innerEvent) ->
                             ShareRefreshManager.processRefreshPayload(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // And a repair, in the same room (Phase 10).
+                        ShareRepairEvents.isShareRepairKind(innerEvent.kind) ->
+                            ShareRepairManager.processRepairPayload(
                                 database = database,
                                 localChatRoom = localChatRoom,
                                 innerEvent = innerEvent,

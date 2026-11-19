@@ -217,7 +217,10 @@ object GroupKeyStateManager {
 
         val filed = database.groupKeyStateDao().replace(state)
         // `replace` re-stamps what it files, so the row is compared on what it says.
-        if (filed.generation == state.generation && filed.announcedAt == state.announcedAt) retireOlderShares(database, state)
+        if (filed.generation == state.generation && filed.announcedAt == state.announcedAt) {
+            retireOlderShares(database, state)
+            applyBindings(database, state)
+        }
         return filed
     }
 
@@ -247,6 +250,57 @@ object GroupKeyStateManager {
     }
 
     /**
+     * Rebinds the ids a signed state names to their new identities, in this
+     * device's roster of that generation (docs/frost-share-refresh.md, Phase 10b).
+     * Only an id that is not live can change hands: a live one is somebody's
+     * working share, and binding it elsewhere would leave two holders of one point.
+     * Then any repair that was waiting on the binding goes on.
+     */
+    private suspend fun applyBindings(database: DedunDatabase, state: GroupKeyState) {
+        val generation = state.generation ?: return
+        val bindings = GroupKeyStateEvent.MemberBinding.decodeAll(state.memberBindings)
+        if (bindings.isEmpty()) return
+        val members = database.keyShareDao().getMembers(state.dkgSessionId, generation)
+        val changed = bindings.mapNotNull { binding ->
+            val row = members.firstOrNull { it.participantId == binding.participantId } ?: return@mapNotNull null
+            if (row.standing == ShareStanding.LIVE) {
+                logger.w("Key state binds live id ${binding.participantId} of ${state.dkgSessionId} elsewhere; ignoring that binding")
+                return@mapNotNull null
+            }
+            if (row.memberPublicKey == binding.memberPublicKey && row.hostPublicKey.equals(binding.hostPublicKey, ignoreCase = true)) return@mapNotNull null
+            row.copy(memberPublicKey = binding.memberPublicKey, hostPublicKey = binding.hostPublicKey, standing = ShareStanding.STALE, updatedAt = Clock.System.now())
+        }
+        if (changed.isEmpty()) return
+        database.keyShareDao().upsert(changed)
+        ShareRepairManager.resumeAwaitingBinding(database, state.dkgSessionId)
+    }
+
+    /**
+     * Asks the group to bind participant id [participantId] to a new identity
+     * (docs/frost-share-refresh.md, Phase 10b): [memberPublicKey], asking under
+     * ChillDKG host key [hostPublicKey]. The id must already be withheld -- the
+     * old identity's share made worthless by a refresh -- or a repair to the new
+     * one would hand it the point the old device still has.
+     */
+    suspend fun proposeRebind(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        userPublicKey: HexKey,
+        key: DkgSession,
+        participantId: Int,
+        memberPublicKey: HexKey,
+        hostPublicKey: HexKey,
+    ): FrostSigningSession {
+        val entry = ShareGenerations.active(database, key).roster.firstOrNull { it.participantId == participantId }
+            ?: throw IllegalStateException("Id $participantId is not in the key")
+        check(entry.standing != ShareStanding.LIVE) {
+            "Id $participantId still holds a live share; rotate the shares without it before binding it to anyone else"
+        }
+        val binding = GroupKeyStateEvent.MemberBinding(participantId, memberPublicKey.lowercase(), hostPublicKey.lowercase())
+        return proposeGeneration(database, localChatRoom, userPublicKey, key, refreshId = null, newBinding = binding)
+    }
+
+    /**
      * Asks the group to sign the key state at the generation it now signs with,
      * after a refresh (docs/frost-share-refresh.md, Phase 8). The same room, key
      * and path, and the same parentage if the room has one, plus what the
@@ -259,6 +313,7 @@ object GroupKeyStateManager {
         userPublicKey: HexKey,
         key: DkgSession,
         refreshId: String?,
+        newBinding: GroupKeyStateEvent.MemberBinding? = null,
     ): FrostSigningSession {
         val shares = ShareGenerations.active(database, key)
         check(shares.generation >= 1) { "Generation 0 is the ceremony's, and needs no new key state" }
@@ -284,10 +339,25 @@ object GroupKeyStateManager {
                     publicSharesHash = ShareGenerations.publicSharesHash(publicShares),
                     refreshId = refreshId,
                     retiredIds = shares.roster.filter { it.standing == ShareStanding.RETIRED }.map { it.participantId },
+                    // Bindings already in force at this generation stay said, so a
+                    // later state does not quietly undo them; a new one replaces any
+                    // earlier binding of the same id.
+                    bindings = (
+                        GroupKeyStateEvent.MemberBinding.decodeAll(current?.takeIf { it.generation == shares.generation }?.memberBindings)
+                            .filter { it.participantId != newBinding?.participantId } + listOfNotNull(newBinding)
+                        ),
                 ),
             ),
             content = thresholdPublicKey,
             key = key,
+            // Later than the state it amends, by a second if it must be. Two states
+            // at one generation are told apart by their time alone, and a rebind
+            // stamped in the same second as the state it adds to would tie with it
+            // -- and the binding could be the one that loses.
+            createdAt = maxOf(
+                Clock.System.now().epochSeconds,
+                (current?.takeIf { (it.generation ?: 0) == shares.generation }?.announcedAt?.epochSeconds ?: 0L) + 1
+            ),
         )
     }
 
@@ -648,7 +718,8 @@ object GroupKeyStateManager {
             parentChatRoomId = parent.value?.parentChatRoomId,
             birthCertificateJson = parent.value?.certificate?.toJson(),
             generation = shareGeneration?.generation,
-            publicSharesHash = shareGeneration?.publicSharesHash
+            publicSharesHash = shareGeneration?.publicSharesHash,
+            memberBindings = shareGeneration?.bindings?.takeIf { it.isNotEmpty() }?.joinToString(",") { it.encode() }
         )
 
         // Half the trust model, in one line, and the half that does not care who

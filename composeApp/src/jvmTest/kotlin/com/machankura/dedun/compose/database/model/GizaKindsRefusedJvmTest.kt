@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.GizaProtocolEvents
+import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
@@ -138,7 +139,7 @@ class GizaKindsRefusedJvmTest {
         assertEquals(30342, MovedKinds.NEW_TO_LEGACY[TransferRequestEvent.KIND])
         assertEquals(30343, MovedKinds.NEW_TO_LEGACY[MemberTransferEvent.KIND])
         assertEquals((30370..30377).toList(), (GroupWavelengthEvents.WALLET_STATEMENT..GroupWavelengthEvents.HIGH_WATER).map { MovedKinds.NEW_TO_LEGACY[it] })
-        assertTrue((30340..30343).all { it in GizaProtocolEvents.ALL })
+        assertTrue((30340..30343).all { ShareRefreshEvents.isShareRefreshKind(it) })
         assertTrue((30370..30377).all { it in GizaProtocolEvents.ALL })
     }
 

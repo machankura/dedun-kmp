@@ -76,9 +76,9 @@ class ShareRefreshRitualJvmTest {
         fun memberWithId(id: Int): HexKey = members[idOf.indexOf(id)]
     }
 
-    private inner class Device(val group: Group, val index: Int, val db: DedunDatabase, val room: LocalChatRoom) {
-        val publicKey: HexKey get() = group.members[index]
-        val privateKey: ByteArray get() = group.keyPairs[index].privKey!!
+    private inner class Device(val group: Group, val index: Int, val db: DedunDatabase, val room: LocalChatRoom, val keyPair: KeyPair = group.keyPairs[index]) {
+        val publicKey: HexKey get() = keyPair.pubKey.toHexKey()
+        val privateKey: ByteArray get() = keyPair.privKey!!
         val received = mutableSetOf<String>()
         suspend fun key(): DkgSession = db.dkgSessionDao().getSessionById(ceremonyId)!!
         suspend fun refresh(id: String) = db.shareRefreshDao().getSessionById(id)
@@ -123,7 +123,7 @@ class ShareRefreshRitualJvmTest {
 
     // ---- the wire ----------------------------------------------------------------------------------------------
 
-    private val ferried = (ShareRefreshEvents.ALL + FrostSigningEvents.ALL).toList()
+    private val ferried = (ShareRefreshEvents.ALL + FrostSigningEvents.ALL + com.machankura.dedun.compose.nostr.frost.ShareRepairEvents.ALL).toList()
 
     private suspend fun outbox(device: Device): List<MarmotInnerEvent> =
         device.db.marmotInnerEventDao()
@@ -144,6 +144,8 @@ class ShareRefreshRitualJvmTest {
                     val event = Event(queued.id, queued.publicKey, queued.createdAt.epochSeconds, queued.kind, queued.tags, queued.content, "")
                     if (ShareRefreshEvents.isShareRefreshKind(event.kind)) {
                         ShareRefreshManager.processRefreshPayload(to.db, to.room, event, to.publicKey, to.privateKey)
+                    } else if (com.machankura.dedun.compose.nostr.frost.ShareRepairEvents.isShareRepairKind(event.kind)) {
+                        ShareRepairManager.processRepairPayload(to.db, to.room, event, to.publicKey, to.privateKey)
                     } else {
                         FrostSigningManager.processSigningPayload(to.db, to.room, event, to.publicKey)
                     }
@@ -467,5 +469,156 @@ class ShareRefreshRitualJvmTest {
             ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, bob.publicKey)
         }
         assertTrue(error.message!!.contains("fewer than the 2 it takes to sign"), error.message)
+    }
+
+    // ---- Phase 10: re-enrollment -----------------------------------------------------------------------------------
+
+    /** Every helper approves every repair waiting on them. */
+    private suspend fun approveRepairs(between: List<Device>) {
+        var asked = true
+        while (asked) {
+            asked = false
+            for (device in between) {
+                device.db.shareRepairDao().getSessionsForKey(ceremonyId)
+                    .filter { ShareRepairManager.isAwaitingApproval(device.db, it) }
+                    .forEach { ShareRepairManager.approve(device.db, device.room, it.id, device.privateKey); asked = true }
+            }
+            pump(between)
+        }
+    }
+
+    /** A 3-member 2-of-3 group that has rotated without [withheldIndex], left stale, with its key state signed and its old shares deleted. */
+    private suspend fun rotatedWithout(withheldIndex: Int): Pair<Group, List<Device>> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all.first { it.index != withheldIndex }, mapOf(group.idOf[withheldIndex] to ShareStanding.STALE))
+        pump(all)
+        approveAll(all, refresh.id)
+        approveSigning(all)
+        return group to all
+    }
+
+    /**
+     * 10a: a member withheld from a refresh -- offline, or on a build that could
+     * not take part -- is brought back by two helpers, with a share of the new
+     * generation its old one is not, and signs.
+     */
+    @Test
+    fun `a stale member is repaired into the new generation and signs`() = runBlocking<Unit> {
+        val (group, all) = rotatedWithout(2)
+        val (alice, bob, carol) = all
+        val carolId = group.idOf[2]
+        assertNull(carol.active().secretShare)
+
+        val repair = ShareRepairManager.requestRepair(carol.db, carol.room, carol.publicKey, carol.privateKey, carol.key())
+        assertEquals(com.machankura.dedun.compose.database.model.types.ShareRepairStage.COLLECTING, repair.stage)
+        pump(all)
+        // Nothing of a helper's goes out before its owner approves.
+        assertTrue(outbox(alice).none { it.kind in com.machankura.dedun.compose.nostr.frost.ShareRepairEvents.ALL })
+        approveRepairs(all)
+
+        val repaired = assertNotNull(carol.active().secretShare, "carol must hold a share of generation 1")
+        assertEquals(carol.active().publicShares!![carolId], repaired.publicKey())
+        assertNotEquals(group.keyMaterial.secretShares[carolId], repaired, "not the share her old device had")
+        all.forEach { device ->
+            assertEquals(ShareStanding.LIVE, device.active().roster.single { it.participantId == carolId }.standing, "on device ${device.index}")
+        }
+
+        // Carol signs, with Alice; Bob stays out.
+        val session = FrostSigningManager.proposeSigning(alice.db, alice.room, alice.publicKey, kind = 1, tags = arrayOf(), content = "Carol is back")
+        pump(all)
+        FrostSigningManager.approve(carol.db, carol.room, session.id)
+        pump(all)
+        assertEquals(FrostSigningStage.COMPLETE, alice.db.frostSigningSessionDao().getSessionById(session.id)?.stage)
+        assertTrue(alice.db.frostSigningSessionDao().getSessionById(session.id)!!.signerIdList()!!.contains(carolId))
+        assertNull(bob.db.frostSigningSessionDao().getSessionById(session.id)?.signApprovedAt)
+    }
+
+    /** A repair whose expected public share is not the one the group signed fails at round 2, not at signing. */
+    @Test
+    fun `a repair checked against the wrong public share stores nothing`() = runBlocking<Unit> {
+        val (group, all) = rotatedWithout(2)
+        val carol = all[2]
+        val carolId = group.idOf[2]
+        // Carol's table says something else at her id.
+        val row = carol.db.keyShareDao().getGeneration(ceremonyId, 1)!!
+        val table = row.publicShareList()!!.toMutableList().also { it[carolId] = it[(carolId + 1) % 3] }
+        carol.db.keyShareDao().upsert(row.copy(publicShares = table.joinToString(",") { it.value.toHex() }))
+
+        val repair = ShareRepairManager.requestRepair(carol.db, carol.room, carol.publicKey, carol.privateKey, carol.key())
+        pump(all)
+        approveRepairs(all)
+
+        assertEquals(com.machankura.dedun.compose.database.model.types.ShareRepairStage.FAILED, carol.db.shareRepairDao().getSessionById(repair.id)?.stage)
+        assertNull(carol.active().secretShare)
+        assertEquals(ShareStanding.STALE, all[0].active().roster.single { it.participantId == carolId }.standing, "nobody marks her live without a proof")
+    }
+
+    /**
+     * 10b: Carol's device is lost; Dave -- her new identity -- comes back at her
+     * id. A request from an identity the group has not bound waits, with nothing
+     * sent; once the group signs the binding, the same repair runs, and Dave signs.
+     */
+    @Test
+    fun `a new identity is bound to a stale id before it is repaired into it`() = runBlocking<Unit> {
+        val (group, all) = rotatedWithout(2)
+        val (alice, bob) = all
+        val carolId = group.idOf[2]
+        val daveKeys = KeyPair()
+        val daveHost = ChillDkgRitualManager.deriveHostPublicKey(daveKeys.privKey!!).value.toHex()
+        val dave = newcomer(group, daveKeys, from = alice)
+        val everyone = listOf(alice, bob, dave)
+
+        // Dave asks before the group has bound him: everyone waits, and no helper sends anything.
+        val repair = ShareRepairManager.requestRepair(dave.db, dave.room, dave.publicKey, dave.privateKey, dave.key(), targetId = carolId)
+        assertEquals(com.machankura.dedun.compose.database.model.types.ShareRepairStage.AWAITING_BINDING, repair.stage)
+        pump(everyone)
+        listOf(alice, bob).forEach {
+            assertEquals(com.machankura.dedun.compose.database.model.types.ShareRepairStage.AWAITING_BINDING, it.db.shareRepairDao().getSessionById(repair.id)?.stage)
+            assertTrue(!ShareRepairManager.isAwaitingApproval(it.db, it.db.shareRepairDao().getSessionById(repair.id)!!))
+        }
+
+        // The group binds Carol's id to Dave, and Dave's device learns it as the chronicle would hand it over.
+        GroupKeyStateManager.proposeRebind(alice.db, alice.room, alice.publicKey, alice.key(), carolId, dave.publicKey, daveHost)
+        pump(everyone)
+        approveSigning(listOf(alice, bob))
+        pump(everyone)
+        val signed = assertNotNull(GroupKeyStateManager.signedEventFor(alice.db, group.roomId)).toEvent()
+        GroupKeyStateManager.record(dave.db, group.roomId, signed)
+        everyone.forEach { device ->
+            val entry = device.active().roster.single { it.participantId == carolId }
+            assertEquals(dave.publicKey, entry.memberPublicKey, "on device ${device.index}")
+            assertEquals(ShareStanding.STALE, entry.standing)
+        }
+
+        approveRepairs(everyone)
+        val share = assertNotNull(dave.active().secretShare, "dave must hold carol's id's share of generation 1")
+        assertEquals(dave.active().publicShares!![carolId], share.publicKey())
+        listOf(alice, bob).forEach { assertEquals(ShareStanding.LIVE, it.active().roster.single { e -> e.participantId == carolId }.standing) }
+    }
+
+    /**
+     * A newcomer's device, seeded with what the member chronicle would hand it:
+     * the key's public record -- the ceremony without a share, its host keys, and
+     * the current generation's table and roster -- and nothing secret.
+     */
+    private suspend fun newcomer(group: Group, keyPair: KeyPair, from: Device): Device {
+        val db = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
+        val publicKey = keyPair.pubKey.toHexKey()
+        (group.members + publicKey).forEach { member ->
+            val nostrEventId = "e$member".take(64)
+            db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
+            db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
+        }
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        db.chatRoomDao().upsert(chatRoom)
+        val key = from.key()
+        db.dkgSessionDao().upsert(key.copy(userPublicKey = publicKey, secretShare = null, round1Random = "", round2AuxRandom = "", hostPublicKey = ChillDkgRitualManager.deriveHostPublicKey(keyPair.privKey!!).value.toHex()))
+        from.db.dkgSessionDao().getMessagesByKind(ceremonyId, DkgRitualEvents.HOST_KEY).forEach { db.dkgSessionDao().upsert(it) }
+        from.db.keyShareDao().getGenerations(ceremonyId).forEach { generation ->
+            db.keyShareDao().upsert(generation.copy(secretShare = null))
+            db.keyShareDao().upsert(from.db.keyShareDao().getMembers(ceremonyId, generation.generation))
+        }
+        return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
     }
 }

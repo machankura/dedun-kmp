@@ -68,6 +68,7 @@ import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
 import com.machankura.dedun.compose.database.dao.InReplyToRelationDao
 import com.machankura.dedun.compose.database.dao.KeyShareDao
 import com.machankura.dedun.compose.database.dao.ShareRefreshDao
+import com.machankura.dedun.compose.database.dao.ShareRepairDao
 import com.machankura.dedun.compose.database.dao.MarmotCommitResultDao
 import com.machankura.dedun.compose.database.dao.MarmotOutboundDao
 import com.machankura.dedun.compose.database.dao.MarmotGroupEventDao
@@ -114,6 +115,8 @@ import com.machankura.dedun.compose.database.model.KeyShareMember
 import com.machankura.dedun.compose.database.model.ShareRefreshConfirmation
 import com.machankura.dedun.compose.database.model.ShareRefreshMessage
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
+import com.machankura.dedun.compose.database.model.ShareRepairMessage
+import com.machankura.dedun.compose.database.model.ShareRepairSession
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.InReplyToRelation
 import com.machankura.dedun.compose.database.model.MarmotCommitResult
@@ -213,6 +216,8 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         ShareRefreshConfirmation::class,
         ShareRefreshMessage::class,
         ShareRefreshSession::class,
+        ShareRepairMessage::class,
+        ShareRepairSession::class,
         InReplyToRelation::class,
         MarmotCommitResult::class,
         MarmotGroupEvent::class,
@@ -244,7 +249,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 48,
+    version = 49,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -536,6 +541,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // ShareRefreshSession, ShareRefreshMessage and ShareRefreshConfirmation
         // tables. Three new tables, so Room generates it. Giza's v39, Bennu's v38.
         AutoMigration(from = 47, to = 48),
+        // v49 adds share repair (docs/frost-share-refresh.md, Phase 10): the
+        // ShareRepairSession and ShareRepairMessage tables, and the nullable
+        // GroupKeyState.memberBindings. Room generates it. Giza's v40, Bennu's v39.
+        AutoMigration(from = 48, to = 49),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -571,6 +580,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun keyShareDao(): KeyShareDao
 
     abstract fun shareRefreshDao(): ShareRefreshDao
+
+    abstract fun shareRepairDao(): ShareRepairDao
 
     abstract fun groupSignedEventDao(): GroupSignedEventDao
 

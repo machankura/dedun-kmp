@@ -143,6 +143,15 @@ data class GroupKeyState(
      */
     val publicSharesHash: String? = null,
 
+    /**
+     * Participant ids the group has bound to a new identity, as
+     * `id:npub:hostkey` comma separated, or null for none
+     * (docs/frost-share-refresh.md, Phase 10b). A member who lost their device,
+     * or whose account is compromised, comes back under a new identity at their
+     * old id, and the group says which -- before any repair can target it.
+     */
+    val memberBindings: String? = null,
+
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,

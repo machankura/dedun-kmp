@@ -62,11 +62,12 @@ class ShippedProfileUpgradeJvmTest {
     private val shipped = 45
 
     /**
-     * The schema version this branch builds: 47 for share generations and 48 for
-     * share refresh (docs/frost-share-refresh.md, Phases 6 and 7), so the upgrade
-     * crosses three generated migrations and the file has to come out at the last.
+     * The schema version this branch builds: 47 for share generations, 48 for share
+     * refresh and 49 for share repair (docs/frost-share-refresh.md, Phases 6, 7 and
+     * 10), so the upgrade crosses four generated migrations and the file has to come
+     * out at the last.
      */
-    private val current = 48
+    private val current = 49
 
     private val directory: File = Files.createTempDirectory("dedun-shipped-profile").toFile()
     private val file: File = File(directory, "aux.db")
