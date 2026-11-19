@@ -227,6 +227,22 @@ class RobustGroupAdminsJvmTest {
         }
     }
 
+    /**
+     * A room joined before Phase 2, whose joiner's rows flag nobody, is caught up
+     * at the next start, once. docs/robust-group-admins.md, Phase 6.
+     */
+    @Test
+    fun `a room joined before the Welcome wrote flags is caught up at start`() = onEveryProfile { profile, phones ->
+        val founders = phones.map { it.publicKey }.toSet()
+        val joiner = phones.last()
+        joiner.db.participantDao().upsert(joiner.room().localParticipants.map { it.participant.copy(adminAt = null) })
+        assertTrue(joiner.flaggedAdmins().isEmpty(), "the fixture did not clear the flags ($profile)")
+
+        assertEquals(founders.size, AdminFlags.reconcileAll(joiner.db), "($profile)")
+        assertEquals(founders, joiner.flaggedAdmins(), "($profile)")
+        assertEquals(0, AdminFlags.reconcileAll(joiner.db), "and a second start changes nothing ($profile)")
+    }
+
     // ---- The founding invite: docs/robust-group-admins.md, Phase 4 -------------
 
     private val ceremonyRoomId = "ce1e".repeat(16)

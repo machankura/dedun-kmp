@@ -56,4 +56,31 @@ object AdminFlags {
         }
         return changed.size
     }
+
+    /**
+     * [reconcile] for every room this device holds MLS state for and is still in.
+     *
+     * Run once per start, for the rooms made before the Welcome wrote any flags:
+     * a joiner's rows there flag nobody until some commit arrives, and in a
+     * robust group's admin room one may never arrive. No stored "done" flag -- a
+     * room whose rows already agree is a read and no write, so a second run costs
+     * one decode per room and a preference would only be one more thing to keep
+     * right. docs/robust-group-admins.md, Phase 6.
+     *
+     * One room that will not decode is logged and passed over, not fatal to the
+     * rest.
+     *
+     * @return how many rows changed, across every room.
+     */
+    suspend fun reconcileAll(database: DedunDatabase): Int =
+        database.chatRoomDao().getChatRoomIdsWithMlsState().sumOf { chatRoomId ->
+            runCatching {
+                val group = database.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.toMlsGroup()
+                    ?: return@runCatching 0
+                reconcile(database, chatRoomId, group)
+            }.getOrElse {
+                logger.e("Could not bring $chatRoomId's admin flags in line", it)
+                0
+            }
+        }
 }

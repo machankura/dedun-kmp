@@ -361,6 +361,13 @@ interface ChatRepository {
     suspend fun adminRoomOf(chatRoomId: String): String?
 
     /**
+     * Brings every Marmot room's admin flags in line with its group's policy, for
+     * the rooms joined before the Welcome wrote any. Once per start. See
+     * `AdminFlags.reconcileAll` and docs/robust-group-admins.md, Phase 6.
+     */
+    suspend fun reconcileAdminFlags(): Int
+
+    /**
      * Takes every key ceremony [keyPair] coordinated from a key to a working room,
      * until cancelled: asks the group to sign its key state (a subgroup's parent to
      * certify it first) and creates the room. See `CeremonyFollowThrough` and
@@ -695,6 +702,8 @@ interface ChatRepository {
             override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = emptySet()
 
             override suspend fun adminRoomOf(chatRoomId: String): String? = null
+
+            override suspend fun reconcileAdminFlags(): Int = 0
 
 
             override suspend fun sendChatMessage(

@@ -248,6 +248,13 @@ class SynchronizationViewModel(
                             // (docs/rotate-shares-single-approval.md, Phase 3).
                             runCatching { nostrRepository.resumeRunningCeremonies(keyPair) }
                                 .onFailure { logger.e("Could not resume running key ceremonies", it) }
+                            // The rooms joined before the Welcome wrote admin flags
+                            // flag nobody until some commit arrives, and a robust
+                            // group's admin room may never get one. Caught up here,
+                            // once a start; a room already right is read, not
+                            // written. docs/robust-group-admins.md, Phase 6.
+                            runCatching { chatRepository.reconcileAdminFlags() }
+                                .onFailure { logger.e("Could not bring admin flags in line", it) }
                             launch(Dispatchers.IO) { observePendingBroadcastNostrEventRequests(keyPair) }
                             // Runs until cancelled rather than draining a queue, but it
                             // belongs here for the same reason the pumps do: it needs the

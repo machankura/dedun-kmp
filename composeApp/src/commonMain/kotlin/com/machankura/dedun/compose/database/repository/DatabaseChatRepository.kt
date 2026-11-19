@@ -49,6 +49,7 @@ import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.managers.MarmotInboundManager
+import com.machankura.dedun.compose.managers.AdminFlags
 import com.machankura.dedun.compose.managers.FoundingAdmins
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.CeremonyFollowThrough
@@ -149,6 +150,8 @@ class DatabaseChatRepository(
         logger.e("Error finding the admin room of $chatRoomId", e)
         null
     }
+
+    override suspend fun reconcileAdminFlags(): Int = AdminFlags.reconcileAll(database)
 
     override suspend fun followThroughCeremonies(keyPair: KeyPair) =
         CeremonyFollowThrough.observe(database = database, chatRepository = this, keyPair = keyPair)
