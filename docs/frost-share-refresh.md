@@ -27,6 +27,7 @@ ceremony they describe and the rule that a room's id *is* the key it signs with.
 | 12 | `4949f0fe` | `ShareRefreshRitualJvmTest`: three refreshes in a row, then the recovery walk from the generation-0 share lands on every device's live share, each generation checked against its table. `jvmTest` 1200/1200 |
 | 13 | `99229090` | `ShareRefreshRitualJvmTest`: with the flag off, the recipients decline a rotation out loud and it fails; proposing one throws. Android, desktop and iOS device checks not done |
 | after 13 | `159ae402`, `d358a0db`, `98567629`, `95131248` | [rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md): a rotation waits for the group to sign the last one's key state, the Shares section says why, follows the group while open, and the proposer is not asked about their own rotation. `ShareRefreshRitualJvmTest` 25/25, `ChatRoomDetailSharesJvmTest` 3/3; `./gradlew check` (`jvmTest` 1240/1240, `testDebugUnitTest` 496/496, lint, audits). **Not seen on a device or a desktop window** |
+| after that | rotate-shares-single-approval.md | taking part is a rotation's only approval: `CONFIRM` is gone, the proposer's dialog is its approval, the new generation's key state signs itself, and a running rotation can be abandoned from the Shares section. See that note |
 | 5 | `4040ae74` | `SecureDeleteJvmTest` (5, two of them controls that fail without the fix); `jvmTest` 1176/1176; `compileDebugKotlinAndroid`, `processDebugResources` |
 | 6 | `fce51e20` | `ShareGenerationsJvmTest` (7: a real 2-of-3 signature with hand-refreshed shares verifying as the unchanged room, a decline from a device without the generation, a withheld member who is not a signer); every existing signing test unedited; `jvmTest` 1183/1183; `compileDebugKotlinAndroid`; the M3, brand and wallet audits |
 
@@ -485,21 +486,24 @@ host keys, so a room-wide message is fine here, which it is **not** for repair (
   `ShareRefreshManager.rotationHold`). Not on arrival: a recipient a few seconds behind on the
   signature would end a rotation that was fine.
 
-**Approval gates.** Two, mirroring the ceremony's, with `pendingApproval` mirroring `advance`
-exactly:
+**Approval gates.** One, with `pendingApproval` mirroring `advance` exactly:
 
 | step | publishes | why it is its own decision |
 |---|---|---|
 | `DEAL` | round 1 | joins the refresh and agrees to the withheld list. Withholding someone is a decision about them, so every recipient makes it, not only the proposer |
-| `CONFIRM` | CertEq | commits to the new generation. This is what stops a coordinator substituting a table the recipients never dealt |
 
-~~The proposer is auto-approved for nothing. Proposing a refresh is not agreeing to withhold
-whomever the form defaulted to.~~ The proposer is approved at both gates on proposal
-([rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md), Phase 4). The form no
-longer defaults silently: the Shares section's button asks first in a dialog naming everyone
-the rotation leaves out, so the tap is the `DEAL` decision; and the proposer is the coordinator
-`CONFIRM` guards against, whose own CertEq check does that work. Every other recipient is asked
-at both gates.
+The proposer makes it by proposing, from a dialog that names everyone the proposal leaves out
+([rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md), Phase 4).
+
+*As first built there were two gates, and the proposer was asked at both.* `CONFIRM` stood
+before CertEq, on the reasoning that it "stops a coordinator substituting a table the recipients
+never dealt". It never did: that is `participantStep2`'s check, which runs before any prompt
+could appear and fails the refresh out loud, and the one confirmation per generation is the
+write-once `ShareRefreshConfirmation`. Both hold whoever is looking.
+rotation-waits-for-key-state.md first stopped asking the proposer;
+[rotate-shares-single-approval.md](./rotate-shares-single-approval.md) then removed the gate for
+everyone. `ShareRefreshApprovalStep.CONFIRM` and `confirmApprovedAt` remain, unread, so rows
+written before still decode.
 
 **Transcript.** System lines in the room, as the ceremony writes them, idempotent by reading the
 row before writing:
@@ -535,7 +539,9 @@ What a device does with a certificate, and when the old share goes.
    - `frost_retired` per retired id.
 
    It is signed under `g+1`, which makes it the first signature the new shares make: the proof
-   D6 waits for.
+   D6 waits for. A recipient's device signs it without asking when it is exactly the state the
+   rotation it completed implies (`GroupKeyStateManager.vouchesForGeneration`,
+   [rotate-shares-single-approval.md](./rotate-shares-single-approval.md), Phase 5).
 3. **`GroupKeyStateManager` changes, and the comment in `GroupKeyStateEvent.kt` (L84–87) gets
    answered.**
    - The comment expects that rotation would break `verifies()`. It does not: the *key* is
@@ -660,7 +666,7 @@ Under CLAUDE.md's rules:
 
   Standing gets a text label, not only an icon, so the icon gets `Decorative`.
 - **The refresh screen.** A progress ladder that names who it waits on, like the ceremony's,
-  with the two approvals.
+  with its one approval (two as first built; see [rotate-shares-single-approval.md](./rotate-shares-single-approval.md)).
   - The `DEAL` prompt lists who is withheld, and as what.
   - The `CONFIRM` prompt is the ceremony's CertEq prompt in different words.
 - **The copy has to tell the truth from [what it protects against](#what-a-refresh-protects-against-and-what-it-cannot).**

@@ -343,7 +343,10 @@ member is asked to take part". `StringCatalogueJvmTest` needs no change.
 
 - **`CONFIRM` automatic for every recipient**, the ceremony's round-2 decision applied
   to refresh. It is defensible on the same argument, but it changes what every member
-  is asked, so it needs its own decision.
+  is asked, so it needs its own decision. *Since decided and built:*
+  [rotate-shares-single-approval.md](./rotate-shares-single-approval.md), which also
+  lets the new generation's key state sign itself and replaced this note's confirmation
+  dialog with one read from the proposal's own plan.
 - **Recipients refusing a proposal whose base key state they have not seen signed**
   (R2). Without D5's capability check there is no way to tell "behind" from "never
   will".

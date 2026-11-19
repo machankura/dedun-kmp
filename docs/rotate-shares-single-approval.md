@@ -12,7 +12,48 @@ made to the ceremony, applied to [frost-share-refresh.md](./frost-share-refresh.
 Read both first. This plan follows the first one's shape, because the reasoning
 is the same and so are most of the traps.
 
-**Not built.** Written against `fc437d05` on 2026-11-20.
+**Built**, one commit per phase on `claude/rotate-shares-single-approval-338a7d`
+(`18f426ca` to the commit that adds this header), against `fc437d05`, on
+2026-11-20. Each recipient is now asked once and the proposer not at all:
+`ShareRefreshRitualJvmTest`'s `answerEverything` counts the asks, and they went
+from three per recipient to one. jvmTest 1250/1250, `compileDebugKotlinAndroid`, `m3Audit` at its budgets,
+the brand and wallet audits. The phases are kept as written because they are
+the reasoning. Where the build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 1: three asks per recipient, the proposer included | two for the proposer. Its device proposes the key state, and a proposer's signature is its proposal. The pinned test said so, and Phase 4 took the proposer to none |
+| Phase 2: the fork test, two proposals with an overlapping recipient who confirms one | two proposals opened at once never reach the write-once rule. Each device refuses the second on arrival ("another refresh of this key is still running here"), and the refusals end both. The test asserts what matters, that the group never splits. The write-once rule keeps its own test, against the DAO, which never involved the gate |
+| Phase 2: a tampered sum fails on every honest recipient | it fails on every device, the coordinator included, through the FAILURE an honest recipient broadcasts. The coordinator used its own untampered sum and had confirmed |
+| Phase 3: rename `resumeRunningCeremonies` or widen its KDoc | widened. It now also runs `ShareRefreshManager.resumeRunning` and, from Phase 5, `FrostSigningManager.resumeVouched` |
+| Phase 4: `rotationPreview` runs the same selection as `proposeRefresh` | both call one private `ShareRefreshManager.plan`, which also carries the refusals that were `require`s. Those now throw `IllegalStateException` rather than `IllegalArgumentException`. The removal dialog names only the stale members, since its title already names the removed one |
+| Phase 5: re-check vouching in `resumeAt` and the sweep | one `approveIfVouched` behind all three: arrival, `resumeAt`, and `resumeVouched`. The sweep answers any key state the device can vouch for, a ceremony's included, through a new `getOpenUnansweredSessionsFor` |
+| Phase 5: path and parent match the room's signed state | the birth certificate is compared by event id, not JSON. No test has a signed generation-0 state to differ from, since the ritual harness's devices hold none, so the test breaks the path against rule 4 instead |
+| Phase 6: the running card shows who it waits on and since when, with an inline abandon past a day | always shown, with no threshold. Unlike a ceremony, a rotation has no screen of its own, so the card is the only place it can be seen at all. Abandon got a confirmation dialog, since the Shares section had none |
+| Phase 6: running until the key state is signed | while that signature is *open*. A key state nobody is asking for would otherwise read as one under way, forever |
+| Phase 6: fix `record` the way the ceremony's was | `record` and `publishOwn` both. The first version of the test passed without the fix: timestamps are kept to the second, and a redelivery in the same second looks identical. The test now backdates the messages a day first, and fails with the old behaviour put back |
+| (not in the plan) | one full `jvmTest` run died on a SIGSEGV in SQLite's native code (`sqlite3DbMallocRawNN`), inside a background `MarmotKeyPackageDao.upsert`. That looks like an existing test leaving a write running against an in-memory database it has closed. The rerun was clean. Not investigated |
+
+**Merged into `giza`** alongside [rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md),
+built in parallel from the same base. The two agreed on not asking the proposer; where
+they met:
+
+- **The proposer's dialog** is this note's (`previewRotation`, read from `plan`, with
+  the refusal), under that note's title and caveat. Its own dialog, which listed stale
+  members from the summary, went; `ChatRoomDetailSharesJvmTest` asks the same question
+  of this one. The preview's refusal now carries `rotationHold`'s reason.
+- **The proposer** is approved to take part only. That note also set
+  `confirmApprovedAt`, which nothing reads any more.
+- **The Shares section** has both: that note's held button, its reason and "Ask the group
+  to sign", and this note's running card and abandon.
+- **That note's hold tests** waited on a key state nobody had signed by simply not
+  signing it. That state signs itself now, so they hold the signing messages after the
+  proposal (`signingHeldOpen`) to look at it.
+- This note's test of two rotations opened at once gave way to that note's, which
+  asserts the same and more.
+
+**Not done:** the emulator session in Phase 7. Nothing here has run on a device:
+not the dialog, not the card, not the upgrade in place.
 
 The headline: **a device asks its owner only for decisions it cannot make on
 its own.** Taking part is one of those decisions, because it agrees to the

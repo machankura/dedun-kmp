@@ -514,7 +514,9 @@ decline. It means the device cannot vouch for the statement, so a person has to.
   waits for that member's taps.
 - **It does not automate signatures other than the key state.** A post, a
   profile, a certificate for some other group, or anything in a batch is still
-  asked about, exactly as today.
+  asked about, exactly as today. A share rotation's key state for its new
+  generation was automated later, by the same rule, in
+  [rotate-shares-single-approval.md](./rotate-shares-single-approval.md).
 
 ## Order and size
 
