@@ -181,6 +181,47 @@ class ShareRefreshRitualJvmTest {
     private suspend fun propose(by: Device, withheld: Map<Int, ShareStanding> = emptyMap()) =
         ShareRefreshManager.proposeRefresh(by.db, by.room, by.publicKey, by.privateKey, by.key(), withheld)
 
+    /** One thing a device's owner was asked during a rotation. */
+    private sealed interface Ask {
+        data class Rotation(val step: com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep) : Ask
+        data object KeyState : Ask
+        data class Signature(val kind: Int) : Ask
+    }
+
+    /**
+     * Every owner says yes to whatever they are asked, about the rotation or any
+     * signature, until nobody is asked anything -- and the list of what each was
+     * asked, in order. The count is what docs/rotate-shares-single-approval.md
+     * takes from three to one.
+     */
+    private suspend fun answerEverything(between: List<Device>, refreshId: String): Map<Int, List<Ask>> {
+        val asks = between.associate { it.index to mutableListOf<Ask>() }
+        var asked = true
+        while (asked) {
+            asked = false
+            for (device in between) {
+                device.refresh(refreshId)?.let { session ->
+                    ShareRefreshManager.pendingApproval(device.db, session)?.let { step ->
+                        asks.getValue(device.index) += Ask.Rotation(step)
+                        ShareRefreshManager.approve(device.db, device.room, refreshId, device.privateKey)
+                        asked = true
+                    }
+                }
+                val signing = device.db.frostSigningSessionDao()
+                signing.getSessionsForChatRoom(device.group.roomId)
+                    .filter { FrostSigningManager.isAwaitingApproval(it, signing.getItems(it.id)) }
+                    .forEach { session ->
+                        val kind = Event.fromJsonOrNull(signing.getItems(session.id).single().unsignedEventJson)!!.kind
+                        asks.getValue(device.index) += if (kind == com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent.KIND) Ask.KeyState else Ask.Signature(kind)
+                        FrostSigningManager.approve(device.db, device.room, session.id)
+                        asked = true
+                    }
+            }
+            pump(between)
+        }
+        return asks
+    }
+
     // ---- the tests ---------------------------------------------------------------------------------------------
 
     @Test
@@ -268,6 +309,81 @@ class ShareRefreshRitualJvmTest {
             assertTrue(ShareRefreshManager.rotationHold(device.db, device.room, device.key()) !is RotationHold.Running, "device ${device.index}")
         }
         assertEquals(1, all.map { it.active().publicShares }.toSet().size, "every device on one table")
+    }
+
+    // ---- the approvals, counted (docs/rotate-shares-single-approval.md) ---------------------------------------------
+
+    /**
+     * Today's gates, pinned: taking part is not enough. With every recipient's
+     * owner agreeing to take part and nothing more, the rotation goes quiet with
+     * every recipient asked to store their new share, and nobody has stored one.
+     */
+    @Test
+    fun `after taking part, every recipient is asked again before storing the new share`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        all.forEach { ShareRefreshManager.approve(it.db, it.room, refresh.id, it.privateKey) }
+        pump(all)
+
+        all.forEach { device ->
+            val session = device.refresh(refresh.id)!!
+            assertEquals(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.CONFIRM, ShareRefreshManager.pendingApproval(device.db, session), "device ${device.index}")
+            assertNull(device.db.keyShareDao().getGeneration(ceremonyId, 1), "device ${device.index} stored a share it was not told to")
+            assertTrue(outbox(device).none { it.kind == ShareRefreshEvents.ROUND_2 }, "device ${device.index} confirmed")
+            assertTrue(outbox(device).any { it.kind == ShareRefreshEvents.ROUND_1 }, "device ${device.index} did not deal")
+        }
+    }
+
+    /**
+     * Today's asks, pinned: three per recipient -- take part, store the new
+     * share, sign the new generation's key state -- before the old shares are
+     * deleted. The proposer is asked the first two; its device proposes the key
+     * state, and a proposer's signature is its proposal.
+     */
+    @Test
+    fun `a recipient is asked three times before the old shares go`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        val asks = answerEverything(all, refresh.id)
+
+        val rotation = listOf(
+            Ask.Rotation(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.DEAL),
+            Ask.Rotation(com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep.CONFIRM),
+        )
+        assertEquals(rotation, asks[0], "the proposer")
+        all.drop(1).forEach { device -> assertEquals(rotation + Ask.KeyState, asks[device.index], "device ${device.index}") }
+        all.forEach { device ->
+            assertEquals(1, device.db.groupKeyStateDao().getByChatRoomId(group.roomId)?.generation, "device ${device.index}")
+            assertNull(device.key().secretShare, "device ${device.index} kept the old share")
+        }
+    }
+
+    /**
+     * Today's key state, pinned: a rotation complete on every device still waits
+     * on each owner but the proposer's to sign the new generation, and until a quorum has, every
+     * device keeps the share it was meant to delete.
+     */
+    @Test
+    fun `a completed rotation waits on its owners to sign the new key state`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        approveAll(all, refresh.id)
+        pump(all)
+
+        all.forEach { assertEquals(ShareRefreshStage.COMPLETE, it.refresh(refresh.id)?.stage) }
+        all.drop(1).forEach { device ->
+            val signing = device.db.frostSigningSessionDao()
+            val keyState = signing.getSessionsForChatRoom(group.roomId).single()
+            assertEquals(1, keyState.generation)
+            assertTrue(FrostSigningManager.isAwaitingApproval(keyState, signing.getItems(keyState.id)), "device ${device.index} was not asked")
+            assertNotNull(device.key().secretShare, "device ${device.index} deleted before the group signed")
+        }
     }
 
     @Test
