@@ -57,7 +57,10 @@ class ShareRefreshRitualJvmTest {
     private val devices = mutableListOf<Device>()
 
     @AfterTest
-    fun closeDatabases() = devices.forEach { it.db.close() }
+    fun closeDatabases() {
+        devices.forEach { it.db.close() }
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+    }
 
     private val ceremonyId = "ceremony".padEnd(64, '0')
 
@@ -620,5 +623,52 @@ class ShareRefreshRitualJvmTest {
             db.keyShareDao().upsert(from.db.keyShareDao().getMembers(ceremonyId, generation.generation))
         }
         return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
+    }
+
+    // ---- Phase 12: restore ---------------------------------------------------------------------------------------
+
+    /**
+     * A restored device has its nsec and the room's backlog. ChillDKG's recovery
+     * gives it generation 0 (here dealt by hand, so given), and every refresh's
+     * recovery data, applied in turn, gives the next: the walk lands on the share
+     * the device holds live, three refreshes later.
+     */
+    @Test
+    fun `the recovery walk rebuilds the live share three refreshes on`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        repeat(3) { round ->
+            val refresh = propose(all[round % 3])
+            pump(all)
+            approveAll(all, refresh.id)
+        }
+        all.forEach { device ->
+            assertEquals(3, device.active().generation)
+            val hostSecretKey = ChillDkgRitualManager.deriveHostSecretKey(device.privateKey)
+            val id = group.idOf[device.index]
+            val walked = ShareGenerations.recoverFrom(device.db, device.key(), hostSecretKey, group.keyMaterial.secretShares[id])
+            assertEquals((0..3).toList(), walked.keys.toList(), "on device ${device.index}")
+            assertEquals(device.active().secretShare, walked[3])
+            (1..3).forEach { g ->
+                val table = device.db.keyShareDao().getGeneration(ceremonyId, g)!!.publicShareList()!!
+                assertEquals(table[id], walked.getValue(g).publicKey(), "generation $g on device ${device.index}")
+            }
+        }
+    }
+
+    // ---- Phase 13: a release build ---------------------------------------------------------------------------------
+
+    /** A build without the feature declines a rotation it is asked into, out loud, rather than leaving it waiting. */
+    @Test
+    fun `a release build declines a rotation out loud`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = false
+        pump(all)
+
+        assertEquals(ShareRefreshStage.FAILED, all[0].refresh(refresh.id)?.stage)
+        assertTrue(all[0].refresh(refresh.id)!!.failureReason!!.contains("this build cannot rotate shares"), all[0].refresh(refresh.id)!!.failureReason)
+        assertFailsWith<IllegalStateException> { propose(all[1]) }
     }
 }

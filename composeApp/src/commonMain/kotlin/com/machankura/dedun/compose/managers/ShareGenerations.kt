@@ -1,7 +1,11 @@
 package com.machankura.dedun.compose.managers
 
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.crypto.dkg.chill.ChillDKG
+import fr.acinq.bitcoin.crypto.frost.FrostRefresh
+import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import fr.acinq.bitcoin.Crypto
 import kotlin.time.Clock
 import com.machankura.dedun.compose.extensions.toHex
@@ -119,6 +123,37 @@ object ShareGenerations {
             database.dkgSessionDao().upsert(key.copy(secretShare = null, round1Random = "", round2AuxRandom = ""))
         }
         database.scrubFreedPages()
+    }
+
+    /**
+     * Rebuilds this device's share of every generation of [key] from its host
+     * secret key alone, as a restored device would (docs/frost-share-refresh.md,
+     * Phase 12): ChillDKG's recovery data gives generation 0, and each refresh's
+     * recovery data, applied to the generation before, gives the next.
+     *
+     * The walk stops at the first generation this host key was withheld from --
+     * its share there came from a repair, which leaves no recovery data, or from
+     * nothing -- and at the first generation whose recovery data is not on file.
+     * Returns the shares it could rebuild, by generation.
+     */
+    suspend fun recover(database: DedunDatabase, key: DkgSession, hostSecretKey: PrivateKey): Map<Int, PrivateKey> {
+        val recovery = key.recoveryData ?: return emptyMap()
+        val generation0 = ChillDKG.participantRecover(hostSecretKey, ByteVector(recovery.hexToByteArray())).secretShare ?: return emptyMap()
+        return recoverFrom(database, key, hostSecretKey, generation0)
+    }
+
+    /** [recover], from a generation-0 share already in hand. */
+    suspend fun recoverFrom(database: DedunDatabase, key: DkgSession, hostSecretKey: PrivateKey, generation0: PrivateKey): Map<Int, PrivateKey> {
+        val shares = linkedMapOf(0 to generation0)
+        var share = generation0
+        for (row in database.keyShareDao().getGenerations(key.id).sortedBy { it.generation }) {
+            if (row.generation != shares.size) break
+            val data = row.recoveryData ?: break
+            val next = FrostRefresh.participantRecover(hostSecretKey, share, ByteVector(data.hexToByteArray()))
+            share = next.newSecretShare?.takeIf { next.fault.isOk } ?: break
+            shares[row.generation] = share
+        }
+        return shares
     }
 
     /** Whether this device can sign with [key] today: it holds a share of the generation the group signs with. */
