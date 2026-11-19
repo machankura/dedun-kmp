@@ -43,40 +43,57 @@ chat feature and drives most of the UI: the progress ladder names who it is
 waiting on rather than showing a count, because "2 of 3" does not tell anyone whose
 door to knock on.
 
-## Nothing publishes without approval
+## Joining is the only approval
 
 The ritual is driven by arriving messages, which originally meant a relay
 delivering an event to a phone in someone's pocket was enough to enrol its owner
 in a group's permanent signing quorum. `acceptProposal` published the host key on
 arrival; rounds 1 and 2 followed automatically.
 
-It now publishes nothing on this device's behalf until its owner agrees, at three
-separate gates:
+It now publishes nothing on this device's behalf until its owner agrees to join,
+and after that asks them nothing:
 
-| step       | publishes                | why it is its own decision                                                    |
-|------------|--------------------------|-------------------------------------------------------------------------------|
-| `HOST_KEY` | the host public key      | joins the ceremony and fixes `n`. Joining then going quiet holds it open for everyone |
-| `ROUND_1`  | the key contribution     | the member's secret material starts shaping a key they must help sign with     |
-| `ROUND_2`  | the CertEq signature     | a real check: it is what stops a coordinator substituting a key the members never contributed to |
+| step       | publishes                | asked?                                                                         |
+|------------|--------------------------|--------------------------------------------------------------------------------|
+| `HOST_KEY` | the host public key      | **yes**: joins the ceremony and fixes `n`. Nothing on the device can decide that for its owner |
+| `ROUND_1`  | the key contribution     | no: it follows from having joined, once every host key is in                    |
+| `ROUND_2`  | the CertEq signature     | no: the check is ChillDKG's, and a mismatch fails the ceremony whether or not anybody is looking |
 
-The coordinator's two aggregations are **not** gated. They relay other members'
-already-published messages and disclose nothing of the coordinator's own, so an
-approval there would stall the whole group on one person's attention without
-protecting anybody.
+Rounds 1 and 2 were gates of their own until
+[automatic-key-ceremony.md](./automatic-key-ceremony.md). Neither was a decision
+a person could add to. The participant set the round-1 screen showed was fixed
+by the proposal before anyone joined, so the join screen shows it now. The
+round-2 screen said itself that the device had already checked the combined
+result; a coordinator substituting it is caught by the members' checks and the
+CertEq signatures, with nobody asked (`CeremonyAcrossDevicesJvmTest`).
 
-The member who opens a ceremony is auto-approved for the host key alone —
-starting one is already the act of agreeing to be in it — and is still asked for
-rounds 1 and 2.
+The coordinator's two aggregations were never gated. They relay other members'
+already-published messages and disclose nothing of the coordinator's own.
 
-Each gate returns rather than throwing. The ritual is not failing, it is waiting
-on a person; everything received stays stored and it resumes on approval.
+The member who opens a ceremony is approved at creation -- starting one is
+already the act of agreeing to be in it -- and is never asked about it.
 
-> **`pendingApproval` must mirror the gates in `advance` exactly.** If they drift,
+The join gate returns rather than throwing. The ritual is not failing, it is
+waiting on a person; everything received stays stored and it resumes on
+approval. Without the round gates a tap no longer resumes a ritual, so
+`resumeRunning` does, once per activation: a ceremony that holds every message
+it needs and will be sent no more -- one an older build left waiting to be told
+to contribute -- would otherwise never move.
+
+> **`pendingApproval` must mirror the gate in `advance` exactly.** If they drift,
 > the screen offers an approval that does nothing, or offers none while the ritual
 > sits still. Neither produces an error.
 
-Approvals are recorded as three nullable timestamps on `DkgSession`, plus
-`approvalRequestedThrough` so the chat line asking for each is written once.
+Approval is recorded as `hostKeyApprovedAt` on `DkgSession`, plus
+`approvalRequestedThrough` so the chat line asking for it is written once.
+`round1ApprovedAt` and `round2ApprovedAt` stay in the schema, unread, and
+`DkgApprovalStep` keeps `ROUND_1` and `ROUND_2`, so rows written by older builds
+keep decoding and their request lines keep rendering.
+
+Once everyone has joined, the only thing a ceremony can wait on is a device that
+is not answering. After a day without a new message the ritual screen names who
+it is waiting on and since when, with **Abandon** beside it. Nothing abandons on
+its own; whether a day is too long is the group's call.
 
 ## Faults are values, not exceptions
 
@@ -169,8 +186,10 @@ and `ChatMessage` now recognises a ceremony's kinds before any content kind.
 The group has a threshold public key; each device keeps its own share, restorable
 from that member's wallet backup and nobody else's.
 
-From there the coordinator can create the group's admin room — a Marmot group
-whose id is derived from the shared key. See
+From there the coordinator's device creates the group's admin room on its own,
+once the group has signed its key state -- see `CeremonyFollowThrough` and
+[automatic-key-ceremony.md](./automatic-key-ceremony.md), Phases 6 and 7. The
+room is a Marmot group whose id is derived from the shared key. See
 [shared-key-derivation.md](./shared-key-derivation.md) for how, and
 [marmot-membership.md](./marmot-membership.md) for how members are added to it.
 
@@ -189,5 +208,8 @@ belonged to.
 - No ceremony has been run on a physical device.
 - A member invited to the admin room whose Welcome never goes out is
   indistinguishable, from the coordinator's side, from one who joined.
-- The ritual's request chat lines are `3n + 4` per ceremony — 19 lines for five
-  members. Compact, but they dominate a transcript while a ceremony runs.
+- The ritual's chat lines are `3n + 4` per ceremony, plus one request line on
+  each device that had to be asked to join — 19 or 20 lines for five members.
+  Compact, but they dominate a transcript while a ceremony runs.
+- A ceremony moves only while its members' apps are in the foreground. Nobody
+  has to tap anything after joining, but each device still has to be opened.

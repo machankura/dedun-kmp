@@ -93,6 +93,16 @@ which needs every selected member to show up. That is named again under
   4. the Marmot room                     -> coordinator creates C and welcomes the admins
 ```
 
+**Which of these anybody is asked about.** Since
+[automatic-key-ceremony.md](./automatic-key-ceremony.md), an admin is asked one
+thing in step 1 -- whether to join -- and their device does the rest of it. The
+coordinator's device proposes step 2, proposes step 3 once the certificate is
+signed, and creates the room in step 4, without anybody pressing a button. Each
+admin's device signs step 3 on its own, because for a ceremony it finished there
+is exactly one true key state. **Step 2's signature stays a decision**: the
+parent's quorum is agreeing that the parent wants this subgroup, under this
+name, with these admins, and most of its signers were never in the ceremony.
+
 Nothing here is a policy choice. Step 2 needs `C`, which does not exist until
 step 1 produces `K`. Step 3 carries the certificate, so it needs step 2. Step 4
 is gated on the key state for the same reason `DkgRitualViewModel.createAdminGroup`

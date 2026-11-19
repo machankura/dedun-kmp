@@ -12,8 +12,30 @@ Read [shared-key-ceremony.md](./shared-key-ceremony.md) first, especially
 [subgroups.md](./subgroups.md) for the four steps after a subgroup's ceremony,
 since Phases 6 and 7 automate three of them.
 
-**Not built.** Written against the code at `d4dd87f2`, on
-`claude/automate-key-ceremony-803bb9`.
+**Built**, one commit per phase on `claude/automate-key-ceremony-803bb9`
+(`e9c413ac` to `0a60da6e`), against the code as it stood at `d4dd87f2`. After
+the joins, a group's own ceremony runs to a signed key state and a room-creation
+call with nobody asked anything: `KeyStateSignsItselfJvmTest` runs it across
+three in-memory devices with real ChillDKG and real FROST. The phases are kept
+as written because they are the reasoning. Where the build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 2's tampered `cmsg1` is caught by every honest member at round 2, and each broadcasts FAILURE | depends on which bytes change. The flipped byte the test uses is not one a member's share check covers, so the members confirm, the confirmations disagree, and the coordinator's `coordinatorFinalize` refuses to make a certificate. Every device fails and nobody holds a key, which is the property. The test asserts that and that somebody said so, not that every member did |
+| Phase 3's sweep is wired "where the live subscription is built" | in `SynchronizationViewModel`, after `reopenInbox`, through `NostrRepository.resumeRunningCeremonies`, and under the same lock as the inbound path that otherwise drives a ritual |
+| Phase 4's notice loses its `ROUND_1` and `ROUND_2` arms | they stay, answering `null`: the `when` is over the enum, which keeps both values for old rows. Nothing reaches them |
+| Phase 5 dates a stall from the newest transcript line | from the newest `DkgParticipantMessage`. A `ChatMessage` has no session id, so in a room that has run more than one ceremony its lines cannot be told apart. That needed one fix: `record` and `publishOwn` rewrote a message's row on every redelivery, which restarted the clock each time a relay repeated itself. A message is now stored once, on first arrival |
+| Phase 5 puts the abandon action inline on the waiting rung | a card at the top of the ladder, above the rungs, naming who and since when, with the button. The stall is the most important thing on the screen when there is one |
+| Phase 6 runs the follow-through at the end of `advance` and when a signing session completes | a long-running driver beside the live subscription, `ChatRepository.followThroughCeremonies`, that looks again when a ceremony finishes, a certificate or key state is signed, or a key package arrives. Creating a room waits on relays for key packages, and the inbound path is what delivers them: run inside it, under its lock, it would wait on itself. It does not run in the sweep for the same reason |
+| Phase 6 moves the ladder buttons' code into the manager | the buttons keep their own code and share `roomName` and `roomPurpose`. They are now the retry after a failure, which the automatic path never does. A button pressed in the moment before the coordinator's device proposes could open a second key-state session; both sign the same statement, so the cost is a second session, not a wrong one |
+| Phase 6's ladder ends in **Open the room** | it does, and the room-creation notice on the coordinator's chat stays: it still names a ceremony whose room does not exist yet, and opens the ladder that says what it is waiting on |
+| Phase 7 calls the checks `stateFrom` makes | `stateFrom` became `claimFrom` plus the signature check, so the rule for signing and the rule for keeping are one function. One check was added: the unsigned event's author is the room it names |
+| Phase 7's tests sit beside the existing key-state tests unchanged | two in `SignedGroupKeyStateTest` asserted the gate this phase removes and now assert the new rule. A member who hears a proposal only after the quorum finished it may still publish a nonce for it, since the signature can arrive after the proposal; it is never used |
+
+**Not done:** the emulator session in Phase 8. Nothing here has run on a device,
+including the upgrade in place and a subgroup from proposal to room. A subgroup's
+certificate needs its parent's quorum to sign, so no test runs that path end to
+end; `CeremonyFollowThroughJvmTest` covers each step of it separately.
 
 The headline: **the device asks its owner only for decisions the device cannot
 make on its own.** Joining is one of those decisions. It puts the member in a
