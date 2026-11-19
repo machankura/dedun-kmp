@@ -27,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.managers.FoundingAdmins
+import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
@@ -131,6 +132,13 @@ class ChatRoomDetailViewModel(
                 // docs/group-payout-destination.md: a group still going has a Payouts
                 // section, and every member row says where that member is paid.
                 val payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup }
+                // The founding members, against what the ceremony that made the
+                // room's key said: who the policy leaves out, and who the founding
+                // invite never reached. docs/robust-group-admins.md, Phases 3 and 4.
+                val missingFoundingAdmins = (chatRepository.foundingAdmins(chatRoomId) as? FoundingAdmins.Check.Missing)
+                    ?.publicKeys
+                    .orEmpty()
+                val uninvitedFounders = chatRepository.uninvitedFounders(localChatRoom)
 
                 ChatRoomDetailUIState.Loaded(
                     localChatRoom = localChatRoom,
@@ -176,9 +184,13 @@ class ChatRoomDetailViewModel(
                             .toSet()
                     } else emptySet(),
                     shares = chatRepository.sharesSummary(localChatRoom),
-                    missingFoundingAdmins = (chatRepository.foundingAdmins(chatRoomId) as? FoundingAdmins.Check.Missing)
-                        ?.publicKeys
-                        .orEmpty(),
+                    missingFoundingAdmins = missingFoundingAdmins,
+                    uninvitedFounders = uninvitedFounders,
+                    founderNames = (missingFoundingAdmins + uninvitedFounders).associateWith { publicKey ->
+                        nostrRepository.getProfileWithPublicKey(publicKey)?.humanReadableNameOrPubkey()
+                            ?: publicKey.take(SHORTENED_PUBLIC_KEY_LENGTH)
+                    },
+                    adminRoomId = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.adminRoomOf(chatRoomId) else null,
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
@@ -298,10 +310,36 @@ class ChatRoomDetailViewModel(
      * warning stays until then. docs/robust-group-admins.md, Phase 3.
      */
     fun addMissingFoundingAdmins(localChatRoom: LocalChatRoom, missing: Set<HexKey>, onDone: (String?) -> Unit = {}) {
+        if (isActionPending.value) return
+        isActionPending.value = true
         viewModelScope.launch(Dispatchers.IO) {
             val failure = runCatching { chatRepository.addAdmins(localChatRoom, missing) }.exceptionOrNull()
             initiateChatRoomDetail()
-            viewModelScope.launch(Dispatchers.Main) { onDone(failure?.message) }
+            viewModelScope.launch(Dispatchers.Main) {
+                isActionPending.value = false
+                onDone(failure?.message)
+            }
+        }
+    }
+
+    /**
+     * Finishes the room's founding invite, and reloads the screen. Reports null
+     * when it went out, or why not -- naming the founders still without a key
+     * package, since only they can publish one. docs/robust-group-admins.md,
+     * Phase 4.
+     */
+    fun inviteFounders(chatRoomId: String, onDone: (MarmotGroupCreation.FoundingInvite) -> Unit = {}) {
+        // Waits on relays for key packages, so a second tap would ask twice.
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val invite = runCatching { chatRepository.finishFoundingInvite(chatRoomId) }
+                .getOrElse { MarmotGroupCreation.FoundingInvite.Failed(it.message ?: "Couldn't invite them. Please try again.") }
+            initiateChatRoomDetail()
+            viewModelScope.launch(Dispatchers.Main) {
+                isActionPending.value = false
+                onDone(invite)
+            }
         }
     }
 
@@ -503,6 +541,8 @@ class ChatRoomDetailViewModel(
 
         /** How long the Shares section's inputs have to be still before it is read again. */
         internal const val SHARES_SETTLE_MILLIS = 250L
+        /** Enough of a key to tell two founders apart when no profile is stored. */
+        private const val SHORTENED_PUBLIC_KEY_LENGTH = 12
 
         fun factory(
             activeUserPublicKey: HexKey,

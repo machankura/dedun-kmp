@@ -80,6 +80,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import com.machankura.dedun.compose.managers.MarmotGroupCreation
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Autorenew
@@ -195,6 +198,18 @@ import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.couldn_t_leave_the_group
+import dedun.composeapp.generated.resources.every_member_of_this_group_administers_it_there
+import dedun.composeapp.generated.resources.admin_room
+import dedun.composeapp.generated.resources.founding_members_have_no_key_package
+import dedun.composeapp.generated.resources.founding_members_invited
+import dedun.composeapp.generated.resources.invite_them
+import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_were_not_invited
+import dedun.composeapp.generated.resources.not_every_founding_member_was_invited
+import dedun.composeapp.generated.resources.founding_members_made_admins_requested
+import dedun.composeapp.generated.resources.make_them_admins
+import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_are_not_admins
+import dedun.composeapp.generated.resources.founding_members_are_not_admins
+import dedun.composeapp.generated.resources.admin
 import dedun.composeapp.generated.resources.run_by_members
 import dedun.composeapp.generated.resources.parent_group
 import dedun.composeapp.generated.resources.a_subgroup
@@ -259,7 +274,6 @@ import dedun.composeapp.generated.resources.rotation_taking_part
 import dedun.composeapp.generated.resources.rotation_no_key
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import androidx.compose.runtime.remember
-import androidx.compose.material3.CardDefaults
 import dedun.composeapp.generated.resources.waiting_on_s_since_s
 import dedun.composeapp.generated.resources.rotation_ended
 import dedun.composeapp.generated.resources.abandon_rotation_body
@@ -351,6 +365,9 @@ fun ChatRoomDetailScreen(
     val keyStateRequested = stringResource(Res.string.key_state_requested)
     val rotationHeldAfterRemoval = stringResource(Res.string.rotation_held_after_removal)
     val noKeyToRotate = stringResource(Res.string.rotation_no_key)
+    val madeAdminsRequested = stringResource(Res.string.founding_members_made_admins_requested)
+    val foundersInvited = stringResource(Res.string.founding_members_invited)
+    val foundersHaveNoKeyPackage = stringResource(Res.string.founding_members_have_no_key_package)
 
     // Offered after removing a member who still holds a share of the room's key:
     // the removal took them out of the room, not out of the key
@@ -621,6 +638,94 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
+                            // The founding members, where the room is not as the
+                            // ceremony that made its key left it: founders its
+                            // policy does not list as admins, or founders its
+                            // founding invite never reached. Under the key and the
+                            // parent, because it is about the same thing -- who the
+                            // group that made this room is. docs/robust-group-admins.md,
+                            // Phase 5.
+                            if (chatRoomDetailUIState.missingFoundingAdmins.isNotEmpty()) {
+                                item {
+                                    FoundingMembersCard(
+                                        title = stringResource(Res.string.founding_members_are_not_admins),
+                                        body = stringResource(
+                                            Res.string.s_took_part_in_the_key_ceremony_but_are_not_admins,
+                                            chatRoomDetailUIState.founderNamesFor(chatRoomDetailUIState.missingFoundingAdmins),
+                                        ),
+                                        // An admin of a room the app governs: the
+                                        // repair is a commit only they can make.
+                                        actionLabel = stringResource(Res.string.make_them_admins)
+                                            .takeIf { chatRoomDetailUIState.canGovern },
+                                        isActionPending = chatRoomDetailViewModel.isActionPending.value,
+                                        onAction = {
+                                            chatRoomDetailViewModel.addMissingFoundingAdmins(
+                                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                                missing = chatRoomDetailUIState.missingFoundingAdmins,
+                                            ) { failure -> notify(failure ?: madeAdminsRequested) }
+                                        },
+                                    )
+                                }
+                            }
+
+                            if (chatRoomDetailUIState.uninvitedFounders.isNotEmpty()) {
+                                item {
+                                    FoundingMembersCard(
+                                        title = stringResource(Res.string.not_every_founding_member_was_invited),
+                                        body = stringResource(
+                                            Res.string.s_took_part_in_the_key_ceremony_but_were_not_invited,
+                                            chatRoomDetailUIState.founderNamesFor(chatRoomDetailUIState.uninvitedFounders),
+                                        ),
+                                        actionLabel = stringResource(Res.string.invite_them),
+                                        isActionPending = chatRoomDetailViewModel.isActionPending.value,
+                                        onAction = {
+                                            chatRoomDetailViewModel.inviteFounders(chatRoomId) { invite ->
+                                                notify(
+                                                    when (invite) {
+                                                        is MarmotGroupCreation.FoundingInvite.BlockedOn -> foundersHaveNoKeyPackage
+                                                        is MarmotGroupCreation.FoundingInvite.Failed -> invite.reason
+                                                        else -> foundersInvited
+                                                    }
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+
+                            // A robust group's NIP-17 room has no admins of its own;
+                            // its members are admins of the room its key made.
+                            chatRoomDetailUIState.adminRoomId?.let { adminRoomId ->
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                ChatRoomDetailRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = adminRoomId,
+                                                    relayHint = relayHint
+                                                )
+                                            )
+                                        }
+                                    ) {
+                                        ListItem(
+                                            leadingContent = {
+                                                Icon(Icons.Default.AdminPanelSettings, contentDescription = Decorative)
+                                            },
+                                            trailingContent = {
+                                                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+                                            },
+                                            headlineContent = {
+                                                Text(text = stringResource(Res.string.admin_room))
+                                            },
+                                            supportingContent = {
+                                                Text(text = stringResource(Res.string.every_member_of_this_group_administers_it_there))
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                             item {
                                 chatRoomDetailUIState.localChatRoom.chatRoom.description?.let {
                                     Text(
@@ -1321,6 +1426,15 @@ fun ChatRoomDetailScreen(
                                         supportingContent = {
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
                                             Column {
+                                                // From the group's admin policy, through
+                                                // `AdminFlags` -- docs/robust-group-admins.md.
+                                                if (localParticipant.participant.adminAt != null) {
+                                                    Text(
+                                                        text = stringResource(Res.string.admin),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                }
                                                 localParticipant.profile?.about?.let {
                                                     Text(
                                                         text = it
@@ -2434,3 +2548,60 @@ private fun RotationRunningCard(running: SharesSummary.Running, onAbandon: () ->
         }
     }
 }
+
+/**
+ * Something about this room's founding members that is not as the ceremony
+ * left it -- founders it does not list as admins, or founders its invite never
+ * reached -- and, where this device can, the one action that repairs it.
+ *
+ * On the error container: the room works, but not as the group that made it
+ * agreed, and that is worth more than a supporting line. docs/robust-group-admins.md,
+ * Phase 5.
+ */
+@Composable
+private fun FoundingMembersCard(
+    title: String,
+    body: String,
+    actionLabel: String?,
+    isActionPending: Boolean,
+    onAction: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.containerPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+            ) {
+                Icon(Icons.Default.AdminPanelSettings, contentDescription = Decorative)
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+            }
+
+            Text(text = body, style = MaterialTheme.typography.bodyMedium)
+
+            actionLabel?.let { label ->
+                TextButton(
+                    onClick = onAction,
+                    enabled = !isActionPending,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ),
+                ) {
+                    Text(label)
+                }
+            }
+        }
+    }
+}
+
+/** The founders [publicKeys] names, as the screen calls them, in a stable order. */
+private fun ChatRoomDetailUIState.Loaded.founderNamesFor(publicKeys: Set<HexKey>): String =
+    publicKeys.map { founderNames[it] ?: it }.sorted().joinToString(", ")

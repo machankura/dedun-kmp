@@ -257,6 +257,7 @@ object MarmotInboundManager {
         // Phase 1 could have wrong. Only for accounts still in the tree: one that
         // left took its admin rights with it, and "left the group" says so already.
         if (priorAdmins != null && !disbanded && !removedUs) {
+            val adminPublicKeys = mlsGroup.currentAdminIdentities()
             val members = committedGroupMembersPublicKeys.toSet()
             (priorAdmins - adminPublicKeys).filter { it in members }.sorted().forEach { demoted ->
                 announceLine(database, localChatRoom, ChatMessage.TYPE_ADMIN_REMOVED,

@@ -353,6 +353,14 @@ interface ChatRepository {
     suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey>
 
     /**
+     * The admin room [chatRoomId]'s own key ceremony made, if this device holds
+     * it: where the members of a robust group's NIP-17 room are admins. Null for
+     * a room with no finished ceremony of its own, and for one whose admin room
+     * this device does not hold.
+     */
+    suspend fun adminRoomOf(chatRoomId: String): String?
+
+    /**
      * Takes every key ceremony [keyPair] coordinated from a key to a working room,
      * until cancelled: asks the group to sign its key state (a subgroup's parent to
      * certify it first) and creates the room. See `CeremonyFollowThrough` and
@@ -670,6 +678,8 @@ interface ChatRepository {
                 MarmotGroupCreation.FoundingInvite.NothingToDo
 
             override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = emptySet()
+
+            override suspend fun adminRoomOf(chatRoomId: String): String? = null
 
 
             override suspend fun sendChatMessage(

@@ -168,6 +168,26 @@ sealed interface ChatRoomDetailUIState {
          * `FoundingAdmins.check`; docs/robust-group-admins.md, Phase 3.
          */
         val missingFoundingAdmins: Set<HexKey> = emptySet(),
+        /**
+         * Founding members this room's founding invite never reached -- only ever
+         * non-empty on the device that made the room, while it is still at epoch 0.
+         * See `MarmotGroupCreation.uninvitedFounders`; docs/robust-group-admins.md,
+         * Phase 4.
+         */
+        val uninvitedFounders: Set<HexKey> = emptySet(),
+        /**
+         * What to call the founders the two sets above name. They need not be in
+         * this room -- an uninvited one is not, by definition -- so the room's own
+         * rows cannot be asked.
+         */
+        val founderNames: Map<HexKey, String> = emptyMap(),
+        /**
+         * The admin room this group's ceremony made, when this is the group's
+         * NIP-17 room and this device holds it. A NIP-17 room has no admins of its
+         * own; this is where its members are admins. docs/robust-group-admins.md,
+         * Phase 5.
+         */
+        val adminRoomId: String? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

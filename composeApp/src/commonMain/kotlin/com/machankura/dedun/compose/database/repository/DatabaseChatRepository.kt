@@ -50,6 +50,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 import com.machankura.dedun.compose.managers.FoundingAdmins
+import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.CeremonyFollowThrough
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -134,6 +135,19 @@ class DatabaseChatRepository(
     } catch (e: Throwable) {
         logger.e("Error reading who ${localChatRoom.chatRoom.id}'s founding invite missed", e)
         emptySet()
+    }
+
+    override suspend fun adminRoomOf(chatRoomId: String): String? = try {
+        // The room's own ceremony, not a subgroup's it hosted: a subgroup's key
+        // makes the subgroup's room, which is not this group's admin room.
+        database.dkgSessionDao().getLatestSessionFor(chatRoomId, parentChatRoomId = null)
+            ?.takeIf { it.stage == DkgRitualStage.COMPLETE }
+            ?.thresholdPublicKey
+            ?.let { SharedKeyDerivation.marmotGroupId(it) }
+            ?.takeIf { it != chatRoomId && database.chatRoomDao().findChatRoomById(it) != null }
+    } catch (e: Throwable) {
+        logger.e("Error finding the admin room of $chatRoomId", e)
+        null
     }
 
     override suspend fun followThroughCeremonies(keyPair: KeyPair) =
