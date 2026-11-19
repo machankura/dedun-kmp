@@ -13,6 +13,7 @@ import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -629,11 +630,13 @@ object GroupKeyStateManager {
      *    [claimFrom] checks the derivation, the same check [stateFrom] makes;
      * 6. claiming the parent the ceremony was run for, or none for a group's own,
      *    with a certificate that parent's quorum signed -- [claimFrom] again;
-     * 7. with no state for that room already signed on this device;
-     * 8. and naming no share generation and no member binding. A rotation's key
-     *    state, or one binding an id to a new identity, says more than the
-     *    ceremony did -- which shares the group now signs with, who holds an id --
-     *    and that is its owner's to agree to (docs/frost-share-refresh.md).
+     * 7. with no state for that room already signed on this device -- or, for a
+     *    state naming share generation `h`, none signed at `h` or later;
+     * 8. and naming no share generation and no member binding -- **unless** it
+     *    is the one key state a rotation this device completed implies
+     *    ([vouchesForGeneration], docs/rotate-shares-single-approval.md, Phase 5).
+     *    A state binding an id to a new identity is never vouched for: who holds
+     *    an id is governance, not arithmetic, and its owner decides it.
      */
     suspend fun vouchesFor(
         database: DedunDatabase,
@@ -665,13 +668,72 @@ object GroupKeyStateManager {
         // 6's parent
         if (claim.parentChatRoomId != key.parentChatRoomId) return false
 
-        // 7
         val signed = stateAmong(database.groupSignedEventDao().getByKind(GroupKeyStateEvent.KIND), claim.chatRoomId)
-        if (signed != null) return false
+        val generation = claim.generation
+        if (generation == null) {
+            // 7, for a ceremony's state
+            if (signed != null) return false
+            // 8: a binding is never vouched for
+            return claim.memberBindings == null
+        }
 
+        // 7, for a rotation's
+        if (signed != null && (signed.generation ?: 0) >= generation) return false
         // 8
-        if (claim.generation != null || claim.memberBindings != null) return false
+        return vouchesForGeneration(database, session, key, unsigned, claim, signed)
+    }
 
+    /**
+     * Whether a key state naming share generation `h` is exactly the one a
+     * rotation this device completed implies (docs/rotate-shares-single-approval.md,
+     * Phase 5). For such a rotation every fact the state names is one this device
+     * holds and has checked against the certificate: the table, the rotation, who
+     * it retired. So there is one true statement, and a person shown it has
+     * nothing to add. Every one of these has to hold:
+     *
+     * - generation `h` is the one this device signs with, and it holds a share
+     *   of it -- a device withheld from `h` neither signs at `h` nor vouches for
+     *   a table it did not help make;
+     * - the rotation that made `h` is the one the state names, and it is
+     *   complete here;
+     * - the state's public-share hash is this device's table at `h`;
+     * - the ids it retires are the ids this device's roster at `h` retires;
+     * - it binds no id to a new identity;
+     * - the signing session is at `h`;
+     * - its path and parent are the ones the room's signed state already names,
+     *   when there is one -- [proposeGeneration] copies them from it.
+     */
+    private suspend fun vouchesForGeneration(
+        database: DedunDatabase,
+        session: FrostSigningSession,
+        key: DkgSession,
+        unsigned: Event,
+        claim: GroupKeyState,
+        signed: GroupKeyState?,
+    ): Boolean {
+        val generation = claim.generation ?: return false
+        val tags = GroupKeyStateEvent.parseShareGeneration(unsigned.tags).getOrNull() ?: return false
+        if (tags.bindings.isNotEmpty() || claim.memberBindings != null) return false
+        if ((session.generation ?: 0) != generation) return false
+
+        val active = ShareGenerations.active(database, key)
+        if (active.generation != generation || active.secretShare == null) return false
+        val publicShares = active.publicShares ?: return false
+        if (ShareGenerations.publicSharesHash(publicShares) != claim.publicSharesHash) return false
+        if (tags.retiredIds.sorted() != active.roster.filter { it.standing == ShareStanding.RETIRED }.map { it.participantId }.sorted()) return false
+
+        val refreshId = tags.refreshId ?: return false
+        val row = database.keyShareDao().getGeneration(key.id, generation) ?: return false
+        if (row.refreshSessionId != refreshId) return false
+        val refresh = database.shareRefreshDao().getSessionById(refreshId) ?: return false
+        if (refresh.stage != ShareRefreshStage.COMPLETE || refresh.dkgSessionId != key.id || refresh.baseGeneration + 1 != generation) return false
+
+        if (signed != null) {
+            if (claim.derivationPath != signed.derivationPath) return false
+            if (claim.parentChatRoomId != signed.parentChatRoomId) return false
+            val certificate = { json: String? -> json?.let { Event.fromJsonOrNull(it)?.id } }
+            if (certificate(claim.birthCertificateJson) != certificate(signed.birthCertificateJson)) return false
+        }
         return true
     }
 

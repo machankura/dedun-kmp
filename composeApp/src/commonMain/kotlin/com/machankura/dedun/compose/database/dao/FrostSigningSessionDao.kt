@@ -83,6 +83,13 @@ interface FrostSigningSessionDao {
     suspend fun getSessionsForChatRoom(chatRoomId: String): List<FrostSigningSession>
 
     /** Sessions of one key still running: what a share rotation has to end. */
+    /** Sessions still running that [userPublicKey]'s owner has neither approved nor declined. */
+    @Query(
+        "SELECT * FROM FrostSigningSession WHERE userPublicKey = :userPublicKey AND stage NOT IN ('COMPLETE', 'FAILED') " +
+            "AND signApprovedAt IS NULL AND signDeclinedAt IS NULL ORDER BY createdAt ASC"
+    )
+    suspend fun getOpenUnansweredSessionsFor(userPublicKey: HexKey): List<FrostSigningSession>
+
     @Query("SELECT * FROM FrostSigningSession WHERE dkgSessionId = :dkgSessionId AND stage NOT IN ('COMPLETE', 'FAILED')")
     suspend fun getOpenSessionsForKey(dkgSessionId: String): List<FrostSigningSession>
 

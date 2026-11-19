@@ -465,14 +465,14 @@ object FrostSigningManager {
         }
 
         // The one answer a device gives on its owner's behalf, and only to one
-        // question: what the room a ceremony it finished signs with. For that there
-        // is exactly one true statement, and `vouchesFor` signs nothing else --
-        // any other proposal, a key state included, is asked about as before.
-        // docs/automatic-key-ceremony.md, Phase 7.
-        if (FrostSigningEvents.isProposal(innerEvent.kind) && signsAsItsOwnKeyState(database, session)) {
-            logger.i("Session ${session.id} is the key state of a ceremony this device finished; signing")
-            update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
-        }
+        // question: what the room a ceremony it finished signs with, or a rotation
+        // it completed. For that there is exactly one true statement, and
+        // `vouchesFor` signs nothing else -- any other proposal, a key state
+        // included, is asked about as before. docs/automatic-key-ceremony.md,
+        // Phase 7, and docs/rotate-shares-single-approval.md, Phase 5.
+        // A rotation's key state can arrive before the rotation completes here, and
+        // is asked again then ([resumeAt]).
+        if (FrostSigningEvents.isProposal(innerEvent.kind)) approveIfVouched(database, session)
 
         if (session.stage == FrostSigningStage.FAILED) {
             logger.i("Session $sessionId already failed; ignoring kind ${innerEvent.kind}")
@@ -3048,11 +3048,45 @@ object FrostSigningManager {
      * [generation], which has just become signable here. A session proposed while
      * this device still waited on that generation's certificate stops at the share
      * it did not yet have; nothing else would wake it until the next message.
+     *
+     * That includes the generation's own key state, which the coordinator proposes
+     * the moment its certificate verifies -- often before this device's. On arrival
+     * this device could not vouch for it, since the rotation it names was not yet
+     * complete here; now it can, so it asks again rather than leaving the owner a
+     * question the device can answer (docs/rotate-shares-single-approval.md, Phase 5).
      */
     suspend fun resumeAt(database: DedunDatabase, localChatRoom: LocalChatRoom, dkgSessionId: String, generation: Int) {
         database.frostSigningSessionDao().getOpenSessionsForKey(dkgSessionId)
             .filter { (it.generation ?: 0) == generation && it.chatRoomId == localChatRoom.chatRoom.id }
-            .forEach { advance(database, localChatRoom, it.id) }
+            .forEach { session ->
+                approveIfVouched(database, session)
+                advance(database, localChatRoom, session.id)
+            }
+    }
+
+    /**
+     * Signs every open key state this user's device can now vouch for and has not
+     * been answered about -- what a build that asked about them left waiting. Run
+     * by the sweep beside the rituals' (docs/rotate-shares-single-approval.md,
+     * Phase 5). Returns how many it approved.
+     */
+    suspend fun resumeVouched(database: DedunDatabase, userPublicKey: HexKey): Int {
+        var approved = 0
+        database.frostSigningSessionDao().getOpenUnansweredSessionsFor(userPublicKey).forEach { session ->
+            if (!approveIfVouched(database, session)) return@forEach
+            val localChatRoom = database.chatRoomDao().findChatRoomById(session.chatRoomId) ?: return@forEach
+            advance(database, localChatRoom, session.id)
+            approved += 1
+        }
+        return approved
+    }
+
+    /** Approves [session] on its owner's behalf when [signsAsItsOwnKeyState] says this device can. */
+    private suspend fun approveIfVouched(database: DedunDatabase, session: FrostSigningSession): Boolean {
+        if (!signsAsItsOwnKeyState(database, session)) return false
+        logger.i("Session ${session.id} is a key state this device can vouch for; signing")
+        update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
+        return true
     }
 
     /**

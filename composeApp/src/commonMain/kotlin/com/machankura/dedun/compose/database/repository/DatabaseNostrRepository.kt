@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
+import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.identity.Identity
@@ -154,6 +155,9 @@ class DatabaseNostrRepository(
                 database = database,
                 userPublicKey = userPublicKey,
                 nostrPrivateKey = privateKey
+            ) + FrostSigningManager.resumeVouched(
+                database = database,
+                userPublicKey = userPublicKey,
             )
         }
     }
