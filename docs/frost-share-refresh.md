@@ -15,13 +15,29 @@ ceremony they describe and the rule that a room's id *is* the key it signs with.
 
 | phase | commit | checked |
 |---|---|---|
-| 5 | Phase 5 | `SecureDeleteJvmTest` (5, two of them controls that fail without the fix); `jvmTest` 1176/1176; `compileDebugKotlinAndroid`, `processDebugResources` |
+| 1 | zkp `8477b7c1`, `a7c54598`, `e30c8a16`, `31ea015c` | `tests -t=frost_refresh` (vectors, roundtrip n 2..5, withheld, sequential, recovery, faults, binding, params, lengths); full `tests` suite; `ctime_tests` under valgrind (RelWithDebInfo) clean; autotools build. **Not reviewed** (D4) |
+| 2 | secp256k1-kmp `7fd0d34`, `8beb781`, `0f5a710` | `:tests:jvmTest` and `:tests:linuxX64Test` 112/112, the zkp vector byte for byte through both backends |
+| 3 | bitcoin-kmp `d2e15b8`, `3cd82d1` | `jvmTest` 274/274, including withheld → repaired with `FrostReducedEnrollment` → signs |
+| 4 | lightning-kmp `2043f254`, lightning-kmp-app `3794eb8`, Giza Phase 4 | lightning-kmp `crypto` tests 104/104; Giza `compileDebugKotlinAndroid`, `jvmTest` 1183/1183, audits |
+| 5 | `4040ae74` | `SecureDeleteJvmTest` (5, two of them controls that fail without the fix); `jvmTest` 1176/1176; `compileDebugKotlinAndroid`, `processDebugResources` |
+| 6 | `fce51e20` | `ShareGenerationsJvmTest` (7: a real 2-of-3 signature with hand-refreshed shares verifying as the unchanged room, a decline from a device without the generation, a withheld member who is not a signer); every existing signing test unedited; `jvmTest` 1183/1183; `compileDebugKotlinAndroid`; the M3, brand and wallet audits |
+
+**Nothing below Giza is pushed.** Each level's work is on a local `claude/frost-share-refresh`
+branch (zkp, secp256k1-kmp, bitcoin-kmp, lightning-kmp, lightning-kmp-app), and every parent pins
+its child's local commit. A clone of Giza at these commits cannot fetch them until the branches are
+pushed bottom up, which waits on an explicit go-ahead. The tracked branches (`main`, `threshold`,
+`master`) are untouched.
 
 Where the build chose differently from the plan:
 
 | what the plan said | what it turned out to be |
 |---|---|
 | Phase 5: a test overwrites a share and finds no copy | three. An overwrite in this schema happens to write the new cell over the old share, so it passed with `secure_delete` off too and proved nothing; a deleted row is the control that fails without it. And `secure_delete` alone leaves the share in `-wal` until a truncating checkpoint, so `DedunDatabase.scrubFreedPages` is part of the fix, with its own control |
+| Phase 1: the module's C API | adds `secp256k1_frost_refresh_params_parse`, so the bindings carry the parameters as their serialization and parse them in every call, holding nothing between calls. Faults reuse `secp256k1_chilldkg_fault`, with the fault index a position in the recipient list; bitcoin-kmp's `FrostRefreshFault` translates it to an identifier. The round-1 zero-randomness check was variable time, which `ctime_tests` found; it is `secp256k1_is_zero_array` now |
+| Phase 1: an investigation procedure | none. A dealt value that does not match the commitments is `UNKNOWN_FAULTY_PARTICIPANT_OR_COORDINATOR` and the session must be abandoned; frost_refresh.md names it as future work |
+| Phase 6: a manual `MIGRATION_37_38` backfills generation 0 into the new tables | no backfill, and no manual migration. Generation 0 stays where the ceremony wrote it, read by `ShareGenerations` with ids derived from the host keys exactly as `signerIds` derived them; rows exist from generation 1 on. A copy of generation 0 would have been a second source of truth for the one fact signing most needs to agree with the ceremony about, and `ShareGenerationsJvmTest` asserts the derivation instead of a copy. The migration is a Room `AutoMigration` |
+| Phase 6: a session at a generation this device lacks declines | so does one whose `frost_generation` is present and unreadable, filed at generation -1 so nothing reads it as a share this device holds. A decline's reason is `FrostSigningManager.GENERATION_REFUSAL` |
+| Phase 6: (not in the plan) | `DkgSessionDao.getKeyHoldingSessions` now counts a share of any generation, and `completedKey` asks `ShareGenerations.canSign`, so a refreshed key whose ceremony share is wiped is still found -- and a member withheld from the newest refresh is offered nothing to sign. `ShippedProfileUpgradeJvmTest` pins the built version at 38 |
 | Phase 5: `dataExtractionRules` or `allowBackup="false"` | both. From Android 12 `allowBackup="false"` stops cloud backup but not a device-to-device transfer |
 
 ## The headline: enrollment cannot rotate a share
