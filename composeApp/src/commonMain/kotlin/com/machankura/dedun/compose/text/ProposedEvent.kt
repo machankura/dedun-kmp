@@ -23,6 +23,7 @@ import com.machankura.dedun.compose.nostr.wallet.MemberWalletRequestEvent
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
@@ -389,6 +390,24 @@ object ProposedEvent {
                 }
                 ?: "A member wallet this device cannot read"
         )
+
+        // A change to the room itself, which no single admin may make: who is in
+        // it and who governs it, said in names, because a member approving it is
+        // approving those lines and not a hash. docs/member-admin-promotion.md,
+        // Phase 3.
+        GovernanceStatementEvent.KIND -> GovernanceStatementEvent.parse(event)?.let { statement ->
+            val name = { key: HexKey -> nameOf(key) ?: key.take(8) }
+            val change = statement.change
+            Summary(
+                label = "A change to who is in this group",
+                detail = listOfNotNull(
+                    change.adds.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Adds ") { name(it.account) },
+                    change.removes.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Removes ") { name(it) },
+                    change.admins?.joinToString(prefix = "Admins afterwards: ") { name(it) },
+                    "Changes its settings".takeIf { change.components.isNotEmpty() },
+                ).joinToString(" · ")
+            )
+        } ?: Summary(label = "A change to this group that cannot be read", detail = "")
 
         else -> Summary(label = "Event of kind ${event.kind}", detail = event.content)
     }

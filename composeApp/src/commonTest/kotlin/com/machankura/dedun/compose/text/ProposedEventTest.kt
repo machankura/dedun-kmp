@@ -4,6 +4,8 @@ import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.ByteVector32
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
+import com.machankura.dedun.compose.nostr.frost.GovernanceChange
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
@@ -64,6 +66,25 @@ class ProposedEventTest {
             ProposedEvent.summarize(certificate(null, guarded = true)).detail,
             "an older certificate decides nothing, and says nothing about it",
         )
+    }
+
+    /** docs/member-admin-promotion.md, Phase 3: a member approves names, not a hash. */
+    @Test
+    fun `a change to the group says who, in names`() {
+        val bob = "b".repeat(64)
+        val carol = "c".repeat(64)
+        val tags = GovernanceStatementEvent.assembleTags(
+            chatRoomId = "1".repeat(64),
+            epoch = 4,
+            change = GovernanceChange(removes = setOf(carol), admins = setOf(bob)),
+            proposer = bob,
+        )
+        val names = mapOf(bob to "Bob", carol to "Carol")
+
+        val summary = ProposedEvent.summarize(event(GovernanceStatementEvent.KIND, tags = tags), nameOf = names::get)
+
+        assertEquals("A change to who is in this group", summary.label)
+        assertEquals("Removes Carol · Admins afterwards: Bob", summary.detail)
     }
 
     @Test
