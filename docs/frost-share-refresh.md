@@ -29,11 +29,11 @@ ceremony they describe and the rule that a room's id *is* the key it signs with.
 | 5 | `4040ae74` | `SecureDeleteJvmTest` (5, two of them controls that fail without the fix); `jvmTest` 1176/1176; `compileDebugKotlinAndroid`, `processDebugResources` |
 | 6 | `fce51e20` | `ShareGenerationsJvmTest` (7: a real 2-of-3 signature with hand-refreshed shares verifying as the unchanged room, a decline from a device without the generation, a withheld member who is not a signer); every existing signing test unedited; `jvmTest` 1183/1183; `compileDebugKotlinAndroid`; the M3, brand and wallet audits |
 
-**Nothing below Giza is pushed.** Each level's work is on a local `claude/frost-share-refresh`
-branch (zkp, secp256k1-kmp, bitcoin-kmp, lightning-kmp, lightning-kmp-app), and every parent pins
-its child's local commit. A clone of Giza at these commits cannot fetch them until the branches are
-pushed bottom up, which waits on an explicit go-ahead. The tracked branches (`main`, `threshold`,
-`master`) are untouched.
+**Pushed on 2026-11-19, bottom up, as `claude/frost-share-refresh` at every level** (zkp to
+`code.sigidli.com/frost/secp256k1-zkp`, secp256k1-kmp, bitcoin-kmp, lightning-kmp and
+lightning-kmp-app to `github.com/kngako`), and every parent's pin checked against its child's
+remote branch. The tracked branches (`main`, `threshold`, `master`) are untouched: moving them is a
+fast-forward to these branches once the work is reviewed, as submodule-refresh.md did.
 
 Where the build chose differently from the plan:
 
