@@ -474,6 +474,116 @@ class ShareRefreshRitualJvmTest {
         assertTrue(error.message!!.contains("fewer than the 2 it takes to sign"), error.message)
     }
 
+    // ---- a rotation waits for the last one to be signed (docs/rotation-waits-for-key-state.md) -------------------
+
+    @Test
+    fun `the next rotation waits until the group has signed the last one`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val (alice, bob) = all
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()), "generation 0 waits on nothing")
+
+        val first = propose(alice)
+        pump(all)
+        assertEquals(RotationHold.Running(first.id), ShareRefreshManager.rotationHold(bob.db, bob.room, bob.key()))
+        approveAll(all, first.id)
+
+        // The refresh is complete and its key state is out for signatures: everyone waits.
+        all.forEach { device ->
+            val hold = ShareRefreshManager.rotationHold(device.db, device.room, device.key())
+            assertTrue(hold is RotationHold.AwaitingKeyState && hold.generation == 1 && hold.signingSessionId != null, "device ${device.index}: $hold")
+        }
+        val refused = assertFailsWith<IllegalStateException> { propose(bob) }
+        assertTrue(refused.message!!.contains("generation 1"), refused.message)
+        assertEquals(listOf(first.id), bob.db.shareRefreshDao().getSessionsForKey(ceremonyId).map { it.id }, "nothing new was opened")
+
+        approveSigning(all)
+        all.forEach { assertNull(ShareRefreshManager.rotationHold(it.db, it.room, it.key()), "device ${it.index}") }
+        assertNotEquals(first.id, propose(bob).id)
+    }
+
+    @Test
+    fun `rotating without a member waits as well`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val (alice, _, carol) = all
+        val first = propose(alice)
+        pump(all)
+        approveAll(all, first.id)
+
+        val refused = assertFailsWith<IllegalStateException> {
+            ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, carol.publicKey)
+        }
+        assertTrue(refused.message!!.contains("not yet signed"), refused.message)
+    }
+
+    @Test
+    fun `a key state with nobody asking for it still holds the next rotation`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val first = propose(all[0])
+        pump(all)
+        approveAll(all, first.id)
+        // The coordinator's key-state proposal failed, or its device went away.
+        all.forEach { device ->
+            device.db.frostSigningSessionDao().getSessionsForChatRoom(group.roomId).forEach {
+                device.db.frostSigningSessionDao().upsert(it.copy(stage = FrostSigningStage.FAILED))
+            }
+        }
+        val hold = ShareRefreshManager.rotationHold(all[1].db, all[1].room, all[1].key())
+        assertEquals(RotationHold.AwaitingKeyState(1, signingSessionId = null), hold)
+    }
+
+    @Test
+    fun `a rebind waiting on signatures holds a rotation, until this device declines it`() = runBlocking<Unit> {
+        // Four members, one left stale: three live signers of a 2-of-n key, so a
+        // single refusal leaves a session open rather than ending it.
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol) = all
+        val staleId = group.idOf[3]
+        val refresh = propose(alice, mapOf(staleId to ShareStanding.STALE))
+        pump(all)
+        approveAll(all, refresh.id)
+        approveSigning(all)
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+
+        val daveKeys = KeyPair()
+        val daveHost = ChillDkgRitualManager.deriveHostPublicKey(daveKeys.privKey!!).value.toHex()
+        val rebind = GroupKeyStateManager.proposeRebind(alice.db, alice.room, alice.publicKey, alice.key(), staleId, daveKeys.pubKey.toHexKey(), daveHost)
+        pump(all)
+
+        listOf(alice, bob, carol).forEach { device ->
+            assertEquals(RotationHold.AwaitingKeyState(1, rebind.id), ShareRefreshManager.rotationHold(device.db, device.room, device.key()), "device ${device.index}")
+        }
+
+        // One refusal does not end it, so it sits open; it no longer holds Bob, who refused it.
+        FrostSigningManager.decline(bob.db, bob.room, rebind.id)
+        pump(all)
+        assertNotEquals(FrostSigningStage.FAILED, bob.db.frostSigningSessionDao().getSessionById(rebind.id)!!.stage)
+        assertNull(ShareRefreshManager.rotationHold(bob.db, bob.room, bob.key()))
+        assertEquals(RotationHold.AwaitingKeyState(1, rebind.id), ShareRefreshManager.rotationHold(carol.db, carol.room, carol.key()))
+    }
+
+    @Test
+    fun `a device that missed the certificate cannot propose from the old generation`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val first = propose(all[0])
+        pump(all)
+        approveAll(all, first.id)
+        approveSigning(all)
+
+        // Alice on a second device that heard the group's signature but none of the refresh.
+        val late = device(group, 0)
+        val signed = assertNotNull(GroupKeyStateManager.signedEventFor(all[1].db, group.roomId)).toEvent()
+        assertNotNull(GroupKeyStateManager.record(late.db, group.roomId, signed))
+        assertEquals(0, late.active().generation)
+
+        assertEquals(RotationHold.Behind(groupGeneration = 1, localGeneration = 0), ShareRefreshManager.rotationHold(late.db, late.room, late.key()))
+        assertFailsWith<IllegalStateException> { propose(late) }
+    }
+
     // ---- Phase 10: re-enrollment -----------------------------------------------------------------------------------
 
     /** Every helper approves every repair waiting on them. */
@@ -641,6 +751,8 @@ class ShareRefreshRitualJvmTest {
             val refresh = propose(all[round % 3])
             pump(all)
             approveAll(all, refresh.id)
+            // The next rotation waits for this one's key state, and the old shares go.
+            approveSigning(all)
         }
         all.forEach { device ->
             assertEquals(3, device.active().generation)

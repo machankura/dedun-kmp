@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.KeyShareGeneration
 import com.machankura.dedun.compose.database.model.KeyShareMember
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
@@ -36,6 +37,7 @@ import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 
 /**
@@ -128,6 +130,7 @@ object ShareRefreshManager {
         require(isKeysRoom(database, localChatRoom, key)) { "${localChatRoom.chatRoom.id} is not the room key ${key.id} signs as" }
 
         running(database, key)?.let { return it }
+        rotationHold(database, localChatRoom, key)?.let { throw IllegalStateException("Cannot rotate yet: ${it.reason}") }
 
         val shares = ShareGenerations.active(database, key)
         requireNotNull(shares.secretShare) { "This device holds no share of generation ${shares.generation}" }
@@ -201,6 +204,53 @@ object ShareRefreshManager {
         val id = ShareGenerations.active(database, key).signerIds[memberPublicKey]
             ?: throw IllegalStateException("They hold no share of the group's key")
         return proposeRefresh(database, localChatRoom, userPublicKey, nostrPrivateKey, key, mapOf(id to ShareStanding.RETIRED))
+    }
+
+    /**
+     * Why this device must not propose a rotation of [key] now, or null when it may
+     * (docs/rotation-waits-for-key-state.md). The Shares section and [proposeRefresh]
+     * both read this, so the button and the protocol cannot disagree.
+     *
+     * A rotation is not over when its refresh is: it is over when the group has
+     * signed the key state at the new generation, the first signature the new
+     * shares make and what every device waits on before deleting the old ones
+     * (D6). Rotating again before then stacks a second unproven generation on the
+     * first, and leaves the first one's key-state proposal to fail under its
+     * signers.
+     *
+     * Checked on the proposer's device only. A recipient a few seconds behind on
+     * the signature would refuse out loud and end a rotation that was fine.
+     */
+    suspend fun rotationHold(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+        running(database, key)?.let { return RotationHold.Running(it.id) }
+
+        val active = ShareGenerations.active(database, key).generation
+        val signed = GroupKeyStateManager.keyStateFor(database, localChatRoom.chatRoom.id)
+            ?.takeIf { it.dkgSessionId == key.id }
+            ?.generation ?: 0
+        if (signed > active) return RotationHold.Behind(groupGeneration = signed, localGeneration = active)
+
+        val open = openKeyStateSession(database, key)
+        if (signed < active || open != null) return RotationHold.AwaitingKeyState(active, open?.id)
+        return null
+    }
+
+    /**
+     * A key-state signing session of [key] still open on this device -- a
+     * rotation's, a rebind's, or the ceremony's first -- unless this device has
+     * declined it. A session fails only once enough members decline, so one this
+     * device has refused can sit open for as long as the others stay quiet; it
+     * does not hold this device's hand for that long.
+     */
+    private suspend fun openKeyStateSession(database: DedunDatabase, key: DkgSession): FrostSigningSession? {
+        val dao = database.frostSigningSessionDao()
+        return dao.getOpenSessionsForKey(key.id)
+            .filter { it.signDeclinedAt == null }
+            .firstOrNull { session ->
+                dao.getItems(session.id).singleOrNull()
+                    ?.let { Event.fromJsonOrNull(it.unsignedEventJson) }
+                    ?.kind == GroupKeyStateEvent.KIND
+            }
     }
 
     /** A refresh of [key] still running on this device, if there is one. One at a time per key. */
