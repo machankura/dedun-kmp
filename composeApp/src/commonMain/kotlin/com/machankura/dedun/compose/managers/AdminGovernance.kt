@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.managers
 
 import com.vitorpamplona.marmot.groups.MarmotGroupPermissions
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ExperimentalFeatures
@@ -98,27 +99,34 @@ object AdminGovernance {
         isKeyedRoom(group) && GovernanceGate.isGoverned(group) && ExperimentalFeatures.shareRefresh
 
     /**
-     * What [me] may do to each member of [group], for the member rows' menus. Empty
-     * when [me] does not govern the room. Removal stays offered in a keyed room,
-     * where it always was, unless it would take the room below [floor] admins
-     * ([adminFloor]); promotion and demotion are not, for [isKeyedRoom]'s reason.
+     * What [MemberActionPolicy] reads, from [group]'s state: its admins, its
+     * members, whether it is keyed and needs the group's signature, and [floor].
+     * What only the database knows -- having left, whose devices a keyed room
+     * waits on, work in flight -- is the caller's to add.
      */
-    fun memberActions(group: MlsGroup, me: HexKey, floor: Int = 1): Map<HexKey, Set<MemberAction>> {
-        if (!MarmotGroupPermissions.canManage(group.currentAdminIdentities(), me)) return emptyMap()
-        return members(group).associateWith { member ->
-            buildSet {
-                if (member == me) {
-                    if (canDemote(group, me, me)) add(MemberAction.STEP_DOWN)
-                } else {
-                    if (canPromote(group, me, member)) add(MemberAction.MAKE_ADMIN)
-                    if (canDemote(group, me, member) && keepsFloor(group, member, floor)) add(MemberAction.REMOVE_AS_ADMIN)
-                    if (MarmotGroupPermissions.canRemove(group.currentAdminIdentities(), me, member) && keepsFloor(group, member, floor)) {
-                        add(MemberAction.REMOVE_FROM_GROUP)
-                    }
-                }
-            }
-        }.filterValues { it.isNotEmpty() }
-    }
+    fun context(group: MlsGroup, me: HexKey, floor: Int = 1): MemberActionContext = MemberActionContext(
+        room = MemberActionRoom.CURRENT,
+        me = me,
+        admins = group.currentAdminIdentities().toSet(),
+        members = members(group),
+        isDisbanded = group.currentGroupState().isDisbanded,
+        isKeyed = isKeyedRoom(group),
+        governed = GovernanceGate.isGoverned(group),
+        shareRefresh = ExperimentalFeatures.shareRefresh,
+        floor = floor,
+    )
+
+    /**
+     * What [me] may do now to each member of [group]: [MemberActionPolicy]'s
+     * options that are open, and members with none left out. Empty when [me] does
+     * not govern the room. Removal stays open in a keyed room, where it always was,
+     * unless it would take the room below [floor] admins ([adminFloor]); promotion
+     * and demotion are not, for [isKeyedRoom]'s reason.
+     */
+    fun memberActions(group: MlsGroup, me: HexKey, floor: Int = 1): Map<HexKey, Set<MemberAction>> =
+        MemberActionPolicy.options(context(group, me, floor), members(group))
+            .mapValues { (_, options) -> options.filter { it.isAvailable }.map { it.action }.toSet() }
+            .filterValues { it.isNotEmpty() }
 
     /** How **Leave group** goes for [me] in [group]: null when [me] is not an admin. */
     fun adminLeave(group: MlsGroup, me: HexKey): AdminLeave? = when {
