@@ -82,7 +82,6 @@ import com.machankura.dedun.compose.exceptions.MarmotMissingNostrGroupDataExtens
 import com.machankura.dedun.compose.exceptions.MarmotNotMemberOfChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.managers.AdminFlags
-import com.machankura.dedun.compose.managers.FoundingAdmins
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.ShareRepairManager
@@ -1002,17 +1001,6 @@ abstract class NostrDao(
                                     GroupKeyStateManager.adopt(
                                         database = database,
                                         chatRoomId = nostrGroupId
-                                    )
-
-                                    // And with the state on file, whether the room
-                                    // names every member of that ceremony as an
-                                    // admin -- this device's own record against the
-                                    // creator's list. docs/robust-group-admins.md,
-                                    // Phase 3.
-                                    FoundingAdmins.announceIfMissing(
-                                        database = database,
-                                        chatRoomId = nostrGroupId,
-                                        userPublicKey = userPublicKey,
                                     )
 
                                     // Where is the decoded welcome message...

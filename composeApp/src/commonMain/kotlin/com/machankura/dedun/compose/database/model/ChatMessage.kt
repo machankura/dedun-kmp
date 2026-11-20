@@ -941,10 +941,15 @@ data class ChatMessage(
         const val TYPE_CHANGE_REJECTED = "changeRejected"
 
         /**
-         * The admin room this device was welcomed into does not name every member
+         * The admin room this device was welcomed into did not name every member
          * of the ceremony that made its key as an admin. Derived at the Welcome
-         * from this device's own record of the ceremony, never received, and
-         * written once. docs/robust-group-admins.md, Phase 3.
+         * from this device's own record of the ceremony, never received.
+         * docs/robust-group-admins.md, Phase 3.
+         *
+         * Retired: no longer written (docs/remove-founding-admins-card.md, D3).
+         * Kept, and kept in [MEMBERSHIP_TYPES], because rows written before are
+         * still on devices, as the user's own, and out of the set each would
+         * render as a bubble from the user.
          */
         const val TYPE_FOUNDING_ADMINS_MISSING = "foundingAdminsMissing"
 
