@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.ui.composable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -93,9 +94,14 @@ fun SearchResultScreen(
     var expanded by rememberSaveable { mutableStateOf(true) }
 
 
-    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) }) { innerPadding ->
+    // The SearchBar takes the window insets itself, so the scaffold gives its content none:
+    // innerPadding is zero, and applied so that stays a decision rather than an oversight.
+    Scaffold(
+        snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

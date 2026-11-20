@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +42,7 @@ internal fun TextNoteFeedItem(
     mentionedProfiles: List<com.machankura.dedun.compose.database.model.intermdiate.LocalMention>,
     onNavigateToEvent: (HexKey) -> Unit
 ) {
-    val expended = mutableStateOf(false)
+    val expended = remember { mutableStateOf(false) }
 
     Column {
 
