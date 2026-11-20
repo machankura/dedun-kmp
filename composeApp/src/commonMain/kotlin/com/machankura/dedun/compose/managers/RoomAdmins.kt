@@ -6,22 +6,20 @@ import com.machankura.dedun.compose.database.DedunDatabase
 
 /**
  * Who a keyed room's live admin policy names, as far as the share work reads it
- * (docs/admin-change-rotation.md): the admins, whether the group's signature
- * governs the room -- so that the policy changes only by a signed commit -- and
- * any founding member [FoundingAdmins.check] finds the policy missing, whose
- * absence the group never signed.
+ * (docs/admin-change-rotation.md): the admins, and whether the group's signature
+ * governs the room, so that the policy changes only by a signed commit. Every
+ * founding member is an admin when the room is made (docs/robust-group-admins.md),
+ * so a holder a governed room's policy does not name is one the group took out.
  */
 data class RoomAdmins(
     val admins: Set<HexKey>,
     val governed: Boolean,
-    val missingFounders: Set<HexKey> = emptySet(),
 ) {
     /**
      * Whether [member] is someone the group's signature took out of the admins:
-     * the room is governed, the policy does not name them, and they are not a
-     * founder it has been missing from the start.
+     * the room is governed and its policy does not name them.
      */
-    fun removedBySignature(member: HexKey): Boolean = governed && member !in admins && member !in missingFounders
+    fun removedBySignature(member: HexKey): Boolean = governed && member !in admins
 
     companion object {
         /**
@@ -36,8 +34,7 @@ data class RoomAdmins(
             override?.let { return it(chatRoomId) }
             val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return null
             val group = runCatching { database.marmotEngine.groupFor(room.routingId) }.getOrNull() ?: return null
-            val missing = (FoundingAdmins.check(database, chatRoomId) as? FoundingAdmins.Check.Missing)?.publicKeys.orEmpty()
-            return RoomAdmins(group.currentAdminIdentities().toSet(), GovernanceGate.isGoverned(group), missing)
+            return RoomAdmins(group.currentAdminIdentities().toSet(), GovernanceGate.isGoverned(group))
         }
     }
 }

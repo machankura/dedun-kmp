@@ -939,34 +939,6 @@ abstract class MarmotOutboundDao(
     }
 
     /**
-     * Adds [publicKeys] to a current-profile room's admin policy, as an admin.
-     *
-     * Additions only. The policy committed is the one the group holds now plus
-     * these -- never a list built somewhere else -- so an admin already there is
-     * never dropped by it. One commit for all of them, through the publish gate
-     * like every other governance change. Nothing to do when every one is already
-     * listed. docs/robust-group-admins.md, Phase 3.
-     */
-    @Transaction
-    open suspend fun addAdmins(localChatRoom: LocalChatRoom, publicKeys: Set<HexKey>) {
-        require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room can change its admins" }
-        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
-            ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
-
-        val current = group.currentAdminIdentities()
-        val added = publicKeys - current
-        if (added.isEmpty()) return
-        // A room whose changes need the group's signature takes no bare commit from
-        // this build (GovernanceMarker; docs/giza-into-dedun.md, Phase 1).
-        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
-
-        val policy = AdminPolicyV1.ofHex(current + added).encode()
-        publishGatedCommit(localChatRoom) { manager, id ->
-            manager.stageAppDataUpdate(id, AdminPolicyV1.COMPONENT_ID, policy)
-        }
-    }
-
-    /**
      * Makes [memberPublicKey] an admin of a room this device administers, by one
      * commit through the publish gate. Nothing happens for someone who already is.
      *

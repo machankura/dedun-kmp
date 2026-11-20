@@ -26,7 +26,6 @@ import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
-import com.machankura.dedun.compose.managers.FoundingAdmins
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
@@ -461,21 +460,6 @@ interface ChatRepository {
     suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey)
 
     /**
-     * Adds [publicKeys] to a current-profile room's admin policy, as an admin of
-     * it: one commit through the publish gate, additions only. The repair for a
-     * room missing founding members from its admins -- see [foundingAdmins] and
-     * docs/robust-group-admins.md, Phase 3.
-     */
-    suspend fun addAdmins(localChatRoom: LocalChatRoom, publicKeys: Set<HexKey>)
-
-    /**
-     * Whether [chatRoomId]'s admin policy names every member of the ceremony that
-     * made its key, as this device's own record of that ceremony has them. See
-     * `FoundingAdmins`.
-     */
-    suspend fun foundingAdmins(chatRoomId: String): FoundingAdmins.Check
-
-    /**
      * Makes [memberPublicKey] an admin of a convenient room this device
      * administers: one commit through the publish gate, captioned when it is
      * applied. Throws with words a person can act on when it cannot be done. See
@@ -814,11 +798,6 @@ interface ChatRepository {
             override suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String? = null
 
             override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
-
-            override suspend fun addAdmins(localChatRoom: LocalChatRoom, publicKeys: Set<HexKey>) = Unit
-
-            override suspend fun foundingAdmins(chatRoomId: String): FoundingAdmins.Check =
-                FoundingAdmins.Check.NotKeyBacked
 
             override suspend fun holdsShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean = false
 

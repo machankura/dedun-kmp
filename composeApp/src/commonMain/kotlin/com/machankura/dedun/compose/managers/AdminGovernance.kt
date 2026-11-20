@@ -181,8 +181,7 @@ object AdminGovernance {
         if (adminChangeHold(database, localChatRoom) != null) return ROTATION_PENDING_REFUSAL
 
         val adminsAfter = (change.admins ?: currentAdmins) - change.removes
-        val missing = RoomAdmins.of(database, localChatRoom.chatRoom.id)?.missingFounders.orEmpty()
-        val retire = holders - adminsAfter - missing
+        val retire = holders - adminsAfter
         // Only a change that itself takes a share away owes a rotation.
         if (retire.none { it in change.removes || it in currentAdmins }) return null
         return ShareRefreshManager.owedRotationRefusal(key, shares, retire)?.let {

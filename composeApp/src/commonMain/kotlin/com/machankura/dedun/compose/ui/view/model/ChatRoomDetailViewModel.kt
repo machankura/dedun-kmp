@@ -328,24 +328,6 @@ class ChatRoomDetailViewModel(
     }
 
     /**
-     * Adds the founding members the room's admin policy is missing, as an admin,
-     * and reloads the screen. One commit, applied when a relay accepts it, so the
-     * warning stays until then. docs/robust-group-admins.md, Phase 3.
-     */
-    fun addMissingFoundingAdmins(localChatRoom: LocalChatRoom, missing: Set<HexKey>, onDone: (String?) -> Unit = {}) {
-        if (isActionPending.value) return
-        isActionPending.value = true
-        viewModelScope.launch(Dispatchers.IO) {
-            val failure = runCatching { chatRepository.addAdmins(localChatRoom, missing) }.exceptionOrNull()
-            initiateChatRoomDetail()
-            viewModelScope.launch(Dispatchers.Main) {
-                isActionPending.value = false
-                onDone(failure?.message)
-            }
-        }
-    }
-
-    /**
      * Finishes the room's founding invite, and reloads the screen. Reports null
      * when it went out, or why not -- naming the founders still without a key
      * package, since only they can publish one. docs/robust-group-admins.md,
