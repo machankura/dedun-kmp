@@ -25,6 +25,7 @@ Where the build chose differently:
 
 | what the plan said | what it turned out to be |
 |---|---|
+| Phase 1's `reconcileAdmins` as the single writer of `adminAt` | `AdminFlags.reconcile`, from [robust-group-admins.md](./robust-group-admins.md), which was built at the same time for the same reason and also runs on the Welcome and once at start. Phase 1's own function was dropped when the two met; its creation-site calls now go through `AdminFlags` |
 | Phase 2's lines in the library's order: departures, arrivals, demotions, promotions | after the membership lines, which keep the order they had (arrivals, then departures); then demotions, then promotions |
 | Phase 3's statement has a `disband` line | a `component` line per GroupContext component the commit changes, by id and the hash of its new value. Disband, enabling disband and a rename are all that one rule, and a statement cannot sign off one component while the commit changes another |
 | Phase 3's kind "in the 303xx range" | 30370, past the last retired wallet kind. 30371 is the own-commit envelope, 30372 the support announcement, 30373 the carrier |
