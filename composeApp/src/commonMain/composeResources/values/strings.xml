@@ -137,6 +137,7 @@
     <string name="require_signatures_explainer">From then on, adding or removing a member, or changing who the admins are, is proposed and has to be signed by the group before it happens.</string>
     <string name="governance_waiting">Waiting for %1$s to open an up-to-date Dedun. Until then, this group can't require its signature on changes, and nobody else can be made an admin.</string>
     <string name="make_admin_body_keyed">They'll be asked to accept, then the group signs it, and they'll hold a share of the group's key and be asked to approve its changes.</string>
+    <string name="make_admin_rotates_first">The group's shares are rotated first. Nobody needs to approve that, and they're asked once it's done.</string>
     <string name="remove_as_admin_body_keyed">Once the group signs it, they stay in the group as a member and their share of the group's key is rotated away.</string>
     <string name="admin_offer_sent">Asked; they become an admin once they accept and the group signs it</string>
     <string name="promotion_offer_body">%1$s asked you to become an admin. You'll hold a share of the group's key, and be asked to approve its changes.</string>

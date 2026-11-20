@@ -515,6 +515,7 @@ fun ChatRoomDetailScreen(
                         action = action,
                         memberName = nameOf(memberPublicKey),
                         keyed = chatRoomDetailUIState.governance is GovernanceStatus.Governed,
+                        rotatesFirst = chatRoomDetailUIState.shares?.generation == 0,
                         onDismiss = { confirmingAdminChange = null },
                         onConfirm = {
                             confirmingAdminChange = null

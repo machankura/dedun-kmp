@@ -118,7 +118,7 @@ object PromotionManager {
      * Offers [target] the role of admin in [localChatRoom], as [me]. Refused, in words
      * a person can act on, where the room or its key cannot take a new admin.
      */
-    suspend fun offer(database: DedunDatabase, localChatRoom: LocalChatRoom, me: HexKey, target: HexKey): HexKey {
+    suspend fun offer(database: DedunDatabase, localChatRoom: LocalChatRoom, me: HexKey, target: HexKey, nostrPrivateKey: ByteArray? = null): HexKey {
         val group = database.marmotEngine.groupFor(localChatRoom.routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
         check(AdminGovernance.keyedChangesAllowed(group)) { "This group's admins can't be changed from this device" }
@@ -129,11 +129,24 @@ object PromotionManager {
         check(AdminGovernance.adminChangeHold(database, localChatRoom) == null) { AdminGovernance.ROTATION_PENDING_REFUSAL }
         val key = FrostSigningManager.completedKey(database, localChatRoom.chatRoom.id)
             ?: throw IllegalStateException("This device holds no share of the group's key")
-        check(ShareGenerations.active(database, key).generation >= 1) {
-            "Rotate the group's shares once before adding an admin: the key's first generation is its ceremony's, and has no room for a new member"
+        // The ceremony's generation has no room for a new id: the first rotation makes
+        // the rows an enrollment extends. Rather than send the admin to rotate by hand
+        // and come back, the offer starts that rotation -- which withholds nobody new,
+        // so nobody is asked to take part -- and its proposal waits for it in
+        // GovernanceFollowThrough (docs/admin-change-rotation.md, Phase 6).
+        val rotatesFirst = ShareGenerations.active(database, key).generation == 0
+        if (rotatesFirst) {
+            checkNotNull(nostrPrivateKey) {
+                "Rotate the group's shares once before adding an admin: the key's first generation is its ceremony's, and has no room for a new member"
+            }
+            ShareRefreshManager.proposeRefresh(database, localChatRoom, me, nostrPrivateKey, key)
         }
         val id = send(database, localChatRoom.chatRoom.id, me, PromotionEvents.OFFER, "", PromotionEvents.offerTags(localChatRoom.chatRoom.id, target))
-        announce(database, localChatRoom.chatRoom.id, me, ChatMessage.TYPE_ADMIN_OFFERED, "Asked ${nameOf(database, target)} to become an admin")
+        announce(
+            database, localChatRoom.chatRoom.id, me, ChatMessage.TYPE_ADMIN_OFFERED,
+            if (rotatesFirst) "Asked ${nameOf(database, target)} to become an admin. The group's shares are rotated first"
+            else "Asked ${nameOf(database, target)} to become an admin",
+        )
         return id
     }
 
@@ -253,6 +266,27 @@ object PromotionManager {
     }
 
     // ---- 3. the proposal, by the device that offered ---------------------------------------------------------------
+
+    /**
+     * Whether [offer], accepted, can be proposed in [localChatRoom] now: not while the
+     * shares are being rotated, which a first promotion starts itself (Phase 6 of
+     * docs/admin-change-rotation.md), and not while the key is still at its
+     * ceremony's generation. Still there with nothing running means the rotation
+     * the offer started was abandoned or failed: the offer ends, said once, and is
+     * dropped on this device, as a step-down request is once used.
+     */
+    suspend fun readyToPropose(database: DedunDatabase, localChatRoom: LocalChatRoom, me: HexKey, offer: MarmotInnerEvent): Boolean {
+        if (AdminGovernance.adminChangeHold(database, localChatRoom) != null) return false
+        val key = FrostSigningManager.completedKey(database, localChatRoom.chatRoom.id) ?: return true
+        if (ShareGenerations.active(database, key).generation >= 1) return true
+        val target = PromotionEvents.value(offer.tags, PromotionEvents.TARGET_TAG)
+        announce(
+            database, localChatRoom.chatRoom.id, me, ChatMessage.TYPE_CHANGE_NOT_APPLIED,
+            "Couldn't make ${target?.let { nameOf(database, it) } ?: "them"} an admin: the rotation it needed did not finish. Make them an admin again",
+        )
+        database.marmotInnerEventDao().deleteById(offer.id)
+        return false
+    }
 
     /** This device's offers that have been accepted and not yet proposed, with their acceptance. */
     suspend fun acceptedOffers(database: DedunDatabase, me: HexKey): List<Pair<MarmotInnerEvent, MarmotInnerEvent>> {

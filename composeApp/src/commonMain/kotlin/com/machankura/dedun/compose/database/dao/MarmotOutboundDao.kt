@@ -949,7 +949,7 @@ abstract class MarmotOutboundDao(
      * docs/member-admin-promotion.md, Phase 6.
      */
     @Transaction
-    open suspend fun promote(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
+    open suspend fun promote(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, nostrPrivateKey: ByteArray? = null) {
         val group = governedGroup(localChatRoom)
         if (memberPublicKey in group.currentAdminIdentities()) return
         // A keyed room: an offer the member accepts, then the group signs the change
@@ -957,7 +957,7 @@ abstract class MarmotOutboundDao(
         // Phase 8).
         if (AdminGovernance.isKeyedRoom(group)) {
             check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
-            PromotionManager.offer(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, memberPublicKey)
+            PromotionManager.offer(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, memberPublicKey, nostrPrivateKey)
             return
         }
         if (memberPublicKey !in AdminGovernance.members(group)) {

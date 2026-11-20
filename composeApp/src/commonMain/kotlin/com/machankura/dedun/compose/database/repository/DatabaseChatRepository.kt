@@ -935,7 +935,8 @@ class DatabaseChatRepository(
     }
 
     override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
-        database.marmotOutboundDao().promote(localChatRoom, memberPublicKey)
+        // The key, for the rotation a first promotion starts (docs/admin-change-rotation.md, Phase 6).
+        database.marmotOutboundDao().promote(localChatRoom, memberPublicKey, privateKeyOrNull()?.second)
     }
 
     override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {

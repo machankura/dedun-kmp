@@ -75,9 +75,10 @@ object GovernanceFollowThrough {
         PromotionManager.acceptedOffers(database, me).forEach { (offer, acceptance) ->
             if (offer.id in failedOffers) return@forEach
             val room = database.chatRoomDao().findChatRoomById(offer.chatRoomId) ?: return@forEach
-            // Waits while the shares are being rotated, rather than failing
-            // (docs/admin-change-rotation.md, A7): proposed on the pass after.
-            if (AdminGovernance.adminChangeHold(database, room) != null) return@forEach
+            // Waits while the shares are being rotated, rather than failing -- a first
+            // promotion's own rotation included -- and is proposed on the pass after
+            // (docs/admin-change-rotation.md, A7 and Phase 6).
+            if (!PromotionManager.readyToPropose(database, room, me, offer)) return@forEach
             runCatching { PromotionManager.propose(database, room, me, offer, acceptance) }.onFailure {
                 if (it is CancellationException) throw it
                 failedOffers += offer.id

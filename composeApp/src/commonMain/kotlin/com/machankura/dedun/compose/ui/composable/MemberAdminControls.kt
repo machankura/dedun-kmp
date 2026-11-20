@@ -63,6 +63,7 @@ import dedun.composeapp.generated.resources.step_down_body_keyed
 import dedun.composeapp.generated.resources.step_down_title
 import dedun.composeapp.generated.resources.unavailable
 import dedun.composeapp.generated.resources.why_this_is_unavailable
+import dedun.composeapp.generated.resources.make_admin_rotates_first
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
@@ -129,13 +130,16 @@ internal fun ConfirmAdminChangeDialog(
     action: MemberAction,
     memberName: String,
     keyed: Boolean = false,
+    rotatesFirst: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val (title, body, confirm) = when (action) {
         MemberAction.MAKE_ADMIN -> Triple(
             stringResource(Res.string.make_admin_title, memberName),
-            stringResource(if (keyed) Res.string.make_admin_body_keyed else Res.string.make_admin_body),
+            // A first promotion rotates the shares itself (docs/admin-change-rotation.md, Phase 6).
+            stringResource(if (keyed) Res.string.make_admin_body_keyed else Res.string.make_admin_body) +
+                if (keyed && rotatesFirst) "\n\n" + stringResource(Res.string.make_admin_rotates_first) else "",
             stringResource(Res.string.make_admin),
         )
         MemberAction.REMOVE_AS_ADMIN -> Triple(

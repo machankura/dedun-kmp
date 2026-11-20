@@ -736,7 +736,11 @@ class GovernanceGateJvmTest {
      * device holds, the floor, a rotation -- without a ceremony or a signature.
      */
     private suspend fun roomKeyHeldBy(holders: List<String>, t: Int = 2) {
-        val hosts = holders.map { "02" + KeyPair().pubKey.toHexKey() }
+        // This device's own as a ceremony derives it, so a rotation it proposes can deal.
+        val hosts = holders.map { holder ->
+            if (holder == userHex) ChillDkgRitualManager.deriveHostPublicKey(user.privKey!!).value.toHex()
+            else "02" + KeyPair().pubKey.toHexKey()
+        }
         val ids = hosts.map { host -> hosts.sorted().indexOf(host) }
         val material = fr.acinq.bitcoin.crypto.frost.Frost.trustedDealerKeygen(
             fr.acinq.bitcoin.PrivateKey(fr.acinq.bitcoin.ByteVector32("ab".repeat(32))), holders.size, t,
@@ -777,9 +781,13 @@ class GovernanceGateJvmTest {
             round1Random = "3".repeat(64), auxRandom = "4".repeat(64),
         ).also { db.shareRefreshDao().upsert(it) }
 
-    /** Pinned before Phase 6: the first promotion in a keyed room is refused, and the admin is sent to rotate by hand. */
+    /**
+     * Phase 6: the first promotion in a keyed room starts the rotation the
+     * ceremony's generation needs, instead of sending the admin to rotate by hand.
+     * Without the key to propose it with, it is refused as before.
+     */
     @Test
-    fun `pinned -- making someone an admin at the ceremony's generation is refused`() = runBlocking {
+    fun `making someone an admin at the ceremony's generation rotates the shares first`() = runBlocking {
         governedRoom()
         appIsAdmin()
         erinAddedSigned()
@@ -788,6 +796,45 @@ class GovernanceGateJvmTest {
         try {
             val refused = assertFailsWith<IllegalStateException> { PromotionManager.offer(db, room(), userHex, erin.hex) }
             assertTrue("Rotate the group's shares once" in refused.message.orEmpty(), refused.message)
+            assertTrue(db.shareRefreshDao().getSessionsForKey(ceremonyId).isEmpty())
+
+            PromotionManager.offer(db, room(), userHex, erin.hex, user.privKey!!)
+            val rotation = db.shareRefreshDao().getSessionsForKey(ceremonyId).single()
+            assertEquals(0, rotation.baseGeneration)
+            assertEquals(emptyMap(), rotation.withheldStandings(), "the rotation before a promotion left someone out")
+            assertEquals(listOf(erin.hex), db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.OFFER))
+                .map { PromotionEvents.value(it.tags, PromotionEvents.TARGET_TAG) })
+
+            // Another offer meanwhile waits on that rotation like any other change.
+            assertEquals(
+                AdminGovernance.ROTATION_PENDING_REFUSAL,
+                assertFailsWith<IllegalStateException> { PromotionManager.offer(db, room(), userHex, erin.hex, user.privKey!!) }.message,
+            )
+        } finally {
+            com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        }
+    }
+
+    /** Phase 6: an accepted first promotion waits for its rotation, and ends out loud, once, if the rotation does not finish. */
+    @Test
+    fun `an accepted first promotion waits for its rotation, and ends if the rotation is abandoned`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        erinAddedSigned()
+        roomKeyHeldBy(listOf(dana.hex, userHex))
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        try {
+            PromotionManager.offer(db, room(), userHex, erin.hex, user.privKey!!)
+            val offer = db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.OFFER)).single()
+            assertFalse(PromotionManager.readyToPropose(db, room(), userHex, offer), "proposed while its rotation ran")
+            assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).isEmpty())
+
+            val rotation = db.shareRefreshDao().getSessionsForKey(ceremonyId).single()
+            ShareRefreshManager.abandon(db, room(), rotation.id)
+            assertFalse(PromotionManager.readyToPropose(db, room(), userHex, offer))
+            assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).single().content.startsWith("Couldn't make Erin an admin"))
+            assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.OFFER)).isEmpty(), "the offer stayed")
+            assertTrue(PromotionManager.acceptedOffers(db, userHex).isEmpty())
         } finally {
             com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
         }
