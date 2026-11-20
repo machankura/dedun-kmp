@@ -19,7 +19,8 @@ make on its own**, to the one ask they left in the admin-change flow.
 (`4550201d` to the commit that adds this header; Phases 3 and 4 are one commit, since
 they ship together), against `b7de119e`, on 2026-11-20. A removal's rotation now asks
 nobody: the only taps in a removal are the `t` signatures on the change. jvmTest
-1411, `m3Audit` at its budgets. The phases are kept as written because they are the
+1411, and 1404 once merged with `giza`, whose founding-admins removal took that check's
+tests; `m3Audit` at its budgets. The phases are kept as written because they are the
 reasoning. Where the build chose differently:
 
 | what the plan said | what it turned out to be |
@@ -42,6 +43,7 @@ reasoning. Where the build chose differently:
 | Phase 6: the whole first promotion in one test | in parts: the offer starting its rotation, the wait, and the abandon in the governance harness, and the rotation running unasked in the ritual harness (A2). The same harness gap as above |
 | Phase 7: the member row's line comes from member-row-actions Phase 5's pending lines | that phase did not leave a line on the row to extend. **Holds a share** reads **Share being rotated away** instead while a running rotation takes it, from `SharesSummary.Running.takingAway` |
 | (not in the plan) | two full `jvmTest` runs each had one identity test time out at 5 seconds (`MultipleProfilesRoundTripJvmTest`, then `IdentitySwitchJvmTest`). Both pass alone, repeatedly, neither starts the governance follow-through, and a third full run passed whole. Load, not this work; not investigated |
+| A4: never retire a founding member `FoundingAdmins.check` reports `Missing` | built, then taken out when this branch met [remove-founding-admins-card.md](./remove-founding-admins-card.md) on `giza`, which deleted the check: it cannot tell a founder a buggy creator left out from one the group demoted, and every founder is an admin when the room is made (robust-group-admins). A governed room's live policy is the whole answer. The two tests of the guard went with it |
 | (not in the plan) | this worktree's build needed its submodules initialised, from the main checkout's copies, and their `local.properties` copied in |
 
 **Not done:** the emulator session in Phase 8. Nothing here has run on a device: not the

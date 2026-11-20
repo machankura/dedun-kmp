@@ -149,8 +149,7 @@ object ShareRefreshManager {
      * A3 and A4): every admin holds a share (R1), so no rotation deals a new one
      * to somebody who is no longer an admin -- whichever rotation runs first after
      * a demotion takes their share away, the one it owes or anybody's. Only in a
-     * governed room, whose admins change only by a signed commit, and never for a
-     * founder the policy has been missing from the start.
+     * governed room, whose admins change only by a signed commit.
      */
     private suspend fun removedBySignature(database: DedunDatabase, localChatRoom: LocalChatRoom, shares: ShareGenerations.Shares): Map<Int, ShareStanding> {
         val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id) ?: return emptyMap()
