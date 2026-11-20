@@ -3,7 +3,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.androidApplication)
-//    alias(libs.plugins.androidx.room)
     alias(libs.plugins.androidx.room3)
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.composeMultiplatform)
@@ -64,7 +63,6 @@ kotlin {
             implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.24.0")
 
             implementation(libs.androidx.activity.compose)
-//            implementation(libs.androidx.room.sqlite.wrapper)
             implementation(libs.compose.uiToolingPreview)
 
             // The daemon itself, for Android. A separate line from core and engine below: this
@@ -84,7 +82,6 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
-//            implementation(libs.androidx.room.runtime)
             implementation(libs.androidx.room3.runtime)
             implementation(libs.androidx.sqlite.bundled)
 
@@ -117,7 +114,6 @@ kotlin {
 
 
 
-//            implementation(libs.lightning.kmp.core)
 
             // resolved via the lightning-kmp-app composite build (see settings.gradle.kts)
             implementation("fr.acinq.phoenix:lightning-kmp-app:1.0.0")
@@ -317,13 +313,11 @@ dependencies {
     // already set content". Merged into the debug manifest only, which is where an instrumented test
     // runs (group Wavelength redesign, phase 9).
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.11.2")
-//    ksp(libs.androidx.room3.compiler)
     add("kspAndroid", libs.androidx.room3.compiler)
     // These configurations only exist when the ios targets are declared, which the kotlin block
     // above does only on a mac.
     if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
         add("kspIosSimulatorArm64", libs.androidx.room3.compiler)
-//        add("kspIosX64", libs.androidx.room.compiler)
         add("kspIosArm64", libs.androidx.room3.compiler)
     }
     add("kspJvm", libs.androidx.room3.compiler)

@@ -25,8 +25,13 @@ Researched on 2026-11-20 against `390d4bc3`. The composite's pins were read from
 
 ### Where the build stands
 
-**Not built.** Each phase records what it turned out to be once it has been built, the way the
-other plans in this folder do.
+**Being built** on `claude/dependency-update-plan-1b853a`, one commit per step. Each phase
+records what it turned out to be in the results table below.
+
+| phase | result |
+|---|---|
+| 0 | the baseline, at `25f14aa4`. `check` green. `jvmTest` 1,407 run, 0 failed, 0 skipped, 182 classes; `testDebugUnitTest` 529 run, 0 failed, 65 classes. `m3-audit`: every budget 0, adaptive APIs **12 against a floor of 12**, navigation components 2 against 2. Resolved graphs: 277 coordinates on `jvmRuntimeClasspath`, 342 on `debugRuntimeClasspath`, 336 on `releaseRuntimeClasspath`. The newest versions were as the tables below say. The build's own warnings are AGP 9's seven deprecated opt-out flags in `gradle.properties` (each "removed in version 10.0"), the obsolete `applicationVariants` API, Kotlin's deprecation of KMP beside `com.android.application`, and three Gradle 10 deprecations (`by getting`, `by registering`), all of them in the composite's scripts rather than Giza's |
+| 1 | built. Eight library entries, the `sqldelight` plugin alias and six version keys removed, with the six commented-out lines in `composeApp/build.gradle.kts` that named them or Room 2's aliases. All three resolved graphs are identical to Phase 0's, line for line. `check` green |
 
 | phase | what it is | rough size |
 |---|---|---|
