@@ -83,6 +83,7 @@ import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import com.machankura.dedun.compose.managers.RotationHold
+import com.machankura.dedun.compose.managers.RoomAdmins
 import com.machankura.dedun.compose.ui.view.state.MemberActionBlocker
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
@@ -1018,6 +1019,7 @@ class DatabaseChatRepository(
                     waitingOn = progress.waitingOn.map(::nameOf),
                     since = progress.since,
                     canAbandon = progress.canAbandon,
+                    takingAway = takingAway(localChatRoom, key, session).associateWith(::nameOf),
                 )
             }
         } ?: signingNewGeneration(localChatRoom, key, shares.generation, refreshes)
@@ -1062,6 +1064,21 @@ class DatabaseChatRepository(
         database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId),
         database.shareRefreshDao().observeSessionsForRoom(chatRoomId),
     ) { _, _, _ -> }
+
+    /**
+     * Whom [session] withholds for good because the group's signature took them out
+     * of the admins: the cause the running card names (docs/admin-change-rotation.md,
+     * Phase 7).
+     */
+    private suspend fun takingAway(localChatRoom: LocalChatRoom, key: DkgSession, session: ShareRefreshSession): List<HexKey> {
+        val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id) ?: return emptyList()
+        val roster = ShareGenerations.at(database, key, session.baseGeneration)?.roster.orEmpty()
+            .associate { it.participantId to it.memberPublicKey }
+        return session.withheldStandings()
+            .filterValues { it == ShareStanding.RETIRED }
+            .keys.mapNotNull { roster[it] }
+            .filter { admins.removedBySignature(it) }
+    }
 
     /**
      * The last step of a rotation: complete, and the group signing the new

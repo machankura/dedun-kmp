@@ -15,7 +15,39 @@ and [rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md). This p
 follows the rule those two set, that **a device asks its owner only for decisions it cannot
 make on its own**, to the one ask they left in the admin-change flow.
 
-**Not built.** Written against `b7de119e`, on 2026-11-20.
+**Built**, one commit per phase on `claude/rotating-shares-admin-approval-edd90c`
+(`4550201d` to the commit that adds this header; Phases 3 and 4 are one commit, since
+they ship together), against `b7de119e`, on 2026-11-20. A removal's rotation now asks
+nobody: the only taps in a removal are the `t` signatures on the change. jvmTest
+1411, `m3Audit` at its budgets. The phases are kept as written because they are the
+reasoning. Where the build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| H1: `rotateAway` is refused "a rotation is still running", says so, and gives up | worse: it is not refused. `proposeRefresh` hands a running rotation back, so `rotateAway` marked the change done **silently**, and the removed member got a share of the next generation with nothing said. Phase 4 checks the rotation it is handed and says so when it still deals to them |
+| H2: the new id is left `STALE` at `g+1` | worse: the rotation **fails**. The binding grows the base generation's table under a rotation dealt against the old one, and round 2's own check refuses the result ("what was dealt does not match the commitments") on every device |
+| Phase 1: pin H5 as "the request is deleted" | the governance harness's room is at its admin floor, so the request was used up by the floor whatever the rotation did. Pinned as used up, then rewritten in Phase 3 to show it kept through the rotation and taken up after |
+| Phase 2: the Shares section's two new held reasons land in Phase 4 | in Phase 2, since the `when` over `RotationHold` is exhaustive |
+| Phase 2: `AdminChangeInFlight` counts the proposer's rows "signed or published and not yet applied" | `SIGNING` or `PUBLISHED`, and the group not yet past the proposal's epoch, which is how `rotationsOwed` tells a change that landed unwatched. A statement session this device declined does not hold it, as for key states |
+| Phase 2: `Enrolling` holds until the enrollment completes or fails | also not for a bound member the live group does not name an admin. A promotion whose commit went stale leaves a signed binding nobody will enroll, which would otherwise hold every rotation for good |
+| (not in the plan) | the share rituals' test devices hold no MLS group, so nothing there can read an admin policy. `RoomAdmins` reads it off the live group, with an `override` the tests set, as `ExperimentalFeatures.shareRefreshOverride` stands in for the build. As with member-admin-promotion, no test runs a whole removal with real MLS and real FROST together: the governed-room tests have no FROST key, and the ritual tests stand the policy in |
+| Phase 3: a test that the freeze also holds while the key state is unsigned | in the ritual harness (`an admin change waits on a rotation until its key state is signed`), where a real rotation produces one; the governance harness's seeded key has no generations |
+| Phase 3: **See the rotation** goes to the group's Shares section | back, to the group's screen beneath, where the Shares section is |
+| Phase 3: *"Waiting on Carol since yesterday"* | the names only, while the rotation is dealing. The card in the Shares section has the time |
+| A12's test goes through `GovernanceManager.propose` | through `ShareRefreshManager.owedRotationRefusal` on a real six-holder roster with a stale member. The governance harness cannot make a member stale |
+| Phase 5: `takePartIfNothingNew` called on arrival, after a commit that changes admins, and in the sweep | once, at `advance`'s one gate, which arrival, a replay and the sweep all reach. The commit-time trigger was not built: a rotation travels as an inner event at the epoch after the commit it follows, so no device reads it before applying that commit, and the sweep covers a session an older build left asking |
+| Phase 5: the transcript line in place of the approval-needed one | with a type of its own, `TYPE_SHARE_REFRESH_TOOK_PART`, in both share-refresh sets so it renders as a notice |
+| Phase 6: `offer` proposes the rotation | `offer` takes the account key, which `DatabaseChatRepository.promoteMember` passes through `MarmotOutboundDao.promote`. Without it, the refusal is as before |
+| Phase 6: two admins offering at once start one rotation, and both offers go ahead after it | the plan contradicted itself: its own freeze refuses the second offer while the first one's rotation runs, and that is what the build does. Two devices offering in the same moment each propose a rotation; the two refuse each other on arrival, as any crossing rotations do, and both offers end out loud once nothing is running |
+| Phase 6: the whole first promotion in one test | in parts: the offer starting its rotation, the wait, and the abandon in the governance harness, and the rotation running unasked in the ritual harness (A2). The same harness gap as above |
+| Phase 7: the member row's line comes from member-row-actions Phase 5's pending lines | that phase did not leave a line on the row to extend. **Holds a share** reads **Share being rotated away** instead while a running rotation takes it, from `SharesSummary.Running.takingAway` |
+| (not in the plan) | two full `jvmTest` runs each had one identity test time out at 5 seconds (`MultipleProfilesRoundTripJvmTest`, then `IdentitySwitchJvmTest`). Both pass alone, repeatedly, neither starts the governance follow-through, and a third full run passed whole. Load, not this work; not investigated |
+| (not in the plan) | this worktree's build needed its submodules initialised, from the main checkout's copies, and their `local.properties` copied in |
+
+**Not done:** the emulator session in Phase 8. Nothing here has run on a device: not the
+held menu, not the first promotion's rotation, not a removal on three phones.
+
+Written against `b7de119e`, on 2026-11-20.
 
 ---
 

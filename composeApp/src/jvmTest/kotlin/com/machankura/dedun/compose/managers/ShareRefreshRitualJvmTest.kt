@@ -1852,6 +1852,26 @@ class ShareRefreshRitualJvmTest {
         assertNull(ShareRefreshManager.owedRotationRefusal(alice.key(), shares, retire = setOf(dave.publicKey)))
     }
 
+    // ---- docs/admin-change-rotation.md, Phase 7: what the Shares section says ----------------------------------------
+
+    /** The running card names whose share the rotation takes away, once taking part asks nothing more. */
+    @Test
+    fun `a rotation after a removal says whose share it takes away`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, _, _, dave) = all
+        admins(group, dave.publicKey)
+        ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+
+        val running = assertNotNull(summaryOn(alice).running, "the proposer sees no rotation running")
+        assertEquals(setOf(dave.publicKey), running.takingAway.keys)
+
+        // A rotation with nobody removed as admin names no cause.
+        RoomAdmins.override = null
+        assertEquals(emptyMap(), summaryOn(alice).running?.takingAway.orEmpty())
+    }
+
     // ---- Phase 12: restore ---------------------------------------------------------------------------------------
 
     /**

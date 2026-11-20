@@ -325,6 +325,8 @@ import dedun.composeapp.generated.resources.this_device_does_not_hold_the_event
 import dedun.composeapp.generated.resources.event_s_still_unreadable
 import dedun.composeapp.generated.resources.recovered_of_event_s
 import dedun.composeapp.generated.resources.recovered_of_still_unreadable
+import dedun.composeapp.generated.resources.rotation_taking_away
+import dedun.composeapp.generated.resources.share_being_rotated_away
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
@@ -381,6 +383,7 @@ fun ChatRoomDetailScreen(
     val adminLabel = stringResource(Res.string.admin_badge)
     val viewProfile = stringResource(Res.string.view_profile)
     val shareLabel = stringResource(Res.string.holds_a_share)
+    val shareBeingRotatedAwayLabel = stringResource(Res.string.share_being_rotated_away)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
     val sharesActionSent = stringResource(Res.string.shares_action_sent)
     val keyStateRequested = stringResource(Res.string.key_state_requested)
@@ -1521,9 +1524,14 @@ fun ChatRoomDetailScreen(
                                             // still owed or still to be rotated away.
                                             // docs/member-admin-promotion.md, D2.
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
+                                            // A share a running rotation is taking away says so, so the
+                                            // window D10 names reads as closing, not only open
+                                            // (docs/admin-change-rotation.md, Phase 7).
+                                            val beingRotatedAway = chatRoomDetailUIState.shares?.running?.takingAway?.containsKey(memberPublicKey) == true
                                             val roles = listOfNotNull(
-                                                adminLabel.takeIf { memberPublicKey in chatRoomDetailUIState.adminPublicKeys },
-                                                shareLabel.takeIf { memberPublicKey in chatRoomDetailUIState.shareHolders },
+                                                adminLabel.takeIf { localParticipant.participant.adminAt != null },
+                                                (if (beingRotatedAway) shareBeingRotatedAwayLabel else shareLabel)
+                                                    .takeIf { memberPublicKey in chatRoomDetailUIState.shareHolders },
                                             )
                                             Column {
                                                 if (roles.isNotEmpty()) {
@@ -2644,6 +2652,12 @@ private fun RotationRunningCard(running: SharesSummary.Running, onAbandon: () ->
                 ),
                 style = MaterialTheme.typography.bodyMedium
             )
+            if (running.takingAway.isNotEmpty()) {
+                Text(
+                    stringResource(Res.string.rotation_taking_away, running.takingAway.values.sorted().joinToString(", ")),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
             if (running.waitingOn.isNotEmpty()) {
                 Text(
                     stringResource(Res.string.waiting_on_s_since_s, running.waitingOn.joinToString(", "), running.since.toFormattedTimeAndDateString()),

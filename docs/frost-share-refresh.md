@@ -495,6 +495,11 @@ host keys, so a room-wide message is fine here, which it is **not** for repair (
 The proposer makes it by proposing, from a dialog that names everyone the proposal leaves out
 ([rotation-waits-for-key-state.md](./rotation-waits-for-key-state.md), Phase 4).
 
+A recipient is asked only when the withheld list holds a decision: a rotation that leaves out
+only members already stale, and members the group's signature took out of a governed room's
+admins, is taken part in unasked, which is what a rotation after an admin change is
+([admin-change-rotation.md](./admin-change-rotation.md), Phase 5).
+
 *As first built there were two gates, and the proposer was asked at both.* `CONFIRM` stood
 before CertEq, on the reasoning that it "stops a coordinator substituting a table the recipients
 never dealt". It never did: that is `participantStep2`'s check, which runs before any prompt

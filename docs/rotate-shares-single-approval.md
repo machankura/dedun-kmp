@@ -548,6 +548,9 @@ instead of two.
 
 ## What this does not do
 
+- *Since then:* a rotation that withholds nobody new -- only members already stale, and
+  members the group's signature removed as admin -- asks nobody at all, the proposer's
+  fellow recipients included ([admin-change-rotation.md](./admin-change-rotation.md)).
 - **It does not run while the app is closed.** The live subscription is
   foreground-only ([long-running-sync.md](./long-running-sync.md)). After
   approving, each member's device still has to be opened once the others have

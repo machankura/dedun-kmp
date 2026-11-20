@@ -89,6 +89,12 @@ data class SharesSummary(
         val since: Instant,
         /** This device is a recipient of a rotation not yet certified, so it may end it for everyone. */
         val canAbandon: Boolean,
+        /**
+         * Members whose share it takes away because the group removed them as admin,
+         * by name: what the rotation is for, when it follows an admin change
+         * (docs/admin-change-rotation.md, Phase 7).
+         */
+        val takingAway: Map<HexKey, String> = emptyMap(),
     ) {
         enum class Step { DEALING, STORING, SIGNING }
     }
