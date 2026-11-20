@@ -219,10 +219,6 @@ import dedun.composeapp.generated.resources.founding_members_invited
 import dedun.composeapp.generated.resources.invite_them
 import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_were_not_invited
 import dedun.composeapp.generated.resources.not_every_founding_member_was_invited
-import dedun.composeapp.generated.resources.founding_members_made_admins_requested
-import dedun.composeapp.generated.resources.make_them_admins
-import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_are_not_admins
-import dedun.composeapp.generated.resources.founding_members_are_not_admins
 import dedun.composeapp.generated.resources.admin
 import dedun.composeapp.generated.resources.admin_badge
 import dedun.composeapp.generated.resources.view_profile
@@ -388,7 +384,6 @@ fun ChatRoomDetailScreen(
     val keyStateRequested = stringResource(Res.string.key_state_requested)
     val rotationHeldAfterRemoval = stringResource(Res.string.rotation_held_after_removal)
     val noKeyToRotate = stringResource(Res.string.rotation_no_key)
-    val madeAdminsRequested = stringResource(Res.string.founding_members_made_admins_requested)
     val foundersInvited = stringResource(Res.string.founding_members_invited)
     val foundersHaveNoKeyPackage = stringResource(Res.string.founding_members_have_no_key_package)
 
@@ -732,36 +727,10 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
-                            // The founding members, where the room is not as the
-                            // ceremony that made its key left it: founders its
-                            // policy does not list as admins, or founders its
-                            // founding invite never reached. Under the key and the
-                            // parent, because it is about the same thing -- who the
-                            // group that made this room is. docs/robust-group-admins.md,
-                            // Phase 5.
-                            if (chatRoomDetailUIState.missingFoundingAdmins.isNotEmpty()) {
-                                item {
-                                    FoundingMembersCard(
-                                        title = stringResource(Res.string.founding_members_are_not_admins),
-                                        body = stringResource(
-                                            Res.string.s_took_part_in_the_key_ceremony_but_are_not_admins,
-                                            chatRoomDetailUIState.founderNamesFor(chatRoomDetailUIState.missingFoundingAdmins),
-                                        ),
-                                        // An admin of a room the app governs: the
-                                        // repair is a commit only they can make.
-                                        actionLabel = stringResource(Res.string.make_them_admins)
-                                            .takeIf { chatRoomDetailUIState.canGovern },
-                                        isActionPending = chatRoomDetailViewModel.isActionPending.value,
-                                        onAction = {
-                                            chatRoomDetailViewModel.addMissingFoundingAdmins(
-                                                localChatRoom = chatRoomDetailUIState.localChatRoom,
-                                                missing = chatRoomDetailUIState.missingFoundingAdmins,
-                                            ) { failure -> notify(failure ?: madeAdminsRequested) }
-                                        },
-                                    )
-                                }
-                            }
-
+                            // The founding members the founding invite never
+                            // reached. Under the key and the parent, because it is
+                            // about the same thing -- who the group that made this
+                            // room is. docs/robust-group-admins.md, Phase 5.
                             if (chatRoomDetailUIState.uninvitedFounders.isNotEmpty()) {
                                 item {
                                     FoundingMembersCard(
@@ -2694,8 +2663,8 @@ private fun RotationRunningCard(running: SharesSummary.Running, onAbandon: () ->
 
 /**
  * Something about this room's founding members that is not as the ceremony
- * left it -- founders it does not list as admins, or founders its invite never
- * reached -- and, where this device can, the one action that repairs it.
+ * left it -- founders its invite never reached -- and, where this device can,
+ * the one action that repairs it.
  *
  * On the error container: the room works, but not as the group that made it
  * agreed, and that is worth more than a supporting line. docs/robust-group-admins.md,

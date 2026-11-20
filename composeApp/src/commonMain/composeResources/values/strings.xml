@@ -1788,10 +1788,6 @@
     <string name="action_reply">Reply</string>
     <string name="action_reply_hint">Message</string>
     <string name="admin">Admin</string>
-    <string name="founding_members_are_not_admins">Founding members aren't admins</string>
-    <string name="s_took_part_in_the_key_ceremony_but_are_not_admins">%1$s took part in the key ceremony that made this group, but this room doesn't list them as admins.</string>
-    <string name="make_them_admins">Make them admins</string>
-    <string name="founding_members_made_admins_requested">Asked the group to make them admins</string>
     <string name="not_every_founding_member_was_invited">Not every founding member was invited</string>
     <string name="s_took_part_in_the_key_ceremony_but_were_not_invited">%1$s took part in the key ceremony that made this group, but the invitation to this room never went out.</string>
     <string name="invite_them">Invite them</string>
