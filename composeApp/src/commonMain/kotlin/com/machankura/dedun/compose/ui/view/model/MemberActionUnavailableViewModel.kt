@@ -78,6 +78,7 @@ class MemberActionUnavailableViewModel(
             when (blocker) {
                 is MemberActionBlocker.NotAnAdmin -> blocker.admins
                 is MemberActionBlocker.SignaturesNotRequired -> blocker.waitingOn
+                is MemberActionBlocker.RotationPending -> blocker.waitingOn
                 else -> emptySet()
             }
         }.toSet()

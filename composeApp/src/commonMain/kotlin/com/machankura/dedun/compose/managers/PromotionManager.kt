@@ -125,6 +125,8 @@ object PromotionManager {
         check(me in group.currentAdminIdentities()) { "Only an admin can make someone else one" }
         require(target in AdminGovernance.members(group)) { "They are not in the group any more" }
         if (target in group.currentAdminIdentities()) return ""
+        // An offer the group cannot act on until a rotation ends only asks them to wait.
+        check(AdminGovernance.adminChangeHold(database, localChatRoom) == null) { AdminGovernance.ROTATION_PENDING_REFUSAL }
         val key = FrostSigningManager.completedKey(database, localChatRoom.chatRoom.id)
             ?: throw IllegalStateException("This device holds no share of the group's key")
         check(ShareGenerations.active(database, key).generation >= 1) {
@@ -194,6 +196,7 @@ object PromotionManager {
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
         check(me in group.currentAdminIdentities()) { "You're not an admin of this group" }
         check(AdminGovernance.stepDownProposer(group, me) != null) { "You're the only admin. Make someone else an admin first" }
+        check(AdminGovernance.adminChangeHold(database, localChatRoom) == null) { AdminGovernance.ROTATION_PENDING_REFUSAL }
         val id = send(database, localChatRoom.chatRoom.id, me, PromotionEvents.STEP_DOWN, "", PromotionEvents.stepDownTags(localChatRoom.chatRoom.id))
         announce(database, localChatRoom.chatRoom.id, me, ChatMessage.TYPE_ADMIN_OFFERED, "You asked to step down as admin. The group signs it next")
         return id
@@ -228,6 +231,9 @@ object PromotionManager {
                 return@forEach
             }
             if (room.chatRoom.userPublicKey != me || AdminGovernance.stepDownProposer(group, requester) != me) return@forEach
+            // Kept, not used up, while the room's shares are being rotated: taken up by
+            // the first pass after the group signs the new ones (docs/admin-change-rotation.md, A7).
+            if (AdminGovernance.adminChangeHold(database, room) != null) return@forEach
 
             val failure = runCatching { database.marmotOutboundDao().demote(room, requester) }.exceptionOrNull()
             if (failure is kotlinx.coroutines.CancellationException) throw failure

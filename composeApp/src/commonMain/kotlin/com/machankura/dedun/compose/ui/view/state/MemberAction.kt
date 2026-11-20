@@ -73,6 +73,13 @@ sealed interface MemberActionBlocker {
 
     /** The member has already been offered admin, and has not answered. */
     data object OfferPending : MemberActionBlocker
+
+    /**
+     * The group's shares are being rotated, until the group signs the new ones;
+     * a change to who holds a share waits for that (docs/admin-change-rotation.md,
+     * Phase 3). [waitingOn]: whom the rotation is waiting on, when it is still dealing.
+     */
+    data class RotationPending(val waitingOn: Set<HexKey> = emptySet()) : MemberActionBlocker
 }
 
 /**

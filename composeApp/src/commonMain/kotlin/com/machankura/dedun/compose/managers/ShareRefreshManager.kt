@@ -143,6 +143,22 @@ object ShareRefreshManager {
 
     private data class Plan(val recipients: List<Int>, val withheld: Map<Int, ShareStanding>, val refusal: String?)
 
+    /**
+     * Why the rotation a change would owe could not run, or null when it could
+     * (docs/admin-change-rotation.md, A12): every live holder of [shares] in
+     * [retire] withheld for good, every stale one withheld again, and the rest
+     * dealt to -- checked by the same [refusal] the rotation itself will meet. The
+     * admin floor counts admins; this counts recipients against every id not yet
+     * retired, so a share left live by an abandoned rotation makes the two differ.
+     */
+    fun owedRotationRefusal(key: DkgSession, shares: ShareGenerations.Shares, retire: Set<HexKey>): String? {
+        val withheld = shares.roster
+            .filter { it.standing == ShareStanding.LIVE && it.memberPublicKey in retire }
+            .associate { it.participantId to ShareStanding.RETIRED }
+        val plan = plan(key, shares, userPublicKey = "", withheld)
+        return refusal(key, shares, plan.recipients, plan.withheld)
+    }
+
     /** A refresh as it would be proposed, by member rather than by id. */
     data class Preview(
         val takingPart: List<HexKey>,

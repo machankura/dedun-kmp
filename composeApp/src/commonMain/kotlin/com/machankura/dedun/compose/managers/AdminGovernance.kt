@@ -146,11 +146,55 @@ object AdminGovernance {
         return ShareRefreshManager.rotationPending(database, localChatRoom, key)
     }
 
+    /** What a change waits on while the room's shares are being rotated. */
+    const val ROTATION_PENDING_REFUSAL = "The group's shares are still being rotated. Admins can change once the group has signed the new shares"
+
+    /**
+     * Whether [change] moves who holds a share of the room's key: it changes the
+     * admins -- every admin holds a share (R1), so a promotion enrolls one and a
+     * demotion rotates one away -- or removes a member who holds one of
+     * [holders]. Inviting or removing anyone else leaves the roster alone, and
+     * does not wait on a rotation (docs/admin-change-rotation.md, A6).
+     */
+    fun touchesShares(change: com.machankura.dedun.compose.nostr.frost.GovernanceChange, holders: Set<HexKey>): Boolean =
+        change.admins != null || change.removes.any { it in holders }
+
+    /**
+     * Why [change] must not be proposed in [localChatRoom] now, as far as the
+     * room's shares go, or null (docs/admin-change-rotation.md, Phase 3): a
+     * change that moves who holds a share waits while a rotation is pending
+     * ([adminChangeHold]), and one that takes a holder's share away is refused
+     * when the rotation it owes could not run (A12) -- before anybody signs it,
+     * since a change that lands with a rotation nobody can run leaves a
+     * non-admin holding a live share.
+     */
+    suspend fun sharesRefusal(
+        database: DedunDatabase,
+        localChatRoom: com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom,
+        change: com.machankura.dedun.compose.nostr.frost.GovernanceChange,
+        currentAdmins: Set<HexKey>,
+    ): String? {
+        val key = keyOf(database, localChatRoom.chatRoom.id) ?: return null
+        val shares = ShareGenerations.active(database, key)
+        val holders = shares.roster.filter { it.standing == com.machankura.dedun.compose.database.model.types.ShareStanding.LIVE }.map { it.memberPublicKey }.toSet()
+        if (!touchesShares(change, holders)) return null
+        if (adminChangeHold(database, localChatRoom) != null) return ROTATION_PENDING_REFUSAL
+
+        val adminsAfter = (change.admins ?: currentAdmins) - change.removes
+        val missing = RoomAdmins.of(database, localChatRoom.chatRoom.id)?.missingFounders.orEmpty()
+        val retire = holders - adminsAfter - missing
+        // Only a change that itself takes a share away owes a rotation.
+        if (retire.none { it in change.removes || it in currentAdmins }) return null
+        return ShareRefreshManager.owedRotationRefusal(key, shares, retire)?.let {
+            "This would owe a rotation of the shares the group can't run: $it. Rotate the shares, or bring stale members back, first"
+        }
+    }
+
     /**
      * The key [chatRoomId] signs with, as this device holds it -- whether or not it
      * can sign with it now: a member withheld from a rotation still follows it.
      */
-    private suspend fun keyOf(database: DedunDatabase, chatRoomId: String): com.machankura.dedun.compose.database.model.DkgSession? =
+    suspend fun keyOf(database: DedunDatabase, chatRoomId: String): com.machankura.dedun.compose.database.model.DkgSession? =
         GroupKeyStateManager.keyStateFor(database, chatRoomId)?.dkgSessionId
             ?.let { database.dkgSessionDao().getSessionById(it) }
             ?.takeIf { it.stage == DkgRitualStage.COMPLETE }

@@ -1824,6 +1824,10 @@
     <string name="member_action_change_pending_body">A relay hasn't accepted the last change to this group yet. This clears by itself.</string>
     <string name="member_action_offer_pending_title">%1$s has already been asked</string>
     <string name="member_action_offer_pending_body">They've been offered admin and haven't answered yet.</string>
+    <string name="member_action_rotation_pending_title">The group's shares are being rotated</string>
+    <string name="member_action_rotation_pending_body">Admins can change once the group has signed the new shares. This clears by itself.</string>
+    <string name="member_action_rotation_pending_waiting_body">Waiting on %1$s. Admins can change once the group has signed the new shares.</string>
+    <string name="see_the_rotation">See the rotation</string>
     <string name="also_in_the_way">Also in the way</string>
     <string name="you_can_do_this_now">You can do this now</string>
     <string name="you_can_do_this_now_body">Nothing stands in the way any more. Go back to the group to do it.</string>

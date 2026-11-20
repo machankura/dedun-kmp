@@ -793,20 +793,78 @@ class GovernanceGateJvmTest {
         }
     }
 
-    /** Pinned before Phase 3 (H5): a step-down request taken up while a rotation runs is used up, whatever it meets. */
+    /** H5: a step-down request that arrives during a rotation waits for it, and is taken up after. */
     @Test
-    fun `pinned -- a step-down request taken up during a rotation is used up`() = runBlocking {
+    fun `a step-down request waits through a rotation and is taken up once it ends`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        roomKeyHeldBy(listOf(dana.hex, userHex))
+        val rotation = rotationRunning()
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        try {
+            danaSays(PromotionEvents.STEP_DOWN, "", PromotionEvents.stepDownTags(roomId))
+            assertEquals(0, PromotionManager.followStepDowns(db, userHex))
+            assertEquals(1, db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).size, "the request was used up")
+            assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).isEmpty())
+
+            // The rotation ends; the next pass takes the request up. This room is at its
+            // floor, so the demotion is refused there, out loud, and the request is used.
+            db.shareRefreshDao().upsert(rotation.copy(stage = com.machankura.dedun.compose.database.model.types.ShareRefreshStage.FAILED))
+            PromotionManager.followStepDowns(db, userHex)
+            assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).isEmpty())
+            assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).any { "as they asked" in it.content })
+        } finally {
+            com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        }
+    }
+
+    /** H1, from the admin side: a demotion is not proposed while the shares are being rotated. */
+    @Test
+    fun `a demotion proposed while the shares are being rotated is refused, and nothing is signed`() = runBlocking {
         governedRoom()
         appIsAdmin()
         roomKeyHeldBy(listOf(dana.hex, userHex))
         rotationRunning()
+
+        val refused = assertFailsWith<IllegalStateException> {
+            GovernanceManager.propose(db, room(), userHex, thenRotateWithout = dana.hex, propose = ::demoteDana)
+        }
+        assertEquals(AdminGovernance.ROTATION_PENDING_REFUSAL, refused.message)
+        assertTrue(db.governanceProposalDao().getAll().isEmpty())
+        assertTrue(db.frostSigningSessionDao().getSessionsForChatRoom(roomId).isEmpty(), "a signature was asked for")
+    }
+
+    @Test
+    fun `nobody is offered admin, and nobody asks to step down, while the shares are being rotated`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        erinAddedSigned()
+        roomKeyHeldBy(listOf(dana.hex, userHex))
+        rotationRunning()
         com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
         try {
-            danaSays(PromotionEvents.STEP_DOWN, "", PromotionEvents.stepDownTags(roomId))
-            PromotionManager.followStepDowns(db, userHex)
-            assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).isEmpty(), "the request was kept")
+            assertEquals(AdminGovernance.ROTATION_PENDING_REFUSAL, assertFailsWith<IllegalStateException> { PromotionManager.offer(db, room(), userHex, erin.hex) }.message)
+            assertEquals(AdminGovernance.ROTATION_PENDING_REFUSAL, assertFailsWith<IllegalStateException> { PromotionManager.requestStepDown(db, room(), userHex) }.message)
+            assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.OFFER, PromotionEvents.STEP_DOWN)).isEmpty())
+
+            // The member rows say why, with the share holders' removal held and nobody else's.
+            val options = chatRepository.memberActionOptions(room())
+            val rotating = options.getValue(dana.hex).first { it.action == com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_AS_ADMIN }.blockers
+            assertTrue(rotating.any { it is com.machankura.dedun.compose.ui.view.state.MemberActionBlocker.RotationPending }, rotating.toString())
+            val erinRemoval = options.getValue(erin.hex).first { it.action == com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_FROM_GROUP }.blockers
+            assertTrue(erinRemoval.none { it is com.machankura.dedun.compose.ui.view.state.MemberActionBlocker.RotationPending }, erinRemoval.toString())
         } finally {
             com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
         }
+    }
+
+    /** A6: only a change that moves who holds a share waits on a rotation. */
+    @Test
+    fun `inviting or removing a member with no share does not touch the shares`() {
+        val holders = setOf(dana.hex, userHex)
+        assertFalse(AdminGovernance.touchesShares(GovernanceChange(removes = setOf(erin.hex)), holders))
+        assertFalse(AdminGovernance.touchesShares(GovernanceChange(adds = setOf(com.machankura.dedun.compose.nostr.frost.AddedMember(erin.hex, "r"))), holders))
+        assertTrue(AdminGovernance.touchesShares(GovernanceChange(removes = setOf(dana.hex)), holders))
+        assertTrue(AdminGovernance.touchesShares(GovernanceChange(admins = setOf(userHex)), holders))
     }
 }

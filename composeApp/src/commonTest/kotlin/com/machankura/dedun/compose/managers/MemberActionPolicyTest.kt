@@ -191,4 +191,27 @@ class MemberActionPolicyTest {
             context.blockers(bob, MemberAction.REMOVE_FROM_GROUP),
         )
     }
+
+    // docs/admin-change-rotation.md, Phase 3
+
+    @Test
+    fun `a rotation under way holds every change of role, and the removal of a share holder only`() {
+        val rotating = MemberActionBlocker.RotationPending(waitingOn = setOf(carol))
+        val context = keyed(
+            admins = setOf(me, bob, carol, dana),
+            members = setOf(me, bob, carol, dana, gone),
+        ).copy(rotationPending = rotating, shareHolders = setOf(me, bob, carol, dana))
+
+        assertEquals(listOf(rotating), context.blockers(bob, MemberAction.REMOVE_AS_ADMIN))
+        assertEquals(listOf(rotating), context.blockers(bob, MemberAction.REMOVE_FROM_GROUP))
+        assertEquals(listOf(rotating), context.blockers(gone, MemberAction.MAKE_ADMIN))
+        // Someone with no share leaves the roster alone: their removal does not wait.
+        assertTrue(context.blockers(gone, MemberAction.REMOVE_FROM_GROUP).isEmpty())
+        // Your own row lists nothing it cannot do.
+        assertNull(MemberActionPolicy.options(context, listOf(me))[me])
+
+        val settled = context.copy(rotationPending = null)
+        assertTrue(settled.blockers(bob, MemberAction.REMOVE_AS_ADMIN).isEmpty())
+        assertTrue(settled.option(me, MemberAction.STEP_DOWN)!!.isAvailable)
+    }
 }

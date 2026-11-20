@@ -125,6 +125,10 @@ object GovernanceManager {
             val remaining = admins - prepared.change.removes
             check(remaining.size >= floor) { "A group with a shared key needs at least $floor admins. Make someone else an admin first" }
         }
+        // Admin changes and rotations take turns, and a change that owes a rotation
+        // has to owe one the group can run. docs/admin-change-rotation.md, Phase 3.
+        AdminGovernance.sharesRefusal(database, localChatRoom, prepared.change, live.currentAdminIdentitiesSet())
+            ?.let { throw IllegalStateException(it) }
 
         // The statement leads; anything signed with it -- a promotion's key state --
         // is one decision by one quorum, so it is one batch.

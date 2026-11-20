@@ -84,6 +84,7 @@ import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import com.machankura.dedun.compose.managers.RotationHold
+import com.machankura.dedun.compose.ui.view.state.MemberActionBlocker
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import com.machankura.dedun.compose.database.model.types.ShareStanding
@@ -903,7 +904,7 @@ class DatabaseChatRepository(
                     changePending = engine.groupFor(localChatRoom.routingId) != null &&
                         !engine.gate.canPrepareLocalCommit(localChatRoom.routingId),
                     offeredAdmin = if (context.isKeyed) PromotionManager.unansweredOfferTargets(database, chatRoom.id) else emptySet(),
-                )
+                ).let { if (it.isKeyed) withShares(localChatRoom, it) else it }
             }
         }
         return MemberActionPolicy.options(context, rows)
@@ -911,6 +912,27 @@ class DatabaseChatRepository(
 
     override suspend fun requireSignatures(localChatRoom: LocalChatRoom) {
         database.marmotOutboundDao().requireSignatures(localChatRoom)
+    }
+
+    /**
+     * [context] with what the room's shares say about its member rows: a rotation
+     * still under way, and whom it waits on, and who holds a live share.
+     * docs/admin-change-rotation.md, Phase 3.
+     */
+    private suspend fun withShares(localChatRoom: LocalChatRoom, context: MemberActionContext): MemberActionContext {
+        val key = AdminGovernance.keyOf(database, localChatRoom.chatRoom.id) ?: return context
+        val holders = ShareGenerations.active(database, key).roster
+            .filter { it.standing == ShareStanding.LIVE }
+            .map { it.memberPublicKey }
+            .toSet()
+        val pending = AdminGovernance.adminChangeHold(database, localChatRoom)?.let { hold ->
+            val waitingOn = (hold as? RotationHold.Running)
+                ?.let { database.shareRefreshDao().getSessionById(it.refreshId) }
+                ?.let { ShareRefreshManager.progress(database, it)?.waitingOn }
+                .orEmpty()
+            MemberActionBlocker.RotationPending(waitingOn.toSet())
+        }
+        return context.copy(rotationPending = pending, shareHolders = holders)
     }
 
     override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {

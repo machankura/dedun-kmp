@@ -1514,12 +1514,14 @@ class ShareRefreshRitualJvmTest {
     }
 
     /**
-     * H1: a removal that lands while a rotation runs. The rotation it owes is handed
-     * the running one back -- which was proposed before the removal, deals to the
-     * removed member, and leaves them a live share of the new generation.
+     * H1: a removal that lands while a rotation runs is handed the running one, which
+     * was proposed before the removal and deals to the removed member. The freeze
+     * keeps that removal from being proposed (Phase 3); if one lands anyway, the
+     * rotation it owes is not marked done as if the running one were it.
      */
     @Test
-    fun `pinned -- a removal during a rotation leaves the removed member a live share`() = runBlocking<Unit> {
+    fun `a removal's rotation is not taken for one already running that deals to them`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
         val group = Group(4, 2)
         val all = devicesFor(group)
         val (alice, _, _, dave) = all
@@ -1528,10 +1530,19 @@ class ShareRefreshRitualJvmTest {
 
         val owed = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
         assertEquals(running.id, owed.id, "the owed rotation was handed the running one")
-        approveAll(all, running.id)
 
-        assertEquals(1, alice.active().generation)
-        assertEquals(ShareStanding.LIVE, alice.active().roster.single { it.memberPublicKey == dave.publicKey }.standing)
+        val proposal = com.machankura.dedun.compose.database.model.GovernanceProposal(
+            id = "d".repeat(64), chatRoomId = group.roomId, routingId = group.roomId, epoch = 1, frostSigningSessionId = "s",
+            commitEventId = "e".repeat(64), commitEventJson = "{}", priorStateHex = "", pendingStateHex = "",
+            stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.APPLIED, thenRotateWithout = dave.publicKey,
+        )
+        alice.db.governanceProposalDao().upsert(proposal)
+        GovernanceFollowThrough.pass(alice.db, alice.keyPair)
+
+        assertEquals(com.machankura.dedun.compose.database.model.GovernanceProposalStage.DONE, alice.db.governanceProposalDao().getById(proposal.id)!!.stage)
+        val said = alice.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).map { it.chatMessage }
+            .filter { it.messageType == ChatMessage.TYPE_CHANGE_NOT_APPLIED }
+        assertTrue(said.any { "still deals to them" in it.content }, said.map { it.content }.toString())
     }
 
     /**
@@ -1687,6 +1698,58 @@ class ShareRefreshRitualJvmTest {
         // The key state signs itself as the rotation completes; then nothing is pending.
         pump(all)
         assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room))
+    }
+
+    // ---- docs/admin-change-rotation.md, Phases 3 and 4 ---------------------------------------------------------------
+
+    /** H3: the rotation waits out a new admin's enrollment, and then deals to them. */
+    @Test
+    fun `a rotation after an enrollment deals to the new admin`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val erinKeys = KeyPair()
+        val erin = stranger(alice.group, erinKeys)
+        bindNextId(all, erin.publicKey, ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+        assertFailsWith<IllegalStateException> { propose(alice) }
+
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, handoverFrom(alice, erin.publicKey))
+        val everyone = all + erin
+        pump(everyone)
+
+        val refresh = propose(alice)
+        assertTrue(3 in refresh.recipientIdList(), "the new admin was left out")
+        pump(everyone)
+        approveAll(everyone, refresh.id)
+        everyone.forEach { device -> assertEquals(2, device.active().generation, "device ${device.index}") }
+        assertNotNull(erin.active().secretShare, "the new admin holds no share of the new generation")
+    }
+
+    /**
+     * A12: the admin floor counts admins, a rotation counts recipients against every
+     * id not yet retired. With one member stale and another's share left live by an
+     * abandoned rotation, retiring a third would leave no majority.
+     */
+    @Test
+    fun `a removal is refused when the rotation it owes could not run`() = runBlocking<Unit> {
+        val group = Group(6, 3)
+        val all = devicesFor(group)
+        val carol = all[2]
+        val first = propose(all[0], mapOf(group.idOf[carol.index] to ShareStanding.STALE))
+        pump(all)
+        approveAll(all, first.id)
+        pump(all)
+        val alice = all[0]
+        val shares = alice.active()
+        assertEquals(1, shares.generation)
+        val (eve, dave) = all[4] to all[3]
+
+        // Eve's share was left live when her rotation was abandoned; Dave is being removed.
+        val refused = ShareRefreshManager.owedRotationRefusal(alice.key(), shares, retire = setOf(eve.publicKey, dave.publicKey))
+        assertNotNull(refused)
+        assertTrue("majority" in refused, refused)
+        // Dave alone would be fine.
+        assertNull(ShareRefreshManager.owedRotationRefusal(alice.key(), shares, retire = setOf(dave.publicKey)))
     }
 
     // ---- Phase 12: restore ---------------------------------------------------------------------------------------

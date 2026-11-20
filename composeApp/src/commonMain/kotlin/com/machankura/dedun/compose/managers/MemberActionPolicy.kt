@@ -48,6 +48,14 @@ data class MemberActionContext(
     val changePending: Boolean = false,
     /** Members this account has offered admin and who have not answered. */
     val offeredAdmin: Set<HexKey> = emptySet(),
+    /**
+     * A rotation of the room's key still under way, which every change to who holds
+     * a share waits on, with whom it waits on; null when none is.
+     * docs/admin-change-rotation.md, Phase 3.
+     */
+    val rotationPending: MemberActionBlocker.RotationPending? = null,
+    /** Who holds a live share of the room's key: their removal waits on a rotation too. */
+    val shareHolders: Set<HexKey> = emptySet(),
 )
 
 /**
@@ -85,6 +93,7 @@ object MemberActionPolicy {
                 // proposes, because a rotation's proposer has to keep a share. So the
                 // room's rules, the floor, and another admin with a leaf to ask.
                 context.governed && context.shareRefresh &&
+                    context.rotationPending == null &&
                     context.me in context.admins &&
                     keepsFloor(context, context.me) &&
                     context.admins.any { it != context.me && it in context.members }
@@ -122,20 +131,22 @@ object MemberActionPolicy {
             else -> null
         }
         val pending = listOfNotNull(MemberActionBlocker.ChangePending.takeIf { context.changePending })
+        // Every role change moves a share (R1); a removal does only for a holder (A6).
+        val rotating = listOfNotNull(context.rotationPending)
 
         val role = if (isAdmin) {
-            room + actor + keyed + listOfNotNull(floor) + pending
+            room + actor + keyed + listOfNotNull(floor) + pending + rotating
         } else {
             room + actor + keyed + listOfNotNull(
                 MemberActionBlocker.NotInGroupYet.takeUnless { inGroup },
-            ) + pending + listOfNotNull(
+            ) + pending + rotating + listOfNotNull(
                 MemberActionBlocker.OfferPending.takeIf { member in context.offeredAdmin },
             )
         }
         val removal = room + actor + listOfNotNull(
             MemberActionBlocker.NotInGroupYet.takeUnless { inGroup },
             floor,
-        ) + pending
+        ) + pending + rotating.takeIf { member in context.shareHolders }.orEmpty()
 
         return listOf(MemberActionOption(roleAction, role), MemberActionOption(MemberAction.REMOVE_FROM_GROUP, removal))
     }

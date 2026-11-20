@@ -19,6 +19,7 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GovernanceProposal
 import com.machankura.dedun.compose.database.model.GovernanceProposalStage
+import com.machankura.dedun.compose.database.model.types.ShareStanding
 
 /**
  * What a governed room's signed changes need after they land, taken by the device
@@ -44,7 +45,9 @@ object GovernanceFollowThrough {
                 listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER, PromotionEvents.STEP_DOWN, GovernanceSupportEvent.KIND)
             ),
             database.groupSignedEventDao().observeByKind(GroupKeyStateEvent.KIND),
-        ) { _, _, _ -> Unit }
+            // A rotation abandoned or failed releases what waited on it, with no key state filed.
+            database.shareRefreshDao().observeRunningCount(),
+        ) { _, _, _, _ -> Unit }
             .conflate()
             .collect {
                 try {
@@ -72,6 +75,9 @@ object GovernanceFollowThrough {
         PromotionManager.acceptedOffers(database, me).forEach { (offer, acceptance) ->
             if (offer.id in failedOffers) return@forEach
             val room = database.chatRoomDao().findChatRoomById(offer.chatRoomId) ?: return@forEach
+            // Waits while the shares are being rotated, rather than failing
+            // (docs/admin-change-rotation.md, A7): proposed on the pass after.
+            if (AdminGovernance.adminChangeHold(database, room) != null) return@forEach
             runCatching { PromotionManager.propose(database, room, me, offer, acceptance) }.onFailure {
                 if (it is CancellationException) throw it
                 failedOffers += offer.id
@@ -137,7 +143,18 @@ object GovernanceFollowThrough {
         val room = database.chatRoomDao().findChatRoomById(proposal.chatRoomId) ?: return
         val me = keyPair.pubKey.toHexKey()
         val privateKey = keyPair.privKey ?: return
-        val failure = runCatching { ShareRefreshManager.proposeWithout(database, room, me, privateKey, member) }.exceptionOrNull()
+        val failure = runCatching {
+            val rotation = ShareRefreshManager.proposeWithout(database, room, me, privateKey, member)
+            // A rotation already running is handed back. If it was proposed before
+            // the change and deals to the member, it is not the one owed: it would
+            // leave them a live share of the next generation
+            // (docs/admin-change-rotation.md, H1).
+            val id = ShareGenerations.at(database, database.dkgSessionDao().getSessionById(rotation.dkgSessionId)!!, rotation.baseGeneration)
+                ?.signerIds?.get(member)
+            check(id == null || rotation.withheldStandings()[id] == ShareStanding.RETIRED) {
+                "a rotation that still deals to them was already running"
+            }
+        }.exceptionOrNull()
         if (failure is CancellationException) throw failure
         database.governanceProposalDao().upsert(proposal.copy(stage = GovernanceProposalStage.DONE, updatedAt = Clock.System.now()))
         if (failure != null) {

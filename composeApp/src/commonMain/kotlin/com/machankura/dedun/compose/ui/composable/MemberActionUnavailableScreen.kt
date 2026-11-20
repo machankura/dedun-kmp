@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -70,6 +71,10 @@ import dedun.composeapp.generated.resources.step_down_as_admin
 import dedun.composeapp.generated.resources.this_no_longer_applies
 import dedun.composeapp.generated.resources.you_can_do_this_now
 import dedun.composeapp.generated.resources.you_can_do_this_now_body
+import dedun.composeapp.generated.resources.member_action_rotation_pending_title
+import dedun.composeapp.generated.resources.member_action_rotation_pending_body
+import dedun.composeapp.generated.resources.member_action_rotation_pending_waiting_body
+import dedun.composeapp.generated.resources.see_the_rotation
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomDetailRoute
@@ -193,6 +198,14 @@ fun MemberActionUnavailableScreen(
                         }
                     }
 
+                    // The rotation is on the group's screen, under Shares, with Abandon
+                    // for one that has stalled (docs/admin-change-rotation.md, A10).
+                    if (lead is MemberActionBlocker.RotationPending) {
+                        Button(onClick = onNavigateBack) {
+                            Text(stringResource(Res.string.see_the_rotation))
+                        }
+                    }
+
                     val rest = state.blockers.drop(1)
                     if (rest.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
@@ -283,6 +296,7 @@ private fun MemberActionBlocker.icon(): ImageVector = when (this) {
     is MemberActionBlocker.BelowFloor -> Icons.Default.AdminPanelSettings
     MemberActionBlocker.ChangePending,
     MemberActionBlocker.OfferPending -> Icons.Default.Schedule
+    is MemberActionBlocker.RotationPending -> Icons.Default.Sync
 }
 
 @Composable
@@ -299,6 +313,7 @@ private fun MemberActionBlocker.title(memberName: String): String = when (this) 
     is MemberActionBlocker.BelowFloor -> stringResource(Res.string.member_action_below_floor_title, floor.toString())
     MemberActionBlocker.ChangePending -> stringResource(Res.string.member_action_change_pending_title)
     MemberActionBlocker.OfferPending -> stringResource(Res.string.member_action_offer_pending_title, memberName)
+    is MemberActionBlocker.RotationPending -> stringResource(Res.string.member_action_rotation_pending_title)
 }
 
 @Composable
@@ -315,6 +330,9 @@ private fun MemberActionBlocker.body(names: Map<HexKey, String>): String = when 
     is MemberActionBlocker.BelowFloor -> stringResource(Res.string.member_action_below_floor_body)
     MemberActionBlocker.ChangePending -> stringResource(Res.string.member_action_change_pending_body)
     MemberActionBlocker.OfferPending -> stringResource(Res.string.member_action_offer_pending_body)
+    is MemberActionBlocker.RotationPending ->
+        if (waitingOn.isEmpty()) stringResource(Res.string.member_action_rotation_pending_body)
+        else stringResource(Res.string.member_action_rotation_pending_waiting_body, waitingOn.namedBy(names))
 }
 
 /** The menu's word for [this], which is also this screen's title. */
