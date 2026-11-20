@@ -67,6 +67,7 @@ class ShareRefreshRitualJvmTest {
     fun closeDatabases() {
         devices.forEach { it.db.close() }
         com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        RoomAdmins.override = null
     }
 
     private val ceremonyId = "ceremony".padEnd(64, '0')
@@ -1494,23 +1495,122 @@ class ShareRefreshRitualJvmTest {
 
     // ---- docs/admin-change-rotation.md: today's behaviour, pinned ---------------------------------------------------
 
+    /** The room's live admins, as a governed room's policy would name them after the group signed a change. */
+    private fun admins(group: Group, vararg removed: HexKey, governed: Boolean = true) {
+        RoomAdmins.override = { RoomAdmins(group.members.toSet() - removed.toSet(), governed) }
+    }
+
+    private suspend fun approvalLines(device: Device) =
+        device.db.chatMessageDao().getChatMessagesByChatRoomId(device.group.roomId).map { it.chatMessage }
+            .filter { it.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED }
+
     /**
-     * The rotation a removal owes, as `GovernanceFollowThrough.rotateAway` opens it.
-     * Pinned before Phase 5: every remaining holder is asked to take part, though the
-     * group's signature on the removal already decided who is withheld.
+     * The rotation a removal owes, as `GovernanceFollowThrough.rotateAway` opens it,
+     * runs with nobody asked: the group's signature on the removal decided who is
+     * withheld. The only taps in the whole flow were the signatures on the change.
      */
     @Test
-    fun `pinned -- after a removal, every remaining holder is asked to take part in its rotation`() = runBlocking<Unit> {
+    fun `after a removal, the rotation it owes runs without asking anyone`() = runBlocking<Unit> {
         val group = Group(4, 2)
         val all = devicesFor(group)
         val (alice, bob, carol, dave) = all
+        admins(group, dave.publicKey)
         val refresh = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
         pump(all)
 
-        listOf(bob, carol).forEach { device ->
-            assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index}")
+        listOf(alice, bob, carol).forEach { device ->
+            assertEquals(ShareRefreshStage.COMPLETE, device.refresh(refresh.id)?.stage, "device ${device.index}")
+            assertEquals(1, device.active().generation, "device ${device.index}")
+            assertTrue(approvalLines(device).isEmpty(), "device ${device.index} was asked")
+            assertEquals(ShareStanding.RETIRED, device.active().roster.single { it.memberPublicKey == dave.publicKey }.standing)
         }
-        all.forEach { assertEquals(0, it.active().generation, "device ${it.index} moved without anyone agreeing") }
+        listOf(bob, carol).forEach { device ->
+            val took = device.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).map { it.chatMessage }
+                .single { it.messageType == ChatMessage.TYPE_SHARE_REFRESH_TOOK_PART }
+            assertTrue("whom the group removed as admin" in took.content, took.content)
+        }
+        // The key state signed itself, and the old shares are gone.
+        assertEquals(1, GroupKeyStateManager.keyStateFor(alice.db, group.roomId)?.generation)
+        assertNull(alice.key().secretShare, "the ceremony's share is still here")
+    }
+
+    /** A2: a rotation that leaves out only who is stale already asks nobody either. */
+    @Test
+    fun `a rotation that leaves out only the stale is taken part in unasked`() = runBlocking<Unit> {
+        val (group, all) = rotatedWithout(2)
+        val (alice, bob, _) = all
+        admins(group)
+        val refresh = propose(alice)
+        assertEquals(mapOf(group.idOf[2] to ShareStanding.STALE), refresh.withheldStandings())
+        pump(all)
+        assertEquals(ShareRefreshStage.COMPLETE, bob.refresh(refresh.id)?.stage)
+        assertTrue(approvalLines(bob).none { it.createdAt > refresh.createdAt }, "Bob was asked")
+    }
+
+    /** Anything new on the withheld list is a decision, and is asked as it always was. */
+    @Test
+    fun `a rotation that withholds anyone the group has not decided about is still asked`() = runBlocking<Unit> {
+        suspend fun asksBob(arrange: (Group) -> Unit, open: suspend (List<Device>) -> com.machankura.dedun.compose.database.model.ShareRefreshSession) {
+            val group = Group(4, 2)
+            val all = devicesFor(group)
+            arrange(group)
+            val refresh = open(all)
+            pump(all)
+            assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(all[1].db, all[1].refresh(refresh.id)!!))
+            assertEquals(1, approvalLines(all[1]).size)
+        }
+        suspend fun without(all: List<Device>) = ShareRefreshManager.proposeWithout(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, all[3].publicKey)
+
+        // Withheld for good, and still an admin.
+        asksBob({ admins(it) }, ::without)
+        // Withheld until brought back, and live here.
+        asksBob({ admins(it) }) { all -> propose(all[0], mapOf(all[0].group.idOf[3] to ShareStanding.STALE)) }
+        // A room whose admins change without the group's signature.
+        asksBob({ admins(it, it.members[3], governed = false) }, ::without)
+    }
+
+    /** A3: every rotation retires the holders the group took out of the admins, not only the one a removal owes. */
+    @Test
+    fun `any rotation withholds for good whoever is no longer an admin`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val dave = group.members[3]
+        val daveId = group.idOf[3]
+
+        admins(group, dave, governed = false)
+        assertEquals(emptyMap(), ShareRefreshManager.preview(alice.db, alice.room, alice.publicKey)!!.withheld, "an ungoverned room's admins are not the group's word")
+
+        admins(group, dave)
+        assertEquals(mapOf(dave to ShareStanding.RETIRED), ShareRefreshManager.preview(alice.db, alice.room, alice.publicKey)!!.withheld)
+        assertEquals(mapOf(daveId to ShareStanding.RETIRED), propose(alice).withheldStandings())
+    }
+
+    /**
+     * A proposal read before the change that it follows has been applied here is
+     * asked; once the change applies, the sweep takes part with no tap -- and never
+     * over a person who has already abandoned.
+     */
+    @Test
+    fun `a rotation asked before its change applied is taken part in by the sweep, unless abandoned`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol, dave) = all
+        admins(group)
+        val refresh = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+        pump(all)
+        assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(bob.db, bob.refresh(refresh.id)!!))
+
+        // Carol abandons the copy she was asked about, on her device alone, before anything is delivered.
+        val carolsDb = carol.db
+        admins(group, dave.publicKey)
+        ShareRefreshManager.abandon(carolsDb, carol.room, refresh.id)
+        assertEquals(0, ShareRefreshManager.resumeRunning(carolsDb, carol.publicKey, carol.privateKey))
+        assertEquals(ShareRefreshStage.FAILED, carol.refresh(refresh.id)?.stage)
+
+        ShareRefreshManager.resumeRunning(bob.db, bob.publicKey, bob.privateKey)
+        assertNull(ShareRefreshManager.pendingApproval(bob.db, bob.refresh(refresh.id)!!), "the sweep still asked")
+        assertTrue(outbox(bob).any { it.kind == ShareRefreshEvents.ROUND_1 }, "Bob's part did not go out")
     }
 
     /**

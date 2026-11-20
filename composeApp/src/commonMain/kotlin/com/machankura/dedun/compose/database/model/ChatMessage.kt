@@ -301,6 +301,9 @@ data class ChatMessage(
         const val TYPE_SHARE_REFRESH_DEALT = "shareRefreshDealt"
         const val TYPE_SHARE_REFRESH_CONFIRMED = "shareRefreshConfirmed"
         const val TYPE_SHARE_REFRESH_APPROVAL_NEEDED = "shareRefreshApprovalNeeded"
+
+        /** Took part in a rotation with nothing to decide (docs/admin-change-rotation.md, Phase 5). */
+        const val TYPE_SHARE_REFRESH_TOOK_PART = "shareRefreshTookPart"
         const val TYPE_SHARE_REFRESH_COMPLETE = "shareRefreshComplete"
         const val TYPE_SHARE_REFRESH_FAILED = "shareRefreshFailed"
 
@@ -315,6 +318,7 @@ data class ChatMessage(
             TYPE_SHARE_REFRESH_DEALT,
             TYPE_SHARE_REFRESH_CONFIRMED,
             TYPE_SHARE_REFRESH_APPROVAL_NEEDED,
+            TYPE_SHARE_REFRESH_TOOK_PART,
             TYPE_SHARE_REFRESH_COMPLETE,
             TYPE_SHARE_REFRESH_FAILED,
             TYPE_SHARE_REPAIR_REQUESTED,
@@ -328,6 +332,7 @@ data class ChatMessage(
             TYPE_SHARE_REFRESH_STARTED,
             TYPE_SHARE_REFRESH_DEALT,
             TYPE_SHARE_REFRESH_CONFIRMED,
+            TYPE_SHARE_REFRESH_TOOK_PART,
             TYPE_SHARE_REPAIR_REQUESTED,
             TYPE_SHARE_REPAIRED,
         )

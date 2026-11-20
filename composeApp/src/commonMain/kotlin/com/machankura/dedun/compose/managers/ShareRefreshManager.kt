@@ -144,6 +144,67 @@ object ShareRefreshManager {
     private data class Plan(val recipients: List<Int>, val withheld: Map<Int, ShareStanding>, val refusal: String?)
 
     /**
+     * Every live holder of [shares] whom the group's signature has taken out of
+     * [localChatRoom]'s admins, withheld for good (docs/admin-change-rotation.md,
+     * A3 and A4): every admin holds a share (R1), so no rotation deals a new one
+     * to somebody who is no longer an admin -- whichever rotation runs first after
+     * a demotion takes their share away, the one it owes or anybody's. Only in a
+     * governed room, whose admins change only by a signed commit, and never for a
+     * founder the policy has been missing from the start.
+     */
+    private suspend fun removedBySignature(database: DedunDatabase, localChatRoom: LocalChatRoom, shares: ShareGenerations.Shares): Map<Int, ShareStanding> {
+        val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id) ?: return emptyMap()
+        return shares.roster
+            .filter { it.standing == ShareStanding.LIVE && admins.removedBySignature(it.memberPublicKey) }
+            .associate { it.participantId to ShareStanding.RETIRED }
+    }
+
+    /**
+     * Whether [session] withholds nobody the group has not already decided about,
+     * so that taking part is not a decision (docs/admin-change-rotation.md,
+     * Phase 5): every member it leaves out until brought back is stale in
+     * [base] already, and every member it leaves out for good is one the
+     * group's signature took out of the admins of a governed room. Taking part
+     * only ever decided the withheld list (rotate-shares-single-approval, R1);
+     * with nothing new on it, there is nothing for a person to add.
+     */
+    suspend fun withholdsNothingNew(database: DedunDatabase, session: ShareRefreshSession, base: ShareGenerations.Shares): Boolean {
+        val admins = RoomAdmins.of(database, session.chatRoomId)?.takeIf { it.governed } ?: return false
+        return session.withheldStandings().all { (id, standing) ->
+            val entry = base.roster.firstOrNull { it.participantId == id } ?: return@all false
+            when (standing) {
+                ShareStanding.STALE -> entry.standing == ShareStanding.STALE
+                ShareStanding.RETIRED -> entry.standing == ShareStanding.LIVE && admins.removedBySignature(entry.memberPublicKey)
+                else -> false
+            }
+        }
+    }
+
+    /**
+     * Takes part in [session] on its owner's behalf when [withholdsNothingNew] says
+     * there is nothing to decide, and says so in the room in place of asking. Run
+     * at the one gate in [advance], so arrival, a replay and the sweep all meet it.
+     */
+    private suspend fun takePartIfNothingNew(database: DedunDatabase, session: ShareRefreshSession, base: ShareGenerations.Shares): Boolean {
+        if (!withholdsNothingNew(database, session, base)) return false
+        update(database, session) { it.copy(dealApprovedAt = Clock.System.now()) }
+        val withheld = session.withheldStandings()
+        val retired = withheld.filterValues { it == ShareStanding.RETIRED }.keys
+            .mapNotNull { id -> base.roster.firstOrNull { it.participantId == id }?.memberPublicKey }
+        val line = if (retired.isEmpty()) {
+            "took part in rotating the shares without being asked: it leaves out nobody new."
+        } else {
+            val names = retired.map { member ->
+                database.profileDao().getProfileByPublicKey(member)?.humanReadableNameOrPubkey() ?: member.take(8)
+            }.sorted().joinToString(", ")
+            "took part in rotating the shares without being asked: it leaves out only $names, whom the group removed as admin."
+        }
+        logger.i("Taking part in refresh ${session.id} unasked: it withholds nobody new")
+        announce(database, session, ChatMessage.TYPE_SHARE_REFRESH_TOOK_PART, line, session.userPublicKey)
+        return true
+    }
+
+    /**
      * Why the rotation a change would owe could not run, or null when it could
      * (docs/admin-change-rotation.md, A12): every live holder of [shares] in
      * [retire] withheld for good, every stale one withheld again, and the rest
@@ -182,7 +243,7 @@ object ShareRefreshManager {
             val id = shares.signerIds[member] ?: return Preview(emptyList(), emptyMap(), "they hold no share of the group's key")
             mapOf(id to ShareStanding.RETIRED)
         } ?: emptyMap()
-        val plan = plan(key, shares, userPublicKey, withheld)
+        val plan = plan(key, shares, userPublicKey, removedBySignature(database, localChatRoom, shares) + withheld)
         val memberOf = shares.roster.associate { it.participantId to it.memberPublicKey }
         return Preview(
             takingPart = plan.recipients.mapNotNull { memberOf[it] },
@@ -224,7 +285,7 @@ object ShareRefreshManager {
         rotationHold(database, localChatRoom, key)?.let { throw IllegalStateException("Cannot rotate yet: ${it.reason}") }
 
         val shares = ShareGenerations.active(database, key)
-        val (recipients, allWithheld, refused) = plan(key, shares, userPublicKey, withheld)
+        val (recipients, allWithheld, refused) = plan(key, shares, userPublicKey, removedBySignature(database, localChatRoom, shares) + withheld)
         refused?.let { throw IllegalStateException("Cannot refresh: $it") }
 
         val session = ShareRefreshSession(
@@ -655,8 +716,14 @@ object ShareRefreshManager {
                 // The one gate: taking part, with these members withheld. Every
                 // step after it follows from that decision and asks nothing more.
                 if (session.dealApprovedAt == null) {
-                    announceApprovalNeeded(database, session, ShareRefreshApprovalStep.DEAL)
-                    return
+                    // Unless there is nothing to decide: a rotation that withholds
+                    // nobody new, such as the one an admin change owes
+                    // (docs/admin-change-rotation.md, Phase 5).
+                    if (!takePartIfNothingNew(database, session, base)) {
+                        announceApprovalNeeded(database, session, ShareRefreshApprovalStep.DEAL)
+                        return
+                    }
+                    session = current(database, session)
                 }
                 if (ownMessage(database, session, ShareRefreshEvents.ROUND_1) == null) {
                     val pmsg1 = FrostRefresh.participantStep1(hostSecretKey, params, myId.toUInt(), ByteVector32(session.round1Random)).right
