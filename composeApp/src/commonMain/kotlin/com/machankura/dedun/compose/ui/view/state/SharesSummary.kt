@@ -24,6 +24,21 @@ data class SharesSummary(
 ) {
     data class Member(val publicKey: HexKey, val name: String, val standing: ShareStanding, val isSelf: Boolean)
 
+    companion object {
+        /**
+         * One row per member, from a roster with one per participant id.
+         *
+         * An admin removed and later reinstated holds two ids: the old one, retired
+         * for good, and the new one bound at reinstatement. Both carry the same
+         * nostr key, and the section is about people, so the row shows the id that
+         * says what they hold now -- [ShareStanding.LIVE] over [ShareStanding.STALE]
+         * over [ShareStanding.RETIRED]. A member keeps the place of their first id,
+         * so a reinstated founder stays at the top.
+         */
+        fun byMember(perId: List<Member>): List<Member> =
+            perId.groupBy { it.publicKey }.values.map { ids -> ids.minBy { it.standing.ordinal } }
+    }
+
     /**
      * The rotate action, as the section shows it (docs/rotation-waits-for-key-state.md).
      * [ShareRefreshManager.rotationHold][com.machankura.dedun.compose.managers.ShareRefreshManager.rotationHold]

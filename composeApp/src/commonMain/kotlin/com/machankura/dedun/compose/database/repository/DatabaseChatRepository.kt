@@ -802,13 +802,17 @@ class DatabaseChatRepository(
                 )
             }
         } ?: signingNewGeneration(localChatRoom, key, shares.generation, refreshes)
-        val mine = shares.roster.firstOrNull { it.memberPublicKey == me }
+        // The roster has a row per participant id, and a reinstated admin has two.
+        val members = SharesSummary.byMember(
+            shares.roster.map { entry ->
+                SharesSummary.Member(entry.memberPublicKey, nameOf(entry.memberPublicKey), entry.standing, entry.memberPublicKey == me)
+            }
+        )
+        val mine = members.firstOrNull { it.isSelf }
         val repairing = repairs.any { it.targetPublicKey == me && it.stage != ShareRepairStage.FAILED && it.stage != ShareRepairStage.COMPLETE }
         SharesSummary(
             generation = shares.generation,
-            members = shares.roster.map { entry ->
-                SharesSummary.Member(entry.memberPublicKey, nameOf(entry.memberPublicKey), entry.standing, entry.memberPublicKey == me)
-            },
+            members = members,
             pending = if (ExperimentalFeatures.shareRefresh) pending else emptyList(),
             rotation = if (!ExperimentalFeatures.shareRefresh || shares.secretShare == null) {
                 SharesSummary.Rotation.Unavailable
