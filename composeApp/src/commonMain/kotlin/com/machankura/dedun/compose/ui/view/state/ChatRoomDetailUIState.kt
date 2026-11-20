@@ -162,13 +162,6 @@ sealed interface ChatRoomDetailUIState {
          */
         val promotionOffer: Pair<HexKey, HexKey>? = null,
         /**
-         * Members of the ceremony that made this room's key whom its admin policy
-         * does not name -- empty when it names them all, and when this device has
-         * no record of the ceremony to check against. Read through
-         * `FoundingAdmins.check`; docs/robust-group-admins.md, Phase 3.
-         */
-        val missingFoundingAdmins: Set<HexKey> = emptySet(),
-        /**
          * Founding members this room's founding invite never reached -- only ever
          * non-empty on the device that made the room, while it is still at epoch 0.
          * See `MarmotGroupCreation.uninvitedFounders`; docs/robust-group-admins.md,
@@ -176,9 +169,8 @@ sealed interface ChatRoomDetailUIState {
          */
         val uninvitedFounders: Set<HexKey> = emptySet(),
         /**
-         * What to call the founders the two sets above name. They need not be in
-         * this room -- an uninvited one is not, by definition -- so the room's own
-         * rows cannot be asked.
+         * What to call the founders [uninvitedFounders] names. They are not in this
+         * room, by definition, so the room's own rows cannot be asked.
          */
         val founderNames: Map<HexKey, String> = emptyMap(),
         /**

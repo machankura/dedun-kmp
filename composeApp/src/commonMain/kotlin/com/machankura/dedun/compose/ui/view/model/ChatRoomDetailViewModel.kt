@@ -27,7 +27,6 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import com.machankura.dedun.compose.managers.FoundingAdmins
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
@@ -133,11 +132,8 @@ class ChatRoomDetailViewModel(
                 // section, and every member row says where that member is paid.
                 val payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup }
                 // The founding members, against what the ceremony that made the
-                // room's key said: who the policy leaves out, and who the founding
-                // invite never reached. docs/robust-group-admins.md, Phases 3 and 4.
-                val missingFoundingAdmins = (chatRepository.foundingAdmins(chatRoomId) as? FoundingAdmins.Check.Missing)
-                    ?.publicKeys
-                    .orEmpty()
+                // room's key said: who the founding invite never reached.
+                // docs/robust-group-admins.md, Phase 4.
                 val uninvitedFounders = chatRepository.uninvitedFounders(localChatRoom)
 
                 val shares = chatRepository.sharesSummary(localChatRoom)
@@ -189,13 +185,6 @@ class ChatRoomDetailViewModel(
                             .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }
                             .toSet()
                     } else emptySet(),
-                    missingFoundingAdmins = missingFoundingAdmins,
-                    uninvitedFounders = uninvitedFounders,
-                    founderNames = (missingFoundingAdmins + uninvitedFounders).associateWith { publicKey ->
-                        nostrRepository.getProfileWithPublicKey(publicKey)?.humanReadableNameOrPubkey()
-                            ?: publicKey.take(SHORTENED_PUBLIC_KEY_LENGTH)
-                    },
-                    adminRoomId = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.adminRoomOf(chatRoomId) else null,
                     shares = shares,
                     adminPublicKeys = group?.currentAdminIdentities().orEmpty(),
                     shareHolders = if (ExperimentalFeatures.shareRefresh) {
@@ -216,6 +205,12 @@ class ChatRoomDetailViewModel(
                         .onFailure { if (it is CancellationException) throw it }
                         .getOrNull()
                         ?.let { it.id to it.from },
+                    uninvitedFounders = uninvitedFounders,
+                    founderNames = uninvitedFounders.associateWith { publicKey ->
+                        nostrRepository.getProfileWithPublicKey(publicKey)?.humanReadableNameOrPubkey()
+                            ?: publicKey.take(SHORTENED_PUBLIC_KEY_LENGTH)
+                    },
+                    adminRoomId = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.adminRoomOf(chatRoomId) else null,
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
