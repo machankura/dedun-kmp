@@ -13,6 +13,8 @@ import fr.acinq.bitcoin.crypto.frost.Frost
 import fr.acinq.bitcoin.crypto.frost.KeyMaterial
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
@@ -1356,6 +1358,138 @@ class ShareRefreshRitualJvmTest {
             db.keyShareDao().upsert(from.db.keyShareDao().getMembers(ceremonyId, generation.generation))
         }
         return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
+    }
+
+    // ---- member-admin-promotion, Phase 8: enrollment at a new id -----------------------------------------------
+
+    /** A 3-member 2-of-3 group that has rotated once, everyone included, with its key state signed. */
+    private suspend fun rotatedOnce(): Pair<Group, List<Device>> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        approveAll(all, refresh.id)
+        approveSigning(all)
+        return group to all
+    }
+
+    /** A device for [keyPair] holding nothing of the key at all: the room, the members' profiles, no ceremony. */
+    private suspend fun stranger(group: Group, keyPair: KeyPair): Device {
+        val db = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
+        val publicKey = keyPair.pubKey.toHexKey()
+        (group.members + publicKey).forEach { member ->
+            val nostrEventId = "e$member".take(64)
+            db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
+            db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
+        }
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        db.chatRoomDao().upsert(chatRoom)
+        return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
+    }
+
+    /** The group signs the key state binding the next id to [member] under [host], with that id's public share added. */
+    private suspend fun bindNextId(all: List<Device>, member: HexKey, host: HexKey) {
+        val alice = all[0]
+        val table = alice.active().publicShares!!
+        val binding = com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent.MemberBinding(table.size, member, host)
+        val template = GroupKeyStateManager.generationTemplate(
+            alice.db, alice.room, alice.key(), refreshId = null, newBinding = binding,
+            publicShares = PromotionManager.extended(table, alice.key().threshold),
+        )
+        FrostSigningManager.proposeSigning(alice.db, alice.room, alice.publicKey, template.kind, template.tags, template.content, alice.key(), template.createdAt)
+        pump(all)
+        approveSigning(all)
+        pump(all)
+    }
+
+    /** The handover the proposer's device would send, as Erin's device receives it. */
+    private suspend fun handoverFrom(from: Device, to: HexKey): MarmotInnerEvent =
+        MarmotInnerEvent(
+            id = "f".repeat(64), publicKey = from.publicKey, kind = com.machankura.dedun.compose.nostr.frost.PromotionEvents.HANDOVER,
+            tags = com.machankura.dedun.compose.nostr.frost.PromotionEvents.handoverTags(from.group.roomId, to),
+            content = assertNotNull(PromotionManager.handoverContent(from.db, from.group.roomId)),
+            chatRoomId = from.group.roomId,
+        )
+
+    /**
+     * A member who never took part in the ceremony is enrolled at id 3 of a 2-of-3
+     * key: every device adds the id from the key state the group signed, the new
+     * member checks what they are handed against it, two holders run reduced
+     * enrollment with nobody asked, and the new share signs.
+     */
+    @Test
+    fun `a new member is enrolled at the next id, and signs with the group`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val (alice, bob, carol) = all
+        val erinKeys = KeyPair()
+        val erinHost = ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex()
+        val erin = stranger(all[0].group, erinKeys)
+
+        bindNextId(all, erin.publicKey, erinHost)
+        all.forEach { device ->
+            assertEquals(4, device.active().publicShares!!.size, "the table on device ${device.index}")
+            val entry = device.active().roster.single { it.participantId == 3 }
+            assertEquals(erin.publicKey, entry.memberPublicKey)
+            assertEquals(ShareStanding.STALE, entry.standing, "id 3 waits for its share")
+        }
+
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, handoverFrom(alice, erin.publicKey))
+        val everyone = all + erin
+        pump(everyone)
+
+        val share = assertNotNull(erin.active().secretShare, "Erin must hold a share of id 3")
+        assertEquals(alice.active().publicShares!![3], share.publicKey(), "a share on the group's polynomial")
+        everyone.forEach { device ->
+            assertEquals(ShareStanding.LIVE, device.active().roster.single { it.participantId == 3 }.standing, "id 3 on device ${device.index}")
+        }
+
+        // Erin signs, with Alice; Bob and Carol stay out.
+        val session = FrostSigningManager.proposeSigning(alice.db, alice.room, alice.publicKey, kind = 1, tags = arrayOf(), content = "Erin signs")
+        assertEquals(4, session.participantCount, "n is the table's, which grew")
+        pump(everyone)
+        FrostSigningManager.approve(erin.db, erin.room, session.id)
+        pump(everyone)
+        assertEquals(FrostSigningStage.COMPLETE, alice.db.frostSigningSessionDao().getSessionById(session.id)?.stage)
+        assertTrue(alice.db.frostSigningSessionDao().getSessionById(session.id)!!.signerIdList()!!.contains(3))
+        listOf(bob, carol).forEach { assertNull(it.db.frostSigningSessionDao().getSessionById(session.id)?.signApprovedAt) }
+    }
+
+    /** A handover that does not match what the group signed is refused, and nothing is asked for. */
+    @Test
+    fun `a handover whose table the group did not sign is refused`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val erinKeys = KeyPair()
+        val erin = stranger(all[0].group, erinKeys)
+        bindNextId(all, erin.publicKey, ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+
+        val honest = handoverFrom(all[0], erin.publicKey)
+        val json = kotlinx.serialization.json.Json.parseToJsonElement(honest.content).jsonObject
+        val shares = json["publicShares"]!!.jsonArray
+        val swapped = kotlinx.serialization.json.JsonArray(listOf(shares[1], shares[0]) + shares.drop(2))
+        val forged = honest.copy(content = kotlinx.serialization.json.JsonObject(json + ("publicShares" to swapped)).toString())
+
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, forged)
+
+        assertNull(erin.db.dkgSessionDao().getSessionById(ceremonyId), "a key was filed from a forged handover")
+        assertTrue(erin.db.shareRepairDao().getSessionsForKey(ceremonyId).isEmpty())
+    }
+
+    /** A binding of the next id whose table this device cannot extend to is not applied. */
+    @Test
+    fun `an id enrolled with a table that does not extend this one is not added`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val table = alice.active().publicShares!!
+        val state = assertNotNull(GroupKeyStateManager.keyStateFor(alice.db, alice.group.roomId))
+        // The next id, but a hash over some other fourth share.
+        val wrong = state.copy(publicSharesHash = ShareGenerations.publicSharesHash(table + table[0]))
+        PromotionManager.enrollNewId(alice.db, wrong, com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent.MemberBinding(3, "a".repeat(64), "02" + "b".repeat(64)))
+
+        assertEquals(3, alice.active().publicShares!!.size)
+        assertTrue(alice.active().roster.none { it.participantId == 3 })
     }
 
     // ---- Phase 12: restore ---------------------------------------------------------------------------------------

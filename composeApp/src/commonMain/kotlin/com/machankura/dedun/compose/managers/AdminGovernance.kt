@@ -72,7 +72,7 @@ object AdminGovernance {
      * `AdminPolicyV1` says is never valid.
      */
     fun canPromote(group: MlsGroup, actor: HexKey, target: HexKey): Boolean =
-        !isKeyedRoom(group) &&
+        (!isKeyedRoom(group) || keyedChangesAllowed(group)) &&
             target in members(group) &&
             MarmotGroupPermissions.canPromote(group.currentAdminIdentities(), actor, target)
 

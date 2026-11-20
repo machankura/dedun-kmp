@@ -39,6 +39,10 @@ import dedun.composeapp.generated.resources.require_signatures_explainer
 import dedun.composeapp.generated.resources.make_admin
 import dedun.composeapp.generated.resources.make_admin_and_leave
 import dedun.composeapp.generated.resources.make_admin_body
+import dedun.composeapp.generated.resources.make_admin_body_keyed
+import dedun.composeapp.generated.resources.remove_as_admin_body_keyed
+import dedun.composeapp.generated.resources.promotion_offer_body
+import dedun.composeapp.generated.resources.accept
 import dedun.composeapp.generated.resources.make_admin_title
 import dedun.composeapp.generated.resources.member_actions
 import dedun.composeapp.generated.resources.pick_heir_body
@@ -107,18 +111,19 @@ private fun MemberAction.label() = when (this) {
 internal fun ConfirmAdminChangeDialog(
     action: MemberAction,
     memberName: String,
+    keyed: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val (title, body, confirm) = when (action) {
         MemberAction.MAKE_ADMIN -> Triple(
             stringResource(Res.string.make_admin_title, memberName),
-            stringResource(Res.string.make_admin_body),
+            stringResource(if (keyed) Res.string.make_admin_body_keyed else Res.string.make_admin_body),
             stringResource(Res.string.make_admin),
         )
         MemberAction.REMOVE_AS_ADMIN -> Triple(
             stringResource(Res.string.remove_as_admin_title, memberName),
-            stringResource(Res.string.remove_as_admin_body),
+            stringResource(if (keyed) Res.string.remove_as_admin_body_keyed else Res.string.remove_as_admin_body),
             stringResource(Res.string.remove_as_admin),
         )
         MemberAction.STEP_DOWN -> Triple(
@@ -241,6 +246,25 @@ internal fun GovernanceSection(
                     modifier = explainer,
                 )
             }
+        }
+    }
+}
+
+/**
+ * An offer to this account to become an admin of a keyed room, with the one
+ * decision only its owner can make: accepting puts them in the group's signing
+ * quorum. docs/member-admin-promotion.md, D3 and Phase 8.
+ */
+@Composable
+internal fun PromotionOfferCard(fromName: String, onAccept: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacing.containerPadding, vertical = MaterialTheme.spacing.compactPadding)) {
+        Text(
+            text = stringResource(Res.string.promotion_offer_body, fromName),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(onClick = onAccept) {
+            Icon(Icons.Default.Verified, contentDescription = Decorative)
+            Text(stringResource(Res.string.accept), modifier = Modifier.padding(start = MaterialTheme.spacing.relatedGap))
         }
     }
 }

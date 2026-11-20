@@ -984,6 +984,7 @@ private fun RitualNotice(
         ChatMessage.TYPE_CHANGE_REJECTED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_ADMIN_ADDED -> Icons.Default.AdminPanelSettings
         ChatMessage.TYPE_ADMIN_REMOVED -> Icons.Default.RemoveModerator
+        ChatMessage.TYPE_ADMIN_OFFERED -> Icons.Default.AdminPanelSettings
         ChatMessage.TYPE_CHANGE_NOT_APPLIED -> Icons.Default.Block
 
         ChatMessage.TYPE_GROUP_LIGHTNING_WALLET_OPENED -> Icons.Default.Bolt

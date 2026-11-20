@@ -32,6 +32,7 @@ import com.machankura.dedun.compose.managers.SubgroupManager
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.managers.PromotionManager
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
@@ -478,6 +479,15 @@ interface ChatRepository {
     suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?)
 
     /**
+     * An offer to this device's account to become an admin of a keyed room that it
+     * has not answered, or null. docs/member-admin-promotion.md, Phase 8.
+     */
+    suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer?
+
+    /** Accepts [offerId]. Returns null when the acceptance went out, or why it could not. */
+    suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String?
+
+    /**
      * Whether [memberPublicKey] holds a live share of the room's key, and so
      * whether a removal leaves them able to help sign until the shares are
      * rotated without them (docs/frost-share-refresh.md, Phase 9).
@@ -775,6 +785,10 @@ interface ChatRepository {
             override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) = Unit
 
             override suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) = Unit
+
+            override suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer? = null
+
+            override suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String? = null
 
             override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
 

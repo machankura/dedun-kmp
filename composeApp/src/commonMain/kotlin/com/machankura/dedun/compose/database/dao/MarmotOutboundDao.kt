@@ -72,6 +72,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.PromotionManager
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.managers.GovernanceGate
 import com.machankura.dedun.compose.managers.GovernanceManager
@@ -979,7 +980,14 @@ abstract class MarmotOutboundDao(
     open suspend fun promote(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         val group = governedGroup(localChatRoom)
         if (memberPublicKey in group.currentAdminIdentities()) return
-        check(!AdminGovernance.isKeyedRoom(group)) { KEYED_ROOM_REFUSAL }
+        // A keyed room: an offer the member accepts, then the group signs the change
+        // and the key state that gives them a share (docs/member-admin-promotion.md,
+        // Phase 8).
+        if (AdminGovernance.isKeyedRoom(group)) {
+            check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
+            PromotionManager.offer(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, memberPublicKey)
+            return
+        }
         if (memberPublicKey !in AdminGovernance.members(group)) {
             throw IllegalArgumentException("${memberName(memberPublicKey)} is not in the group any more")
         }

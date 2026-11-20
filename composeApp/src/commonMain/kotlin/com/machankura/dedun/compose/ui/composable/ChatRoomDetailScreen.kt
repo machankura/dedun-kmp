@@ -199,6 +199,16 @@ import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.couldn_t_leave_the_group
+import dedun.composeapp.generated.resources.admin_change_requested
+import dedun.composeapp.generated.resources.stepping_down_to_leave
+import dedun.composeapp.generated.resources.require_signatures_sent
+import dedun.composeapp.generated.resources.change_proposed
+import dedun.composeapp.generated.resources.admin_offer_sent
+import dedun.composeapp.generated.resources.promotion_accepted
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import dedun.composeapp.generated.resources.holds_a_share
+import com.machankura.dedun.compose.ui.view.state.AdminLeave
+import com.machankura.dedun.compose.ui.view.state.MemberAction
 import dedun.composeapp.generated.resources.every_member_of_this_group_administers_it_there
 import dedun.composeapp.generated.resources.admin_room
 import dedun.composeapp.generated.resources.founding_members_have_no_key_package
@@ -211,15 +221,7 @@ import dedun.composeapp.generated.resources.make_them_admins
 import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_are_not_admins
 import dedun.composeapp.generated.resources.founding_members_are_not_admins
 import dedun.composeapp.generated.resources.admin
-import dedun.composeapp.generated.resources.admin_change_requested
-import dedun.composeapp.generated.resources.stepping_down_to_leave
-import dedun.composeapp.generated.resources.require_signatures_sent
-import dedun.composeapp.generated.resources.change_proposed
-import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import dedun.composeapp.generated.resources.admin_badge
-import dedun.composeapp.generated.resources.holds_a_share
-import com.machankura.dedun.compose.ui.view.state.AdminLeave
-import com.machankura.dedun.compose.ui.view.state.MemberAction
 import dedun.composeapp.generated.resources.run_by_members
 import dedun.composeapp.generated.resources.parent_group
 import dedun.composeapp.generated.resources.a_subgroup
@@ -372,6 +374,8 @@ fun ChatRoomDetailScreen(
     val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
     val requireSignaturesSent = stringResource(Res.string.require_signatures_sent)
     val changeProposed = stringResource(Res.string.change_proposed)
+    val adminOfferSent = stringResource(Res.string.admin_offer_sent)
+    val promotionAccepted = stringResource(Res.string.promotion_accepted)
     val adminLabel = stringResource(Res.string.admin_badge)
     val shareLabel = stringResource(Res.string.holds_a_share)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
@@ -508,11 +512,21 @@ fun ChatRoomDetailScreen(
                     ConfirmAdminChangeDialog(
                         action = action,
                         memberName = nameOf(memberPublicKey),
+                        keyed = chatRoomDetailUIState.governance is GovernanceStatus.Governed,
                         onDismiss = { confirmingAdminChange = null },
                         onConfirm = {
                             confirmingAdminChange = null
                             val room = chatRoomDetailUIState.localChatRoom
-                            val onDone = { failure: String? -> notify(failure ?: adminChangeRequested) }
+                            val governed = chatRoomDetailUIState.governance is GovernanceStatus.Governed
+                            val onDone = { failure: String? ->
+                                notify(
+                                    failure ?: when {
+                                        governed && action == MemberAction.MAKE_ADMIN -> adminOfferSent
+                                        governed -> changeProposed
+                                        else -> adminChangeRequested
+                                    }
+                                )
+                            }
                             when (action) {
                                 MemberAction.MAKE_ADMIN -> chatRoomDetailViewModel.makeAdmin(room, memberPublicKey, onDone)
                                 MemberAction.REMOVE_AS_ADMIN, MemberAction.STEP_DOWN ->
@@ -1577,6 +1591,18 @@ fun ChatRoomDetailScreen(
 
                             // Whether the room's changes need the group's signature, and the
                             // switch that makes them. docs/member-admin-promotion.md, Phase 4b.
+                            // An offer to this account to become an admin, with its one
+                            // decision. docs/member-admin-promotion.md, Phase 8.
+                            chatRoomDetailUIState.promotionOffer?.let { (offerId, from) ->
+                                item {
+                                    PromotionOfferCard(fromName = nameOf(from)) {
+                                        chatRoomDetailViewModel.acceptPromotion(chatRoomDetailUIState.localChatRoom, offerId) { failure ->
+                                            notify(failure ?: promotionAccepted)
+                                        }
+                                    }
+                                }
+                            }
+
                             chatRoomDetailUIState.governance?.let { governance ->
                                 item {
                                     GovernanceSection(

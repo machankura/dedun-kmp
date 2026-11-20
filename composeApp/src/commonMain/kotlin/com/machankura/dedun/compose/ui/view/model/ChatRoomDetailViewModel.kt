@@ -208,6 +208,10 @@ class ChatRoomDetailViewModel(
                     governance = runCatching { chatRepository.governanceStatus(chatRoomId) }
                         .onFailure { if (it is CancellationException) throw it }
                         .getOrNull(),
+                    promotionOffer = runCatching { chatRepository.pendingPromotion(chatRoomId) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull()
+                        ?.let { it.id to it.from },
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
@@ -381,6 +385,10 @@ class ChatRoomDetailViewModel(
     /** Makes the room's changes need the group's signature. docs/member-admin-promotion.md, Phase 4b. */
     fun requireSignatures(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
         adminAction(onDone) { chatRepository.requireSignatures(localChatRoom) }
+
+    /** Accepts becoming an admin of a keyed room. docs/member-admin-promotion.md, Phase 8. */
+    fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.acceptPromotion(localChatRoom, offerId)?.let { throw IllegalStateException(it) } }
 
     fun makeAdmin(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (String?) -> Unit) =
         adminAction(onDone) { chatRepository.promoteMember(localChatRoom, memberPublicKey) }

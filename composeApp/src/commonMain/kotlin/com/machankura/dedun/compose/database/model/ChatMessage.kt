@@ -920,6 +920,13 @@ data class ChatMessage(
         const val TYPE_ADMIN_REMOVED = "adminRemoved"
 
         /**
+         * An offer to make a member an admin of a keyed room, or their answer to one:
+         * this device's own account of what it asked or said, before the group signs
+         * anything. docs/member-admin-promotion.md, Phase 8.
+         */
+        const val TYPE_ADMIN_OFFERED = "adminOffered"
+
+        /**
          * A change to a governed room that this device refused: a commit sent bare,
          * or an envelope whose check failed. Every device refuses the same ones,
          * so every device says so. docs/member-admin-promotion.md, Phase 4a.
@@ -956,6 +963,7 @@ data class ChatMessage(
             TYPE_GROUP_DISBANDED,
             TYPE_ADMIN_ADDED,
             TYPE_ADMIN_REMOVED,
+            TYPE_ADMIN_OFFERED,
             TYPE_CHANGE_NOT_APPLIED,
             TYPE_CHANGE_REJECTED,
             TYPE_FOUNDING_ADMINS_MISSING,

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 52,
-    "identityHash": "703b6178225c1c56e1e18bdcb928a6ee",
+    "identityHash": "5145816d63db8fdb6192f5e05c7060cd",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -4454,7 +4454,7 @@
       },
       {
         "tableName": "GovernanceProposal",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `chatRoomId` TEXT NOT NULL, `routingId` TEXT NOT NULL, `epoch` INTEGER NOT NULL, `frostSigningSessionId` TEXT NOT NULL, `commitEventId` TEXT NOT NULL, `commitEventJson` TEXT NOT NULL, `peerKeyPackageEventId` TEXT, `priorStateHex` TEXT NOT NULL, `pendingStateHex` TEXT NOT NULL, `stage` TEXT NOT NULL, `thenRotateWithout` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`chatRoomId`) REFERENCES `ChatRoom`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `chatRoomId` TEXT NOT NULL, `routingId` TEXT NOT NULL, `epoch` INTEGER NOT NULL, `frostSigningSessionId` TEXT NOT NULL, `commitEventId` TEXT NOT NULL, `commitEventJson` TEXT NOT NULL, `peerKeyPackageEventId` TEXT, `priorStateHex` TEXT NOT NULL, `pendingStateHex` TEXT NOT NULL, `stage` TEXT NOT NULL, `thenRotateWithout` TEXT, `promotionOfferId` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`chatRoomId`) REFERENCES `ChatRoom`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -4524,6 +4524,11 @@
           {
             "fieldPath": "thenRotateWithout",
             "columnName": "thenRotateWithout",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "promotionOfferId",
+            "columnName": "promotionOfferId",
             "affinity": "TEXT"
           },
           {
@@ -7453,7 +7458,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '703b6178225c1c56e1e18bdcb928a6ee')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5145816d63db8fdb6192f5e05c7060cd')"
     ]
   }
 }

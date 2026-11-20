@@ -12,6 +12,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -102,6 +103,8 @@ object GovernanceManager {
         userPublicKey: HexKey,
         peerKeyPackageEventId: HexKey? = null,
         thenRotateWithout: HexKey? = null,
+        promotionOfferId: HexKey? = null,
+        alsoSign: List<EventTemplate<Event>> = emptyList(),
         propose: (MlsGroup) -> Unit,
     ): String {
         val engine = database.marmotEngine
@@ -123,16 +126,24 @@ object GovernanceManager {
             check(remaining.size >= floor) { "A group with a shared key needs at least $floor admins. Make someone else an admin first" }
         }
 
-        val session = FrostSigningManager.proposeSigning(
+        // The statement leads; anything signed with it -- a promotion's key state --
+        // is one decision by one quorum, so it is one batch.
+        val statement = EventTemplate<Event>(
+            Clock.System.now().epochSeconds,
+            GovernanceStatementEvent.KIND,
+            GovernanceStatementEvent.assembleTags(roomId, prepared.epoch, prepared.change, userPublicKey),
+            prepared.commitEvent.toJson(),
+        )
+        val session = FrostSigningManager.proposeSigningBatch(
             database = database,
             localChatRoom = localChatRoom,
             userPublicKey = userPublicKey,
-            kind = GovernanceStatementEvent.KIND,
-            tags = GovernanceStatementEvent.assembleTags(roomId, prepared.epoch, prepared.change, userPublicKey),
-            content = prepared.commitEvent.toJson(),
+            events = listOf(statement) + alsoSign,
         )
-        val statementId = database.frostSigningSessionDao().getItems(session.id).single().eventId
-        record(database, localChatRoom, userPublicKey, prepared, statementId, session.id, peerKeyPackageEventId, thenRotateWithout)
+        val statementId = database.frostSigningSessionDao().getItems(session.id)
+            .first { Event.fromJsonOrNull(it.unsignedEventJson)?.kind == GovernanceStatementEvent.KIND }
+            .eventId
+        record(database, localChatRoom, userPublicKey, prepared, statementId, session.id, peerKeyPackageEventId, thenRotateWithout, promotionOfferId)
         return session.id
     }
 
@@ -151,6 +162,7 @@ object GovernanceManager {
         sessionId: String,
         peerKeyPackageEventId: HexKey? = null,
         thenRotateWithout: HexKey? = null,
+        promotionOfferId: HexKey? = null,
     ): GovernanceProposal {
         val roomId = localChatRoom.chatRoom.id
         database.marmotCommitResultDao().upsert(
@@ -176,6 +188,7 @@ object GovernanceManager {
             priorStateHex = prepared.staged.priorState.encodeTls().toHex(),
             pendingStateHex = prepared.staged.pendingState.encodeTls().toHex(),
             thenRotateWithout = thenRotateWithout,
+            promotionOfferId = promotionOfferId,
         )
         database.governanceProposalDao().upsert(proposal)
         return proposal

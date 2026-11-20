@@ -91,6 +91,12 @@ interface MarmotInnerEventDao {
     @Query("SELECT COUNT(*) FROM MarmotInnerEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds)")
     fun observeCountByChatRoomAndEveryNumber(chatRoomId: String, kinds: List<Int>): Flow<Int>
 
+    @Query("SELECT * FROM MarmotInnerEvent WHERE kind IN (:kinds) ORDER BY createdAt ASC")
+    suspend fun getByKinds(kinds: List<Int>): List<MarmotInnerEvent>
+
+    @Query("SELECT COUNT(*) FROM MarmotInnerEvent WHERE kind IN (:kinds)")
+    fun observeCountByKinds(kinds: List<Int>): Flow<Int>
+
     @Query("DELETE FROM MarmotInnerEvent WHERE id = :id")
     suspend fun deleteById(id: String)
 

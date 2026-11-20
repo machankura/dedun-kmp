@@ -56,6 +56,12 @@ data class GovernanceProposal(
      * because the change can land long after it was proposed, across a restart.
      */
     val thenRotateWithout: HexKey? = null,
+    /**
+     * The promotion offer this change answers, for a promotion in a keyed room: once
+     * it lands, the new admin is handed what they need to be enrolled into the key
+     * (docs/member-admin-promotion.md, Phase 8).
+     */
+    val promotionOfferId: HexKey? = null,
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,

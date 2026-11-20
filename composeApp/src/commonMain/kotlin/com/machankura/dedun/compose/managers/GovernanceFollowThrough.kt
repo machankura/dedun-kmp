@@ -7,7 +7,11 @@ import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
+import com.machankura.dedun.compose.nostr.frost.PromotionEvents
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -31,7 +35,11 @@ object GovernanceFollowThrough {
 
     /** Follows this device's proposals until cancelled. */
     suspend fun observe(database: DedunDatabase, keyPair: KeyPair) {
-        database.governanceProposalDao().observeAll()
+        combine(
+            database.governanceProposalDao().observeAll(),
+            database.marmotInnerEventDao().observeCountByKinds(listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER)),
+            database.groupSignedEventDao().observeByKind(GroupKeyStateEvent.KIND),
+        ) { _, _, _ -> Unit }
             .conflate()
             .collect {
                 try {
@@ -47,7 +55,44 @@ object GovernanceFollowThrough {
     /** One pass over everything owed. */
     suspend fun pass(database: DedunDatabase, keyPair: KeyPair) = mutex.withLock {
         rotationsOwed(database).forEach { proposal -> rotateAway(database, keyPair, proposal) }
+        if (!ExperimentalFeatures.shareRefresh) return@withLock
+        val me = keyPair.pubKey.toHexKey()
+        val privateKey = keyPair.privKey ?: return@withLock
+
+        // Phase 8, the device that offered: an accepted offer is proposed for the
+        // group's signature, once; a promotion that landed is handed over.
+        PromotionManager.acceptedOffers(database, me).forEach { (offer, acceptance) ->
+            if (offer.id in failedOffers) return@forEach
+            val room = database.chatRoomDao().findChatRoomById(offer.chatRoomId) ?: return@forEach
+            runCatching { PromotionManager.propose(database, room, me, offer, acceptance) }.onFailure {
+                if (it is CancellationException) throw it
+                failedOffers += offer.id
+                logger.w("Couldn't propose the promotion ${offer.id.take(8)}…: ${it.message}")
+                announce(database, offer.chatRoomId, me, "Couldn't ask the group to make them an admin: ${it.message}")
+            }
+        }
+        PromotionManager.handoversOwed(database).forEach { proposal ->
+            runCatching { PromotionManager.handover(database, proposal, me) }.onFailure {
+                if (it is CancellationException) throw it
+                logger.w("Couldn't hand over ${proposal.id.take(8)}…: ${it.message}")
+            }
+        }
+
+        // Phase 8, the new admin's device: a handover is checked and taken.
+        PromotionManager.handoversToMe(database, me).forEach { handover ->
+            if (handover.id in failedHandovers) return@forEach
+            val room = database.chatRoomDao().findChatRoomById(handover.chatRoomId) ?: return@forEach
+            runCatching { PromotionManager.takeHandover(database, room, me, privateKey, handover) }.onFailure {
+                if (it is CancellationException) throw it
+                failedHandovers += handover.id
+                logger.w("Couldn't take the handover ${handover.id.take(8)}…: ${it.message}")
+            }
+        }
     }
+
+    /** Offers and handovers that failed once in this process: not retried on every pass. */
+    private val failedOffers = mutableSetOf<HexKey>()
+    private val failedHandovers = mutableSetOf<HexKey>()
 
     /**
      * This device's changes that have landed and owe a rotation without a member

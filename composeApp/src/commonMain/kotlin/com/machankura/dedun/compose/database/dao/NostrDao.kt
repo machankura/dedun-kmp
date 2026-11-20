@@ -22,6 +22,7 @@ import com.machankura.dedun.compose.managers.GovernanceGate
 import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
+import com.machankura.dedun.compose.nostr.frost.PromotionEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
 import com.machankura.dedun.compose.nostr.frost.OwnCommitEvent
 import com.vitorpamplona.marmot.groups.currentGroupState
@@ -1721,6 +1722,12 @@ abstract class NostrDao(
                                     GovernanceSupport.announce(database, localChatRoom.chatRoom.id, group, activeKeyPair.pubKey.toHex())
                                 }
                             }
+                        // A promotion's offer, acceptance and handover are filed with the
+                        // room's other protocol events, and GovernanceFollowThrough acts on
+                        // them from there; here they only have to stay out of the
+                        // Wavelength co-signer's arm, whose legacy numbers they share.
+                        innerEvent.kind in PromotionEvents.ALL && GovernanceEvents.isGovernance(innerEvent) -> Unit
+
                         innerEvent.kind == OwnCommitEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
                             admitEnvelopedCommit(localChatRoom, innerEvent, activeKeyPair)
                         innerEvent.kind == GovernanceCarrierEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->

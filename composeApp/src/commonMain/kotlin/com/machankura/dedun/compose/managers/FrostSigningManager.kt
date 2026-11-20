@@ -381,7 +381,9 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            // The table's size, not the ceremony's: an enrollment adds an id
+            // (docs/member-admin-promotion.md, Phase 8).
+            participantCount = shares.publicShares?.size ?: ceremony.participantCount,
             signerId = signerId,
             derivationPath = path?.let(SharedKeyDerivation::formatPath),
             generation = shares.generation,
@@ -609,7 +611,8 @@ object FrostSigningManager {
         key: DkgSession,
         signerId: Int,
         path: List<Long>?,
-        generation: Int = 0
+        generation: Int = 0,
+        participantCount: Int = key.participantCount,
     ) = FrostSigningSession(
         id = sessionId,
         chatRoomId = localChatRoom.chatRoom.id,
@@ -620,7 +623,7 @@ object FrostSigningManager {
         userPublicKey = userPublicKey,
         dkgSessionId = key.id,
         threshold = key.threshold,
-        participantCount = key.participantCount,
+        participantCount = participantCount,
         signerId = signerId,
         derivationPath = path?.let(SharedKeyDerivation::formatPath),
         generation = generation
@@ -704,6 +707,9 @@ object FrostSigningManager {
         // could choose the key the group signs as, and every signer would put
         // their share behind an author none of them checked.
         val path = signingPath(database, localChatRoom, key)
+        // `n` is the generation's table, which an enrollment grows
+        // (docs/member-admin-promotion.md, Phase 8); the ceremony's count otherwise.
+        val n = generation?.let { ShareGenerations.at(database, key, it) }?.publicShares?.size ?: key.participantCount
         val unsignedEvents = proposed.map { event ->
             unsignedEventOf(
                 key = key,
@@ -890,7 +896,7 @@ object FrostSigningManager {
         unsignedEvents.firstOrNull { it.kind == GovernanceStatementEvent.KIND }?.let { statement ->
             GovernanceManager.refusalOf(database, localChatRoom, statement)?.let { why ->
                 logger.w("Signing proposal $sessionId carries a change that is refused: $why; declining")
-                val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
+                val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
                     .copy(signDeclinedAt = Clock.System.now())
                 database.frostSigningSessionDao().upsert(declined)
                 database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
@@ -922,7 +928,7 @@ object FrostSigningManager {
             )
             // An unreadable tag is filed as -1: no generation, so nothing reads it as a
             // share this device holds, and the decline says why.
-            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: -1)
+            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: -1, participantCount = n)
                 .copy(signDeclinedAt = Clock.System.now())
             database.frostSigningSessionDao().upsert(declined)
             database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
@@ -938,7 +944,7 @@ object FrostSigningManager {
             }
         }
 
-        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
+        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
         database.frostSigningSessionDao().upsert(session)
         database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
         announceStarted(database, session)
@@ -987,6 +993,8 @@ object FrostSigningManager {
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
         val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
+        // The generation's table, which an enrollment grows; the ceremony's count otherwise.
+        val n = ShareGenerations.active(database, ceremony).publicShares?.size ?: ceremony.participantCount
         val wallet = GroupWalletManager.walletFor(database, chatRoomId, thresholdPublicKey, chain, account)
             ?: throw IllegalStateException("This group has not opened a wallet on ${GroupWalletStatementEvent.chainName(chain)}")
 
@@ -1003,7 +1011,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            participantCount = n,
             signerId = signerId,
             // A transaction does not sign as the room: each input has its own
             // derivation, and those are on the items.
@@ -1066,6 +1074,8 @@ object FrostSigningManager {
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
         val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
+        // The generation's table, which an enrollment grows; the ceremony's count otherwise.
+        val n = ShareGenerations.active(database, ceremony).publicShares?.size ?: ceremony.participantCount
         val guarded = GuardianManager.guardedWalletFor(database, chatRoomId, descendantChatRoomId, chain, account)
             ?: throw IllegalStateException("This group guards no wallet of $descendantChatRoomId on ${GroupWalletStatementEvent.chainName(chain)}")
 
@@ -1081,7 +1091,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
@@ -1168,6 +1178,7 @@ object FrostSigningManager {
         val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
         declineWithoutShare(database, localChatRoom, innerEvent, sessionId, userPublicKey, key, signerId, generation, FrostSigningSubject.TRANSACTION)
             ?.let { return it }
+        val n = generation?.let { ShareGenerations.at(database, key, it) }?.publicShares?.size ?: key.participantCount
 
         val (chainName, account) = FrostSigningEvents.parseWallet(innerEvent.tags) ?: run {
             logger.w("Spend proposal $sessionId names no wallet; dropping")
@@ -1225,7 +1236,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = key.id,
             threshold = key.threshold,
-            participantCount = key.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
@@ -1386,6 +1397,8 @@ object FrostSigningManager {
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
         val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
+        // The generation's table, which an enrollment grows; the ceremony's count otherwise.
+        val n = ShareGenerations.active(database, ceremony).publicShares?.size ?: ceremony.participantCount
         val checked = when (val result = checkSweep(database, chatRoomId, thresholdPublicKey, chain, account, sweep)) {
             is GroupSweep.Result.Ok -> result.checked
             is GroupSweep.Result.Refused -> throw IllegalArgumentException("This sweep ${result.reason}")
@@ -1398,7 +1411,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.SWEEP,
@@ -1461,6 +1474,7 @@ object FrostSigningManager {
         val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
         declineWithoutShare(database, localChatRoom, innerEvent, sessionId, userPublicKey, key, signerId, generation, FrostSigningSubject.SWEEP)
             ?.let { return it }
+        val n = generation?.let { ShareGenerations.at(database, key, it) }?.publicShares?.size ?: key.participantCount
         val (chainName, account) = FrostSigningEvents.parseWallet(innerEvent.tags) ?: run {
             logger.w("Sweep proposal $sessionId names no wallet; dropping")
             return null
@@ -1484,7 +1498,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = key.id,
             threshold = key.threshold,
-            participantCount = key.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.SWEEP,

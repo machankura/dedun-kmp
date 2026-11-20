@@ -26,7 +26,10 @@ import com.vitorpamplona.quartz.nip01Core.tags.dTag.DTag
  * member who sends it. An own commit is already its sender's and needs no carrier.
  */
 object GovernanceEvents {
-    val ALL: Set<Kind> = setOf(GovernanceStatementEvent.KIND, OwnCommitEvent.KIND, GovernanceSupportEvent.KIND, GovernanceCarrierEvent.KIND)
+    val ALL: Set<Kind> = setOf(
+        GovernanceStatementEvent.KIND, OwnCommitEvent.KIND, GovernanceSupportEvent.KIND, GovernanceCarrierEvent.KIND,
+        PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER,
+    )
 
     /** The epoch tag every envelope names: the epoch its commit is built at. */
     const val EPOCH_TAG = "epoch"
@@ -50,17 +53,22 @@ object GovernanceEvents {
         envelope.tags.firstOrNull { it.size >= 2 && it[0] == EPOCH_TAG }?.get(1)?.toLongOrNull()
 
     /**
-     * Whether [event] is one of these envelopes. Until K3 (docs/giza-into-dedun.md, Phase K),
-     * 30370-30373 are also the legacy numbers of four of Dedun's Wavelength kinds -- the wallet
-     * and operator statements, the auth seed and the signing request -- and Dedun devices
-     * still write them, so the number alone does not say. The shape does: a statement and an
-     * own commit name an `epoch`, which no Wavelength event carries; the support word names
-     * its `governance` version; and a carrier's content is a statement.
+     * Whether [event] is one of these envelopes, or a step of a promotion. Until K3
+     * (docs/giza-into-dedun.md, Phase K), 30370-30376 are also the legacy numbers of seven of
+     * Dedun's Wavelength kinds -- the wallet and operator statements, the auth seed, and the
+     * signing request, echo, provision and signature shares -- and Dedun devices still write
+     * them, so the number alone does not say. The shape does, since no Wavelength event carries
+     * any of these tags: a statement and an own commit name an `epoch`; the support word names
+     * its `governance` version; a carrier's content is a statement; an offer and a handover
+     * name their `target`, and an acceptance its `offer` and `host`.
      */
     fun isGovernance(event: Event): Boolean = when (event.kind) {
         GovernanceStatementEvent.KIND, OwnCommitEvent.KIND -> epochOf(event) != null
         GovernanceSupportEvent.KIND -> GovernanceSupportEvent.supports(event)
         GovernanceCarrierEvent.KIND -> GovernanceCarrierEvent.statementOf(event)?.let { epochOf(it) != null } == true
+        PromotionEvents.OFFER, PromotionEvents.HANDOVER -> PromotionEvents.value(event.tags, PromotionEvents.TARGET_TAG) != null
+        PromotionEvents.ACCEPT ->
+            PromotionEvents.value(event.tags, PromotionEvents.OFFER_TAG) != null && PromotionEvents.value(event.tags, PromotionEvents.HOST_KEY_TAG) != null
         else -> false
     }
 }
@@ -111,4 +119,43 @@ object GovernanceCarrierEvent {
     fun statementOf(carrier: Event): Event? = runCatching {
         Event.fromJson(carrier.content).takeIf { it.kind == GovernanceStatementEvent.KIND }
     }.getOrNull()
+}
+
+/**
+ * Making a member an admin of a keyed room, which also makes them a holder of its
+ * key (R1). docs/member-admin-promotion.md, Phase 8.
+ *
+ * 1. An admin offers ([OFFER]) -- a request, carrying no authority.
+ * 2. The member accepts ([ACCEPT]), naming the ChillDKG host key the shares sent
+ *    to them will be sealed to. This is the one decision only they can make.
+ * 3. The group signs the promotion and the key state that binds the next
+ *    participant id to them, in one batch, and the commit lands.
+ * 4. The proposer hands over ([HANDOVER]) what the new member needs to take part:
+ *    the share table, the roster and the signed key state. Nothing in it is
+ *    trusted on the proposer's word -- the table has to hash to what the group
+ *    signed, and the state has to be the room's own signature.
+ * 5. The member asks to be enrolled at the new id, and t holders run reduced
+ *    FROST enrollment for them, as they would a repair.
+ */
+object PromotionEvents {
+    val OFFER: Kind = 30374
+    val ACCEPT: Kind = 30375
+    val HANDOVER: Kind = 30376
+
+    val ALL: Set<Kind> = setOf(OFFER, ACCEPT, HANDOVER)
+
+    const val TARGET_TAG = "target"
+    const val OFFER_TAG = "offer"
+    const val HOST_KEY_TAG = "host"
+
+    fun offerTags(chatRoomId: HexKey, target: HexKey): Array<Array<String>> =
+        arrayOf(DTag.assemble(chatRoomId), arrayOf(TARGET_TAG, target))
+
+    fun acceptTags(chatRoomId: HexKey, offerId: HexKey, hostPublicKey: HexKey): Array<Array<String>> =
+        arrayOf(DTag.assemble(chatRoomId), arrayOf(OFFER_TAG, offerId), arrayOf(HOST_KEY_TAG, hostPublicKey))
+
+    fun handoverTags(chatRoomId: HexKey, target: HexKey): Array<Array<String>> =
+        arrayOf(DTag.assemble(chatRoomId), arrayOf(TARGET_TAG, target))
+
+    fun value(tags: Array<Array<String>>, name: String): String? = tags.firstOrNull { it.size >= 2 && it[0] == name }?.get(1)
 }

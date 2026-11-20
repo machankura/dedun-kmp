@@ -71,6 +71,7 @@ object ShareRepairManager {
         nostrPrivateKey: ByteArray,
         key: DkgSession,
         targetId: Int? = null,
+        nParticipants: Int? = null,
     ): ShareRepairSession {
         check(ExperimentalFeatures.shareRefresh) { "This build does not repair shares" }
         require(key.stage == DkgRitualStage.COMPLETE) { "Ceremony ${key.id} has not produced a key" }
@@ -95,9 +96,14 @@ object ShareRepairManager {
             userPublicKey = userPublicKey,
             stage = if (isBound(entry, userPublicKey, hostPublicKey)) ShareRepairStage.COLLECTING else ShareRepairStage.AWAITING_BINDING,
             sessionRandom = RandomInstance.bytes(32).toHex(),
+            nParticipants = nParticipants,
         )
         database.shareRepairDao().upsert(session)
-        announce(database, session, ChatMessage.TYPE_SHARE_REPAIR_REQUESTED, "asked to be brought back into the group's signing.", userPublicKey)
+        announce(
+            database, session, ChatMessage.TYPE_SHARE_REPAIR_REQUESTED,
+            if (nParticipants != null) "asked to be given a share of the group's key." else "asked to be brought back into the group's signing.",
+            userPublicKey,
+        )
         broadcast(
             database, localChatRoom, userPublicKey, ShareRepairEvents.REQUEST, "",
             arrayOf(
@@ -107,7 +113,7 @@ object ShareRepairManager {
                 arrayOf(ShareRepairEvents.TARGET_TAG, id.toString()),
                 arrayOf(ShareRepairEvents.HELPERS_TAG, session.helperIds),
                 arrayOf(ShareRepairEvents.HOST_KEY_TAG, hostPublicKey),
-            )
+            ) + listOfNotNull(nParticipants?.let { arrayOf(ShareRepairEvents.N_TAG, it.toString()) })
         )
         return session
     }
@@ -146,8 +152,15 @@ object ShareRepairManager {
         val helpers = tag(ShareRepairEvents.HELPERS_TAG)?.split(",")?.map { it.trim().toIntOrNull() ?: return null } ?: return null
         val shares = ShareGenerations.active(database, key)
         val entry = shares.roster.firstOrNull { it.participantId == targetId }
+        // An enrollment at a new id names the n it runs with, which has to be that
+        // id: one past the table the group had before the new member's public share
+        // was added to it (docs/member-admin-promotion.md, Phase 8).
+        val nParticipants = tag(ShareRepairEvents.N_TAG)?.let { it.toIntOrNull() ?: return null }
+        val tableSize = shares.publicShares?.size ?: return null
 
         val reason = when {
+            nParticipants != null && (nParticipants != targetId || tableSize != targetId + 1) ->
+                "it enrolls id $targetId with n = $nParticipants, and this device's table has $tableSize entries"
             shares.generation != generation -> "it repairs into generation $generation, and this device is at ${shares.generation}"
             entry == null -> "id $targetId is not in the key"
             entry.standing != ShareStanding.STALE -> "id $targetId is ${entry.standing.name.lowercase()}"
@@ -173,11 +186,14 @@ object ShareRepairManager {
             userPublicKey = userPublicKey,
             stage = if (isBound(entry!!, event.pubKey, hostKey)) ShareRepairStage.COLLECTING else ShareRepairStage.AWAITING_BINDING,
             sessionRandom = RandomInstance.bytes(32).toHex(),
+            nParticipants = nParticipants,
         )
         database.shareRepairDao().upsert(session)
         announce(
             database, session, ChatMessage.TYPE_SHARE_REPAIR_REQUESTED,
-            if (session.stage == ShareRepairStage.AWAITING_BINDING) {
+            if (nParticipants != null) {
+                "asked to be given a share of the group's key, as the group agreed."
+            } else if (session.stage == ShareRepairStage.AWAITING_BINDING) {
                 "asked to be brought back into the group's signing under a new identity. The group has to bind them to the id first."
             } else {
                 "asked to be brought back into the group's signing."
@@ -236,7 +252,9 @@ object ShareRepairManager {
             val thresholdPublicKey = PublicKey(ByteVector(requireNotNull(key.thresholdPublicKey).hexToByteArray()))
             val helpers = session.helperIdList()
             val helperIds = helpers.map { it.toUInt() }
-            val n = key.participantCount
+            // The table's size, not the ceremony's count: an enrollment grows it. An
+            // enrollment runs with the n before it, which its session names.
+            val n = session.nParticipants ?: table.size
             val t = key.threshold
             val sid = ByteVector32(session.id)
             val hostSecretKey = ChillDkgRitualManager.deriveHostSecretKey(nostrPrivateKey)
@@ -251,13 +269,16 @@ object ShareRepairManager {
                     throw IllegalStateException("the repaired member's proof does not match the group's public share")
                 }
                 markLive(database, key, session)
-                complete(database, session, "was brought back into the group's signing.", session.targetPublicKey)
+                complete(database, session, completedLine(session), session.targetPublicKey)
                 return
             }
 
             // ---- a helper ----
             if (myId != null && myId in helpers && session.userPublicKey != session.targetPublicKey) {
-                if (session.helpApprovedAt == null) {
+                // An enrollment needs no approval of its own: the group signed the
+                // binding that makes the new member the holder of this id, and that
+                // signature was every helper's chance to say no.
+                if (session.helpApprovedAt == null && session.nParticipants == null) {
                     if (!session.approvalRequested) {
                         update(database, session) { it.copy(approvalRequested = true) }
                         announce(database, session, ChatMessage.TYPE_SHARE_REPAIR_APPROVAL_NEEDED, "Your approval is needed to help bring a member back into the group's signing.", session.userPublicKey)
@@ -316,7 +337,7 @@ object ShareRepairManager {
                 val proof = Crypto.signSchnorr(sid, share, null)
                 broadcast(database, localChatRoom, session.userPublicKey, ShareRepairEvents.DONE, proof.toHex(), arrayOf(arrayOf(ShareRepairEvents.SESSION_TAG, session.id)))
                 markLive(database, key, session)
-                complete(database, session, "was brought back into the group's signing.", session.targetPublicKey)
+                complete(database, session, completedLine(session), session.targetPublicKey)
             }
         } catch (e: CancellationException) {
             throw e
@@ -326,6 +347,9 @@ object ShareRepairManager {
             announce(database, session, ChatMessage.TYPE_SHARE_REPAIR_FAILED, "Bringing a member back into the group's signing failed: ${e.message}", session.targetPublicKey)
         }
     }
+
+    private fun completedLine(session: ShareRepairSession): String =
+        if (session.nParticipants != null) "now holds a share of the group's key." else "was brought back into the group's signing."
 
     /** Approves helping with a repair, and moves on. */
     suspend fun approve(database: DedunDatabase, localChatRoom: LocalChatRoom, sessionId: String, nostrPrivateKey: ByteArray) {
@@ -337,7 +361,7 @@ object ShareRepairManager {
 
     /** Whether this device's owner is being asked to help with [session]. */
     suspend fun isAwaitingApproval(database: DedunDatabase, session: ShareRepairSession): Boolean {
-        if (session.stage != ShareRepairStage.COLLECTING || session.helpApprovedAt != null) return false
+        if (session.stage != ShareRepairStage.COLLECTING || session.helpApprovedAt != null || session.nParticipants != null) return false
         val key = database.dkgSessionDao().getSessionById(session.dkgSessionId) ?: return false
         val shares = ShareGenerations.at(database, key, session.generation) ?: return false
         val myId = shares.roster.firstOrNull { it.memberPublicKey == session.userPublicKey && it.standing == ShareStanding.LIVE }?.participantId

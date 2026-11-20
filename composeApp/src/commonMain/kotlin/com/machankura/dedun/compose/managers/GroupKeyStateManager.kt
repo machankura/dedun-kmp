@@ -4,6 +4,8 @@ import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import kotlin.time.Clock
+import fr.acinq.bitcoin.PublicKey
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import kotlin.time.Instant
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DkgSession
@@ -219,8 +221,10 @@ object GroupKeyStateManager {
         val filed = database.groupKeyStateDao().replace(state)
         // `replace` re-stamps what it files, so the row is compared on what it says.
         if (filed.generation == state.generation && filed.announcedAt == state.announcedAt) {
-            retireOlderShares(database, state)
+            // Bindings first: one that enrolls a new id extends the table, and the
+            // table has to be the one the group signed before older shares go.
             applyBindings(database, state)
+            retireOlderShares(database, state)
         }
         return filed
     }
@@ -261,6 +265,9 @@ object GroupKeyStateManager {
         val generation = state.generation ?: return
         val bindings = GroupKeyStateEvent.MemberBinding.decodeAll(state.memberBindings)
         if (bindings.isEmpty()) return
+        // A binding of the next id is an enrollment: the id joins the table first
+        // (docs/member-admin-promotion.md, Phase 8).
+        bindings.forEach { binding -> PromotionManager.enrollNewId(database, state, binding) }
         val members = database.keyShareDao().getMembers(state.dkgSessionId, generation)
         val changed = bindings.mapNotNull { binding ->
             val row = members.firstOrNull { it.participantId == binding.participantId } ?: return@mapNotNull null
@@ -316,50 +323,71 @@ object GroupKeyStateManager {
         refreshId: String?,
         newBinding: GroupKeyStateEvent.MemberBinding? = null,
     ): FrostSigningSession {
+        val template = generationTemplate(database, localChatRoom, key, refreshId, newBinding)
+        return FrostSigningManager.proposeSigning(
+            database = database,
+            localChatRoom = localChatRoom,
+            userPublicKey = userPublicKey,
+            kind = template.kind,
+            tags = template.tags,
+            content = template.content,
+            key = key,
+            createdAt = template.createdAt,
+        )
+    }
+
+    /**
+     * The key state [proposeGeneration] asks the group to sign, unsigned, for a caller
+     * that signs it alongside something else -- a promotion signs it with the change
+     * it makes (docs/member-admin-promotion.md, Phase 8). [publicShares], when given,
+     * is the table the state names instead of this device's: the current one with a
+     * new member's public share appended.
+     */
+    suspend fun generationTemplate(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        key: DkgSession,
+        refreshId: String?,
+        newBinding: GroupKeyStateEvent.MemberBinding? = null,
+        publicShares: List<PublicKey>? = null,
+    ): EventTemplate<Event> {
         val shares = ShareGenerations.active(database, key)
         check(shares.generation >= 1) { "Generation 0 is the ceremony's, and needs no new key state" }
-        val publicShares = requireNotNull(shares.publicShares) { "Generation ${shares.generation} has no public shares" }
+        val table = publicShares ?: requireNotNull(shares.publicShares) { "Generation ${shares.generation} has no public shares" }
         val current = keyStateFor(database, localChatRoom.chatRoom.id)
         val path = current?.pathIndices() ?: SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH
         val parent = current?.parentChatRoomId?.let { parentId ->
             current.birthCertificateJson?.let { Event.fromJsonOrNull(it) }?.let { SubgroupParentage(parentId, it) }
         }
         val thresholdPublicKey = requireNotNull(key.thresholdPublicKey)
-        return FrostSigningManager.proposeSigning(
-            database = database,
-            localChatRoom = localChatRoom,
-            userPublicKey = userPublicKey,
-            kind = GroupKeyStateEvent.KIND,
-            tags = GroupKeyStateEvent.assembleTags(
-                chatRoomId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey, path),
-                dkgSessionId = key.id,
-                path = path,
-                parent = parent,
-                generation = GroupKeyStateEvent.ShareGenerationTags(
-                    generation = shares.generation,
-                    publicSharesHash = ShareGenerations.publicSharesHash(publicShares),
-                    refreshId = refreshId,
-                    retiredIds = shares.roster.filter { it.standing == ShareStanding.RETIRED }.map { it.participantId },
-                    // Bindings already in force at this generation stay said, so a
-                    // later state does not quietly undo them; a new one replaces any
-                    // earlier binding of the same id.
-                    bindings = (
-                        GroupKeyStateEvent.MemberBinding.decodeAll(current?.takeIf { it.generation == shares.generation }?.memberBindings)
-                            .filter { it.participantId != newBinding?.participantId } + listOfNotNull(newBinding)
-                        ),
-                ),
-            ),
-            content = thresholdPublicKey,
-            key = key,
-            // Later than the state it amends, by a second if it must be. Two states
-            // at one generation are told apart by their time alone, and a rebind
-            // stamped in the same second as the state it adds to would tie with it
-            // -- and the binding could be the one that loses.
-            createdAt = maxOf(
-                Clock.System.now().epochSeconds,
-                (current?.takeIf { (it.generation ?: 0) == shares.generation }?.announcedAt?.epochSeconds ?: 0L) + 1
+        val tags = GroupKeyStateEvent.assembleTags(
+            chatRoomId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey, path),
+            dkgSessionId = key.id,
+            path = path,
+            parent = parent,
+            generation = GroupKeyStateEvent.ShareGenerationTags(
+                generation = shares.generation,
+                publicSharesHash = ShareGenerations.publicSharesHash(table),
+                refreshId = refreshId,
+                retiredIds = shares.roster.filter { it.standing == ShareStanding.RETIRED }.map { it.participantId },
+                // Bindings already in force at this generation stay said, so a
+                // later state does not quietly undo them; a new one replaces any
+                // earlier binding of the same id.
+                bindings = (
+                    GroupKeyStateEvent.MemberBinding.decodeAll(current?.takeIf { it.generation == shares.generation }?.memberBindings)
+                        .filter { it.participantId != newBinding?.participantId } + listOfNotNull(newBinding)
+                    ),
             ),
         )
+        // Later than the state it amends, by a second if it must be. Two states
+        // at one generation are told apart by their time alone, and a rebind
+        // stamped in the same second as the state it adds to would tie with it
+        // -- and the binding could be the one that loses.
+        val createdAt = maxOf(
+            Clock.System.now().epochSeconds,
+            (current?.takeIf { (it.generation ?: 0) == shares.generation }?.announcedAt?.epochSeconds ?: 0L) + 1
+        )
+        return EventTemplate(createdAt, GroupKeyStateEvent.KIND, tags, thresholdPublicKey)
     }
 
     /**

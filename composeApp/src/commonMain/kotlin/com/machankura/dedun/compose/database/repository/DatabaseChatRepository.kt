@@ -50,6 +50,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.PromotionManager
 import com.machankura.dedun.compose.managers.GovernanceFollowThrough
 import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.managers.MarmotInboundManager
@@ -875,6 +876,19 @@ class DatabaseChatRepository(
 
     override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
         database.marmotOutboundDao().demote(localChatRoom, adminPublicKey)
+    }
+
+    override suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer? {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return null
+        return PromotionManager.pendingOffer(database, chatRoomId, room.chatRoom.userPublicKey)
+    }
+
+    override suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String? {
+        val identity = activeIdentity.value ?: return "No identity is signed in"
+        val nostrPrivateKey = identity.toKeyPair().privKey ?: return "This identity cannot sign"
+        return runCatching {
+            PromotionManager.accept(database, localChatRoom, identity.nostrPublicKey, nostrPrivateKey, offerId)
+        }.exceptionOrNull()?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
     }
 
     override suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) {

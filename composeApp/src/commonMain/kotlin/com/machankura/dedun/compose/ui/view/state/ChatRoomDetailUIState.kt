@@ -156,6 +156,12 @@ sealed interface ChatRoomDetailUIState {
          */
         val shares: SharesSummary? = null,
         /**
+         * An offer to this device's account to become an admin of this keyed room,
+         * by public key of the offer and of who made it; null when there is none.
+         * docs/member-admin-promotion.md, Phase 8.
+         */
+        val promotionOffer: Pair<HexKey, HexKey>? = null,
+        /**
          * Members of the ceremony that made this room's key whom its admin policy
          * does not name -- empty when it names them all, and when this device has
          * no record of the ceremony to check against. Read through
