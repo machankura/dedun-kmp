@@ -182,6 +182,9 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalParticipant
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilePreviewRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.MemberActionUnavailableRoute
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateSharedKeyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposalListRoute
@@ -221,6 +224,7 @@ import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_
 import dedun.composeapp.generated.resources.founding_members_are_not_admins
 import dedun.composeapp.generated.resources.admin
 import dedun.composeapp.generated.resources.admin_badge
+import dedun.composeapp.generated.resources.view_profile
 import dedun.composeapp.generated.resources.run_by_members
 import dedun.composeapp.generated.resources.parent_group
 import dedun.composeapp.generated.resources.a_subgroup
@@ -375,6 +379,7 @@ fun ChatRoomDetailScreen(
     val adminOfferSent = stringResource(Res.string.admin_offer_sent)
     val promotionAccepted = stringResource(Res.string.promotion_accepted)
     val adminLabel = stringResource(Res.string.admin_badge)
+    val viewProfile = stringResource(Res.string.view_profile)
     val shareLabel = stringResource(Res.string.holds_a_share)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
     val sharesActionSent = stringResource(Res.string.shares_action_sent)
@@ -1448,15 +1453,22 @@ fun ChatRoomDetailScreen(
                                 // keyed by the public key, which is the one thing
                                 // every row here has, and it shows the cached
                                 // profile at once while the relays refresh it.
-                                Card(
-                                    onClick = {
-                                        onNavigateToRoute.invoke(
-                                            ProfilePreviewRoute(
-                                                activeUserPublicKey = activeUserPublicKey,
-                                                profilePublicKey = localParticipant.participant.participantPublicKey
-                                            )
+                                val openProfile = {
+                                    onNavigateToRoute.invoke(
+                                        ProfilePreviewRoute(
+                                            activeUserPublicKey = activeUserPublicKey,
+                                            profilePublicKey = localParticipant.participant.participantPublicKey
                                         )
-                                    }
+                                    )
+                                }
+                                Card(
+                                    // The chevron that said so is gone from every other
+                                    // member's row; the label keeps saying it to anyone
+                                    // who cannot see the row. docs/member-row-actions.md, D7.
+                                    modifier = Modifier.semantics {
+                                        onClick(label = viewProfile) { openProfile(); true }
+                                    },
+                                    onClick = openProfile,
                                 ) {
                                     ListItem(
                                         leadingContent = {
@@ -1467,17 +1479,29 @@ fun ChatRoomDetailScreen(
                                         },
                                         trailingContent = {
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
-                                            val actions = chatRoomDetailUIState.memberActions[memberPublicKey].orEmpty()
-                                                .filter { it.isAvailable }
-                                                .map { it.action }
-                                                .toSet()
-                                            if (actions.isNotEmpty()) {
-                                                // What this device may do to this member, decided by the
-                                                // view model from the group's state. Every one is a commit
-                                                // through the publish gate, applied when a relay accepts
-                                                // it, which is why the row stays as it is until then. See
-                                                // docs/member-admin-promotion.md, Phase 11.
-                                                MemberActionsMenu(actions = actions) { action ->
+                                            val options = chatRoomDetailUIState.memberActions[memberPublicKey].orEmpty()
+                                            if (options.isNotEmpty()) {
+                                                // Every action that fits this member, open or not, decided by
+                                                // the view model from the group's state: every other member's
+                                                // row has the menu whoever is looking, and this device's own
+                                                // only when stepping down is open. An open action is a commit
+                                                // through the publish gate, applied when a relay accepts it,
+                                                // which is why the row stays as it is until then; one that is
+                                                // not opens the screen that says why. See
+                                                // docs/member-row-actions.md, D1 to D3.
+                                                MemberActionsMenu(
+                                                    options = options,
+                                                    onExplain = { action ->
+                                                        onNavigateToRoute.invoke(
+                                                            MemberActionUnavailableRoute(
+                                                                activeUserPublicKey = activeUserPublicKey,
+                                                                chatRoomId = chatRoomId,
+                                                                memberPublicKey = memberPublicKey,
+                                                                action = action,
+                                                            )
+                                                        )
+                                                    },
+                                                ) { action ->
                                                     if (action == MemberAction.REMOVE_FROM_GROUP) {
                                                         chatRoomDetailViewModel.removeMember(
                                                             localChatRoom = chatRoomDetailUIState.localChatRoom,
@@ -1505,9 +1529,10 @@ fun ChatRoomDetailScreen(
                                                     }
                                                 }
                                             } else {
+                                                // This device's own row, with nothing open on it.
                                                 Icon(
                                                     Icons.Default.ChevronRight,
-                                                    contentDescription = "View profile"
+                                                    contentDescription = viewProfile
                                                 )
                                             }
                                         },

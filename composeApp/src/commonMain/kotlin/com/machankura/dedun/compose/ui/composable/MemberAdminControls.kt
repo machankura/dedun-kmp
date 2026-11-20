@@ -9,6 +9,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -16,6 +17,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.cancel
@@ -56,36 +60,56 @@ import dedun.composeapp.generated.resources.step_down_and_leave
 import dedun.composeapp.generated.resources.step_down_and_leave_body
 import dedun.composeapp.generated.resources.step_down_body
 import dedun.composeapp.generated.resources.step_down_title
+import dedun.composeapp.generated.resources.unavailable
+import dedun.composeapp.generated.resources.why_this_is_unavailable
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.MemberAction
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The member row's overflow menu: the actions [actions] allows, and nothing else.
- * The view model decides them; this only lays them out. A 48dp `IconButton`, as
- * every target is. See docs/member-admin-promotion.md, Phase 11.
+ * The member row's overflow menu: every action [options] lists for this member,
+ * open or not, in a fixed order so an item never moves when it opens. An open one
+ * goes to [onAction]; one that is not is marked -- in the menu's quieter role
+ * colour, with an info icon and a state a screen reader says -- and goes to
+ * [onExplain], which opens the screen that says why. Not `enabled = false`: a
+ * disabled item takes no click, and the explanation could never be reached.
+ * A 48dp `IconButton`, as every target is. See docs/member-row-actions.md, D3.
  */
 @Composable
 internal fun MemberActionsMenu(
-    actions: Set<MemberAction>,
+    options: List<MemberActionOption>,
+    onExplain: (MemberAction) -> Unit,
     onAction: (MemberAction) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val unavailable = stringResource(Res.string.unavailable)
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(Icons.Default.MoreVert, contentDescription = stringResource(Res.string.member_actions))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            // In a fixed order, whatever order the set holds them in.
-            MemberAction.entries.filter { it in actions }.forEach { action ->
+            options.sortedBy { it.action.ordinal }.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(stringResource(action.label())) },
+                    text = { Text(stringResource(option.action.label())) },
+                    modifier = if (option.isAvailable) Modifier else Modifier.semantics { stateDescription = unavailable },
+                    colors = if (option.isAvailable) {
+                        MenuDefaults.itemColors()
+                    } else {
+                        MenuDefaults.itemColors(
+                            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            trailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingIcon = if (option.isAvailable) null else {
+                        { Icon(Icons.Outlined.Info, contentDescription = stringResource(Res.string.why_this_is_unavailable)) }
+                    },
                     onClick = {
                         expanded = false
-                        onAction(action)
+                        if (option.isAvailable) onAction(option.action) else onExplain(option.action)
                     },
                 )
             }
