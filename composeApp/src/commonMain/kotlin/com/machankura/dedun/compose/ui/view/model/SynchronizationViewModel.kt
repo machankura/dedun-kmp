@@ -255,6 +255,12 @@ class SynchronizationViewModel(
                             // written. docs/robust-group-admins.md, Phase 6.
                             runCatching { chatRepository.reconcileAdminFlags() }
                                 .onFailure { logger.e("Could not bring admin flags in line", it) }
+                            // A member who joined a keyed room before joining said it
+                            // follows signed commits, and never opened its screen, holds
+                            // the room back from requiring them -- and so from making
+                            // anyone an admin. docs/remove-convenient-groups.md.
+                            runCatching { chatRepository.announceGovernanceSupport() }
+                                .onFailure { logger.e("Could not say which rooms this device follows", it) }
                             launch(Dispatchers.IO) { observePendingBroadcastNostrEventRequests(keyPair) }
                             // Runs until cancelled rather than draining a queue, but it
                             // belongs here for the same reason the pumps do: it needs the

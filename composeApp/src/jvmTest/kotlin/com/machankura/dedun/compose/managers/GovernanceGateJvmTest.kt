@@ -264,10 +264,38 @@ class GovernanceGateJvmTest {
         return event.toGroupEvent(userHex)!!
     }
 
+    /** Takes back what this device said, as a device that joined before joining said it. */
+    private suspend fun forgetOurSupport() {
+        db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(GovernanceSupportEvent.KIND))
+            .filter { it.publicKey == userHex }
+            .forEach { db.marmotInnerEventDao().deleteById(it.id) }
+        assertFalse(userHex in GovernanceSupport.supporters(db, roomId))
+    }
+
+    @Test
+    fun `a member welcomed into a keyed room says it on joining`() = runBlocking {
+        // Nobody else says anything after the Welcome: what the others said before it
+        // is at an epoch this device cannot read. docs/remove-convenient-groups.md.
+        governedRoom(governed = false)
+
+        assertTrue(userHex in GovernanceSupport.supporters(db, roomId), "joining did not say it")
+        assertEquals(setOf(dana.hex), GovernanceSupport.missing(db, roomId, appGroup()))
+    }
+
+    @Test
+    fun `a device that joined before joining said it says it when it starts`() = runBlocking {
+        governedRoom(governed = false)
+        forgetOurSupport()
+
+        assertEquals(1, chatRepository.announceGovernanceSupport())
+        assertTrue(userHex in GovernanceSupport.supporters(db, roomId))
+        assertEquals(0, chatRepository.announceGovernanceSupport(), "said twice")
+    }
+
     @Test
     fun `hearing another member say it, this device says it back`() = runBlocking {
         governedRoom(governed = false)
-        assertFalse(userHex in GovernanceSupport.supporters(db, roomId))
+        forgetOurSupport()
 
         says(dana)
 

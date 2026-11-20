@@ -370,6 +370,13 @@ interface ChatRepository {
     suspend fun reconcileAdminFlags(): Int
 
     /**
+     * Says, in every keyed room this device is in, that it follows signed commits,
+     * for the rooms joined before joining said it. Once per start. See
+     * `GovernanceSupport.announceAll`.
+     */
+    suspend fun announceGovernanceSupport(): Int
+
+    /**
      * Takes every key ceremony [keyPair] coordinated from a key to a working room,
      * until cancelled: asks the group to sign its key state (a subgroup's parent to
      * certify it first) and creates the room. See `CeremonyFollowThrough` and
@@ -739,6 +746,8 @@ interface ChatRepository {
             override suspend fun adminRoomOf(chatRoomId: String): String? = null
 
             override suspend fun reconcileAdminFlags(): Int = 0
+
+            override suspend fun announceGovernanceSupport(): Int = 0
 
 
             override suspend fun sendChatMessage(

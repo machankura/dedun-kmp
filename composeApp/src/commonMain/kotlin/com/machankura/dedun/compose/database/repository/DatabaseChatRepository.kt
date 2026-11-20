@@ -160,6 +160,8 @@ class DatabaseChatRepository(
 
     override suspend fun reconcileAdminFlags(): Int = AdminFlags.reconcileAll(database)
 
+    override suspend fun announceGovernanceSupport(): Int = GovernanceSupport.announceAll(database)
+
     override suspend fun followThroughCeremonies(keyPair: KeyPair) = kotlinx.coroutines.coroutineScope {
         launch { CeremonyFollowThrough.observe(database = database, chatRepository = this@DatabaseChatRepository, keyPair = keyPair) }
         // What a governed room's signed changes need after they land: a rotation

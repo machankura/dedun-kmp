@@ -132,7 +132,7 @@
     <string name="governance_on">Changes to who is in this group need the group's signature. It always keeps at least %1$d admins.</string>
     <string name="require_signatures">Require the group's signature for changes</string>
     <string name="require_signatures_explainer">From then on, adding or removing a member, or changing who the admins are, is proposed and has to be signed by the group before it happens.</string>
-    <string name="governance_waiting">Before changes can need the group's signature, %1$s need to update Dedun.</string>
+    <string name="governance_waiting">Waiting for %1$s to open an up-to-date Dedun. Until then, this group can't require its signature on changes, and nobody else can be made an admin.</string>
     <string name="make_admin_body_keyed">They'll be asked to accept, then the group signs it, and they'll hold a share of the group's key and be asked to approve its changes.</string>
     <string name="remove_as_admin_body_keyed">Once the group signs it, they stay in the group as a member and their share of the group's key is rotated away.</string>
     <string name="admin_offer_sent">Asked; they become an admin once they accept and the group signs it</string>

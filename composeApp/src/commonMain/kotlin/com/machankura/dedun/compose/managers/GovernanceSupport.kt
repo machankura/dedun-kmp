@@ -1,11 +1,13 @@
 package com.machankura.dedun.compose.managers
 
+import co.touchlab.kermit.Logger
 import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import kotlin.time.Clock
 import kotlin.time.Instant
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
 import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
 
@@ -16,9 +18,15 @@ import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
  * The rule cannot be switched on while anybody in the room would be left behind
  * by it: a device that does not know it applies the bare commits Dedun drops and
  * reads none of the envelopes, and is in a different group from the first change.
- * So each device says, once per room, that it can follow -- and says it back when
- * it hears another say it, which is how a member who never opens the room's screen
- * still gets counted.
+ * So each device says, once per room, that it can follow: when it is welcomed in,
+ * when it starts, when the room's screen is opened, and back when it hears another
+ * say it.
+ *
+ * Joining has to be one of them. A member invited after the others said it cannot
+ * read what they said -- it was sent at an epoch before theirs -- so it never hears
+ * anybody to answer, and nobody says it again. Until it opened the room's screen
+ * the room waited on it, and nobody could be made an admin. See
+ * docs/remove-convenient-groups.md, "After the build".
  */
 object GovernanceSupport {
 
@@ -59,4 +67,27 @@ object GovernanceSupport {
         )
         return true
     }
+
+    /**
+     * [announce] for every room this device is in, for the members who joined
+     * before joining was one of the times it is said. Once per start, and a read
+     * with no write for a room that has it already. One room that will not open is
+     * logged and passed over.
+     *
+     * @return how many rooms it was said in now.
+     */
+    suspend fun announceAll(database: DedunDatabase): Int =
+        database.chatRoomDao().getChatRoomIdsWithMlsState().count { chatRoomId ->
+            runCatching {
+                val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return@runCatching false
+                if (room.chatRoom.leftGroupAt != null || room.chatRoom.marmotProfile() != MarmotProfile.CURRENT) return@runCatching false
+                val group = database.marmotEngine.groupFor(room.routingId) ?: return@runCatching false
+                announce(database, chatRoomId, group, room.chatRoom.userPublicKey)
+            }.getOrElse {
+                logger.e("Could not say $chatRoomId follows signed commits", it)
+                false
+            }
+        }
+
+    private val logger = Logger.withTag("GovernanceSupport")
 }

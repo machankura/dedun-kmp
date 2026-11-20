@@ -934,6 +934,15 @@ abstract class NostrDao(
                                         mlsGroup = group,
                                     )
 
+                                    // That this device follows signed commits, said on
+                                    // joining. It cannot read the others saying it -- that
+                                    // was before its epoch -- so it would never answer, and
+                                    // the room would wait on it until its screen was opened.
+                                    // docs/remove-convenient-groups.md, "After the build".
+                                    if (group.currentGroupState().isCurrentProfile) {
+                                        GovernanceSupport.announce(database, nostrGroupId, group, userPublicKey)
+                                    }
+
                                     // Save ChatRoom Relays...
                                     participants.filter { it.participantPublicKey != userPublicKey }.forEach { participant ->
                                         val publicKey = participant.participantPublicKey
