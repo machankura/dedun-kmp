@@ -1013,12 +1013,15 @@ abstract class MarmotOutboundDao(
         // away once it lands (docs/member-admin-promotion.md, Phase 9).
         if (AdminGovernance.isKeyedRoom(group)) {
             check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
-            check(adminPublicKey != localChatRoom.chatRoom.userPublicKey) {
-                "In a group with a shared key, another admin removes you as admin, so the group can rotate your share away"
-            }
             val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
             if (!AdminGovernance.keepsFloor(group, adminPublicKey, floor)) {
                 throw IllegalStateException("A group with a shared key needs at least $floor admins. Make someone else an admin first")
+            }
+            // Your own: asked of another admin, whose device proposes it and then
+            // rotates your share away -- a rotation's proposer has to keep a share.
+            if (adminPublicKey == localChatRoom.chatRoom.userPublicKey) {
+                PromotionManager.requestStepDown(database, localChatRoom, adminPublicKey)
+                return
             }
             val admins = group.currentAdminIdentities()
             GovernanceManager.propose(

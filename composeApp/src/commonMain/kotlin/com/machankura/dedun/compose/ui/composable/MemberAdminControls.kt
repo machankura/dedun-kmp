@@ -59,6 +59,7 @@ import dedun.composeapp.generated.resources.step_down
 import dedun.composeapp.generated.resources.step_down_and_leave
 import dedun.composeapp.generated.resources.step_down_and_leave_body
 import dedun.composeapp.generated.resources.step_down_body
+import dedun.composeapp.generated.resources.step_down_body_keyed
 import dedun.composeapp.generated.resources.step_down_title
 import dedun.composeapp.generated.resources.unavailable
 import dedun.composeapp.generated.resources.why_this_is_unavailable
@@ -144,7 +145,7 @@ internal fun ConfirmAdminChangeDialog(
         )
         MemberAction.STEP_DOWN -> Triple(
             stringResource(Res.string.step_down_title),
-            stringResource(Res.string.step_down_body),
+            stringResource(if (keyed) Res.string.step_down_body_keyed else Res.string.step_down_body),
             stringResource(Res.string.step_down),
         )
         // Removal keeps the immediate action it always had.

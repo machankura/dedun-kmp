@@ -65,7 +65,25 @@ class MemberActionPolicyTest {
 
         assertNull(MemberActionPolicy.options(convenient(), listOf(me))[me], "the only admin was offered to step down")
         assertNull(MemberActionPolicy.options(convenient(admins = setOf(bob)), listOf(me))[me], "a member was offered to step down")
-        assertNull(MemberActionPolicy.options(keyed(), listOf(me))[me], "an admin of a keyed room was offered to step down alone")
+    }
+
+    /**
+     * In a keyed room stepping down is a request another admin's device proposes
+     * (`AdminGovernance.canAskToStepDown`): offered above the floor, with another
+     * admin to ask, in a room whose changes the group signs.
+     */
+    @Test
+    fun `an admin of a keyed room asks to step down, above the floor and with someone to ask`() {
+        assertEquals(listOf(MemberActionOption(MemberAction.STEP_DOWN)), MemberActionPolicy.options(keyed(), listOf(me))[me])
+
+        val atFloor = keyed(admins = setOf(me, bob, carol))
+        assertNull(MemberActionPolicy.options(atFloor, listOf(me))[me], "stepping down was offered at the floor")
+
+        val alone = keyed(admins = setOf(me)).copy(floor = 1)
+        assertNull(MemberActionPolicy.options(alone, listOf(me))[me], "stepping down was offered with nobody to ask")
+
+        assertNull(MemberActionPolicy.options(keyed().copy(governed = false), listOf(me))[me], "an unsigned keyed room offered it")
+        assertNull(MemberActionPolicy.options(keyed().copy(shareRefresh = false), listOf(me))[me], "a build without rotation offered it")
     }
 
     @Test

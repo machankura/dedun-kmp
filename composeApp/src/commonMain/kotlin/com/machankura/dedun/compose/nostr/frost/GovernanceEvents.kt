@@ -28,7 +28,7 @@ import com.vitorpamplona.quartz.nip01Core.tags.dTag.DTag
 object GovernanceEvents {
     val ALL: Set<Kind> = setOf(
         GovernanceStatementEvent.KIND, OwnCommitEvent.KIND, GovernanceSupportEvent.KIND, GovernanceCarrierEvent.KIND,
-        PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER,
+        PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER, PromotionEvents.STEP_DOWN,
     )
 
     /** The epoch tag every envelope names: the epoch its commit is built at. */
@@ -54,19 +54,21 @@ object GovernanceEvents {
 
     /**
      * Whether [event] is one of these envelopes, or a step of a promotion. Until K3
-     * (docs/giza-into-dedun.md, Phase K), 30370-30376 are also the legacy numbers of seven of
+     * (docs/giza-into-dedun.md, Phase K), 30370-30377 are also the legacy numbers of eight of
      * Dedun's Wavelength kinds -- the wallet and operator statements, the auth seed, and the
-     * signing request, echo, provision and signature shares -- and Dedun devices still write
+     * signing request, echo, provision, signature shares and high-water mark -- and Dedun devices still write
      * them, so the number alone does not say. The shape does, since no Wavelength event carries
      * any of these tags: a statement and an own commit name an `epoch`; the support word names
      * its `governance` version; a carrier's content is a statement; an offer and a handover
-     * name their `target`, and an acceptance its `offer` and `host`.
+     * name their `target`, and an acceptance its `offer` and `host`. A step-down (30377, the
+     * high-water mark's legacy number) is told by its empty content.
      */
     fun isGovernance(event: Event): Boolean = when (event.kind) {
         GovernanceStatementEvent.KIND, OwnCommitEvent.KIND -> epochOf(event) != null
         GovernanceSupportEvent.KIND -> GovernanceSupportEvent.supports(event)
         GovernanceCarrierEvent.KIND -> GovernanceCarrierEvent.statementOf(event)?.let { epochOf(it) != null } == true
         PromotionEvents.OFFER, PromotionEvents.HANDOVER -> PromotionEvents.value(event.tags, PromotionEvents.TARGET_TAG) != null
+        PromotionEvents.STEP_DOWN -> PromotionEvents.isStepDown(event.content)
         PromotionEvents.ACCEPT ->
             PromotionEvents.value(event.tags, PromotionEvents.OFFER_TAG) != null && PromotionEvents.value(event.tags, PromotionEvents.HOST_KEY_TAG) != null
         else -> false
@@ -142,7 +144,16 @@ object PromotionEvents {
     val ACCEPT: Kind = 30375
     val HANDOVER: Kind = 30376
 
-    val ALL: Set<Kind> = setOf(OFFER, ACCEPT, HANDOVER)
+    /**
+     * An admin of a keyed room asking to be removed as one. They cannot propose it
+     * themselves: the rotation that follows a demotion is started by its proposer,
+     * and has to be started by somebody who keeps a share. So one remaining admin's
+     * device proposes it for them (`PromotionManager.followStepDowns`). Signed by the
+     * admin stepping down, whom MLS authenticates as its sender.
+     */
+    val STEP_DOWN: Kind = 30377
+
+    val ALL: Set<Kind> = setOf(OFFER, ACCEPT, HANDOVER, STEP_DOWN)
 
     const val TARGET_TAG = "target"
     const val OFFER_TAG = "offer"
@@ -156,6 +167,16 @@ object PromotionEvents {
 
     fun handoverTags(chatRoomId: HexKey, target: HexKey): Array<Array<String>> =
         arrayOf(DTag.assemble(chatRoomId), arrayOf(TARGET_TAG, target))
+
+    fun stepDownTags(chatRoomId: HexKey): Array<Array<String>> = arrayOf(DTag.assemble(chatRoomId))
+
+    /**
+     * Whether a 30377 with [content] is a step-down request: it says nothing but who sent it,
+     * so its content is empty. Until K3, 30377 is also the legacy number of the Wavelength
+     * wallet's high-water mark, which Dedun devices still write and whose content is never
+     * empty -- and an admin's high-water mark taken for a request would have them demoted.
+     */
+    fun isStepDown(content: String): Boolean = content.isEmpty()
 
     fun value(tags: Array<Array<String>>, name: String): String? = tags.firstOrNull { it.size >= 2 && it[0] == name }?.get(1)
 }

@@ -465,6 +465,27 @@ last member says it, and not before; any other admin's device sends nothing.
 Then the member's row offers **Make admin** -- with the room's share rotation on, which
 is a development build for now -- and the member accepts on their own device.
 
+#### Stepping down, asked of another admin
+
+With every keyed room governed, an admin's own row had no menu: an admin of a keyed
+room could not step down (member-admin-promotion, Phase 9). A demotion's proposer starts
+the rotation that takes the demoted admin's share away, and a rotation's proposer has to
+keep a share -- so the admin stepping down cannot propose it.
+
+They ask instead. **Step down as admin** on their own row sends a request into the room
+(`PromotionEvents.STEP_DOWN`, 30377) and commits nothing. The remaining admin in the
+lowest leaf (`AdminGovernance.stepDownProposer`) -- one device, named the same on every
+device, so that two admins never both propose it -- two commits at one epoch the library cannot settle for their authors -- takes it up in
+`GovernanceFollowThrough` and runs the same `demote` its own **Remove as admin** would:
+proposed, signed by the group, then the share rotated away. The request is used once:
+dropped after it is proposed or refused out loud, and by every device once its requester
+is no longer an admin. It is offered only above the floor and while another admin is
+there to ask.
+
+Pinned in `GovernanceGateJvmTest`: the menu offers it, and not at the floor; asking
+commits nothing and is not the asker's to take up; the lowest-leaf admin's device takes
+it to `demote`; a request from someone no longer an admin is dropped.
+
 ## Out of scope
 
 - **One-to-one chats** (D1). If they are to become robust, that needs its own plan.

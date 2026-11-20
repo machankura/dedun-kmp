@@ -122,6 +122,8 @@
     <string name="step_down_title">Step down as admin?</string>
     <string name="step_down_body">You stay in the group as a member. Only an admin can make you one again.</string>
     <string name="step_down">Step down</string>
+    <string name="step_down_body_keyed">You stay in the group as a member. Another admin's Dedun proposes it for the group to sign, and your share of the group's key is rotated away once it's done.</string>
+    <string name="step_down_requested">Asked the other admins; it happens once the group signs it</string>
     <string name="admin_change_requested">Sent; it takes effect once a relay accepts it</string>
     <string name="leave_as_admin_title">Leave the group?</string>
     <string name="step_down_and_leave_body">You're an admin, so you'll step down first, then leave once a relay accepts it.</string>

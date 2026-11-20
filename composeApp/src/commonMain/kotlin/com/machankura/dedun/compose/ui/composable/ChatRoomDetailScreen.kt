@@ -205,6 +205,7 @@ import dedun.composeapp.generated.resources.couldn_t_leave_the_group
 import dedun.composeapp.generated.resources.admin_change_requested
 import dedun.composeapp.generated.resources.stepping_down_to_leave
 import dedun.composeapp.generated.resources.change_proposed
+import dedun.composeapp.generated.resources.step_down_requested
 import dedun.composeapp.generated.resources.admin_offer_sent
 import dedun.composeapp.generated.resources.promotion_accepted
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
@@ -376,6 +377,7 @@ fun ChatRoomDetailScreen(
     val adminChangeRequested = stringResource(Res.string.admin_change_requested)
     val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
     val changeProposed = stringResource(Res.string.change_proposed)
+    val stepDownRequested = stringResource(Res.string.step_down_requested)
     val adminOfferSent = stringResource(Res.string.admin_offer_sent)
     val promotionAccepted = stringResource(Res.string.promotion_accepted)
     val adminLabel = stringResource(Res.string.admin_badge)
@@ -525,6 +527,7 @@ fun ChatRoomDetailScreen(
                                 notify(
                                     failure ?: when {
                                         governed && action == MemberAction.MAKE_ADMIN -> adminOfferSent
+                                        governed && action == MemberAction.STEP_DOWN -> stepDownRequested
                                         governed -> changeProposed
                                         else -> adminChangeRequested
                                     }

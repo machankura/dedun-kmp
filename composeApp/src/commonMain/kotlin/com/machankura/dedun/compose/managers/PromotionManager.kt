@@ -179,6 +179,73 @@ object PromotionManager {
         announce(database, localChatRoom.chatRoom.id, me, ChatMessage.TYPE_ADMIN_OFFERED, "You accepted becoming an admin. The group signs it next")
     }
 
+    // ---- stepping down, asked of another admin ---------------------------------------------------------------------
+
+    /**
+     * Asks, as [me], to stop being an admin of keyed room [localChatRoom]. An admin
+     * cannot propose their own demotion there: the rotation that takes their share
+     * away is started by the demotion's proposer, who has to keep a share. So the
+     * request goes into the room, and [followStepDowns] on
+     * [AdminGovernance.stepDownProposer]'s device proposes it, as that admin pressing
+     * **Remove as admin** would. Nothing is committed here.
+     */
+    suspend fun requestStepDown(database: DedunDatabase, localChatRoom: LocalChatRoom, me: HexKey): HexKey {
+        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+            ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
+        check(me in group.currentAdminIdentities()) { "You're not an admin of this group" }
+        check(AdminGovernance.stepDownProposer(group, me) != null) { "You're the only admin. Make someone else an admin first" }
+        val id = send(database, localChatRoom.chatRoom.id, me, PromotionEvents.STEP_DOWN, "", PromotionEvents.stepDownTags(localChatRoom.chatRoom.id))
+        announce(database, localChatRoom.chatRoom.id, me, ChatMessage.TYPE_ADMIN_OFFERED, "You asked to step down as admin. The group signs it next")
+        return id
+    }
+
+    /**
+     * Takes up the step-down requests whose [AdminGovernance.stepDownProposer] is
+     * [me]: proposes each one's demotion for the group's signature, through the same
+     * `demote` an admin's own **Remove as admin** runs, so its rotation follows the
+     * same way. Run by `GovernanceFollowThrough` whenever a request arrives, and on
+     * start.
+     *
+     * A request is used once. The proposer's device drops it after proposing, or
+     * after saying in the room why it could not; every device drops one whose
+     * requester is no longer an admin, so a member made an admin again later is not
+     * stepped down by what they asked the first time.
+     *
+     * @return how many demotions were proposed.
+     */
+    suspend fun followStepDowns(database: DedunDatabase, me: HexKey): Int {
+        var proposed = 0
+        // Shaped as a request, before anything is deleted: a Wavelength high-water mark
+        // shares the number until K3, and is neither a request nor this code's to delete.
+        database.marmotInnerEventDao().getByKinds(listOf(PromotionEvents.STEP_DOWN))
+            .filter { PromotionEvents.isStepDown(it.content) }
+            .forEach { request ->
+            val requester = request.publicKey
+            val room = database.chatRoomDao().findChatRoomById(request.chatRoomId)
+            val group = room?.let { database.marmotEngine.groupFor(it.routingId) }
+            if (room == null || group == null || requester !in group.currentAdminIdentities()) {
+                database.marmotInnerEventDao().deleteById(request.id)
+                return@forEach
+            }
+            if (room.chatRoom.userPublicKey != me || AdminGovernance.stepDownProposer(group, requester) != me) return@forEach
+
+            val failure = runCatching { database.marmotOutboundDao().demote(room, requester) }.exceptionOrNull()
+            if (failure is kotlinx.coroutines.CancellationException) throw failure
+            database.marmotInnerEventDao().deleteById(request.id)
+            if (failure == null) {
+                proposed++
+                logger.i("Proposed ${requester.take(8)}…'s step-down in ${room.chatRoom.id}")
+            } else {
+                logger.w("Couldn't propose ${requester.take(8)}…'s step-down: ${failure.message}")
+                announce(
+                    database, room.chatRoom.id, me, ChatMessage.TYPE_CHANGE_NOT_APPLIED,
+                    "Couldn't ask the group to remove ${nameOf(database, requester)} as admin, as they asked: ${failure.message}",
+                )
+            }
+        }
+        return proposed
+    }
+
     // ---- 3. the proposal, by the device that offered ---------------------------------------------------------------
 
     /** This device's offers that have been accepted and not yet proposed, with their acceptance. */

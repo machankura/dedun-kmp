@@ -4,7 +4,9 @@ import com.vitorpamplona.marmot.groups.MarmotGroupPermissions
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.mls.tree.Credential
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.types.ChatRoomType
@@ -97,6 +99,35 @@ object AdminGovernance {
      */
     fun keyedChangesAllowed(group: MlsGroup): Boolean =
         isKeyedRoom(group) && GovernanceGate.isGoverned(group) && ExperimentalFeatures.shareRefresh
+
+    /**
+     * Whether [me] may ask to stop being an admin of keyed room [group]. They cannot
+     * demote themselves: a demotion's proposer starts the rotation that takes their
+     * share away, and the proposer has to keep a share. So they ask, and
+     * [stepDownProposer]'s device proposes it. Never below [floor], and only while
+     * another admin is there to ask.
+     */
+    fun canAskToStepDown(group: MlsGroup, me: HexKey, floor: Int): Boolean =
+        keyedChangesAllowed(group) &&
+            me in group.currentAdminIdentities() &&
+            keepsFloor(group, me, floor) &&
+            stepDownProposer(group, me) != null
+
+    /**
+     * The admin whose device proposes [requester]'s step-down: the one in the lowest
+     * leaf, [requester] apart. Read off the group's state, so every device names the
+     * same one and only one of them proposes -- two proposals at one epoch would be
+     * two commits the library cannot settle for their authors (docs/marmot-v2.md,
+     * Phase 8). Null when nobody else is an admin.
+     */
+    fun stepDownProposer(group: MlsGroup, requester: HexKey): HexKey? {
+        val admins = group.currentAdminIdentities() - requester
+        return group.members()
+            .sortedBy { (leafIndex, _) -> leafIndex }
+            .firstNotNullOfOrNull { (_, leaf) ->
+                (leaf.credential as? Credential.Basic)?.identity?.toHexKey()?.takeIf { it in admins }
+            }
+    }
 
     /**
      * What [MemberActionPolicy] reads, from [group]'s state: its admins, its

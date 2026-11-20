@@ -31,6 +31,7 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
+import com.machankura.dedun.compose.nostr.frost.PromotionEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
 import com.machankura.dedun.compose.nostr.frost.GovernanceChange
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
@@ -608,18 +609,82 @@ class GovernanceGateJvmTest {
     // --- Phase 9: demotion and removal in a keyed room, then a rotation ------------
 
     @Test
-    fun `in a governed keyed room an admin is offered demoting another, never stepping down`() = runBlocking {
+    fun `in a governed keyed room an admin is offered demoting another, and stepping down`() = runBlocking {
         governedRoom()
         appIsAdmin()
         com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
         try {
             val actions = AdminGovernance.memberActions(appGroup(), userHex, floor = 1)
             assertTrue(com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_AS_ADMIN in actions[dana.hex].orEmpty())
-            assertFalse(com.machankura.dedun.compose.ui.view.state.MemberAction.STEP_DOWN in actions[userHex].orEmpty(), "an admin was offered stepping down from a keyed room")
-            assertFalse(com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_AS_ADMIN in AdminGovernance.memberActions(appGroup(), userHex, floor = 2)[dana.hex].orEmpty(), "the floor was ignored")
+            assertTrue(com.machankura.dedun.compose.ui.view.state.MemberAction.STEP_DOWN in actions[userHex].orEmpty(), "an admin's own row offered no step-down")
+            val atTheFloor = AdminGovernance.memberActions(appGroup(), userHex, floor = 2)
+            assertFalse(com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_AS_ADMIN in atTheFloor[dana.hex].orEmpty(), "the floor was ignored")
+            assertFalse(com.machankura.dedun.compose.ui.view.state.MemberAction.STEP_DOWN in atTheFloor[userHex].orEmpty(), "the floor was ignored for a step-down")
         } finally {
             com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
         }
+    }
+
+    @Test
+    fun `a step-down is proposed by the admin in the lowest leaf, never the one stepping down`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        // Dana made the room and holds leaf 0; the app holds leaf 1.
+        assertEquals(dana.hex, AdminGovernance.stepDownProposer(appGroup(), userHex))
+        assertEquals(userHex, AdminGovernance.stepDownProposer(appGroup(), dana.hex))
+    }
+
+    @Test
+    fun `stepping down from a keyed room asks the other admins, and commits nothing`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+
+        PromotionManager.requestStepDown(db, room(), userHex)
+
+        val requests = db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN))
+        assertEquals(listOf(userHex), requests.map { it.publicKey })
+        assertTrue(db.marmotPublishObligationDao().getAll().isEmpty(), "a commit went out")
+        assertTrue(db.governanceProposalDao().getAll().isEmpty(), "the one stepping down proposed it")
+        assertTrue(userHex in appGroup().currentAdminIdentities())
+        // Not this device's to take up: Dana's is the one that proposes it.
+        assertEquals(0, PromotionManager.followStepDowns(db, userHex))
+        assertEquals(1, db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).size)
+    }
+
+    @Test
+    fun `the admin whose it is to propose a step-down takes the request up`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        try {
+            danaSays(PromotionEvents.STEP_DOWN, "", PromotionEvents.stepDownTags(roomId))
+
+            // Dana's request reaches `demote` on this device, which is the one to
+            // propose it. This room has two admins under a floor of three, so the
+            // demotion is refused there and the room says why; the request is used.
+            assertEquals(0, PromotionManager.followStepDowns(db, userHex))
+            assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).any { "as they asked" in it.content && "at least 3 admins" in it.content })
+            assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).isEmpty(), "the request was kept")
+        } finally {
+            com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        }
+    }
+
+    @Test
+    fun `a request from someone who is no longer an admin is dropped`() = runBlocking {
+        governedRoom()
+        // A request the app sent while it was an admin, filed after it stopped being one.
+        db.marmotInnerEventDao().upsert(
+            com.machankura.dedun.compose.database.model.MarmotInnerEvent(
+                id = "ab".repeat(32), publicKey = userHex, kind = PromotionEvents.STEP_DOWN,
+                createdAt = kotlin.time.Instant.fromEpochSeconds(1_700_000_000),
+                tags = PromotionEvents.stepDownTags(roomId), content = "", chatRoomId = roomId,
+            )
+        )
+
+        PromotionManager.followStepDowns(db, dana.hex)
+
+        assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).isEmpty())
     }
 
     @Test

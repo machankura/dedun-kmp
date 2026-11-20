@@ -80,9 +80,17 @@ object MemberActionPolicy {
         val open = context.room == MemberActionRoom.CURRENT &&
             !context.isDisbanded &&
             !context.hasLeft &&
-            // In a keyed room another admin removes you, so the group can rotate your share away.
-            !context.isKeyed &&
-            MarmotGroupPermissions.canDemote(context.admins, context.members, context.me, context.me)
+            if (context.isKeyed) {
+                // [AdminGovernance.canAskToStepDown]: a request another admin's device
+                // proposes, because a rotation's proposer has to keep a share. So the
+                // room's rules, the floor, and another admin with a leaf to ask.
+                context.governed && context.shareRefresh &&
+                    context.me in context.admins &&
+                    keepsFloor(context, context.me) &&
+                    context.admins.any { it != context.me && it in context.members }
+            } else {
+                MarmotGroupPermissions.canDemote(context.admins, context.members, context.me, context.me)
+            }
         return if (open) MemberActionOption(MemberAction.STEP_DOWN) else null
     }
 

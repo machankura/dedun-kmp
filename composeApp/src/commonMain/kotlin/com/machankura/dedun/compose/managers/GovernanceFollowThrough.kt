@@ -41,7 +41,7 @@ object GovernanceFollowThrough {
             // A member saying their device follows signed commits may be the last one
             // a room was waiting on before its rule can be switched on.
             database.marmotInnerEventDao().observeCountByKinds(
-                listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER, GovernanceSupportEvent.KIND)
+                listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER, PromotionEvents.STEP_DOWN, GovernanceSupportEvent.KIND)
             ),
             database.groupSignedEventDao().observeByKind(GroupKeyStateEvent.KIND),
         ) { _, _, _ -> Unit }
@@ -79,6 +79,9 @@ object GovernanceFollowThrough {
                 announce(database, offer.chatRoomId, me, "Couldn't ask the group to make them an admin: ${it.message}")
             }
         }
+        // An admin who asked to step down, when this device is the one to propose it.
+        PromotionManager.followStepDowns(database, me)
+
         PromotionManager.handoversOwed(database).forEach { proposal ->
             runCatching { PromotionManager.handover(database, proposal, me) }.onFailure {
                 if (it is CancellationException) throw it
