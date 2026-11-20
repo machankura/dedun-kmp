@@ -48,7 +48,7 @@ what it turned out to be, the way [marmot-kmp.md](./marmot-kmp.md) did, once it 
 |---|---|---|---|---|---|---|
 | quartz | `com.vitorpamplona.quartz:quartz` | 2.7.3 | 2.15.1 | 2.20.1 (2026-11-19) | 2.20.0 | **2.20.1** |
 | marmot-kmp | `com.vitorpamplona.marmot:marmot` | 2.2.1 | 2.2.1 | 2.3.0 (2026-11-19) | — | **2.3.0** |
-| mls-kmp | `com.vitorpamplona.mls:mls` | 1.3.0 | 1.3.0 | 1.4.0 (tag) | 1.3.1 | **1.4.0** |
+| mls-kmp | `com.vitorpamplona.mls:mls` | 1.3.0 | 1.3.0 | 1.3.1; 1.4.0 is a tag, not yet released (Phase 0) | 1.3.1 | **1.4.0** once released; 1.3.1 until then |
 | crypto-kmp | `com.vitorpamplona.crypto:crypto` | 2.1.0 | 2.1.0 | 2.1.1 (2026-11-18) | 2.1.1 | **2.1.1** |
 
 The newest version of each group arrives with them as a transitive dependency:
@@ -213,6 +213,40 @@ No code. Four things, all of which later phases consume:
    without `lightning-kmp-app`, and this one has not initialised it.
 
 **Check:** the decision, the availability table and the two baselines exist.
+
+**Done.** D1 is decided: adopt Magpie. The owner made that call on 2026-11-20, after reading
+this note.
+
+**Availability.** I checked with a throwaway project that applies Magpie 0.2.3 and resolves
+each coordinate as a detached configuration under jvm and androidJvm attributes:
+
+| coordinate | on the relay | brings |
+|---|---|---|
+| quartz 2.20.0 | yes | crypto 2.1.1, negentropy v1.2.3, schnorr256k1-kotlin 1.0.3 |
+| quartz 2.20.1 | yes | the same three |
+| marmot 2.3.0 | yes | quartz 2.20.0, mls 1.3.1, crypto 2.1.1 |
+| mls 1.3.1 | yes | crypto 2.1.1 |
+| **mls 1.4.0** | **no** — "Could not find", and a 404 on Central | — |
+| crypto 2.1.1 | yes | — |
+
+So mls-kmp 1.4.0 is a tag and not a release, and Phase 5b waits for it. The newest mls-kmp
+anyone can resolve is 1.3.1, which is what marmot 2.3.0 was built against. The probe's lock
+also shows the lock's shape. The `-android`, `-jvm` and root modules of one release all
+carry the same manifest hash, so a lock line is per module and a manifest is per release.
+
+**Baselines,** at `d51fdde0`:
+
+- The `jvmRuntimeClasspath`, `debugRuntimeClasspath` and `releaseRuntimeClasspath` reports
+  are reduced to sets of 268, 332 and 326 resolved coordinates.
+- `secp256k1-kmp` resolves to the composite's project substitution, which is the line to
+  watch.
+- `:composeApp:jvmTest` runs 1389 tests in 182 classes, with 0 failures.
+- `./gradlew check` is green, and all four audits pass.
+
+The submodules had to be initialised, as Phase 0 of marmot-kmp.md found. So did the
+gitignored `local.properties` at each of the five composite levels, which a fresh worktree
+does not have. Without them, configuring fails with "SDK location not found" from
+`secp256k1-kmp`.
 
 ## Phase 1 — Java 21, pinned
 
