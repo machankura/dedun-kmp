@@ -302,6 +302,12 @@ android {
             // covering such a path fails on the log line rather than on what it
             // came to check. Default values let the code under test carry on.
             isReturnDefaultValues = true
+            // AGP 9.5 registers `generate<Variant>ComposePreviewRunfiles` on every variant with
+            // Compose on, wires it under the unit tests, and refuses to configure it while they
+            // exclude Android resources ("Compose Preview requires compiled Android resources").
+            // Including them only adds the merged resources to the unit-test classpath; the
+            // tests here read none (docs/dependency-update.md, Phase 5).
+            isIncludeAndroidResources = true
         }
     }
 }
