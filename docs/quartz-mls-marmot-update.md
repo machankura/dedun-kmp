@@ -398,6 +398,74 @@ Then quartz's behavioural deltas that reach the app, both small:
 recorded here. A test that needed its assertions edited to pass is a finding, as in
 marmot-kmp.md's Phase 2.
 
+**Built.** The existing suite needed nothing: it was already green on 1.3.1 in Phase 2, with
+no assertion moved.
+
+**`OldEpochZeroGroupJvmTest`**, two tests, both green. The first draft of the first one
+was wrong, and the way it was wrong is worth keeping.
+
+mls-kmp's commit `6a1ba88` says a creator's epoch-0 state saved by 1.3.0 or older "is
+repaired on restore", and the test asserted that. It failed. The *released* 1.3.1 has no
+repair: its audit commit, `125614a`, took it out ("repairing only the creator forked the two
+apart" from a PublicGroup saved beside it). The library's upgrading guide says what ships:
+"an older release['s epoch-0 group] keeps the old hash, so external joins into it fail until
+its first commit". So the test now pins both sides of that:
+
+- an old epoch-0 room keeps its empty interim hash across a restore;
+- a room created now gets the §11 hash;
+- the old room still adds its first member, and the joiner and the creator agree on the
+  epoch authenticator and the kind:445 key and read each other.
+
+A future mls-kmp that brings the repair back fails the first assertion, and its KDoc says
+to re-read the upgrading guide before inverting it. The app has no `externalJoin`, so the
+one thing an old epoch-0 room cannot do is something this app never asks of it.
+
+**`docs/tools/engine-interop/`** is the probe, built as two programs rather than an
+extension of `old-state-blob`, for two reasons:
+
+- That tool's whole job is provenance for one blob, and should stay that small.
+- The probe cannot be one build. Both halves depend on the `com.vitorpamplona.quartz`
+  group, at 1.15.2 and 2.20.0, and Magpie serves that group exclusively from a relay with
+  nothing older than 2.19.0. So `old/` is quartz 1.15.2 from Central and nothing else,
+  answering one command per line on stdin, and `new/` is the app's versions through
+  Magpie, driving it as a child process.
+
+Each scenario goes three epochs:
+
+1. the Welcome;
+2. two further adds by the room's creator, which the other engine applies, checking each
+   confirmation tag against a transcript it computed itself;
+3. a message each way at every epoch.
+
+The first draft had the joiner commit an add too, and both engines refused it on MIP-03's
+rule that only an admin may. That was correct of them, and the scenario was wrong. Across
+the two scenarios each engine authors commits and each applies the other's. The run:
+
+```
+== the new engine creates the room, the old one joins
+   ok   after the Welcome: both at epoch 1 with the same kind:445 key
+   ok   epoch 1: the old engine reads the new one / the new engine reads the old one
+   ok   after the new engine's first commit past the Welcome: both at epoch 2 …
+   ok   after its second: both at epoch 3 …   (and both ways at 2 and 3)
+== the old engine creates the room, the new one joins
+   …the same ten checks, with the old engine committing…
+ALL PASSED
+```
+
+That is 20 checks, 20 green. So a room either engine creates, at either epoch-0 shape, works
+with the other through three epochs. **What it does not say** is which engine Bennu ships
+today. Its repository is not readable without signing in, so quartz 1.15.2 is
+marmot-kmp.md's last record of it, not a fresh one. If Bennu has moved, the probe's `old/`
+pins that version instead, and Phase 8's real-peer check covers whatever it is.
+
+**quartz's two behavioural deltas**, both checked:
+
+- **`GiftWrapEvent.create`** is called at 16 sites with the same signature. The NIP-17,
+  Welcome-wrapping and `MarmotClientInteropJvmTest` suites pass unchanged, and the last
+  of those has the library's `MarmotWelcomeSender` wrap a Welcome the app opens.
+- **`EventFactory`'s new subclasses** are for kinds 30078, 30100 and 30102.
+  `grep -rnE '\b(30078|30100|30102)\b' composeApp/src` finds nothing.
+
 ## Phase 4 — C1, and the fork, measured again
 
 No new code expected. This phase runs the tests marmot-kmp.md left as tripwires and records
