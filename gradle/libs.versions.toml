@@ -20,11 +20,11 @@ composeMultiplatform = "1.11.1"
 # catalog is the resolved graph. docs/quartz-mls-marmot-update.md, D3.
 cryptoKmp = { strictly = "2.1.1" }
 datastorePreferences = "1.2.1"
-kermit = "2.1.0"
+kermit = "2.2.0"
 kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 kotlinx-datetime = "0.8.0"
-kotlinxSerialization = "1.11.0"
+kotlinxSerialization = "1.13.0"
 ksp = "2.3.6"
 ktor = "3.5.2"
 # Marmot (MIP-00..05), the three processors, convergence, the publish gate, the app
@@ -47,7 +47,7 @@ material3Adaptive = "1.2.0"
 materialIconsCore = "1.7.3"
 materialIconsExtended = "1.7.3"
 navigationCompose = "2.9.2"
-okio = "3.18.1"
+okio = "3.18.2"
 qrose = "1.1.2"
 # One patch past the 2.20.0 marmot 2.3.0 was compiled and tested against. A quartz that moved
 # an API marmot-kmp calls gives a NoSuchMethodError at run time rather than a compile error, so
