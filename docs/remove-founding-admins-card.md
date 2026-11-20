@@ -5,7 +5,13 @@ room's admin policy leaves out someone who took part in the key ceremony. It cov
 card, its "Make them admins" repair, the transcript line written at the Welcome that sends
 the reader to the card, and the check behind all three.
 
-**Not built.** Written against `b7de119e` on `giza`. Read
+**Built**, phases 0-5, one commit each on `claude/founding-members-admin-card-b2b644`.
+The build followed the plan as written. Phase 3 kept its own commit: `FoundingAdminsJvmTest`
+calls `announceIfMissing` directly, so it still passed until Phase 4 deleted both.
+`:composeApp:jvmTest` passed after Phase 4 with 1382 tests. **Not run:** the three device
+checks under "Checking the work" have not been tried on a device.
+
+Written against `b7de119e` on `giza`. Read
 [robust-group-admins.md](./robust-group-admins.md), Phases 3 and 5, which added what this
 plan takes out, and [member-admin-promotion.md](./member-admin-promotion.md), Phase 9, which
 is why it has to go.

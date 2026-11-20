@@ -25,6 +25,11 @@ lists where the build differed:
 
 Written against `e78dfe50`.
 
+`FoundingAdmins.Check.NotKeyBacked`, which the phases below name as the test for "no key
+behind the room", is gone with the rest of that check
+([remove-founding-admins-card.md](./remove-founding-admins-card.md)). The same test is
+now a room with no `GroupKeyState` row, which is what `RobustGroupAdminsJvmTest` asserts.
+
 Read [robust-group-admins.md](./robust-group-admins.md) first; it describes what a robust
 group is in the code, and this plan leaves that unchanged. [subgroups.md](./subgroups.md)
 holds the reasoning for the three-member floor that Phase 3 moves.

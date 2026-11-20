@@ -23,6 +23,12 @@ so, and it did nine times worth reading:
 
 Written against `fc437d05`.
 
+**Since removed:** Phase 3's check, its transcript line and its repair, and the Phase 5
+warning card that showed them. Once an admin of a keyed room could be demoted or step
+down, a founder missing from the policy was usually the group's decision, and the repair
+offered to undo it. [remove-founding-admins-card.md](./remove-founding-admins-card.md)
+has the reasoning. Phase 4's invite card stays.
+
 Read [shared-key-ceremony.md](./shared-key-ceremony.md) and
 [ceremony-creation.md](./ceremony-creation.md) first.
 
