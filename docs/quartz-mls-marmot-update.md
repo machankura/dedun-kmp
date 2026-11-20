@@ -539,6 +539,28 @@ there.
 library moved. If 5b fails in marmot's code rather than the app's, hold mls at 1.3.1, record
 why here, and leave the strict pin to say so (D3).
 
+**5a built, and its premise corrected.** The paragraph above says 2.20.1 changes quartz's
+relay *client*. It does not. `git diff v2.20.0 v2.20.1` touches two source files, both in
+the in-process relay **server**: `relay/server/backend/LiveEventStore.kt` and
+`LiveSubscriptionBackend.kt`. That is "hold a REQ's live events until its EOSE", seen from
+the relay's side. Neither the app nor marmot-kmp's main source imports
+`nip01Core.relay.server` (grep, 0 files each), so for this app the release is inert.
+
+- **The strict pin.** It did what D3 is for: marmot 2.3.0 still asks for quartz 2.20.0,
+  the catalogue says `strictly 2.20.1`, and 2.20.1 is what resolves.
+- **The resolved graph.** It moved by quartz's three coordinates and nothing else, on jvm
+  and release.
+- **The lock.** It gained 2.20.1's three lines, and the 2.20.0 lines stay. Phase 6 says
+  whether they have to.
+- **The suite.** `check` is green, and `jvmTest` runs 1392 tests in 183 classes with 0
+  failures: Phase 0's 1389 plus the three this work added. `MarmotClientInteropJvmTest` is
+  3/3, which is marmot-kmp's own client running on a quartz past its pin.
+
+**5b not built: there is nothing to build against.** mls-kmp 1.4.0 is a GitHub tag. Phase
+0's probe found it on neither the release relay nor Central. mls stays at the 1.3.1 marmot
+2.3.0 was built with, and the catalogue's comment says why. When 1.4.0 is released, 5b is
+the table above, done as written.
+
 ## Phase 6 — every target, then the lock frozen
 
 On a mac:

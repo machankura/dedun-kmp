@@ -54,10 +54,12 @@ materialIconsExtended = "1.7.3"
 navigationCompose = "2.9.2"
 okio = "3.18.1"
 qrose = "1.1.2"
-# The version marmot 2.3.0 was compiled and tested against. A quartz that moved an API
-# marmot-kmp calls gives a NoSuchMethodError at run time rather than a compile error, so
-# moving past it is its own change, with its own evidence. docs/quartz-mls-marmot-update.md, D2.
-quartz = { strictly = "2.20.0" }
+# One patch past the 2.20.0 marmot 2.3.0 was compiled and tested against. A quartz that moved
+# an API marmot-kmp calls gives a NoSuchMethodError at run time rather than a compile error, so
+# each step past marmot's pin is its own change with its own evidence: 2.20.1 changes only two
+# files of quartz's in-process relay server, which neither the app nor marmot-kmp's main source
+# uses. docs/quartz-mls-marmot-update.md, D2 and Phase 5a.
+quartz = { strictly = "2.20.1" }
 room3 = "3.0.1"
 sqldelight = "2.3.2"
 sqlite = "2.7.0"
