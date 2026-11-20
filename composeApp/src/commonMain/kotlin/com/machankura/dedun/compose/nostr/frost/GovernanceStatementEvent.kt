@@ -39,8 +39,8 @@ import com.machankura.dedun.compose.extensions.toHex
  * room's path, so the key that must have signed is the room's id and nothing has
  * to be looked up -- [GroupKeyStateEvent.isSignedByRoom].
  *
- * Kind 30370: past the last of the wallet kinds Dedun retired (30350-30366,
- * `RetiredKinds`). Like every kind in the signing family it only ever travels
+ * Kind 30370: past the last of the wallet kinds Dedun retired
+ * (`RetiredKinds.GROUP_LIGHTNING`). Like every kind in the signing family it only ever travels
  * inside an encryption a relay cannot open.
  */
 object GovernanceStatementEvent {
