@@ -64,11 +64,12 @@ class ShippedProfileUpgradeJvmTest {
     /**
      * The schema version this branch builds: 47 for share generations, 48 for share
      * refresh and 49 for share repair (docs/frost-share-refresh.md, Phases 6, 7 and
-     * 10), and 50 for notifications' read marks and ledger (docs/giza-second-batch.md,
-     * Phase 3), so the upgrade crosses five generated migrations and the file has to come
-     * out at the last.
+     * 10), 50 for notifications' read marks and ledger (docs/giza-second-batch.md,
+     * Phase 3), and 51 for governance proposals (docs/member-admin-promotion.md, Phase 5),
+     * so the upgrade crosses six generated migrations and the file has to come out at the
+     * last.
      */
-    private val current = 50
+    private val current = 51
 
     private val directory: File = Files.createTempDirectory("dedun-shipped-profile").toFile()
     private val file: File = File(directory, "aux.db")

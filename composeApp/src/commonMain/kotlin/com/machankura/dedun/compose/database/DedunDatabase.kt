@@ -71,6 +71,7 @@ import com.machankura.dedun.compose.database.dao.InReplyToRelationDao
 import com.machankura.dedun.compose.database.dao.KeyShareDao
 import com.machankura.dedun.compose.database.dao.ShareRefreshDao
 import com.machankura.dedun.compose.database.dao.ShareRepairDao
+import com.machankura.dedun.compose.database.dao.GovernanceProposalDao
 import com.machankura.dedun.compose.database.dao.MarmotCommitResultDao
 import com.machankura.dedun.compose.database.dao.MarmotOutboundDao
 import com.machankura.dedun.compose.database.dao.MarmotGroupEventDao
@@ -119,6 +120,7 @@ import com.machankura.dedun.compose.database.model.ShareRefreshMessage
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
 import com.machankura.dedun.compose.database.model.ShareRepairMessage
 import com.machankura.dedun.compose.database.model.ShareRepairSession
+import com.machankura.dedun.compose.database.model.GovernanceProposal
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.InReplyToRelation
 import com.machankura.dedun.compose.database.model.MarmotCommitResult
@@ -221,6 +223,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         ShareRefreshSession::class,
         ShareRepairMessage::class,
         ShareRepairSession::class,
+        GovernanceProposal::class,
         InReplyToRelation::class,
         MarmotCommitResult::class,
         MarmotGroupEvent::class,
@@ -253,7 +256,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 50,
+    version = 51,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -555,6 +558,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // every existing room read up to its newest line, so an upgrade does not turn the user's
         // whole history unread.
         AutoMigration(from = 49, to = 50, spec = ReadMarkMigrationSpec::class),
+        // v51 adds GovernanceProposal (docs/member-admin-promotion.md, Phase 5): a
+        // change this device proposed to a governed room, held while the group signs
+        // it. One new table, so Room generates it. Giza's v41, Bennu's v40.
+        AutoMigration(from = 50, to = 51),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -592,6 +599,7 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun shareRefreshDao(): ShareRefreshDao
 
     abstract fun shareRepairDao(): ShareRepairDao
+    abstract fun governanceProposalDao(): GovernanceProposalDao
 
     abstract fun groupSignedEventDao(): GroupSignedEventDao
 

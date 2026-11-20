@@ -307,4 +307,97 @@ class GovernanceGateJvmTest {
         MarmotStandIn.storeInApp(db, user, commitEvent(bare))
         assertEquals(epoch, appGroup().epoch, "a bare commit landed after the switch")
     }
+
+    // --- Phase 5: this device proposes, the group signs, this device publishes ------
+
+    /** The app made an admin beside Dana, inside the group's signature. */
+    private suspend fun appIsAdmin() {
+        val epoch = appGroup().epoch
+        val staged = stagedPromotion()
+        danaCarries(statement(commitEvent(staged.result), GovernanceChange(admins = setOf(dana.hex, userHex)), epoch))
+        dana.manager.installState(routingId, staged.pendingState)
+        assertTrue(appGroup().isLocalAdmin())
+    }
+
+    /** The app's change, built and kept as `propose` keeps it, and the group's signature on it. */
+    private suspend fun appProposes(propose: (com.vitorpamplona.mls.group.MlsGroup) -> Unit): Pair<com.machankura.dedun.compose.database.model.GovernanceProposal, Event> {
+        val prepared = GovernanceManager.prepare(appGroup(), routingId, propose)
+        val signed = statement(prepared.commitEvent, prepared.change, prepared.epoch)
+        val proposal = GovernanceManager.record(db, room(), userHex, prepared, statementId = signed.id, sessionId = "session-" + signed.id.take(8))
+        return proposal to signed
+    }
+
+    private fun demoteDana(group: com.vitorpamplona.mls.group.MlsGroup) {
+        group.proposeAppDataUpdate(AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(listOf(userHex)).encode())
+    }
+
+    /** The carrier this device put on the wire last, as the room's other members receive it. */
+    private suspend fun lastCarrier(): GroupEvent = okTheLatestCommit()
+
+    @Test
+    fun `this device proposes, the group signs, and the change lands here and at Dana's alike`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        val epoch = appGroup().epoch
+
+        val (proposal, signed) = appProposes(::demoteDana)
+        assertEquals(epoch, appGroup().epoch, "the commit was applied before it was signed")
+
+        GovernanceManager.publish(db, proposal, signed)
+        assertEquals(epoch, appGroup().epoch, "the commit was applied before a relay accepted it")
+        val carrier = lastCarrier()
+
+        assertEquals(epoch + 1, appGroup().epoch)
+        assertEquals(setOf(userHex), appGroup().currentAdminIdentities())
+        assertTrue(lines(ChatMessage.TYPE_ADMIN_REMOVED).any { it.content == "Dana is no longer an admin" })
+
+        // Dana reads the carrier and applies the commit inside it, as the gate would.
+        val carried = assertIs<com.vitorpamplona.marmot.GroupEventResult.ApplicationMessage>(dana.inbound.processGroupEvent(carrier))
+        val statement = assertNotNull(GovernanceCarrierEvent.statementOf(Event.fromJson(carried.innerEventJson)))
+        assertEquals(signed.id, statement.id)
+        dana.inbound.processGroupEvent(assertNotNull(com.machankura.dedun.compose.nostr.frost.GovernanceEvents.innerCommitOf(statement)))
+        assertEquals(setOf(userHex), dana.manager.getGroup(routingId)!!.currentAdminIdentities(), "Dana is in another group")
+
+        // The carrier coming back to this device is not news.
+        MarmotStandIn.storeInApp(db, user, carrier)
+        assertEquals(epoch + 1, appGroup().epoch)
+        assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).isEmpty())
+    }
+
+    @Test
+    fun `a signed change the group moved past is marked stale, and says so`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        val (proposal, signed) = appProposes(::demoteDana)
+
+        // Dana's own key update lands first.
+        val update = dana.manager.stageCommit(routingId)
+        danaSays(OwnCommitEvent.KIND, commitEvent(update.result).toJson(), OwnCommitEvent.assembleTags(roomId, appGroup().epoch))
+        dana.manager.installState(routingId, update.pendingState)
+
+        GovernanceManager.publish(db, proposal, signed)
+
+        assertEquals(
+            com.machankura.dedun.compose.database.model.GovernanceProposalStage.STALE,
+            db.governanceProposalDao().getById(proposal.id)!!.stage,
+        )
+        assertEquals(1, lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).size)
+        assertEquals(setOf(dana.hex, userHex), appGroup().currentAdminIdentities())
+    }
+
+    @Test
+    fun `a member's device declines to sign a statement that does not say what its commit does`() = runBlocking<Unit> {
+        governedRoom()
+        val epoch = appGroup().epoch
+        val commit = commitEvent(stagedPromotion().result)
+        val unsigned = { change: GovernanceChange ->
+            Event(
+                id = "0".repeat(64), pubKey = roomId, createdAt = 1_700_000_000, kind = GovernanceStatementEvent.KIND,
+                tags = GovernanceStatementEvent.assembleTags(roomId, epoch, change, proposer = dana.hex), content = commit.toJson(), sig = "",
+            )
+        }
+
+        assertEquals(null, GovernanceManager.refusalOf(db, room(), unsigned(GovernanceChange(admins = setOf(dana.hex, userHex)))))
+        assertNotNull(GovernanceManager.refusalOf(db, room(), unsigned(GovernanceChange(admins = setOf(dana.hex)))))
+    }
 }

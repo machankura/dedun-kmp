@@ -101,7 +101,16 @@ object GovernanceGate {
      * least the room's floor of admins (R3). An own commit (30371) has to be one of
      * D6's two kinds, sent by the account whose leaf committed it.
      */
-    fun admit(group: MlsGroup, chatRoomId: HexKey, envelope: Event): Result<GroupEvent> {
+    fun admit(group: MlsGroup, chatRoomId: HexKey, envelope: Event): Result<GroupEvent> =
+        check(group, chatRoomId, envelope, requireSignature = true)
+
+    /**
+     * [admit]'s checks, with the room's signature on a statement optional: a member's
+     * device runs them on a statement still being asked for, before it signs
+     * (`GovernanceManager.refusalOf`). Everything else is the same, so nobody signs
+     * what the door would then refuse.
+     */
+    fun check(group: MlsGroup, chatRoomId: HexKey, envelope: Event, requireSignature: Boolean): Result<GroupEvent> {
         fun refuse(reason: String) = Result.failure<GroupEvent>(IllegalStateException(reason))
 
         val inner = GovernanceEvents.innerCommitOf(envelope) ?: return refuse("it carries no commit")
@@ -113,7 +122,9 @@ object GovernanceGate {
             GovernanceStatementEvent.KIND -> {
                 val change = GovernanceChange.of(inspection.before, inspection.proposals)
                     ?: return refuse("its change cannot be described, so nobody could have approved it")
-                if (!GovernanceStatementEvent.authorises(envelope, chatRoomId, group.epoch, change)) {
+                val statement = GovernanceStatementEvent.parse(envelope) ?: return refuse("its statement cannot be read")
+                if (statement.change != change) return refuse("it does not say what its commit does")
+                if (requireSignature && !GovernanceStatementEvent.authorises(envelope, chatRoomId, group.epoch, change)) {
                     return refuse("the group's signature is not on this change")
                 }
                 val floor = minimumAdmins(group) ?: 1
@@ -139,7 +150,7 @@ object GovernanceGate {
      * thrown away; this is how the app is told what a commit does without the
      * library being changed to say.
      */
-    private class RecordingPolicy : MlsGroupPolicy by MarmotGroupPolicy {
+    internal class RecordingPolicy : MlsGroupPolicy by MarmotGroupPolicy {
         var seen: Triple<GroupView, List<PendingProposal>, Int>? = null
 
         override fun authorizeCommit(group: GroupView, proposals: List<PendingProposal>, committerLeafIndex: Int) {

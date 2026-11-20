@@ -70,6 +70,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 
 /**
  * Signs a nostr event with a group's FROST threshold key, in one of its rooms.
@@ -879,6 +880,22 @@ object FrostSigningManager {
                         "and this group's parent decided otherwise; dropping"
                 )
                 return null
+            }
+        }
+
+        // A change to a governed room whose commit does not say what its statement
+        // says -- or that the group's door would refuse anyway -- is declined before
+        // anybody is asked, for the wallet's reason: a device that signs what it
+        // cannot stand behind is a rubber stamp. docs/member-admin-promotion.md, Phase 5.
+        unsignedEvents.firstOrNull { it.kind == GovernanceStatementEvent.KIND }?.let { statement ->
+            GovernanceManager.refusalOf(database, localChatRoom, statement)?.let { why ->
+                logger.w("Signing proposal $sessionId carries a change that is refused: $why; declining")
+                val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
+                    .copy(signDeclinedAt = Clock.System.now())
+                database.frostSigningSessionDao().upsert(declined)
+                database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+                announceStarted(database, declined)
+                return declined
             }
         }
 
@@ -2483,6 +2500,14 @@ object FrostSigningManager {
         // re-authors rumors as their sender and would strip the group's
         // signature off.
         signedEvents.forEach { applySignedEvent(database, session, it, recorded) }
+
+        // A change to a governed room this device proposed: now it can be sent.
+        // Swallowed like the rest -- the signature is made either way.
+        try {
+            GovernanceManager.onSigned(database, signedEvents)
+        } catch (e: Throwable) {
+            logger.e("Signed session ${session.id} but could not publish its change", e)
+        }
 
         announce(
             database = database,
