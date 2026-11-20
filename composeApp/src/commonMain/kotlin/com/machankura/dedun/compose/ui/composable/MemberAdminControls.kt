@@ -51,11 +51,9 @@ import dedun.composeapp.generated.resources.leave_as_admin_title
 import dedun.composeapp.generated.resources.remove_as_admin
 import dedun.composeapp.generated.resources.remove_as_admin_body
 import dedun.composeapp.generated.resources.remove_as_admin_title
-import dedun.composeapp.generated.resources.remove_from_group
 import dedun.composeapp.generated.resources.step_down
 import dedun.composeapp.generated.resources.step_down_and_leave
 import dedun.composeapp.generated.resources.step_down_and_leave_body
-import dedun.composeapp.generated.resources.step_down_as_admin
 import dedun.composeapp.generated.resources.step_down_body
 import dedun.composeapp.generated.resources.step_down_title
 import com.machankura.dedun.compose.ui.theme.spacing
@@ -93,13 +91,6 @@ internal fun MemberActionsMenu(
             }
         }
     }
-}
-
-private fun MemberAction.label() = when (this) {
-    MemberAction.MAKE_ADMIN -> Res.string.make_admin
-    MemberAction.REMOVE_AS_ADMIN -> Res.string.remove_as_admin
-    MemberAction.STEP_DOWN -> Res.string.step_down_as_admin
-    MemberAction.REMOVE_FROM_GROUP -> Res.string.remove_from_group
 }
 
 /**

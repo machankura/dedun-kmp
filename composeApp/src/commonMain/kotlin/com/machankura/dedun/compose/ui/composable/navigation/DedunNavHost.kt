@@ -167,6 +167,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateShared
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRitualRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.MemberActionUnavailableRoute
+import com.machankura.dedun.compose.ui.composable.MemberActionUnavailableScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyPackageManagementRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyRecoveryRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.LandingRoute
@@ -2129,6 +2131,22 @@ fun DedunNavHost(
                             }
                         }
                     },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                )
+            }
+            composable<MemberActionUnavailableRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<MemberActionUnavailableRoute>()
+
+                MemberActionUnavailableScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    memberPublicKey = route.memberPublicKey,
+                    action = route.memberAction,
+                    nostrRepository = databaseNostrRepository,
+                    chatRepository = databaseChatRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()
                     },
