@@ -33,7 +33,6 @@ import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
-import com.machankura.dedun.compose.database.model.types.ChatRoomType
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.extensions.toHex
@@ -107,7 +106,7 @@ object ChillDkgRitualManager {
 
     /**
      * Smallest group a ritual can run in. A shared key held by one person is
-     * just a key, and [ChatRoomType.quorumRange] has nothing to offer below two.
+     * just a key, and [Quorum.range] has nothing to offer below two.
      */
     const val MINIMUM_PARTICIPANTS = 2
 
@@ -301,8 +300,8 @@ object ChillDkgRitualManager {
         require(members.size >= MINIMUM_PARTICIPANTS) {
             "A shared key needs at least $MINIMUM_PARTICIPANTS members, this ceremony has ${members.size}"
         }
-        require(threshold in ChatRoomType.quorumRange(members.size)) {
-            "Quorum $threshold is outside ${ChatRoomType.quorumRange(members.size)} for ${members.size} members"
+        require(threshold in Quorum.range(members.size)) {
+            "Quorum $threshold is outside ${Quorum.range(members.size)} for ${members.size} members"
         }
 
         // A subgroup is named by whoever is making it. Falling back to the room
@@ -539,10 +538,10 @@ object ChillDkgRitualManager {
         // A ritual is worth joining only at a quorum the group could have agreed
         // to. `t = 1` is a threshold key any single member can sign with, and
         // ChillDKG will happily generate one — the check has to be here.
-        if (threshold !in ChatRoomType.quorumRange(members.size)) {
+        if (threshold !in Quorum.range(members.size)) {
             logger.w(
                 "DKG proposal $sessionId asks for a $threshold-of-${members.size} key, " +
-                    "outside ${ChatRoomType.quorumRange(members.size)}; dropping"
+                    "outside ${Quorum.range(members.size)}; dropping"
             )
             return null
         }

@@ -33,6 +33,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.MarmotGroupFactory
 import com.machankura.dedun.compose.managers.MarmotGroupName
+import com.machankura.dedun.compose.managers.Quorum
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.repository.ChatRepository
@@ -104,25 +105,25 @@ class SelectChatRoomTypeViewModel(
     val adminCount: Int = (memberPublicKeys + activeUserPublicKey).distinct().size
 
     /** Quorums this group can be run on, under [ChatRoomType.ROBUST]. */
-    val quorumRange: IntRange = ChatRoomType.quorumRange(adminCount)
+    val quorumRange: IntRange = Quorum.range(adminCount)
 
     /**
      * How many of [adminCount] admins have to approve a change, under
      * [ChatRoomType.ROBUST]. Starts on a simple majority and is the user's to move.
      */
-    val quorum: MutableState<Int> = mutableStateOf(ChatRoomType.defaultQuorum(adminCount))
+    val quorum: MutableState<Int> = mutableStateOf(Quorum.default(adminCount))
 
     /** Whether this group is big enough to be run as [ChatRoomType.ROBUST]. */
-    val isRobustAvailable: Boolean = ChatRoomType.isRobustAvailable(adminCount)
+    val isRobustAvailable: Boolean = Quorum.isPossible(adminCount)
 
     /** Why robust is off the table, or null when it is available. */
     val robustUnavailableReason: String? = if (isRobustAvailable) {
         null
     } else {
-        val shortfall = ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE - adminCount
+        val shortfall = Quorum.MINIMUM_GROUP_SIZE - adminCount
         val missing = if (shortfall == 1) "1 more person" else "$shortfall more people"
 
-        "Needs at least ${ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE} people in the group. Go back and add $missing."
+        "Needs at least ${Quorum.MINIMUM_GROUP_SIZE} people in the group. Go back and add $missing."
     }
 
     fun initiate() {

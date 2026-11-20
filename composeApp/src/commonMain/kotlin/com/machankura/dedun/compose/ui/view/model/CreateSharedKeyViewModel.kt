@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.machankura.dedun.compose.database.model.types.ChatRoomType
+import com.machankura.dedun.compose.managers.Quorum
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
@@ -57,7 +57,7 @@ class CreateSharedKeyViewModel(
      * The quorum the ceremony will generate a key for. Pre-filled with the same
      * majority default the group-creation screen offers.
      */
-    val threshold: MutableState<Int> = mutableStateOf(ChatRoomType.MINIMUM_QUORUM)
+    val threshold: MutableState<Int> = mutableStateOf(Quorum.MINIMUM)
 
     fun initiate() {
         uiState = CreateSharedKeyUIState.Loading
@@ -91,7 +91,7 @@ class CreateSharedKeyViewModel(
             }
 
             val participantCount = ChillDkgRitualManager.memberPublicKeys(localChatRoom).size
-            threshold.value = ChatRoomType.defaultQuorum(participantCount)
+            threshold.value = Quorum.default(participantCount)
                 .coerceIn(quorumRange(participantCount))
 
             uiState = CreateSharedKeyUIState.Loaded(
@@ -103,7 +103,7 @@ class CreateSharedKeyViewModel(
 
     fun quorumRange(): IntRange {
         val loaded = uiState as? CreateSharedKeyUIState.Loaded
-            ?: return ChatRoomType.quorumRange(ChatRoomType.MINIMUM_QUORUM)
+            ?: return Quorum.range(Quorum.MINIMUM)
 
         return quorumRange(loaded.participantCount)
     }
@@ -111,7 +111,7 @@ class CreateSharedKeyViewModel(
     // Below the minimum the range runs backwards and is empty, which `coerceIn`
     // rejects outright. There is no ceremony to run at that size either.
     private fun quorumRange(participantCount: Int): IntRange =
-        ChatRoomType.quorumRange(maxOf(participantCount, ChatRoomType.MINIMUM_QUORUM))
+        Quorum.range(maxOf(participantCount, Quorum.MINIMUM))
 
     fun setThreshold(value: Int) {
         if (isActionPending.value) return

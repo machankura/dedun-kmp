@@ -66,16 +66,14 @@ object SubgroupManager {
     /**
      * The fewest admins a subgroup can be run by, the coordinator included.
      *
-     * The same floor [com.machankura.dedun.compose.database.model.types.ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE]
-     * states and for the same reason: below three a quorum is not a check, since
-     * two admins means every decision needs both of them and one means the
-     * coordinator is deciding alone.
+     * [Quorum.MINIMUM_GROUP_SIZE], which says why: a subgroup is a group, and the
+     * floor is the same one.
      *
      * The coordinator counts. They are a ChillDKG participant by construction and
      * hold a share whether or not anybody ticked their name, so a picker that
      * asked for three *others* would be quietly building a group of four.
      */
-    const val MINIMUM_ADMINS: Int = 3
+    const val MINIMUM_ADMINS: Int = Quorum.MINIMUM_GROUP_SIZE
 
     /**
      * Why these admins cannot hold a ceremony together, or null when they can.

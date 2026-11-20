@@ -1,6 +1,5 @@
 package com.machankura.dedun.compose.managers
 
-import com.machankura.dedun.compose.database.model.types.ChatRoomType
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -168,7 +167,7 @@ object MemberWalletManager {
      * rooms, whether or not their key is known yet -- but not a direct chat.
      *
      * A direct chat is a Marmot room too, of exactly two people, and it never has
-     * a key: a key ceremony needs at least `ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE`
+     * a key: a key ceremony needs at least `Quorum.MINIMUM_GROUP_SIZE`
      * participants. Listed, it would ask for a key nobody can ever answer with.
      * So a room of fewer than three members is left out unless this device knows
      * its key -- a real group can shrink to two after its ceremony, and still sign
@@ -182,7 +181,7 @@ object MemberWalletManager {
     suspend fun couldGuard(database: DedunDatabase, room: LocalChatRoom): Boolean {
         if (room.chatRoom.mlsGroupState == null) return false
         val members = room.localParticipants.map { it.participant.participantPublicKey.lowercase() }.toSet()
-        return members.size >= ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE || groupKeyFor(database, room.chatRoom.id) != null
+        return members.size >= Quorum.MINIMUM_GROUP_SIZE || groupKeyFor(database, room.chatRoom.id) != null
     }
 
     /** Why [chatRoomId] cannot guard a wallet for this profile on [chain], or null when it can. */

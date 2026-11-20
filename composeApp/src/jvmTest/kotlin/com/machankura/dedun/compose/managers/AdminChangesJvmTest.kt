@@ -270,9 +270,9 @@ class AdminChangesJvmTest {
 
     @Test
     fun `a robust group keeps at least three admins, and never fewer than its quorum`() {
-        assertEquals(3, com.machankura.dedun.compose.database.model.types.ChatRoomType.minimumAdmins(threshold = null))
-        assertEquals(3, com.machankura.dedun.compose.database.model.types.ChatRoomType.minimumAdmins(threshold = 2))
-        assertEquals(4, com.machankura.dedun.compose.database.model.types.ChatRoomType.minimumAdmins(threshold = 4))
+        assertEquals(3, com.machankura.dedun.compose.managers.Quorum.minimumAdmins(threshold = null))
+        assertEquals(3, com.machankura.dedun.compose.managers.Quorum.minimumAdmins(threshold = 2))
+        assertEquals(4, com.machankura.dedun.compose.managers.Quorum.minimumAdmins(threshold = 4))
     }
 
     @Test

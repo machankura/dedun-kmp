@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.machankura.dedun.compose.database.model.types.ChatRoomType
+import com.machankura.dedun.compose.managers.Quorum
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.DkgRepository
@@ -87,7 +87,7 @@ class SelectSubgroupAdminsViewModel(
      */
     val name: MutableState<String> = mutableStateOf("")
 
-    val threshold: MutableState<Int> = mutableStateOf(ChatRoomType.MINIMUM_QUORUM)
+    val threshold: MutableState<Int> = mutableStateOf(Quorum.MINIMUM)
 
     /**
      * What the subgroup's wallet is to be -- `docs/subgroup-wallet-policy.md`.
@@ -278,7 +278,7 @@ class SelectSubgroupAdminsViewModel(
     fun adminCount(): Int = selectedPublicKeys.size + 1
 
     fun quorumRange(): IntRange =
-        ChatRoomType.quorumRange(maxOf(adminCount(), ChatRoomType.MINIMUM_QUORUM))
+        Quorum.range(maxOf(adminCount(), Quorum.MINIMUM))
 
     fun setThreshold(value: Int) {
         if (isActionPending.value) return

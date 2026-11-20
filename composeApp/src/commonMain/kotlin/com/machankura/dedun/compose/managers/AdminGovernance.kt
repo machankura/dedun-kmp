@@ -37,7 +37,7 @@ object AdminGovernance {
     /**
      * The fewest admins [chatRoomId] may be left with: one in a convenient room,
      * where the library's depletion guard is the whole rule, and
-     * [ChatRoomType.minimumAdmins] of the room's quorum in a keyed one (R3). The
+     * [Quorum.minimumAdmins] of the room's quorum in a keyed one (R3). The
      * quorum is the completed ceremony's; a device that holds none -- a member
      * welcomed after the founding -- applies the size floor alone.
      */
@@ -47,7 +47,7 @@ object AdminGovernance {
             ?.let { database.dkgSessionDao().getSessionById(it) }
             ?.takeIf { it.stage == DkgRitualStage.COMPLETE }
             ?: FrostSigningManager.completedKey(database, chatRoomId)
-        return ChatRoomType.minimumAdmins(key?.threshold)
+        return Quorum.minimumAdmins(key?.threshold)
     }
 
     /**
