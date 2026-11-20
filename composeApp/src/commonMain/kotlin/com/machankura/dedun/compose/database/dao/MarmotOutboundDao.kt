@@ -1108,7 +1108,7 @@ abstract class MarmotOutboundDao(
         if (GovernanceGate.isGoverned(group)) return
         val missing = GovernanceSupport.missing(database, roomId, group)
         if (missing.isNotEmpty()) {
-            throw IllegalStateException("Waiting for ${missing.map { memberName(it) }.sorted().joinToString()} to update Dedun")
+            throw IllegalStateException("Waiting for ${missing.map { memberName(it) }.sorted().joinToString()} to open an up-to-date Dedun")
         }
         val floor = AdminGovernance.adminFloor(database, roomId, group)
         val admins = group.currentAdminIdentities() intersect AdminGovernance.members(group)

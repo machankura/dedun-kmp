@@ -34,7 +34,8 @@ import dedun.composeapp.generated.resources.cancel
 import dedun.composeapp.generated.resources.disband_group_instead
 import dedun.composeapp.generated.resources.governance_on
 import dedun.composeapp.generated.resources.governance_waiting
-import dedun.composeapp.generated.resources.require_signatures
+import dedun.composeapp.generated.resources.governance_switch_waits_for
+import dedun.composeapp.generated.resources.governance_switching
 import dedun.composeapp.generated.resources.require_signatures_explainer
 import dedun.composeapp.generated.resources.make_admin
 import dedun.composeapp.generated.resources.make_admin_and_leave
@@ -203,16 +204,20 @@ internal fun LeaveAsAdminDialog(
 
 /**
  * Whether a keyed room's changes need the group's signature. Once they do, a line
- * saying so; before, for an admin, the switch -- or who it is still waiting on,
- * since switching it on with a member whose device cannot follow would leave them
- * in a different group from the first change. docs/member-admin-promotion.md, Phase 4b.
+ * saying so; before, for an admin, whose device is switching it on -- or who it is
+ * still waiting on, since switching it on with a member whose device cannot follow
+ * would leave them in a different group from the first change.
+ * docs/member-admin-promotion.md, Phase 4b.
+ *
+ * Nothing to press: one device switches it on by itself once everybody can follow.
+ * docs/remove-convenient-groups.md, "After the build".
  */
 @Composable
 internal fun GovernanceSection(
     governance: GovernanceStatus,
     canGovern: Boolean,
     nameOf: (HexKey) -> String,
-    onRequireSignatures: () -> Unit,
+    me: HexKey,
 ) {
     val explainer = Modifier.padding(
         horizontal = MaterialTheme.spacing.containerPadding,
@@ -226,11 +231,17 @@ internal fun GovernanceSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = explainer,
             )
-            is GovernanceStatus.Ready -> if (canGovern) {
-                TextButton(onClick = onRequireSignatures) {
-                    Icon(Icons.Default.Verified, contentDescription = Decorative)
-                    Text(stringResource(Res.string.require_signatures), modifier = Modifier.padding(start = MaterialTheme.spacing.relatedGap))
-                }
+            is GovernanceStatus.Ready -> if (canGovern && governance.switcher != null) {
+                Text(
+                    text = if (governance.switcher == me) {
+                        stringResource(Res.string.governance_switching)
+                    } else {
+                        stringResource(Res.string.governance_switch_waits_for, nameOf(governance.switcher))
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = explainer,
+                )
                 Text(
                     text = stringResource(Res.string.require_signatures_explainer),
                     style = MaterialTheme.typography.bodySmall,

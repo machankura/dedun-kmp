@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
+import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
 import com.machankura.dedun.compose.nostr.frost.PromotionEvents
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -37,7 +38,11 @@ object GovernanceFollowThrough {
     suspend fun observe(database: DedunDatabase, keyPair: KeyPair) {
         combine(
             database.governanceProposalDao().observeAll(),
-            database.marmotInnerEventDao().observeCountByKinds(listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER)),
+            // A member saying their device follows signed commits may be the last one
+            // a room was waiting on before its rule can be switched on.
+            database.marmotInnerEventDao().observeCountByKinds(
+                listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT, PromotionEvents.HANDOVER, GovernanceSupportEvent.KIND)
+            ),
             database.groupSignedEventDao().observeByKind(GroupKeyStateEvent.KIND),
         ) { _, _, _ -> Unit }
             .conflate()
@@ -55,8 +60,11 @@ object GovernanceFollowThrough {
     /** One pass over everything owed. */
     suspend fun pass(database: DedunDatabase, keyPair: KeyPair) = mutex.withLock {
         rotationsOwed(database).forEach { proposal -> rotateAway(database, keyPair, proposal) }
-        if (!ExperimentalFeatures.shareRefresh) return@withLock
         val me = keyPair.pubKey.toHexKey()
+        // A keyed room's rule, switched on once every member can follow it, by the one
+        // device whose it is to switch. docs/remove-convenient-groups.md, "After the build".
+        GovernanceSupport.switchWhereOwed(database, me)
+        if (!ExperimentalFeatures.shareRefresh) return@withLock
         val privateKey = keyPair.privKey ?: return@withLock
 
         // Phase 8, the device that offered: an accepted offer is proposed for the

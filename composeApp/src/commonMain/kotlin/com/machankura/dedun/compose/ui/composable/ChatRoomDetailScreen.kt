@@ -201,7 +201,6 @@ import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.couldn_t_leave_the_group
 import dedun.composeapp.generated.resources.admin_change_requested
 import dedun.composeapp.generated.resources.stepping_down_to_leave
-import dedun.composeapp.generated.resources.require_signatures_sent
 import dedun.composeapp.generated.resources.change_proposed
 import dedun.composeapp.generated.resources.admin_offer_sent
 import dedun.composeapp.generated.resources.promotion_accepted
@@ -372,7 +371,6 @@ fun ChatRoomDetailScreen(
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
     val adminChangeRequested = stringResource(Res.string.admin_change_requested)
     val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
-    val requireSignaturesSent = stringResource(Res.string.require_signatures_sent)
     val changeProposed = stringResource(Res.string.change_proposed)
     val adminOfferSent = stringResource(Res.string.admin_offer_sent)
     val promotionAccepted = stringResource(Res.string.promotion_accepted)
@@ -1609,11 +1607,7 @@ fun ChatRoomDetailScreen(
                                         governance = governance,
                                         canGovern = chatRoomDetailUIState.canGovern,
                                         nameOf = nameOf,
-                                        onRequireSignatures = {
-                                            chatRoomDetailViewModel.requireSignatures(chatRoomDetailUIState.localChatRoom) { failure ->
-                                                notify(failure ?: requireSignaturesSent)
-                                            }
-                                        },
+                                        me = chatRoomDetailUIState.localChatRoom.chatRoom.userPublicKey,
                                     )
                                 }
                             }

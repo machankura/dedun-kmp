@@ -459,7 +459,10 @@ does not; nothing changes in a room without the marker.
   records who has said it.
 - **Require signatures for changes**, on a keyed room's detail screen, for an admin, once
   every current member has said it. It is one bare commit adding the marker line to the
-  profile description. Until every member has, the screen names who has not.
+  profile description. Until every member has, the screen names who has not. (Since
+  made automatic -- one device, the admin in the lowest leaf, sends it once everybody has
+  said it, and the button is gone; [remove-convenient-groups.md](./remove-convenient-groups.md),
+  "After the build".)
 - An invite into a governed room is refused for an account that has not said it, with
   words that say why, once it is in the room (it says so from its own device on joining).
 

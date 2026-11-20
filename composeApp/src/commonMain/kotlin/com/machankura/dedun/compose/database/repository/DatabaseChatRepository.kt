@@ -864,7 +864,7 @@ class DatabaseChatRepository(
         GovernanceGate.minimumAdmins(group)?.let { return GovernanceStatus.Governed(it) }
         if (room.chatRoom.leftGroupAt == null) GovernanceSupport.announce(database, chatRoomId, group, room.chatRoom.userPublicKey)
         val missing = GovernanceSupport.missing(database, chatRoomId, group)
-        return if (missing.isEmpty()) GovernanceStatus.Ready(AdminGovernance.adminFloor(database, chatRoomId, group))
+        return if (missing.isEmpty()) GovernanceStatus.Ready(AdminGovernance.adminFloor(database, chatRoomId, group), GovernanceSupport.switcherOf(group))
         else GovernanceStatus.Waiting(missing)
     }
 

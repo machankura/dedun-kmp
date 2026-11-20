@@ -382,10 +382,6 @@ class ChatRoomDetailViewModel(
         }
     }
 
-    /** Makes the room's changes need the group's signature. docs/member-admin-promotion.md, Phase 4b. */
-    fun requireSignatures(localChatRoom: LocalChatRoom, onDone: (String?) -> Unit) =
-        adminAction(onDone) { chatRepository.requireSignatures(localChatRoom) }
-
     /** Accepts becoming an admin of a keyed room. docs/member-admin-promotion.md, Phase 8. */
     fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey, onDone: (String?) -> Unit) =
         adminAction(onDone) { chatRepository.acceptPromotion(localChatRoom, offerId)?.let { throw IllegalStateException(it) } }

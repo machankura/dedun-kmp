@@ -420,9 +420,50 @@ screen the member had no reason to open.
 Pinned in `GovernanceGateJvmTest`: a welcomed member has said it before anybody else
 speaks, and a device whose saying is taken back says it again at start, once.
 
-Once nobody is outstanding an admin still taps **Require the group's signature for
-changes**, and the room's share rotation has to be on (a development build). Then the
-member's row offers **Make admin**, and the member accepts on their own device.
+#### The switch is nobody's to press
+
+Even then an admin had to find **Require the group's signature for changes** on the
+room's screen and tap it. Nothing about the switch is a decision: the two conditions it
+waits on -- every member can follow, enough of them are admins -- are already checked in
+code, and a group whose point is a key its members hold together is a group that means
+to sign its changes. So the button is gone, and one device switches the rule on by
+itself.
+
+- **Which device.** The admin in the room's lowest leaf (`GovernanceSupport.switcherOf`)
+  -- in a room as it was made, its creator. Not every admin's: two commits at one epoch
+  are settled for every device that watched them but not for the two that made them,
+  which swap branches and stay apart ([marmot-v2.md](./marmot-v2.md), Phase 8). Every
+  device reads the same leaf off the same state, so they agree on one without a word
+  between them.
+- **When.** `GovernanceFollowThrough`, which already runs while the app is open and
+  reads everything again on each pass, now passes whenever a member says it follows
+  signed commits, and on start. A room that is owed the switch (`switchOwed`) gets the
+  commit `requireSignatures` always sent; one still waiting for a relay is not sent
+  twice.
+- **The screen** says which device it is waiting on: "Turning on the group's signature
+  for changes." on that device, "Changes will need the group's signature as soon as
+  Bob's Giza is next online." on the others.
+
+*Not at creation*, though that was the first preference. A room born governed --
+the marker in its epoch-0 description -- would need no switch, but:
+
+- a Bennu founder, or one on an older Giza build, takes part in the ceremony like
+  anyone else, and would apply the bare commits Giza drops: in a different group from
+  the first change, with nobody told. The support check is the only thing that knows,
+  and it can only be asked once the room exists;
+- a founder whose founding invite has to be finished later (robust-group-admins,
+  Phase 4) is added by a bare commit, which the founders already in a governed room
+  would refuse.
+
+Switching once everybody has joined and said it costs the seconds it takes the
+founders' devices to process their Welcomes, and costs nothing when one of them cannot
+follow -- the room simply stays as it is.
+
+Pinned in `GovernanceGateJvmTest`: the first admin's device switches by itself once the
+last member says it, and not before; any other admin's device sends nothing.
+
+Then the member's row offers **Make admin** -- with the room's share rotation on, which
+is a development build for now -- and the member accepts on their own device.
 
 ## Out of scope
 

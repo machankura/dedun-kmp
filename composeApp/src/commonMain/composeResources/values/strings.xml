@@ -130,7 +130,8 @@
     <string name="make_admin_and_leave">Make admin and leave</string>
     <string name="disband_group_instead">Disband group instead</string>
     <string name="governance_on">Changes to who is in this group need the group's signature. It always keeps at least %1$d admins.</string>
-    <string name="require_signatures">Require the group's signature for changes</string>
+    <string name="governance_switching">Turning on the group's signature for changes.</string>
+    <string name="governance_switch_waits_for">Changes will need the group's signature as soon as %1$s's Dedun is next online.</string>
     <string name="require_signatures_explainer">From then on, adding or removing a member, or changing who the admins are, is proposed and has to be signed by the group before it happens.</string>
     <string name="governance_waiting">Waiting for %1$s to open an up-to-date Dedun. Until then, this group can't require its signature on changes, and nobody else can be made an admin.</string>
     <string name="make_admin_body_keyed">They'll be asked to accept, then the group signs it, and they'll hold a share of the group's key and be asked to approve its changes.</string>
@@ -140,7 +141,6 @@
     <string name="accept">Accept</string>
     <string name="promotion_accepted">Accepted; the group signs it next</string>
     <string name="change_proposed">Proposed; it happens once the group signs it</string>
-    <string name="require_signatures_sent">Sent; changes will need the group's signature once a relay accepts it</string>
     <string name="stepping_down_to_leave">Stepping down; you'll leave once a relay accepts it</string>
     <string name="remove_from_group">Remove from group</string>
     <string name="disband_group">Disband group</string>

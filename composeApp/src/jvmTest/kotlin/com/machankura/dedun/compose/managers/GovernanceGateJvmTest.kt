@@ -292,6 +292,73 @@ class GovernanceGateJvmTest {
         assertEquals(0, chatRepository.announceGovernanceSupport(), "said twice")
     }
 
+    private val frank = MarmotStandIn()
+
+    /** Frank joins Dana's room after Erin, by Dana's bare commit; Erin and the app apply it. */
+    private suspend fun frankJoins() {
+        MarmotStandIn.seedProfile(db, frank.hex, "Frank")
+        frank.makeBundle()
+        val add = dana.commitLocally(routingId) { dana.manager.addMember(routingId, frank.bundle.keyPackage.toTlsBytes()) }
+        frank.manager.processWelcome(assertNotNull(add.welcomeBytes), frank.bundle)
+        frank.inbound.trackGroup(routingId)
+        val event = commitEvent(add)
+        erin.inbound.processGroupEvent(event)
+        MarmotStandIn.storeInApp(db, user, event)
+    }
+
+    @Test
+    fun `the first admin's device switches the rule on by itself once everyone has said it`() = runBlocking {
+        // Dana made the room and holds its first leaf; once she is no admin, the app's
+        // leaf is the lowest an admin holds, and the switch is the app's to make.
+        governedRoom(governed = false)
+        erinJoins()
+        frankJoins()
+        val admins = listOf(userHex, erin.hex, frank.hex)
+        val commit = dana.commitLocally(routingId) {
+            val staged = dana.manager.stageAppDataUpdate(routingId, AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(admins).encode())
+            dana.manager.installState(routingId, staged.pendingState)
+            staged.result
+        }
+        val event = commitEvent(commit)
+        erin.inbound.processGroupEvent(event)
+        frank.inbound.processGroupEvent(event)
+        MarmotStandIn.storeInApp(db, user, event)
+        assertEquals(userHex, GovernanceSupport.switcherOf(appGroup()))
+
+        says(dana)
+        says(erin)
+        GovernanceFollowThrough.pass(db, user)
+        assertFalse(GovernanceGate.isGoverned(appGroup()), "switched on before Frank said it")
+
+        says(frank)
+        GovernanceFollowThrough.pass(db, user)
+        okTheLatestCommit()
+
+        assertTrue(GovernanceGate.isGoverned(appGroup()), "nobody pressed anything, and nothing happened")
+        assertEquals(0, GovernanceSupport.switchWhereOwed(db, userHex), "switched twice")
+    }
+
+    @Test
+    fun `a device that is not the first admin leaves the switch to it`() = runBlocking {
+        // Every admin's device switching the moment the last member said it would be two
+        // commits at one epoch, which the library cannot settle for their authors.
+        governedRoom(governed = false)
+        erinJoins()
+        danaSetsAdminsBare(listOf(dana.hex, userHex, erin.hex))
+        says(dana)
+        says(erin)
+        assertEquals(GovernanceStatus.Ready(minimumAdmins = 3, switcher = dana.hex), chatRepository.governanceStatus(roomId))
+
+        GovernanceFollowThrough.pass(db, user)
+
+        assertEquals(0, GovernanceSupport.switchWhereOwed(db, userHex))
+        assertFalse(GovernanceGate.isGoverned(appGroup()))
+        assertTrue(db.marmotCommitResultDao().let { dao ->
+            db.nostrEventDao().getMLSGroupEvents(since = kotlin.time.Instant.fromEpochSeconds(0), limit = 50)
+                .none { it.kind == GroupEvent.KIND && dao.getMarmotCommitRequestById(it.id) != null }
+        }, "the app sent a commit of its own")
+    }
+
     @Test
     fun `hearing another member say it, this device says it back`() = runBlocking {
         governedRoom(governed = false)
@@ -316,7 +383,7 @@ class GovernanceGateJvmTest {
         assertTrue("Erin" in refusal.message.orEmpty(), refusal.message)
 
         says(erin)
-        assertEquals(GovernanceStatus.Ready(minimumAdmins = 3), chatRepository.governanceStatus(roomId))
+        assertEquals(GovernanceStatus.Ready(minimumAdmins = 3, switcher = dana.hex), chatRepository.governanceStatus(roomId))
 
         chatRepository.requireSignatures(room())
         val switch = okTheLatestCommit()
