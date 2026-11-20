@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.managers
 
 import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.mip03GroupMessages.GroupEventEncryption
 import com.vitorpamplona.mls.codec.TlsReader
 import com.vitorpamplona.mls.framing.ContentType
@@ -86,7 +87,10 @@ object GovernanceGate {
         val copy = MlsGroup.restore(group.saveState(), recorder)
         copy.processFramedCommit(mlsBytes)
         val seen = recorder.seen ?: return null
-        Inspection(seen.first, seen.second, seen.first.memberIdentityHex(seen.third), copy)
+        // Identities from the group as it stood before the commit, which [group]
+        // still is: the copy's view can already have a removed leaf blank.
+        val before = group.view()
+        Inspection(before, seen.second, before.memberIdentityHex(seen.third), copy)
     }.getOrNull()
 
     /** Why an envelope was refused, in words for the room. */
@@ -127,9 +131,12 @@ object GovernanceGate {
                 if (requireSignature && !GovernanceStatementEvent.authorises(envelope, chatRoomId, group.epoch, change)) {
                     return refuse("the group's signature is not on this change")
                 }
-                val floor = minimumAdmins(group) ?: 1
-                val admins = inspection.after.currentAdminIdentities() intersect inspection.after.currentMemberIdentities()
-                if (admins.size < floor) return refuse("it would leave fewer than $floor admins")
+                // A disband ends the group, so no floor applies to what it leaves.
+                if (!inspection.after.currentGroupState().isDisbanded) {
+                    val floor = minimumAdmins(group) ?: 1
+                    val admins = inspection.after.currentAdminIdentities() intersect inspection.after.currentMemberIdentities()
+                    if (admins.size < floor) return refuse("it would leave fewer than $floor admins")
+                }
             }
             OwnCommitEvent.KIND -> {
                 if (!GovernanceChange.isExempt(inspection.proposals)) return refuse("only the group can sign a change like this one")

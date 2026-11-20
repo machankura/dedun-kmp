@@ -214,6 +214,8 @@ import dedun.composeapp.generated.resources.admin
 import dedun.composeapp.generated.resources.admin_change_requested
 import dedun.composeapp.generated.resources.stepping_down_to_leave
 import dedun.composeapp.generated.resources.require_signatures_sent
+import dedun.composeapp.generated.resources.change_proposed
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import dedun.composeapp.generated.resources.admin_badge
 import dedun.composeapp.generated.resources.holds_a_share
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
@@ -300,7 +302,6 @@ import androidx.compose.material3.AlertDialog
 import dedun.composeapp.generated.resources.disband_group
 import dedun.composeapp.generated.resources.disband_group_explainer
 import dedun.composeapp.generated.resources.group_disbanded
-import dedun.composeapp.generated.resources.group_governed_elsewhere
 import dedun.composeapp.generated.resources.member_removal_requested
 import dedun.composeapp.generated.resources.members_2
 import dedun.composeapp.generated.resources.proposals
@@ -370,6 +371,7 @@ fun ChatRoomDetailScreen(
     val adminChangeRequested = stringResource(Res.string.admin_change_requested)
     val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
     val requireSignaturesSent = stringResource(Res.string.require_signatures_sent)
+    val changeProposed = stringResource(Res.string.change_proposed)
     val adminLabel = stringResource(Res.string.admin_badge)
     val shareLabel = stringResource(Res.string.holds_a_share)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
@@ -1395,7 +1397,7 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
-                            if (!chatRoomDetailUIState.isGoverned) item {
+                            item {
                                 TextButton(
                                     onClick = {
                                         // Navigate to the invite user screen...
@@ -1466,12 +1468,16 @@ fun ChatRoomDetailScreen(
                                                             localChatRoom = chatRoomDetailUIState.localChatRoom,
                                                             memberPublicKey = memberPublicKey,
                                                         ) { failure, rotationHeld ->
-                                                            // They keep a share of the Lightning wallet's key and its seed: say so,
+                                                            // In a governed room the removal is a proposal
+                                                            // the group still has to sign. They keep a share of
+                                                            // the Lightning wallet's key and its seed: say so,
                                                             // since only a new wallet takes it from them (Phase 14).
+                                                            val governed = chatRoomDetailUIState.governance is GovernanceStatus.Governed
                                                             val holdsShare = memberPublicKey.lowercase() in chatRoomDetailUIState.lightningParticipants
                                                             val holdsWavelengthShare = memberPublicKey.lowercase() in chatRoomDetailUIState.wavelengthParticipants
                                                             notify(
                                                                 failure ?: when {
+                                                                    governed -> changeProposed
                                                                     holdsWavelengthShare -> removalLeavesWavelengthShare
                                                                     holdsShare -> removalLeavesLightningShare
                                                                     rotationHeld -> rotationHeldAfterRemoval
@@ -1567,20 +1573,6 @@ fun ChatRoomDetailScreen(
 
                             item {
                                 HorizontalDivider()
-                            }
-
-                            if (chatRoomDetailUIState.isGoverned && !chatRoomDetailUIState.isDisbanded) {
-                                item {
-                                    Text(
-                                        text = stringResource(Res.string.group_governed_elsewhere),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(
-                                            horizontal = MaterialTheme.spacing.containerPadding,
-                                            vertical = MaterialTheme.spacing.compactPadding,
-                                        )
-                                    )
-                                }
                             }
 
                             // Whether the room's changes need the group's signature, and the

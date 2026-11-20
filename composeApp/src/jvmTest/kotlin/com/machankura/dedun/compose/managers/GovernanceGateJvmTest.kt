@@ -12,6 +12,7 @@ import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerSync
 import kotlin.test.AfterTest
+import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
 import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
@@ -399,5 +400,113 @@ class GovernanceGateJvmTest {
 
         assertEquals(null, GovernanceManager.refusalOf(db, room(), unsigned(GovernanceChange(admins = setOf(dana.hex, userHex)))))
         assertNotNull(GovernanceManager.refusalOf(db, room(), unsigned(GovernanceChange(admins = setOf(dana.hex)))))
+    }
+
+    // --- Phase 5b: the room's ordinary changes, governed --------------------------
+
+    /** Erin added by Dana inside the group's signature, joined from the Welcome. */
+    private suspend fun erinAddedSigned() {
+        MarmotStandIn.seedProfile(db, erin.hex, "Erin")
+        erin.makeBundle()
+        val epoch = appGroup().epoch
+        val staged = dana.manager.stageAddMember(routingId, erin.bundle.keyPackage.toTlsBytes())
+        val added = com.machankura.dedun.compose.nostr.frost.AddedMember(erin.hex, erin.bundle.keyPackage.reference().toHex())
+        danaCarries(statement(commitEvent(staged.result), GovernanceChange(adds = setOf(added)), epoch))
+        dana.manager.installState(routingId, staged.pendingState)
+        erin.manager.processWelcome(assertNotNull(staged.result.welcomeBytes), erin.bundle)
+        erin.inbound.trackGroup(routingId)
+        assertTrue(erin.hex in appGroup().currentMemberIdentities(), "Erin's signed add did not land")
+    }
+
+    /** Dana applies the commit inside the carrier this device sent. */
+    private suspend fun danaFollows(carrier: GroupEvent) {
+        val carried = assertIs<com.vitorpamplona.marmot.GroupEventResult.ApplicationMessage>(dana.inbound.processGroupEvent(carrier))
+        val envelope = Event.fromJson(carried.innerEventJson)
+        val statement = GovernanceCarrierEvent.statementOf(envelope) ?: envelope
+        dana.inbound.processGroupEvent(assertNotNull(com.machankura.dedun.compose.nostr.frost.GovernanceEvents.innerCommitOf(statement)))
+    }
+
+    @Test
+    fun `a member's leave is committed by an admin's device inside its own envelope`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        erinAddedSigned()
+        val epoch = appGroup().epoch
+
+        val (framed, exporter) = erin.manager.leaveGroup(routingId)
+        val leave = com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal(KeyPair()).sign(
+            GroupEvent.build(encryptedContentBase64 = com.vitorpamplona.marmot.mip03GroupMessages.GroupEventEncryption.encrypt(framed, exporter), nostrGroupId = routingId)
+        )
+        // Every member pools the proposal; the commit only refers to it.
+        dana.inbound.processGroupEvent(leave)
+        MarmotStandIn.storeInApp(db, user, leave)
+        val carrier = okTheLatestCommit()
+
+        assertEquals(epoch + 1, appGroup().epoch)
+        assertFalse(erin.hex in appGroup().currentMemberIdentities(), "Erin is still in the tree")
+        danaFollows(carrier)
+        assertFalse(erin.hex in dana.manager.getGroup(routingId)!!.currentMemberIdentities(), "Dana is in another group")
+    }
+
+    @Test
+    fun `removing an admin is one signed commit that takes their admin entry with them`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        val epoch = appGroup().epoch
+        val danaLeaf = appGroup().members().first { (_, leaf) ->
+            (leaf.credential as com.vitorpamplona.mls.tree.Credential.Basic).identity.toHexKey() == dana.hex
+        }.first
+
+        val prepared = GovernanceManager.prepare(appGroup(), routingId, GovernanceManager.removal(danaLeaf, dana.hex, appGroup().currentAdminIdentities()))
+        val signed = statement(prepared.commitEvent, prepared.change, prepared.epoch)
+        assertEquals(GovernanceChange(removes = setOf(dana.hex), admins = setOf(userHex)), prepared.change)
+        GovernanceManager.publish(db, GovernanceManager.record(db, room(), userHex, prepared, signed.id, "s"), signed)
+        okTheLatestCommit()
+
+        assertEquals(epoch + 1, appGroup().epoch, "the removal took more than one commit")
+        assertEquals(setOf(userHex), appGroup().currentAdminIdentities())
+        assertFalse(dana.hex in appGroup().currentMemberIdentities())
+        assertTrue(lines(ChatMessage.TYPE_ADMIN_REMOVED).isEmpty(), "a departure was captioned twice")
+    }
+
+    @Test
+    fun `an invite signed by the group sends its Welcome once the carrier is accepted`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        MarmotStandIn.seedProfile(db, erin.hex, "Erin")
+        erin.makeBundle()
+        val welcomesBefore = db.giftWrapPayloadDao().getAllGiftWrapUnsigned().count { it.kind == com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent.KIND }
+        val packageRow = com.machankura.dedun.compose.database.model.MarmotKeyPackage(
+            id = erin.hex, publicKey = erin.hex,
+            tlsEncodedMarmotKeyPackage = erin.bundle.keyPackage.toTlsBytes(), profile = com.machankura.dedun.compose.nostr.MarmotProfile.CURRENT.wireName,
+        )
+        db.participantDao().upsert(listOf(com.machankura.dedun.compose.database.model.Participant(participantPublicKey = erin.hex, chatRoomId = roomId, relayHint = null)))
+
+        val prepared = GovernanceManager.prepare(appGroup(), routingId, GovernanceManager.addition(packageRow.tlsEncodedMarmotKeyPackage))
+        val signed = statement(prepared.commitEvent, prepared.change, prepared.epoch)
+        GovernanceManager.publish(db, GovernanceManager.record(db, room(), userHex, prepared, signed.id, "s", peerKeyPackageEventId = packageRow.id), signed)
+        assertEquals(welcomesBefore, db.giftWrapPayloadDao().getAllGiftWrapUnsigned().count { it.kind == com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent.KIND }, "the Welcome went before the commit was accepted")
+
+        okTheLatestCommit()
+
+        assertTrue(erin.hex in appGroup().currentMemberIdentities())
+        assertEquals(welcomesBefore + 1, db.giftWrapPayloadDao().getAllGiftWrapUnsigned().count { it.kind == com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent.KIND }, "no Welcome for Erin")
+    }
+
+    @Test
+    fun `a removal signed by the group, from another member, lands here`() = runBlocking {
+        governedRoom()
+        erinAddedSigned()
+        val epoch = appGroup().epoch
+        val erinLeaf = dana.manager.getGroup(routingId)!!.members().first { (_, leaf) ->
+            (leaf.credential as com.vitorpamplona.mls.tree.Credential.Basic).identity.toHexKey() == erin.hex
+        }.first
+
+        val staged = dana.manager.stageRemoveMember(routingId, erinLeaf)
+        danaCarries(statement(commitEvent(staged.result), GovernanceChange(removes = setOf(erin.hex)), epoch))
+
+        assertEquals(epoch + 1, appGroup().epoch, "a signed removal was refused at the door")
+        assertFalse(erin.hex in appGroup().currentMemberIdentities())
+        assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).isEmpty())
     }
 }

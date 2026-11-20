@@ -39,6 +39,8 @@ import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
 import com.vitorpamplona.marmot.appComponents.AppComponentIds
 import com.vitorpamplona.marmot.appComponents.GroupProfileV1
+import com.vitorpamplona.marmot.appComponents.GroupLifecycleV1
+import com.vitorpamplona.mls.components.ComponentsList
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.marmot.groups.MlsGroupManager
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
@@ -70,6 +72,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceManager
 import com.machankura.dedun.compose.managers.GovernanceMarker
 import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.managers.MarmotInboundManager
@@ -205,7 +208,6 @@ abstract class MarmotOutboundDao(
             ?: throw MarmotMissingChatGroupException(
                 "No MLS group state for chat room ${localChatRoom.chatRoom.id}; cannot invite $peerPublicKey"
             )
-        if (mlsGroup.refusesBareCommits()) throw MarmotGovernedRoomException()
 
         val relays = Relays.DefaultDMRelayList.map { it.url }
 
@@ -642,6 +644,18 @@ abstract class MarmotOutboundDao(
                     "An earlier change to this room is still waiting for a relay to accept it; try again in a moment"
                 )
             }
+            // A governed room: proposed and signed by the group; the Welcome goes out
+            // once a relay accepts the carried commit, as it does for a bare one.
+            // docs/member-admin-promotion.md, Phase 5.
+            if (!isOneMemberInitialGroupCreation && GovernanceGate.isGoverned(mlsGroup)) {
+                val room = database.chatRoomDao().findChatRoomById(chatRoomId)
+                    ?: throw MarmotMissingChatGroupException("No room $chatRoomId")
+                GovernanceManager.propose(
+                    database, room, userPublicKey, peerKeyPackageEventId = peerKeyPackage.id,
+                    propose = GovernanceManager.addition(peerKeyPackage.tlsEncodedMarmotKeyPackage),
+                )
+                return
+            }
             engine.awaitSettled(routingId)
             val staged = engine.groupManager.stageAddMember(routingId, peerKeyPackage.tlsEncodedMarmotKeyPackage)
             if (isOneMemberInitialGroupCreation) {
@@ -848,10 +862,14 @@ abstract class MarmotOutboundDao(
         val routingId = localChatRoom.routingId
         val group = engine.groupFor(routingId) ?: return
         if (!group.isLocalAdmin() || !engine.groupManager.hasPendingProposals(routingId)) return
-        // A governed room's admins commit a leave inside the group's signature; a bare
-        // one from here would fork it. A Giza admin commits it instead.
-        if (group.refusesBareCommits()) return
         if (!engine.gate.canPrepareLocalCommit(routingId)) return
+
+        // In a governed room a member's leave is committed inside this account's own
+        // envelope, not bare (docs/member-admin-promotion.md, D6).
+        if (GovernanceGate.isGoverned(group)) {
+            GovernanceManager.publishOwnCommit(database, localChatRoom)
+            return
+        }
 
         publishGatedCommit(localChatRoom) { manager, id -> manager.stageCommit(id) }
     }
@@ -880,7 +898,6 @@ abstract class MarmotOutboundDao(
         val engine = database.marmotEngine
         val group = engine.groupFor(localChatRoom.routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
-        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
         val leafIndex = group.members()
             .firstOrNull { (_, leaf) -> (leaf.credential as? Credential.Basic)?.identity?.toHexKey() == memberPublicKey }
             ?.first
@@ -891,6 +908,16 @@ abstract class MarmotOutboundDao(
         val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
         if (!AdminGovernance.keepsFloor(group, memberPublicKey, floor)) {
             throw IllegalStateException("A group with a shared key needs at least $floor admins, so ${memberName(memberPublicKey)} can't be removed")
+        }
+
+        // A governed room: one change, proposed and signed by the group -- the
+        // removal and, for an admin, their admin entry in the same commit, which a
+        // copy of the group can build where the manager cannot.
+        // docs/member-admin-promotion.md, Phase 5.
+        if (GovernanceGate.isGoverned(group)) {
+            val admins = group.currentAdminIdentities()
+            GovernanceManager.propose(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, propose = GovernanceManager.removal(leafIndex, memberPublicKey, admins))
+            return
         }
 
         if (memberPublicKey in group.currentAdminIdentities()) {
@@ -1102,7 +1129,19 @@ abstract class MarmotOutboundDao(
         val group = engine.groupFor(routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
         require(group.isLocalAdmin()) { "Only an admin can disband the group" }
-        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
+
+        // A governed room ends only with the group's signature. One that has not yet
+        // agreed it can be disbanded agrees to that first, as its own signed change.
+        if (GovernanceGate.isGoverned(group)) {
+            val me = localChatRoom.chatRoom.userPublicKey
+            if (group.currentGroupState().requires(AppComponentIds.GROUP_LIFECYCLE_V1)) {
+                GovernanceManager.propose(database, localChatRoom, me, propose = GovernanceManager.disbanding)
+                return
+            }
+            GovernanceManager.propose(database, localChatRoom, me, propose = GovernanceManager.enablingDisbanding)
+            throw IllegalStateException("The group first has to agree it can be disbanded, and that has been proposed. Disband again once the group has signed it")
+        }
+
         if (!engine.gate.canPrepareLocalCommit(routingId)) {
             throw MarmotCommitPendingException(
                 "An earlier change to this room is still waiting for a relay to accept it; try again in a moment"
@@ -1123,7 +1162,6 @@ abstract class MarmotOutboundDao(
         val group = engine.groupFor(routingId) ?: return
         if (engine.gate.outboundGate(routingId) != LocalOutboundGate.DISBANDING) return
         if (group.currentGroupState().isDisbanded) return
-        if (group.refusesBareCommits()) return
         // The gate this device raised is the one it is acting under, so it is the
         // one exception to "no commit while gated".
         if (!engine.gate.canPrepareLocalCommit(routingId, ignoringGate = LocalOutboundGate.DISBANDING)) return

@@ -111,12 +111,6 @@ sealed interface ChatRoomDetailUIState {
          */
         val canGovern: Boolean = false,
         /**
-         * The room carries Giza's marker: its member changes need the group's
-         * signature, which this build cannot ask for. Invite, remove and disband
-         * are hidden and the room says why. See `GovernanceMarker`.
-         */
-        val isGoverned: Boolean = false,
-        /**
          * The group's lifecycle says it is over. Absorbing: nothing is sent into it
          * and nobody rejoins, so every write entrance is hidden and the room says so.
          */

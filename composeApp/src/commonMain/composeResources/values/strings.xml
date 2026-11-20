@@ -133,11 +133,11 @@
     <string name="require_signatures">Require the group's signature for changes</string>
     <string name="require_signatures_explainer">From then on, adding or removing a member, or changing who the admins are, is proposed and has to be signed by the group before it happens.</string>
     <string name="governance_waiting">Before changes can need the group's signature, %1$s need to update Dedun.</string>
+    <string name="change_proposed">Proposed; it happens once the group signs it</string>
     <string name="require_signatures_sent">Sent; changes will need the group's signature once a relay accepts it</string>
     <string name="stepping_down_to_leave">Stepping down; you'll leave once a relay accepts it</string>
     <string name="remove_from_group">Remove from group</string>
     <string name="disband_group">Disband group</string>
-    <string name="group_governed_elsewhere">Changes to this group's members need the group's signature, which this version of Dedun can't ask for yet. Members can still chat and sign here.</string>
     <string name="group_disbanded">This group was disbanded. Nothing more can be sent into it, and nobody can rejoin.</string>
     <string name="disband_group_explainer">Ends the group for everyone. Nobody can rejoin; a new conversation is a new group.</string>
     <string name="member_removal_requested">Removal sent; it takes effect once a relay accepts it</string>

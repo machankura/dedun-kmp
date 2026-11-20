@@ -31,6 +31,10 @@ import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
 import com.machankura.dedun.compose.nostr.frost.GovernanceChange
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
+import com.machankura.dedun.compose.nostr.frost.OwnCommitEvent
+import com.vitorpamplona.marmot.appComponents.GroupLifecycleV1
+import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
+import com.vitorpamplona.mls.components.ComponentsList
 
 /**
  * How a change to a governed room becomes a commit: built, signed by the group, then
@@ -71,8 +75,13 @@ object GovernanceManager {
         val copy = MlsGroup.restore(prior, recorder)
         propose(copy)
         val result = copy.commit()
-        val (view, proposals, _) = checkNotNull(recorder.seen) { "The commit was built without being checked" }
-        val change = checkNotNull(GovernanceChange.of(view, proposals)) { "This change cannot be described, so the group could not approve it" }
+        val (_, proposals, _) = checkNotNull(recorder.seen) { "The commit was built without being checked" }
+        // Who a Remove names is read off the group as it stood before the commit:
+        // the copy's own view can already have the removed leaf blank.
+        val change = checkNotNull(GovernanceChange.of(live.view(), proposals)) {
+            "This change cannot be described, so the group could not approve it: " +
+                proposals.joinToString { it.proposal::class.simpleName.orEmpty() }
+        }
         val commitEvent: GroupEvent = NostrSignerInternal(KeyPair()).sign(
             GroupEvent.build(
                 encryptedContentBase64 = GroupEventEncryption.encrypt(result.framedCommitBytes, result.preCommitExporterSecret),
@@ -105,7 +114,9 @@ object GovernanceManager {
         }
 
         val prepared = prepare(live, routingId, propose)
-        GovernanceGate.minimumAdmins(live)?.let { floor ->
+        // A disband ends the group, so no floor applies to what it leaves behind.
+        val disbands = GroupLifecycleV1.COMPONENT_ID in prepared.change.components
+        GovernanceGate.minimumAdmins(live)?.takeUnless { disbands }?.let { floor ->
             val admins = prepared.change.admins ?: live.currentAdminIdentitiesSet()
             val remaining = admins - prepared.change.removes
             check(remaining.size >= floor) { "A group with a shared key needs at least $floor admins. Make someone else an admin first" }
@@ -234,23 +245,106 @@ object GovernanceManager {
             MlsGroupState.decodeTls(proposal.pendingStateHex.hexToByteArray()),
         )
 
-        // The carrier first, at this epoch: the gate raised after it.
-        val createdAt = Clock.System.now().epochSeconds
-        val payload = MarmotAppEvent.build(
-            pubKey = me,
-            kind = GovernanceCarrierEvent.KIND,
-            content = signed.toJson(),
-            createdAt = createdAt,
-            tags = GovernanceCarrierEvent.assembleTags(proposal.chatRoomId),
-        ).encodeToPayload()
-        val carrier = engine.outbound.buildGroupEventFromBytes(routingId, payload).signedEvent
-        val obligation = engine.gate.prepare(groupId = routingId, staged = staged, outboundBytes = result.framedCommitBytes, recipientScope = relays)
-
-        // The commit is filed as the event it is, so a carrier coming back from a
-        // relay -- or carried again by another member -- is known for this one.
         val commitEvent = Event.fromJson(proposal.commitEventJson).let {
             GroupEvent(it.id, it.pubKey, it.createdAt, it.tags, it.content, it.sig)
         }
+        sendEnvelope(
+            database = database,
+            chatRoomId = proposal.chatRoomId,
+            routingId = routingId,
+            me = me,
+            staged = staged,
+            commitEvent = commitEvent,
+            commitRow = commitRow,
+            carrierKind = GovernanceCarrierEvent.KIND,
+            carrierContent = signed.toJson(),
+            carrierTags = GovernanceCarrierEvent.assembleTags(proposal.chatRoomId),
+            relays = relays,
+        )
+        database.governanceProposalDao().upsert(proposal.copy(stage = GovernanceProposalStage.PUBLISHED, updatedAt = Clock.System.now()))
+    }
+
+    /**
+     * Commits whatever members' own leaves are waiting in a governed room's pool, as
+     * an admin's device does on receipt -- inside this account's own envelope (D6),
+     * not bare. Nothing when nothing is waiting.
+     */
+    suspend fun publishOwnCommit(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        relays: List<String> = Relays.DefaultDMRelayList.map { it.url },
+    ) {
+        val engine = database.marmotEngine
+        val routingId = localChatRoom.routingId
+        val me = localChatRoom.chatRoom.userPublicKey
+        if (!engine.groupManager.hasPendingProposals(routingId) || !engine.gate.canPrepareLocalCommit(routingId)) return
+        engine.awaitSettled(routingId)
+        val live = engine.groupFor(routingId) ?: return
+        val prepared = prepare(live, routingId) { }
+        // Only members' own leaves are ever pooled (MIP-03), and they need nobody's
+        // signature; anything else would not be this envelope's to carry.
+        check(prepared.change == GovernanceChange()) { "Only a member's own leave can be committed without the group's signature" }
+        val commitRow = MarmotCommitResult.from(
+            commitEventId = prepared.commitEvent.id,
+            commitResult = prepared.staged.result,
+            chatRoomId = localChatRoom.chatRoom.id,
+            userPublicKey = me,
+            peerKeyPackageEventId = MarmotCommitResult.NO_INVITEE,
+            isOneMemberInitialGroupCreation = false,
+            createdAt = Instant.fromEpochSeconds(prepared.commitEvent.createdAt),
+        )
+        database.marmotCommitResultDao().upsert(commitRow)
+        sendEnvelope(
+            database = database,
+            chatRoomId = localChatRoom.chatRoom.id,
+            routingId = routingId,
+            me = me,
+            staged = prepared.staged,
+            commitEvent = prepared.commitEvent,
+            commitRow = commitRow,
+            carrierKind = OwnCommitEvent.KIND,
+            carrierContent = prepared.commitEvent.toJson(),
+            carrierTags = OwnCommitEvent.assembleTags(localChatRoom.chatRoom.id, prepared.epoch),
+            relays = relays,
+        )
+    }
+
+    /**
+     * Puts a commit on the wire inside an envelope: the envelope as an application
+     * message at the commit's epoch, then the publish gate raised with the staged
+     * state, the commit filed as the event it is -- so the envelope coming back is
+     * known for this device's own -- and the relay's OK on the envelope made the
+     * commit's confirmation, as `publishCommit` does for a bare one.
+     */
+    private suspend fun sendEnvelope(
+        database: DedunDatabase,
+        chatRoomId: String,
+        routingId: HexKey,
+        me: HexKey,
+        staged: MlsGroupManager.StagedCommit,
+        commitEvent: GroupEvent,
+        commitRow: MarmotCommitResult,
+        carrierKind: Int,
+        carrierContent: String,
+        carrierTags: Array<Array<String>>,
+        relays: List<String>,
+    ) {
+        val engine = database.marmotEngine
+        val payload = MarmotAppEvent.build(
+            pubKey = me,
+            kind = carrierKind,
+            content = carrierContent,
+            createdAt = Clock.System.now().epochSeconds,
+            tags = carrierTags,
+        ).encodeToPayload()
+        val carrier = engine.outbound.buildGroupEventFromBytes(routingId, payload).signedEvent
+        val obligation = engine.gate.prepare(
+            groupId = routingId,
+            staged = staged,
+            outboundBytes = staged.result.framedCommitBytes,
+            recipientScope = relays,
+        )
+
         listOf(commitEvent, carrier).forEach { event ->
             database.nostrEventDao().upsert(
                 NostrEvent(
@@ -261,17 +355,47 @@ object GovernanceManager {
             database.marmotGroupEventDao().upsert(
                 MarmotGroupEvent(
                     id = event.id, createdAt = Instant.fromEpochSeconds(event.createdAt), encryptedContent = event.encryptedContent(),
-                    publicKey = event.pubKey, userPublicKey = me, expiresAt = null, chatRoomId = proposal.chatRoomId, signature = event.sig,
+                    publicKey = event.pubKey, userPublicKey = me, expiresAt = null, chatRoomId = chatRoomId, signature = event.sig,
                 )
             )
         }
-        // The relay's OK on the carrier is what confirms the commit: filed under the
-        // carrier's id, with the obligation, as `publishCommit` files a bare one.
         database.marmotCommitResultDao().upsert(
             commitRow.copy(id = carrier.id, obligationId = obligation.obligationId, createdAt = Instant.fromEpochSeconds(carrier.createdAt))
         )
         database.broadcastNostrEventRequestDao().insert(relays.map { BroadcastNostrEventRequest(nostrEventId = carrier.id, relayURL = it) })
-        database.governanceProposalDao().upsert(proposal.copy(stage = GovernanceProposalStage.PUBLISHED, updatedAt = Clock.System.now()))
+    }
+
+    // --- The changes, as the proposals a copy of the group is given ----------------
+
+    /** Removing the member at [leafIndex], and their admin entry in the same commit when [admins] names [member]. */
+    fun removal(leafIndex: Int, member: HexKey, admins: Set<HexKey>): (MlsGroup) -> Unit = { copy ->
+        copy.proposeRemove(leafIndex)
+        if (member in admins) {
+            copy.proposeAppDataUpdate(AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(admins - member).encode())
+        }
+    }
+
+    /** Adding the holder of [keyPackageBytes]. */
+    fun addition(keyPackageBytes: ByteArray): (MlsGroup) -> Unit = { copy -> copy.proposeAdd(keyPackageBytes) }
+
+    /** Ending the group, as the library's own disband does: everyone else removed, this device its last admin. */
+    val disbanding: (MlsGroup) -> Unit = { copy ->
+        copy.proposeAppDataUpdate(GroupLifecycleV1.COMPONENT_ID, GroupLifecycleV1.DISBANDED.encode())
+        copy.proposeAppDataUpdate(AdminPolicyV1.COMPONENT_ID, AdminPolicyV1(listOf(checkNotNull(copy.memberIdentity(copy.leafIndex)))).encode())
+        for ((leafIndex, _) in copy.members()) {
+            if (leafIndex != copy.leafIndex) copy.proposeRemove(leafIndex)
+        }
+    }
+
+    /** Agreeing the group can be disbanded, as the library's enablement does: the lifecycle component required, and active. */
+    val enablingDisbanding: (MlsGroup) -> Unit = { copy ->
+        val dictionary = copy.appDataDictionary()
+        val required = ComponentsList.supportedOrRequired(dictionary).toMutableSet()
+        required.add(GroupLifecycleV1.COMPONENT_ID)
+        copy.proposeAppDataUpdate(ComponentsList.APP_COMPONENTS_ID, ComponentsList.encode(required))
+        if (dictionary[GroupLifecycleV1.COMPONENT_ID] == null) {
+            copy.proposeAppDataUpdate(GroupLifecycleV1.COMPONENT_ID, GroupLifecycleV1.ACTIVE.encode())
+        }
     }
 
     private suspend fun announce(database: DedunDatabase, chatRoomId: String, me: HexKey, content: String) {
