@@ -582,6 +582,41 @@ A short section in this note on offline work: one online build fills
 **Check:** a frozen-lock build passes on Linux and on the mac. A deliberately bumped
 version fails the frozen build with Magpie's message.
 
+**Half built: the Linux half.** The mac half and the freeze are still to do, in that
+order.
+
+- **The stale lines.** Phase 5a left quartz 2.20.0's three lines in the lock. With them
+  removed, every runtime and compile classpath resolves under
+  `-Pmagpie.frozenLock=true --refresh-dependencies` and nothing is written back. Under the
+  strict pin, marmot's request for 2.20.0 is never looked up, so the lines are pruned. The
+  lock is now exactly what resolves: six publishers and 18 modules (root, `-jvm` and
+  `-android` for quartz 2.20.1, marmot 2.3.0, mls 1.3.1, crypto 2.1.1, negentropy v1.2.3 and
+  schnorr256k1-kotlin 1.0.3).
+- **The frozen lock refuses.** With quartz set to `strictly 2.19.1`, which is on the relay
+  and not in the lock, a frozen build fails with "Magpie refused …quartz-2.19.1.module:
+  magpie.lock is frozen but resolution needs to add to it: release
+  com.vitorpamplona.quartz:quartz:2.19.1 … Run the build once without frozen locks and
+  commit magpie.lock." Gradle's `dependencies` report renders that as `FAILED` lines and
+  exits 0, but a compile fails.
+- **Offline.** After `./gradlew --stop`, `./gradlew --offline -Pmagpie.frozenLock=true
+  :composeApp:compileKotlinJvm` succeeds. Magpie serves from
+  `~/.gradle/magpie/mirror/<publisher key>/`, which any earlier online build on the machine
+  has filled. A machine that has never built online has to build online once.
+
+**Still to do, on a mac, in this order:**
+
+1. `./gradlew :composeApp:compileKotlinIosSimulatorArm64
+   :composeApp:linkDebugFrameworkIosSimulatorArm64`, and the same for `IosArm64`. The diff
+   to `gradle/magpie.lock` must be additions only: `-iosarm64` and `-iossimulatorarm64`
+   lines for each release, plus schnorr256k1-kotlin's cinterop klib if it is published as
+   its own module.
+2. Add the iOS suffixes to `docs/scripts/magpie-lock-audit.sh` (Phase 7), so the audit
+   requires them from then on.
+3. Add `magpie.frozenLock=true` to `gradle.properties`, with a comment pointing here.
+
+Freezing before step 1 would make the first mac build fail on a lock it is not allowed to
+complete. That is why the freeze is not in this commit.
+
 ## Phase 7 — the guards, and the notes that still say 2.7.3
 
 - **A lock guard.** Extend the `marmotAudit` script, or add a sibling, to fail `check` when a
