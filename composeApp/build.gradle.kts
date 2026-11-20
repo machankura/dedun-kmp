@@ -453,6 +453,39 @@ val marmotAudit = tasks.register("marmotAudit") {
 
 tasks.named("check") { dependsOn(marmotAudit) }
 
+/**
+ * The catalogue and gradle/magpie.lock agree: every version of a group Magpie serves is
+ * `strictly`, and has a lock line for each target. A frozen lock only notices at resolution
+ * time, on the targets the machine resolves, so a bump made on Linux would leave the iOS lines
+ * out and only a mac would find out. docs/quartz-mls-marmot-update.md, Phase 7.
+ */
+val magpieLockAudit = tasks.register("magpieLockAudit") {
+    group = "verification"
+    description = "Checks that every Magpie-served catalogue version is strict and in gradle/magpie.lock."
+
+    val script = rootProject.layout.projectDirectory.file("docs/scripts/magpie-lock-audit.sh").asFile
+    val projectDirectory = rootProject.layout.projectDirectory.asFile
+
+    doLast {
+        val bash = listOf("/bin/bash", "/usr/bin/bash").firstOrNull { File(it).canExecute() }
+        if (bash == null) {
+            logger.warn("magpieLockAudit: no bash found, skipping. Run docs/scripts/magpie-lock-audit.sh --check by hand.")
+            return@doLast
+        }
+        val result = providers.exec {
+            commandLine(bash, script.absolutePath, "--check")
+            workingDir = projectDirectory
+            isIgnoreExitValue = true
+        }
+        logger.lifecycle(result.standardOutput.asText.get())
+        if (result.result.get().exitValue != 0) {
+            throw GradleException("The catalogue and gradle/magpie.lock disagree. See the report above, and docs/quartz-mls-marmot-update.md.")
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(magpieLockAudit) }
+
 compose.desktop {
     application {
         mainClass = "com.machankura.dedun.desktop.MainKt"
