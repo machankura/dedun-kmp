@@ -724,4 +724,89 @@ class GovernanceGateJvmTest {
 
         assertEquals(listOf(proposal.id), GovernanceFollowThrough.rotationsOwed(db).map { it.id })
     }
+
+    // --- docs/admin-change-rotation.md --------------------------------------------
+
+    private val ceremonyId = "c".repeat(64)
+
+    /**
+     * The room's key as this device holds it after its ceremony: [holders] dealt a
+     * share each by a trusted dealer, in host-key order, [t] of them to sign, and a
+     * key state naming it. Enough for the rules that read the key -- what this
+     * device holds, the floor, a rotation -- without a ceremony or a signature.
+     */
+    private suspend fun roomKeyHeldBy(holders: List<String>, t: Int = 2) {
+        val hosts = holders.map { "02" + KeyPair().pubKey.toHexKey() }
+        val ids = hosts.map { host -> hosts.sorted().indexOf(host) }
+        val material = fr.acinq.bitcoin.crypto.frost.Frost.trustedDealerKeygen(
+            fr.acinq.bitcoin.PrivateKey(fr.acinq.bitcoin.ByteVector32("ab".repeat(32))), holders.size, t,
+        )
+        val me = holders.indexOf(userHex)
+        db.dkgSessionDao().upsert(
+            com.machankura.dedun.compose.database.model.DkgSession(
+                id = ceremonyId, chatRoomId = roomId, coordinatorPublicKey = holders.first(), userPublicKey = userHex,
+                threshold = t, participantCount = holders.size, stage = com.machankura.dedun.compose.database.model.types.DkgRitualStage.COMPLETE,
+                hostPublicKey = hosts[me], round1Random = "1".repeat(64), round2AuxRandom = "2".repeat(64),
+                thresholdPublicKey = material.thresholdPublicKey.value.toHex(),
+                secretShare = material.secretShares[ids[me]].value.toHex(),
+                publicShares = material.publicShares.joinToString(",") { it.value.toHex() },
+            )
+        )
+        holders.forEachIndexed { i, holder ->
+            db.dkgSessionDao().upsert(
+                com.machankura.dedun.compose.database.model.DkgParticipantMessage(
+                    sessionId = ceremonyId, participantPublicKey = holder,
+                    kind = com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents.HOST_KEY, payload = hosts[i],
+                )
+            )
+        }
+        db.groupKeyStateDao().upsert(
+            com.machankura.dedun.compose.database.model.GroupKeyState(
+                chatRoomId = roomId, dkgSessionId = ceremonyId, thresholdPublicKey = material.thresholdPublicKey.value.toHex(),
+                derivationPath = SharedKeyDerivation.formatPath(SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH),
+                announcedBy = roomId, announcedAt = kotlin.time.Instant.fromEpochSeconds(1_700_000_000),
+            )
+        )
+    }
+
+    /** A rotation of the room's key, proposed by Dana and still dealing. */
+    private suspend fun rotationRunning(): com.machankura.dedun.compose.database.model.ShareRefreshSession =
+        com.machankura.dedun.compose.database.model.ShareRefreshSession(
+            id = "r".repeat(64), chatRoomId = roomId, dkgSessionId = ceremonyId, coordinatorPublicKey = dana.hex,
+            userPublicKey = userHex, baseGeneration = 0, recipientIds = "0,1",
+            round1Random = "3".repeat(64), auxRandom = "4".repeat(64),
+        ).also { db.shareRefreshDao().upsert(it) }
+
+    /** Pinned before Phase 6: the first promotion in a keyed room is refused, and the admin is sent to rotate by hand. */
+    @Test
+    fun `pinned -- making someone an admin at the ceremony's generation is refused`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        erinAddedSigned()
+        roomKeyHeldBy(listOf(dana.hex, userHex))
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        try {
+            val refused = assertFailsWith<IllegalStateException> { PromotionManager.offer(db, room(), userHex, erin.hex) }
+            assertTrue("Rotate the group's shares once" in refused.message.orEmpty(), refused.message)
+        } finally {
+            com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        }
+    }
+
+    /** Pinned before Phase 3 (H5): a step-down request taken up while a rotation runs is used up, whatever it meets. */
+    @Test
+    fun `pinned -- a step-down request taken up during a rotation is used up`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        roomKeyHeldBy(listOf(dana.hex, userHex))
+        rotationRunning()
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        try {
+            danaSays(PromotionEvents.STEP_DOWN, "", PromotionEvents.stepDownTags(roomId))
+            PromotionManager.followStepDowns(db, userHex)
+            assertTrue(db.marmotInnerEventDao().getByChatRoomAndKinds(roomId, listOf(PromotionEvents.STEP_DOWN)).isEmpty(), "the request was kept")
+        } finally {
+            com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        }
+    }
 }

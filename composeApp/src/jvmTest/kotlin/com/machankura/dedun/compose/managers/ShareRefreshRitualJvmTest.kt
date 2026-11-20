@@ -1492,6 +1492,106 @@ class ShareRefreshRitualJvmTest {
         assertTrue(alice.active().roster.none { it.participantId == 3 })
     }
 
+    // ---- docs/admin-change-rotation.md: today's behaviour, pinned ---------------------------------------------------
+
+    /**
+     * The rotation a removal owes, as `GovernanceFollowThrough.rotateAway` opens it.
+     * Pinned before Phase 5: every remaining holder is asked to take part, though the
+     * group's signature on the removal already decided who is withheld.
+     */
+    @Test
+    fun `pinned -- after a removal, every remaining holder is asked to take part in its rotation`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol, dave) = all
+        val refresh = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+        pump(all)
+
+        listOf(bob, carol).forEach { device ->
+            assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(device.db, device.refresh(refresh.id)!!), "device ${device.index}")
+        }
+        all.forEach { assertEquals(0, it.active().generation, "device ${it.index} moved without anyone agreeing") }
+    }
+
+    /**
+     * H1: a removal that lands while a rotation runs. The rotation it owes is handed
+     * the running one back -- which was proposed before the removal, deals to the
+     * removed member, and leaves them a live share of the new generation.
+     */
+    @Test
+    fun `pinned -- a removal during a rotation leaves the removed member a live share`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, _, _, dave) = all
+        val running = propose(alice)
+        pump(all)
+
+        val owed = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+        assertEquals(running.id, owed.id, "the owed rotation was handed the running one")
+        approveAll(all, running.id)
+
+        assertEquals(1, alice.active().generation)
+        assertEquals(ShareStanding.LIVE, alice.active().roster.single { it.memberPublicKey == dave.publicKey }.standing)
+    }
+
+    /**
+     * H2: a promotion's key state signed while a rotation runs. The new id grows the
+     * base generation's table under a rotation dealt against the old one, and the
+     * rotation's own check refuses what it combines: the whole rotation fails.
+     */
+    @Test
+    fun `pinned -- a new admin bound during a rotation fails the rotation`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val running = propose(alice)
+        pump(all)
+
+        val erinKeys = KeyPair()
+        bindNextId(all, erinKeys.pubKey.toHexKey(), ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+        approveAll(all, running.id)
+
+        assertEquals(1, alice.active().generation)
+        all.forEach { device ->
+            val refresh = device.refresh(running.id)!!
+            assertEquals(ShareRefreshStage.FAILED, refresh.stage, "device ${device.index}")
+            assertTrue("does not match the commitments" in refresh.failureReason.orEmpty(), refresh.failureReason)
+        }
+    }
+
+    /**
+     * H4: a governance statement being signed at generation g when the rotation's
+     * key state at g+1 is signed. Its session is failed with the old shares.
+     */
+    @Test
+    fun `pinned -- a statement still being signed fails when a rotation lands`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val statement = FrostSigningManager.proposeSigning(
+            alice.db, alice.room, alice.publicKey,
+            kind = com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent.KIND, tags = arrayOf(), content = "{}",
+        )
+        val holdStatement = { event: MarmotInnerEvent -> event.tags.any { tag -> statement.id in tag } }
+        val refresh = propose(alice)
+        var asked = true
+        while (asked) {
+            asked = false
+            pump(all, hold = holdStatement)
+            all.forEach { device ->
+                val session = device.refresh(refresh.id) ?: return@forEach
+                if (ShareRefreshManager.pendingApproval(device.db, session) != null) {
+                    ShareRefreshManager.approve(device.db, device.room, refresh.id, device.privateKey)
+                    asked = true
+                }
+            }
+        }
+        pump(all, hold = holdStatement)
+
+        assertEquals(1, alice.active().generation)
+        assertEquals(FrostSigningStage.FAILED, alice.db.frostSigningSessionDao().getSessionById(statement.id)?.stage)
+    }
+
     // ---- Phase 12: restore ---------------------------------------------------------------------------------------
 
     /**
