@@ -57,6 +57,23 @@ class PromotionOffersJvmTest {
         assertNull(PromotionManager.pendingOffer(db, roomId, erin), "an accepted offer still asked")
     }
 
+    /** Who the member rows say has already been asked. docs/member-row-actions.md, Phase 5. */
+    @Test
+    fun `whoever was offered admin and has not answered has already been asked`() = runBlocking {
+        room()
+        assertEquals(emptySet(), PromotionManager.unansweredOfferTargets(db, roomId))
+
+        said('a', alice, PromotionEvents.OFFER, PromotionEvents.offerTags(roomId, erin), 1)
+        assertEquals(setOf(erin), PromotionManager.unansweredOfferTargets(db, roomId))
+
+        // An acceptance by somebody else answers nothing.
+        said('c', alice, PromotionEvents.ACCEPT, PromotionEvents.acceptTags(roomId, "a".repeat(64), "02" + "d".repeat(64)), 2)
+        assertEquals(setOf(erin), PromotionManager.unansweredOfferTargets(db, roomId), "Alice answered Erin's offer")
+
+        said('b', erin, PromotionEvents.ACCEPT, PromotionEvents.acceptTags(roomId, "a".repeat(64), "02" + "c".repeat(64)), 3)
+        assertEquals(emptySet(), PromotionManager.unansweredOfferTargets(db, roomId), "an accepted offer still waited")
+    }
+
     @Test
     fun `an accepted offer is the offerer's to propose, once`() = runBlocking {
         room()

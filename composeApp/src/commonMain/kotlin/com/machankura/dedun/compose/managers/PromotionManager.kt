@@ -149,6 +149,23 @@ object PromotionManager {
         return Offer(offer.id, offer.publicKey)
     }
 
+    /**
+     * Who in [chatRoomId] has been offered admin, by anyone, and has not answered:
+     * a second offer would only ask them twice. docs/member-row-actions.md, Phase 5.
+     */
+    suspend fun unansweredOfferTargets(database: DedunDatabase, chatRoomId: String): Set<HexKey> {
+        val events = database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(PromotionEvents.OFFER, PromotionEvents.ACCEPT))
+        val answered = events.filter { it.kind == PromotionEvents.ACCEPT }
+            .mapNotNull { accept -> PromotionEvents.value(accept.tags, PromotionEvents.OFFER_TAG)?.let { it to accept.publicKey } }
+            .toSet()
+        return events.filter { it.kind == PromotionEvents.OFFER }
+            .mapNotNull { offer ->
+                val target = PromotionEvents.value(offer.tags, PromotionEvents.TARGET_TAG) ?: return@mapNotNull null
+                target.takeIf { (offer.id to target) !in answered }
+            }
+            .toSet()
+    }
+
     // ---- 2. the acceptance ---------------------------------------------------------------------------------------
 
     /**

@@ -194,6 +194,23 @@ class AdminChangesJvmTest {
     }
 
     /**
+     * The same gate, said before anyone tries: every item waits on the earlier
+     * change, and stops waiting once a relay accepts it. docs/member-row-actions.md,
+     * Phase 5.
+     */
+    @Test
+    fun `the rows say an earlier change is on its way, until a relay accepts it`() = runBlocking {
+        convenientRoomWithMember()
+        chatRepository.promoteMember(room(), member.hex)
+
+        val waiting = chatRepository.memberActionOptions(room()).getValue(member.hex)
+        assertTrue(waiting.all { it.blockers == listOf(MemberActionBlocker.ChangePending) }, "the rows did not wait on the commit: $waiting")
+
+        okTheLatestCommit()
+        assertTrue(chatRepository.memberActionOptions(room()).getValue(member.hex).all { it.isAvailable })
+    }
+
+    /**
      * The hole this phase closes. A bare Remove left the admin's key on the list,
      * so inviting them back made them an admin again with nobody having said so.
      */

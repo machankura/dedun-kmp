@@ -892,10 +892,17 @@ class DatabaseChatRepository(
                 // A row whose state this build cannot read has no rules to read either.
                 val group = runCatching { chatRoom.toMlsGroup() }.getOrNull() ?: return emptyMap()
                 val context = AdminGovernance.context(group, me, AdminGovernance.adminFloor(database, chatRoom.id, group))
+                val engine = database.marmotEngine
                 context.copy(
                     hasLeft = hasLeft,
                     // Only asked when it is the answer: a keyed room not yet governed.
                     waitingOn = if (context.isKeyed && !context.governed) GovernanceSupport.missing(database, chatRoom.id, group) else emptySet(),
+                    // Work in flight, which clears by itself: the gate holding an earlier
+                    // commit until a relay accepts it, and offers nobody has answered.
+                    // docs/member-row-actions.md, Phase 5.
+                    changePending = engine.groupFor(localChatRoom.routingId) != null &&
+                        !engine.gate.canPrepareLocalCommit(localChatRoom.routingId),
+                    offeredAdmin = if (context.isKeyed) PromotionManager.unansweredOfferTargets(database, chatRoom.id) else emptySet(),
                 )
             }
         }
