@@ -141,6 +141,12 @@ Gradle resolves to the highest, so the catalog has to name 2.7.3 deliberately an
 has to stay off any quartz API added after it. Moving both forward together is its own
 change, with marmot-kmp's own CI as the evidence.
 
+*Superseded by [quartz-mls-marmot-update.md](./quartz-mls-marmot-update.md). The rule stands,
+and the catalogue now names marmot 2.3.0's own pins `strictly` and moves past them one
+evidenced step at a time. The versions do not: the app is on quartz 2.20.1, marmot-kmp 2.3.0,
+mls-kmp 1.3.1 and crypto-kmp 2.1.1, all through Magpie, because none of them is on Maven
+Central.*
+
 **D3 — crypto-kmp is declared, not inherited.** It arrives transitively under both quartz
 2.x and mls-kmp, but after this move the app imports `RandomInstance`, `sha256`, `Ed25519`
 and `X25519` from it directly in 27 places. A dependency the source names is a dependency
@@ -811,7 +817,8 @@ before a release.
 components, which marmot-kmp has and the app has no screen for. `MarmotManager` as the
 app's engine — Phase 3 tries it in a test and Phase 7 names the reason to want it, and
 that is as far as this plan goes. Moving quartz past 2.7.3, which is D2's other half and
-needs marmot-kmp to move first.
+needs marmot-kmp to move first. *marmot-kmp has moved, and so has quartz:
+[quartz-mls-marmot-update.md](./quartz-mls-marmot-update.md).*
 
 ## Where the numbers come from
 

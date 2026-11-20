@@ -210,6 +210,11 @@ testing/regtest/regtest.sh up
 DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
 ```
 
+quartz, marmot-kmp, mls-kmp and crypto-kmp come through Magpie, not Maven Central, so the
+Gradle daemon runs on Java 21 and a machine's first build needs the network. A version of
+any of them moves in the catalogue *and* `gradle/magpie.lock` together, and `check` fails
+when they disagree ([docs/quartz-mls-marmot-update.md](docs/quartz-mls-marmot-update.md)).
+
 `docs/scripts/` also holds the tools each phase was done with —
 `m3-spacing-positions.py`, `m3-touch-targets.py`, `m3-title-case.py` and the two string
 extractors — each of which takes `--list` to show the sites rather than the count.

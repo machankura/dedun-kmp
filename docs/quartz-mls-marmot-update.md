@@ -27,8 +27,18 @@ the way the build gets them has:
 
 That is read from source, not compiled. Phase 2 is where the compiler gets its say.
 
-Researched on 2026-11-20 against the code at `b7de119e`. **Not built.** Each phase records
-what it turned out to be, the way [marmot-kmp.md](./marmot-kmp.md) did, once it is done.
+Researched on 2026-11-20 against the code at `b7de119e`. Each phase records what it turned
+out to be, the way [marmot-kmp.md](./marmot-kmp.md) did.
+
+**Built but for a mac and a release**, on 2026-11-20. The app is on quartz **2.20.1**,
+marmot-kmp **2.3.0**, mls-kmp **1.3.1** and crypto-kmp **2.1.1**, through Magpie 0.2.3, with
+no Kotlin source changed. `check` is green and `jvmTest` runs 1392 tests in 183 classes with
+0 failures. The old engine and the new agree both ways through three epochs. What is left:
+
+- **5b**, mls-kmp 1.4.0. It is tagged but released nowhere, so 1.3.1 stands.
+- **Phase 6's mac half.** That is the iOS lock lines, then the freeze, then the audit's
+  iOS suffixes, in that order.
+- **Phase 8**, the manual checks: real profiles, real Bennu and MDK peers, iOS on a device.
 
 | phase | what it is |
 |---|---|
@@ -639,6 +649,38 @@ complete. That is why the freeze is not in this commit.
 **Check:** `./gradlew check`, with the guard verified both ways: silent on a clean tree, and
 failing with a pointer to this note when a catalogue version is bumped without its lock
 lines.
+
+**Built.**
+
+**`magpieLockAudit`** runs `docs/scripts/magpie-lock-audit.sh --check` from `check`. It
+reads the groups out of `settings.gradle.kts`'s `magpie { }` block, then the catalogue
+libraries in those groups. Each one must be declared `strictly` (D3 enforced, which the
+plan did not ask for and costs nothing) and have a `release` line for its root, `-jvm` and
+`-android` modules. It was verified three ways:
+
+- a clean tree passes: 6 groups, 4 libraries, 0 problems;
+- `mls = "1.4.0"` fails with four lines, one for not being strict and three for missing
+  lock lines;
+- dropping one line from the lock fails the Gradle task, naming
+  `crypto-android:2.1.1`.
+
+The script's first run reported 8 groups and 0 libraries. `GROUPS` is a bash built-in (the
+user's group ids), and the array had been named that.
+
+**The notes.**
+
+- **[marmot-kmp.md](./marmot-kmp.md).** D2 and the out-of-scope item each carry an italic
+  pointer here. Its phases are untouched.
+- **`docs/scripts/marmot-kmp-imports.sh`.** Unchanged. `--check` still finds 0 references
+  to quartz's old engine, and the compile in Phase 2 is the evidence that its rule table
+  still describes where the classes live. Its header names the versions it was derived
+  against, and that stays true as provenance.
+- **[README.md](./README.md).** The table row is updated, and there is a paragraph on
+  reading this note after marmot-kmp.md.
+- **CLAUDE.md** gets a paragraph in "Checking your work": Java 21, the first build needs
+  the network, and a version moves in the catalogue and the lock together.
+
+The README at the repository root got its Java 21 paragraph in Phase 1.
 
 ## Phase 8 — what a fixture cannot check
 
