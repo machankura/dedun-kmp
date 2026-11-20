@@ -30,13 +30,16 @@ import com.machankura.dedun.compose.database.model.ShareRefreshConfirmation
 import com.machankura.dedun.compose.database.model.ShareRefreshMessage
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.GovernanceProposalStage
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
+import com.machankura.dedun.compose.database.model.types.ShareRepairStage
 import com.machankura.dedun.compose.database.model.types.ShareGenerationState
 import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 
@@ -283,7 +286,19 @@ object ShareRefreshManager {
      * Checked on the proposer's device only. A recipient a few seconds behind on
      * the signature would refuse out loud and end a rotation that was fine.
      */
-    suspend fun rotationHold(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+    suspend fun rotationHold(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? =
+        rotationPending(database, localChatRoom, key)
+            ?: adminChangeInFlight(database, localChatRoom, key)
+            ?: enrolling(database, localChatRoom, key)
+
+    /**
+     * Whether a rotation of [key] is still under way: running, or done but with its
+     * new generation's key state not yet signed -- the moment the old shares are
+     * wiped -- or this device behind the group. The part of [rotationHold] that
+     * admin changes wait on too (docs/admin-change-rotation.md, A5): neither
+     * direction may start while the other has not finished.
+     */
+    suspend fun rotationPending(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
         running(database, key)?.let { return RotationHold.Running(it.id) }
         FrostSigningManager.openWalletSession(database, key.id)?.let { return RotationHold.SpendOpen(it.id) }
         FrostSigningManager.openMoneyStatementSession(database, key.id)?.let { return RotationHold.StatementOpen(it.id) }
@@ -297,6 +312,71 @@ object ShareRefreshManager {
         val open = openKeyStateSession(database, key)
         if (signed < active || open != null) return RotationHold.AwaitingKeyState(active, open?.id)
         return null
+    }
+
+    /**
+     * A signed change to the room that moves who holds a share, not yet landed
+     * (docs/admin-change-rotation.md, Phase 2): a governance statement of
+     * [key] still being signed that changes the admins or removes a holder --
+     * every signer holds that session -- or one of this device's own that is
+     * signed and on its way to a relay, which nobody else holds a session for
+     * any more. One that has landed and owes a rotation is not counted: that
+     * rotation is the change's next step, and must not wait on the change.
+     */
+    private suspend fun adminChangeInFlight(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+        val holders = ShareGenerations.active(database, key).roster
+            .filter { it.standing == ShareStanding.LIVE }
+            .map { it.memberPublicKey }
+            .toSet()
+        val dao = database.frostSigningSessionDao()
+        suspend fun movesShares(sessionId: String): Boolean = dao.getItems(sessionId).any { item ->
+            val statement = Event.fromJsonOrNull(item.unsignedEventJson)?.let(GovernanceStatementEvent::parse) ?: return@any false
+            statement.change.admins != null || statement.change.removes.any { it in holders }
+        }
+
+        dao.getOpenSessionsForKey(key.id)
+            .filter { it.chatRoomId == localChatRoom.chatRoom.id && it.signDeclinedAt == null }
+            .firstOrNull { movesShares(it.id) }
+            ?.let { return RotationHold.AdminChangeInFlight(it.id) }
+
+        database.governanceProposalDao().getAll()
+            .filter { it.chatRoomId == localChatRoom.chatRoom.id }
+            .filter { it.stage == GovernanceProposalStage.SIGNING || it.stage == GovernanceProposalStage.PUBLISHED }
+            .filter { proposal ->
+                // Landed while this device was not watching: the group is past its epoch.
+                val epoch = runCatching { database.marmotEngine.groupFor(proposal.routingId) }.getOrNull()?.epoch
+                epoch == null || epoch <= proposal.epoch
+            }
+            .firstOrNull { movesShares(it.frostSigningSessionId) }
+            ?.let { return RotationHold.AdminChangeInFlight(it.frostSigningSessionId) }
+        return null
+    }
+
+    /**
+     * A new admin whose id the group's key state binds at the active generation
+     * and who holds no share of it yet (docs/admin-change-rotation.md, A8). Not
+     * once their enrollment has failed -- a repair brings that id back at any
+     * generation -- and not for someone the live group does not name an admin,
+     * whose promotion never landed: nothing will enroll them, and they must not
+     * hold every rotation for good.
+     */
+    private suspend fun enrolling(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+        val active = ShareGenerations.active(database, key)
+        val state = GroupKeyStateManager.keyStateFor(database, localChatRoom.chatRoom.id)
+            ?.takeIf { it.dkgSessionId == key.id && it.generation == active.generation }
+            ?: return null
+        val bindings = GroupKeyStateEvent.MemberBinding.decodeAll(state.memberBindings)
+        if (bindings.isEmpty()) return null
+        val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id)?.admins
+        val repairs = database.shareRepairDao().getSessionsForKey(key.id)
+        return bindings.firstOrNull { binding ->
+            val entry = active.roster.firstOrNull { it.participantId == binding.participantId } ?: return@firstOrNull false
+            entry.standing == ShareStanding.STALE &&
+                (admins == null || binding.memberPublicKey in admins) &&
+                repairs.none {
+                    it.targetId == binding.participantId && it.generation == active.generation && it.stage == ShareRepairStage.FAILED
+                }
+        }?.let { RotationHold.Enrolling(it.memberPublicKey) }
     }
 
     /**

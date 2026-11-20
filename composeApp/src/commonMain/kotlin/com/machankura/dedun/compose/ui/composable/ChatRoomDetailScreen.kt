@@ -271,6 +271,8 @@ import dedun.composeapp.generated.resources.rotation_held_awaiting_signatures
 import dedun.composeapp.generated.resources.rotation_held_behind
 import dedun.composeapp.generated.resources.rotation_held_spend_open
 import dedun.composeapp.generated.resources.rotation_held_statement_open
+import dedun.composeapp.generated.resources.rotation_held_admin_change
+import dedun.composeapp.generated.resources.rotation_held_enrolling
 import dedun.composeapp.generated.resources.rotation_held_after_removal
 import dedun.composeapp.generated.resources.ask_the_group_to_sign_the_new_shares
 import dedun.composeapp.generated.resources.key_state_requested
@@ -1026,15 +1028,15 @@ fun ChatRoomDetailScreen(
                                             }
                                             if (rotation is SharesSummary.Rotation.Held) {
                                                 Text(
-                                                    text = stringResource(
-                                                        when (rotation.reason) {
-                                                            SharesSummary.Rotation.Reason.ROTATION_RUNNING -> Res.string.rotation_held_running
-                                                            SharesSummary.Rotation.Reason.AWAITING_SIGNATURES -> Res.string.rotation_held_awaiting_signatures
-                                                            SharesSummary.Rotation.Reason.BEHIND -> Res.string.rotation_held_behind
-                                                            SharesSummary.Rotation.Reason.SPEND_OPEN -> Res.string.rotation_held_spend_open
-                                                            SharesSummary.Rotation.Reason.STATEMENT_OPEN -> Res.string.rotation_held_statement_open
-                                                        }
-                                                    ),
+                                                    text = when (rotation.reason) {
+                                                        SharesSummary.Rotation.Reason.ROTATION_RUNNING -> stringResource(Res.string.rotation_held_running)
+                                                        SharesSummary.Rotation.Reason.AWAITING_SIGNATURES -> stringResource(Res.string.rotation_held_awaiting_signatures)
+                                                        SharesSummary.Rotation.Reason.BEHIND -> stringResource(Res.string.rotation_held_behind)
+                                                        SharesSummary.Rotation.Reason.ADMIN_CHANGE -> stringResource(Res.string.rotation_held_admin_change)
+                                                        SharesSummary.Rotation.Reason.ENROLLING -> stringResource(Res.string.rotation_held_enrolling, rotation.who.orEmpty())
+                                                        SharesSummary.Rotation.Reason.SPEND_OPEN -> stringResource(Res.string.rotation_held_spend_open)
+                                                        SharesSummary.Rotation.Reason.STATEMENT_OPEN -> stringResource(Res.string.rotation_held_statement_open)
+                                                    },
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )

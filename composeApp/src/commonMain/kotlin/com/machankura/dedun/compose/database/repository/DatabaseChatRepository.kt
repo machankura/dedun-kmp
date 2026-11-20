@@ -1037,6 +1037,8 @@ class DatabaseChatRepository(
                     is RotationHold.Behind -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.BEHIND)
                     is RotationHold.SpendOpen -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.SPEND_OPEN)
                     is RotationHold.StatementOpen -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.STATEMENT_OPEN)
+                    is RotationHold.AdminChangeInFlight -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ADMIN_CHANGE)
+                    is RotationHold.Enrolling -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ENROLLING, who = nameOf(hold.memberPublicKey))
                 }
             },
             canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,

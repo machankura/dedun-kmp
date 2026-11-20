@@ -53,15 +53,16 @@ data class SharesSummary(
         /**
          * The button, disabled, and why. [canAskForSignature]: the group owes the
          * key state at this generation and nobody here is asking for it, so this
-         * device can.
+         * device can. [who]: the new admin an [Reason.ENROLLING] hold waits on.
          */
-        data class Held(val reason: Reason, val canAskForSignature: Boolean = false) : Rotation
+        data class Held(val reason: Reason, val canAskForSignature: Boolean = false, val who: String? = null) : Rotation
 
         /**
+         * [ADMIN_CHANGE] and [ENROLLING]: docs/admin-change-rotation.md, Phase 2.
          * [SPEND_OPEN] and [STATEMENT_OPEN] are Dedun's: a wallet spend or sweep, or a payout,
          * transfer or attribution, still being signed.
          */
-        enum class Reason { ROTATION_RUNNING, AWAITING_SIGNATURES, BEHIND, SPEND_OPEN, STATEMENT_OPEN }
+        enum class Reason { ROTATION_RUNNING, AWAITING_SIGNATURES, BEHIND, ADMIN_CHANGE, ENROLLING, SPEND_OPEN, STATEMENT_OPEN }
     }
 
     /**

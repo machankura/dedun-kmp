@@ -192,6 +192,8 @@
     <string name="rotation_held_spend_open">A spend from the group's wallet is still being signed. Rotate once it is signed or has failed, or it would have to be proposed again.</string>
     <string name="rotation_held_statement_open">A payout, transfer or attribution is still being signed. Rotate once it is signed or has failed, or it would have to be proposed again.</string>
     <string name="rotation_held_behind">This device is catching up with the group's latest rotation</string>
+    <string name="rotation_held_admin_change">Waiting for a change to the group's admins to finish</string>
+    <string name="rotation_held_enrolling">Waiting for %1$s to receive their share</string>
     <string name="rotation_held_after_removal">Removal sent. They still hold a share; rotate without them once the group has signed the current shares.</string>
     <string name="ask_the_group_to_sign_the_new_shares">Ask the group to sign the new shares</string>
     <string name="key_state_requested">Asked the group to sign the new shares</string>

@@ -1592,6 +1592,103 @@ class ShareRefreshRitualJvmTest {
         assertEquals(FrostSigningStage.FAILED, alice.db.frostSigningSessionDao().getSessionById(statement.id)?.stage)
     }
 
+    // ---- docs/admin-change-rotation.md, Phase 2: what waits on what -------------------------------------------------
+
+    /** A governance statement for [by]'s room that changes its admins to [admins], opened for the group's signature. */
+    private suspend fun statementOpened(by: Device, admins: Set<HexKey>) = FrostSigningManager.proposeSigning(
+        by.db, by.room, by.publicKey,
+        kind = com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent.KIND,
+        tags = com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent.assembleTags(
+            by.group.roomId, epoch = 1, change = com.machankura.dedun.compose.nostr.frost.GovernanceChange(admins = admins), proposer = by.publicKey,
+        ),
+        content = "{}",
+    )
+
+    @Test
+    fun `a rotation waits while a change to the admins is being signed, and an admin change does not wait on itself`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val statement = statementOpened(alice, admins = setOf(alice.publicKey, all[1].publicKey))
+
+        val hold = ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key())
+        assertEquals(RotationHold.AdminChangeInFlight(statement.id), hold)
+        assertFailsWith<IllegalStateException> { propose(alice) }
+        assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room), "an admin change waited on itself")
+
+        // The statement fails -- declined, or its epoch passed: nothing is in flight.
+        alice.db.frostSigningSessionDao().upsert(alice.db.frostSigningSessionDao().getSessionById(statement.id)!!.copy(stage = FrostSigningStage.FAILED))
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+    }
+
+    @Test
+    fun `this device's own change holds a rotation until it lands, and not after`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val statement = statementOpened(alice, admins = setOf(alice.publicKey))
+        // Signed and sent: the session is over, the proposal is not.
+        alice.db.frostSigningSessionDao().upsert(alice.db.frostSigningSessionDao().getSessionById(statement.id)!!.copy(stage = FrostSigningStage.COMPLETE))
+        val proposal = com.machankura.dedun.compose.database.model.GovernanceProposal(
+            id = "d".repeat(64), chatRoomId = group.roomId, routingId = group.roomId, epoch = 1, frostSigningSessionId = statement.id,
+            commitEventId = "e".repeat(64), commitEventJson = "{}", priorStateHex = "", pendingStateHex = "",
+            stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.PUBLISHED, thenRotateWithout = all[2].publicKey,
+        )
+        alice.db.governanceProposalDao().upsert(proposal)
+        assertEquals(RotationHold.AdminChangeInFlight(statement.id), ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+
+        // Landed, owing its rotation: that rotation is the change's next step.
+        alice.db.governanceProposalDao().upsert(proposal.copy(stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.APPLIED))
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+        ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, all[2].publicKey)
+    }
+
+    @Test
+    fun `a rotation waits for a new admin's enrollment, and not past its failure`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val erinKeys = KeyPair()
+        val erin = stranger(alice.group, erinKeys)
+        bindNextId(all, erin.publicKey, ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+
+        all.forEach { device ->
+            assertEquals(RotationHold.Enrolling(erin.publicKey), ShareRefreshManager.rotationHold(device.db, device.room, device.key()), "device ${device.index}")
+        }
+        assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room), "an admin change waited on an enrollment")
+
+        // A failed enrollment releases it.
+        val bob = all[1]
+        bob.db.shareRepairDao().upsert(
+            com.machankura.dedun.compose.database.model.ShareRepairSession(
+                id = "f".repeat(64), chatRoomId = bob.group.roomId, dkgSessionId = ceremonyId, generation = 1, targetId = 3,
+                targetPublicKey = erin.publicKey, targetHostPublicKey = "02" + "c".repeat(64), helperIds = "0,1",
+                userPublicKey = bob.publicKey, stage = com.machankura.dedun.compose.database.model.types.ShareRepairStage.FAILED,
+                sessionRandom = "5".repeat(64),
+            )
+        )
+        assertNull(ShareRefreshManager.rotationHold(bob.db, bob.room, bob.key()))
+
+        // A completed one too.
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, handoverFrom(alice, erin.publicKey))
+        pump(all + erin)
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+    }
+
+    @Test
+    fun `an admin change waits on a rotation until its key state is signed`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val refresh = propose(alice)
+        assertEquals(RotationHold.Running(refresh.id), AdminGovernance.adminChangeHold(alice.db, alice.room))
+        pump(all)
+        approveAll(all, refresh.id)
+        // The key state signs itself as the rotation completes; then nothing is pending.
+        pump(all)
+        assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room))
+    }
+
     // ---- Phase 12: restore ---------------------------------------------------------------------------------------
 
     /**

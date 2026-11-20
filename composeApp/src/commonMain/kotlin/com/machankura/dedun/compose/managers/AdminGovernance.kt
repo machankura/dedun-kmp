@@ -130,6 +130,33 @@ object AdminGovernance {
     }
 
     /**
+     * Why no change to who is an admin -- and no removal of a member who holds a
+     * share -- may be proposed in [localChatRoom] now, or null when one may: a
+     * rotation of the room's key is still under way, until the group has signed
+     * the key state it ends in (docs/admin-change-rotation.md, A5). A change now
+     * would be fixed against a roster the rotation is about to replace: a removed
+     * admin dealt a fresh share, a new admin's binding failing the rotation, a
+     * statement failed with the shares it was being signed with.
+     *
+     * The other direction, a rotation waiting on an admin change, is
+     * [ShareRefreshManager.rotationHold]'s. Null in a room without a key.
+     */
+    suspend fun adminChangeHold(database: DedunDatabase, localChatRoom: com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom): RotationHold? {
+        val key = keyOf(database, localChatRoom.chatRoom.id) ?: return null
+        return ShareRefreshManager.rotationPending(database, localChatRoom, key)
+    }
+
+    /**
+     * The key [chatRoomId] signs with, as this device holds it -- whether or not it
+     * can sign with it now: a member withheld from a rotation still follows it.
+     */
+    private suspend fun keyOf(database: DedunDatabase, chatRoomId: String): com.machankura.dedun.compose.database.model.DkgSession? =
+        GroupKeyStateManager.keyStateFor(database, chatRoomId)?.dkgSessionId
+            ?.let { database.dkgSessionDao().getSessionById(it) }
+            ?.takeIf { it.stage == DkgRitualStage.COMPLETE }
+            ?: FrostSigningManager.completedKey(database, chatRoomId)
+
+    /**
      * What [MemberActionPolicy] reads, from [group]'s state: its admins, its
      * members, whether it is keyed and needs the group's signature, and [floor].
      * What only the database knows -- having left, whose devices a keyed room
