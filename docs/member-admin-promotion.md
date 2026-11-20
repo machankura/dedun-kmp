@@ -678,6 +678,10 @@ with a decided description. `./gradlew :composeApp:m3Audit` stays at its budgets
 **Tests:** `memberActions` for every row above, in both room kinds, at and above the
 floor.
 
+*Since then:* every other member's row has the menu whoever is looking. An action
+that is not open is listed and explains itself instead of being hidden, and that
+includes D8's floor. See [member-row-actions.md](./member-row-actions.md).
+
 ## Phase 12 — across devices, and the docs
 
 **Two days.**

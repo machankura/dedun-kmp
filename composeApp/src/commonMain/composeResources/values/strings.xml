@@ -1831,6 +1831,5 @@
     <string name="this_no_longer_applies">This no longer applies. The group has changed since you opened it.</string>
     <string name="why_this_is_unavailable">Why this is unavailable</string>
     <string name="unavailable">Unavailable</string>
-    <string name="see_why">See why</string>
     <string name="view_profile">View profile</string>
 </resources>

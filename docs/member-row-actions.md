@@ -6,9 +6,23 @@ action that applies to that member, whether or not the viewer can take it right 
 An action that cannot be taken stays in the menu. Choosing it opens a screen that says
 what stands in the way and what would change that.
 
-**A plan, not built.** Written against `151f15ca` on `giza`, after
-[member-admin-promotion.md](./member-admin-promotion.md) Phase 11 put the menu on the
-row.
+**Built**, one commit per phase on `claude/group-member-row-actions-1016b2`, in the
+order 1, 2, 4, 3, 5, 6. Phase 4 came before Phase 3 so that no commit has a menu item
+leading to a route that does not exist yet. The plan was written against `151f15ca`
+on `giza`, after [member-admin-promotion.md](./member-admin-promotion.md) Phase 11
+put the menu on the row. **Not run:** nothing here has been on a device. What the
+build did differently from the plan is listed in the next section.
+
+## Where the build chose differently
+
+| plan | built | why |
+|---|---|---|
+| D5: the route carries `action: MemberAction` | It carries the action's **name**, a `String`. `MemberActionUnavailableRoute.memberAction` reads it back, and a name no build knows reads as null, which the screen shows as "no longer applies" | The multiplatform navigation-compose 2.9.2 has no `NavType` for an enum. The route test caught this on its first run, which is what D5 asked of it |
+| D3: `onClickLabel = "See why"` on an unavailable item | The item gets `stateDescription = "Unavailable"`, plus the trailing info icon's description, "Why this is unavailable" | The merged node reads as the action, why it is unavailable, and the state. Giving a second click label to a node whose click `DropdownMenuItem` already owns depends on which semantics modifier wins, and nothing here tests that order |
+| D6: **Only admin** and **Below the floor** as separate reasons | The only admin is the floor of one, so one reason, `OnlyAdmin`. `BelowFloor` names a higher floor | The first test run listed both for the same member |
+| D6: `OfferPending` for an offer *from this account* | For an unanswered offer **by anyone** (`PromotionManager.unansweredOfferTargets`) | A second admin asking again is the same duplicate |
+| D6: the explainer's "Back to the group" for `SignaturesNotRequired` | That, as an outlined button | — |
+| Phase 2: a view model test | A repository test in `AdminChangesJvmTest`, through the real database and group | That is the loader both screens read, so testing it covers both |
 
 ---
 
