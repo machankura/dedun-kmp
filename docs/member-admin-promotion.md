@@ -4,28 +4,44 @@ A plan for promoting a member of a group to admin and demoting an admin back to
 member. It also covers the jobs that need the same machinery: removing an admin, an
 admin stepping down, and an admin leaving.
 
-**A phased plan, partly built.** Written against the code as it stood at `fc437d05`, with
+**A phased plan, built but for its share work.** Written against the code as it stood at `fc437d05`, with
 marmot-kmp 2.2.1 and mls-kmp 1.3.0 as the catalogue pins them. The second draft adds
 three rules the first draft lacked; they are stated in the next section, and most of
 the plan follows from them.
 
 **Built**, one commit per phase on `claude/member-admin-promotion-plan-d9d716`: the
-first release's phases (10a, 1, 2, 6, and 10 and 11 for convenient rooms), Phase 7's
-app side, and Phase 3. The plan was then revised: the first draft's Phase 0, upstream
-work in mls-kmp and marmot-kmp, is gone, because the commit now travels inside the
-group's signature (the headline). **Not built yet:** Phases 4, 5, 8, 9 and 12, and 7's
-gate half. Where the build chose differently:
+first release's phases (10a, 1, 2, 6, and 10 and 11 for convenient rooms), Phases 3, 4a,
+4b, 5 and 5b, and Phase 7 on both sides (the app's refusals, and the floor every device
+holds a commit to at the door). The first draft's Phase 0 -- upstream work in mls-kmp and
+marmot-kmp -- was dropped when the commit moved inside the signature (the headline).
+**Not built:** Phases 8 and 9 (promotion with a share, demotion with a refresh, both
+behind enrollment and refresh leaving experimental), Phase 10's keyed-room rows, and
+Phase 12. **Not run:** nothing here has been on a device, and no test runs a real FROST
+ceremony through `GovernanceManager.propose` -- the tests stand a key pair in for the
+room's aggregated key, which is all a FROST signature is once made, and drive the steps
+either side of the session.
+
+Where the build chose differently:
 
 | what the plan said | what it turned out to be |
 |---|---|
 | Phase 2's lines in the library's order: departures, arrivals, demotions, promotions | after the membership lines, which keep the order they had (arrivals, then departures); then demotions, then promotions |
 | Phase 3's statement has a `disband` line | a `component` line per GroupContext component the commit changes, by id and the hash of its new value. Disband, enabling disband and a rename are all that one rule, and a statement cannot sign off one component while the commit changes another |
-| Phase 3's kind "in the 303xx range" | 30370, past the last retired wallet kind (30366) |
-| Phase 6's removal of an admin is "chained in memory" | through `MarmotEngine.afterConfirmed`, registered *before* the commit it waits on so a relay's OK cannot overtake it, and taken back if publishing throws. Leaving as an admin uses the same hook. It applies in keyed rooms too, where every member is an admin, so a removal there is also two commits |
-| Phase 7's floor is checked on demotion, removal and leaving | on removal only, so far: a keyed room offers no demotion and no leave for an admin until Phase 5, and the floor is enforced where those arrive |
+| Phase 3's kind "in the 303xx range" | 30370, past the last retired wallet kind. 30371 is the own-commit envelope, 30372 the support announcement, 30373 the carrier |
+| Phase 4a: the signed statement is published as an application message | inside a **carrier** (30373) sent by a member. The inbound path holds every application message to its sender's own key (MIP-03), and a statement is the room's, so it cannot travel as one -- which is also why `FrostSigningManager.complete` never publishes a group-signed event. The carrier vouches for nothing; the statement inside is checked on its own signature |
+| Phase 4a: an own commit (30371) is "signed by the committer's account key" | sent by it: the inner event is an unsigned rumor whose author MLS has already authenticated as its sender, so the check is that the sender is the committer |
+| D4: the marker is `giza-governance: threshold/v1` | `Changes need the group's signature; at least N admins.` -- it carries the **floor** too. A floor each device worked out from the ceremony it holds would differ between a founder and a member welcomed later, and the two would disagree about a commit |
+| Phase 4a's copy-check reads a commit's proposals off the copy | the proposals off the copy, and who a Remove names off the live group as it stood before the commit: the copy's view can already have the removed leaf blank. Found by the inbound removal test; without it every signed removal was refused at the door |
+| Phase 4b: an invite into a governed room is refused for an account that has not announced | not built. A joiner announces as soon as it hears another member say it, which every device does once per room; a joiner on a build that cannot follow is the open problem D4 names |
+| Phase 5: any other admin publishes a signed change after a short wait | only the proposer publishes. A proposer who goes quiet after the signature leaves the change waiting until it comes back |
+| Phase 5: a stale statement is proposed again automatically | it is marked stale and the room says so; proposing again is the person's |
+| Phase 5b: a removal of an admin is two signed commits | one: the proposer builds it on its own copy of the group, which can stage a Remove and the admin-list update together where the library's manager cannot |
+| Phase 5b: disband proposes each of its commits | in a room that has not agreed it can be disbanded, the first press proposes that agreement and says to disband again once it is signed |
+| D7: founding commits authorised by the key state | dropped: the rule is switched on after founding (Phase 4b), so founding needs nothing |
+| Phase 6's removal of an admin is "chained in memory" | through `MarmotEngine.afterConfirmed`, registered *before* the commit it waits on so a relay's OK cannot overtake it, and taken back if publishing throws. Leaving as an admin uses the same hook. In a governed room a removal is one signed commit instead |
+| Phase 7's floor is checked on demotion, removal and leaving | on removal and on every governed commit at the door; a keyed room offers no demotion and no leave for an admin until Phases 8 to 10 |
 | Phase 10's keyed-room rows: "above the floor" and "at the floor" | one row for now. A keyed room's admin who presses **Leave group** is told, as before, that an admin cannot leave; `AdminLeave.CANNOT` |
 | Phase 11's dialogs for every action | removal keeps the immediate action it had; promotion, demotion and stepping down ask first |
-| Phase 1 calls `reconcileAdmins` from `initiateChatRoomDetail` | and from `MarmotGroupCreation` in place of `stampAdmins`, and from the direct-message and convenient-room creation sites, as planned; the repository's `reconcileAdmins(chatRoomId)` is what the view models call |
 
 Read [marmot-v2.md](./marmot-v2.md) Phase 7 first. Removing a member, disbanding and
 the derived membership captions all come from there. Read
