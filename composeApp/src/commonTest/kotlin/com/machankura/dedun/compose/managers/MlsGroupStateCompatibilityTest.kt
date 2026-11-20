@@ -121,6 +121,26 @@ class MlsGroupStateCompatibilityTest {
     }
 
     /**
+     * The version a save is written at today, exactly. The test above only says "newer
+     * than the old engine's", which a library that moved to 11 would still pass. But a
+     * bump changes what every device writes on its next save, and a build older than
+     * that library cannot read the result back -- so a downgrade, or a peer device on an
+     * older build sharing a backup, loses the room. When this fails, read the library's
+     * upgrading guide for what the new version appends and whether `decodeTls` still
+     * takes 4, and only then move the number. docs/quartz-mls-marmot-update.md, Phase 4.
+     */
+    @Test
+    fun `a save is written at the state version this app was checked against`() {
+        val group = MlsGroup.restore(MlsGroupState.decodeTls(OldEngineBlob.HEX.hexToByteArray()), MarmotGroupPolicy)
+
+        assertEquals(
+            CHECKED_STATE_VERSION,
+            OldEngineBlob.stateVersionOf(group.saveState().encodeTls()),
+            "mls-kmp writes a new state version -- check what it appends before moving this",
+        )
+    }
+
+    /**
      * The retained-epoch window is the app's own rows, not an opaque blob:
      * `RoomMlsGroupStateStore` decodes each one into five columns and re-encodes it from
      * them. A sixth field in `RetainedEpochSecrets` would be silently truncated on every
@@ -145,5 +165,10 @@ class MlsGroupStateCompatibilityTest {
         assertContentEquals(retained.encryptionSecret, back.encryptionSecret)
         assertEquals(3, back.leafCount)
         assertContentEquals(retained.exporterSecret, back.exporterSecret)
+    }
+
+    private companion object {
+        /** mls-kmp 1.3.0 and 1.3.1 both write 10. */
+        const val CHECKED_STATE_VERSION = 10
     }
 }

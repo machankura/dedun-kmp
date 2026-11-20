@@ -483,6 +483,31 @@ No schema change is expected: no table and no column moves.
 
 **Check:** the five tests green with their assertions untouched, and this table filled in.
 
+**Built.** All six classes in the table are green on quartz 2.20.0, marmot 2.3.0 and mls
+1.3.1, with no assertion touched:
+
+| class | tests | result |
+|---|---|---|
+| `MlsGroupStateCompatibilityTest` | 6, now 7 | green |
+| `ShippedProfileUpgradeJvmTest` | 4 | green |
+| `RoomMlsGroupStateStoreJvmTest` | 5 | green |
+| `SenderRatchetPersistenceJvmTest` | 5 | green |
+| `SkippedGenerationJvmTest` | 4 | green |
+| `ConvergenceForkJvmTest` | 2 | green; its `assertNotEquals` held, so the authored fork is still open, as marmot-kmp's unchanged `MlsCandidateStateEngine` predicts |
+
+There is no schema change: the app is at schema 42, and nothing in this update touches a
+table.
+
+**One correction to this phase as written.** The table above says that if mls had bumped
+`STATE_VERSION`, "the re-save is version 10 assertion fails". There was no such assertion.
+The re-save test asserts only that the version is *greater than 4*, which a library at 11
+would also pass. A bump matters because it changes what every device writes on its next
+save, and an older build cannot read that back: a downgrade loses the room. So the
+compatibility test has a seventh case pinning the exact version a save is written at,
+`CHECKED_STATE_VERSION = 10`, with a message that says to read the library's upgrading
+guide before moving it. It was checked both ways: green at 10, and red at 11 with
+"expected:<11> but was:<10>".
+
 ## Phase 5 — past marmot's pins
 
 Two commits, in this order, each reverting on its own.
