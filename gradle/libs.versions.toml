@@ -21,7 +21,7 @@ composeMultiplatform = "1.12.2"
 cryptoKmp = { strictly = "2.1.1" }
 datastorePreferences = "1.3.0"
 kermit = "2.2.0"
-kotlin = "2.4.10"
+kotlin = "2.4.21"
 kotlinx-coroutines = "1.11.0"
 kotlinx-datetime = "0.8.0"
 kotlinxSerialization = "1.13.0"
