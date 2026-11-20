@@ -4,22 +4,25 @@ A plan for promoting a member of a group to admin and demoting an admin back to
 member. It also covers the jobs that need the same machinery: removing an admin, an
 admin stepping down, and an admin leaving.
 
-**A phased plan, built but for its share work.** Written against the code as it stood at `fc437d05`, with
+**A phased plan, built but for its keyed-room leave.** Written against the code as it stood at `fc437d05`, with
 marmot-kmp 2.2.1 and mls-kmp 1.3.0 as the catalogue pins them. The second draft adds
 three rules the first draft lacked; they are stated in the next section, and most of
 the plan follows from them.
 
 **Built**, one commit per phase on `claude/member-admin-promotion-plan-d9d716`: the
 first release's phases (10a, 1, 2, 6, and 10 and 11 for convenient rooms), Phases 3, 4a,
-4b, 5 and 5b, and Phase 7 on both sides (the app's refusals, and the floor every device
-holds a commit to at the door). The first draft's Phase 0 -- upstream work in mls-kmp and
-marmot-kmp -- was dropped when the commit moved inside the signature (the headline).
-**Not built:** Phases 8 and 9 (promotion with a share, demotion with a refresh, both
-behind enrollment and refresh leaving experimental), Phase 10's keyed-room rows, and
-Phase 12. **Not run:** nothing here has been on a device, and no test runs a real FROST
-ceremony through `GovernanceManager.propose` -- the tests stand a key pair in for the
-room's aggregated key, which is all a FROST signature is once made, and drive the steps
-either side of the session.
+4b, 5 and 5b, Phase 7 on both sides, and Phases 8 and 9 under the experimental FROST
+enrollment (`ExperimentalFeatures.shareRefresh`, off in release). The first draft's
+Phase 0 -- upstream work in mls-kmp and marmot-kmp -- was dropped when the commit moved
+inside the signature (the headline). **Not built:** Phase 10's keyed-room rows (an admin
+of a keyed room still cannot step down or leave) and Phase 12. **Not run:** nothing here
+has been on a device. The enrollment itself is tested end to end with real reduced FROST
+across in-memory devices (`ShareRefreshRitualJvmTest`): a member who never took part in
+the ceremony is enrolled at the next id and signs. What no test runs is the whole
+promotion in one go -- offer, acceptance, the signed batch through
+`GovernanceManager.propose`, the commit, then the enrollment -- since the governed-room
+tests stand a key pair in for the room's key and the enrollment tests run in a room
+that is not governed; each half is tested on its own.
 
 Where the build chose differently:
 
@@ -42,6 +45,13 @@ Where the build chose differently:
 | Phase 6's removal of an admin is "chained in memory" | through `MarmotEngine.afterConfirmed`, registered *before* the commit it waits on so a relay's OK cannot overtake it, and taken back if publishing throws. Leaving as an admin uses the same hook. In a governed room a removal is one signed commit instead |
 | Phase 7's floor is checked on demotion, removal and leaving | on removal and on every governed commit at the door; a keyed room offers no demotion and no leave for an admin until Phases 8 to 10 |
 | Phase 10's keyed-room rows: "above the floor" and "at the floor" | one row for now. A keyed room's admin who presses **Leave group** is told, as before, that an admin cannot leave; `AdminLeave.CANNOT` |
+| Phase 8: promotion from any keyed room | only from a key past its ceremony's generation. Generation 0 lives in the ceremony's own record, which has no room for an id the ceremony did not make; the first rotation makes the generation rows an enrollment extends. **Make admin** says so when it is refused |
+| Phase 8: offer and acceptance as "a new 303xx kind" | 30374 and 30375, and a third, 30376, for the **handover**: once the change lands, the offering device sends the new admin the table, roster and signed key state. The new member's device holds nothing of the key before that, and checks all of it against the room's own signature -- the state has to be one the room signed, the table has to hash to what it names, and it has to bind the new id to this account under this device's host key |
+| Phase 8: `P_n` "interpolated in the exponent from the existing table" | from the table's first `t` entries, with `FrostEnrollment.derivePublicShare`. Every device does it, and adds the id only when the extended table hashes to what the group signed |
+| Phase 8: enrollment as `ShareRepairManager` generalised | the repair protocol unchanged but for its `n`: a request names the `n` it runs with (the new id, the table's size before it), helpers check that against their own table, and an enrollment asks no helper for approval -- the signed binding was everyone's chance to say no |
+| Phase 8: `n` grows in "the stored key" | a signing session's and a repair's `n` is the generation's table size, which the enrollment grew; the ceremony's `participantCount` is left as the ceremony made it |
+| Phase 9: every remaining holder's deal and confirm made automatic | the rotation is started by the proposer's device once the change lands (`GovernanceFollowThrough`), and each holder is asked once to take part, as every rotation now asks (rotate-shares-single-approval). A rotation that cannot start is said in the room and offered from the Shares section |
+| Phase 9: an admin can step down in a keyed room | not offered. The rotation that has to follow is the remaining holders', so another admin proposes the demotion |
 | Phase 11's dialogs for every action | removal keeps the immediate action it had; promotion, demotion and stepping down ask first |
 
 Read [marmot-v2.md](./marmot-v2.md) Phase 7 first. Removing a member, disbanding and
