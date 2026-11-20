@@ -329,6 +329,32 @@ not only in the diff.
 - `releaseRuntimeClasspath` as well as debug, because R8 is where a class that quartz moved
   between modules would show.
 
+**Built, and the compiler had nothing to say.** No Kotlin file changed. `settings.gradle.kts`
+applies Magpie 0.2.3 over the six groups, the catalogue names marmot 2.3.0's own pins with
+`strictly`, and the first build wrote `gradle/magpie.lock`. Its 27 lines are a header, six
+`publisher` lines (all the same key, vouched for by `nip05:releases@vitorpamplona.com`) and
+eighteen `release` lines: the root, `-jvm` and `-android` module of each of the six releases.
+As C4 predicted, there are no iOS lines.
+
+- **Compile.** `compileDebugKotlinAndroid`, `compileKotlinJvm` and `compileTestKotlinJvm`
+  were clean. The 85 deprecation warnings are all Compose's and AGP's (`LocalClipboardManager`,
+  the non-mirrored icons, `runDesktopComposeUiTest`), which were there already. None names
+  a quartz symbol.
+- **The resolved graph.** It moved by exactly the expected delta in all three runtime
+  classpaths: the four libraries, negentropy v1.2.0 → v1.2.3, and schnorr256k1-kotlin (root
+  plus `-jvm` or `-android`) added. That is 268 → 273 on jvm, 332 → 337 on debug and
+  326 → 331 on release. Nothing outside the six groups moved. `secp256k1-kmp`, `-jni-jvm`
+  and `-jni-android` still resolve to the composite's projects.
+- **The suite.** `./gradlew check` is green, and `jvmTest` runs 1389 tests in 182 classes
+  with 0 failures, the same count as Phase 0. No test was edited.
+- **R8.** An unsigned `assembleRelease` minifies with the new graph and produces a 37 MB
+  APK. No missing-class warnings. The one R8 warning is the deprecated
+  `android.r8.optimizedResourceShrinking=false` in this repo's own `gradle.properties`.
+
+Phase 1's commit also had to take `gradle/gradle-daemon-jvm.properties` out of
+`.gitignore`. It had been ignored since `8de05742`, most likely to keep an IDE-generated
+copy out of the tree. A file that states the build's daemon JVM has to be tracked.
+
 ## Phase 3 — what the swap means
 
 Phase 2 ends when it compiles and the suite is green. This phase is for what is green and

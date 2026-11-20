@@ -40,6 +40,24 @@ dependencyResolutionManagement {
 
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+    // quartz, mls-kmp, marmot-kmp and crypto-kmp are released on Nostr + Blossom, not Maven Central,
+    // from quartz 2.19.0, mls 1.3.1, marmot 2.3.0 and crypto 2.1.1. Magpie serves the groups below
+    // and nothing else, trusting only the key vitorpamplona.com's nostr.json names as `releases`;
+    // gradle/magpie.lock pins that key and the manifest of every module resolved. Needs a Java 21
+    // daemon (gradle/gradle-daemon-jvm.properties). docs/quartz-mls-marmot-update.md
+    id("com.vitorpamplona.magpie") version "0.2.3"
+}
+
+// Exclusive per group: none of these resolves from Maven Central any more, at any version.
+// negentropy and schnorr256k1 come in under quartz and are on neither Central nor anywhere else.
+// com.vitorpamplona.quic is marmot-quic's, which nothing here uses.
+magpie {
+    group("com.vitorpamplona.quartz")
+    group("com.vitorpamplona.marmot")
+    group("com.vitorpamplona.mls")
+    group("com.vitorpamplona.crypto")
+    group("com.vitorpamplona.negentropy")
+    group("com.vitorpamplona.schnorr256k1")
 }
 
 include(":composeApp")
