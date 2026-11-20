@@ -203,7 +203,11 @@ class ChatRoomDetailViewModel(
                     } else {
                         emptySet()
                     },
-                    memberActions = group?.takeIf { canGovern }?.let { AdminGovernance.memberActions(it, me, chatRepository.adminFloor(chatRoomId)) }.orEmpty(),
+                    // For every viewer, not only an admin: what cannot be done says why.
+                    // docs/member-row-actions.md, Phase 2.
+                    memberActions = runCatching { chatRepository.memberActionOptions(localChatRoom) }
+                        .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't read $chatRoomId's member actions" } }
+                        .getOrElse { emptyMap() },
                     adminLeave = group?.takeIf { roomIsOpen }?.let { AdminGovernance.adminLeave(it, me) },
                     governance = runCatching { chatRepository.governanceStatus(chatRoomId) }
                         .onFailure { if (it is CancellationException) throw it }

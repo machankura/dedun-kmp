@@ -33,7 +33,9 @@ import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.managers.PromotionManager
+import com.machankura.dedun.compose.managers.MemberActionPolicy
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 
@@ -438,6 +440,16 @@ interface ChatRepository {
      */
     suspend fun governanceStatus(chatRoomId: String): GovernanceStatus?
 
+    /**
+     * What each member row of [localChatRoom] offers, and why an item is not open:
+     * [MemberActionPolicy] over the room's state and what only the database knows.
+     * Every room and every viewer gets an answer -- a member who is not an admin is
+     * told why, not shown nothing. The detail screen and the screen that explains a
+     * closed action both read it here, so they cannot disagree.
+     * docs/member-row-actions.md, Phase 2.
+     */
+    suspend fun memberActionOptions(localChatRoom: LocalChatRoom): Map<HexKey, List<MemberActionOption>>
+
     /** Makes a keyed room's changes need the group's signature. Throws with words a person can act on. */
     suspend fun requireSignatures(localChatRoom: LocalChatRoom)
 
@@ -786,6 +798,8 @@ interface ChatRepository {
             override suspend fun adminFloor(chatRoomId: String): Int = 1
 
             override suspend fun governanceStatus(chatRoomId: String): GovernanceStatus? = null
+
+            override suspend fun memberActionOptions(localChatRoom: LocalChatRoom): Map<HexKey, List<MemberActionOption>> = emptyMap()
 
             override suspend fun requireSignatures(localChatRoom: LocalChatRoom) = Unit
 

@@ -24,6 +24,7 @@ import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.machankura.dedun.compose.ui.view.state.MemberAction
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -80,7 +81,7 @@ class ChatRoomMemberRowJvmTest {
             onNavigateToRoute = {},
             state = state().copy(
                 adminPublicKeys = setOf(activeUserPublicKey),
-                memberActions = mapOf(named to setOf(MemberAction.MAKE_ADMIN, MemberAction.REMOVE_FROM_GROUP)),
+                memberActions = mapOf(named to listOf(MemberActionOption(MemberAction.MAKE_ADMIN), MemberActionOption(MemberAction.REMOVE_FROM_GROUP))),
             ),
         ) {
             onAllNodesWithContentDescription("Member actions").assertCountEquals(1)

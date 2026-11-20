@@ -37,6 +37,8 @@ import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.ui.view.state.AdminLeave
 import com.machankura.dedun.compose.ui.view.state.MemberAction
+import com.machankura.dedun.compose.ui.view.state.MemberActionBlocker
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 
 /**
  * Promoting and demoting in a convenient room, which has no key to sign with and
@@ -228,6 +230,37 @@ class AdminChangesJvmTest {
             AdminGovernance.memberActions(appGroup(), user),
         )
         assertEquals(AdminLeave.STEP_DOWN_FIRST, AdminGovernance.adminLeave(appGroup(), user))
+    }
+
+    /**
+     * The rows' options as the screen reads them, through the repository: every
+     * item is listed, and one the group would refuse says why.
+     * docs/member-row-actions.md, Phase 2.
+     */
+    @Test
+    fun `the rows' options list every action, and say why one is not open`() = runBlocking {
+        convenientRoomWithMember()
+
+        assertEquals(
+            mapOf(member.hex to listOf(MemberActionOption(MemberAction.MAKE_ADMIN), MemberActionOption(MemberAction.REMOVE_FROM_GROUP))),
+            chatRepository.memberActionOptions(room()),
+            "the only admin's own row offered to step down, or a member's row was missing",
+        )
+
+        chatRepository.promoteMember(room(), member.hex)
+        okTheLatestCommit()
+
+        val options = chatRepository.memberActionOptions(room())
+        assertEquals(listOf(MemberActionOption(MemberAction.STEP_DOWN)), options[user])
+        assertEquals(
+            listOf(MemberActionOption(MemberAction.REMOVE_AS_ADMIN), MemberActionOption(MemberAction.REMOVE_FROM_GROUP)),
+            options[member.hex],
+        )
+
+        // Having left, nothing is open, and every item says so first.
+        db.chatRoomDao().upsert(room().chatRoom.copy(leftGroupAt = kotlin.time.Clock.System.now()))
+        val afterLeaving = chatRepository.memberActionOptions(room()).getValue(member.hex)
+        assertTrue(afterLeaving.all { it.blockers.firstOrNull() == MemberActionBlocker.YouLeft })
     }
 
     @Test

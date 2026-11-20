@@ -201,8 +201,13 @@ sealed interface ChatRoomDetailUIState {
          * rotation is behind its flag.
          */
         val shareHolders: Set<HexKey> = emptySet(),
-        /** What this device may do to each member, by public key; absent means nothing. */
-        val memberActions: Map<HexKey, Set<MemberAction>> = emptyMap(),
+        /**
+         * What each member row's menu offers, by public key, open or not, with the
+         * reasons an item is not; absent means no menu. Every other member has an
+         * entry whatever the viewer's role, and this device's own row has one only
+         * when stepping down is open. docs/member-row-actions.md, D1 and D2.
+         */
+        val memberActions: Map<HexKey, List<MemberActionOption>> = emptyMap(),
         /** How **Leave group** goes when this device is an admin; null when it is not. */
         val adminLeave: AdminLeave? = null,
         /** Where a keyed room stands on needing the group's signature; null for any other room. */

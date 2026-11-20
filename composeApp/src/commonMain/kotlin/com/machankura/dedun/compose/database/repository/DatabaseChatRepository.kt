@@ -53,6 +53,9 @@ import com.machankura.dedun.compose.managers.GovernanceGate
 import com.machankura.dedun.compose.managers.PromotionManager
 import com.machankura.dedun.compose.managers.GovernanceFollowThrough
 import com.machankura.dedun.compose.managers.GovernanceSupport
+import com.machankura.dedun.compose.managers.MemberActionContext
+import com.machankura.dedun.compose.managers.MemberActionPolicy
+import com.machankura.dedun.compose.managers.MemberActionRoom
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 import com.machankura.dedun.compose.managers.AdminFlags
 import com.machankura.dedun.compose.managers.FoundingAdmins
@@ -78,8 +81,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareRefreshManager
-import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
+import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import com.machankura.dedun.compose.database.model.types.ShareStanding
@@ -866,6 +870,36 @@ class DatabaseChatRepository(
         val missing = GovernanceSupport.missing(database, chatRoomId, group)
         return if (missing.isEmpty()) GovernanceStatus.Ready(AdminGovernance.adminFloor(database, chatRoomId, group), GovernanceSupport.switcherOf(group))
         else GovernanceStatus.Waiting(missing)
+    }
+
+    override suspend fun memberActionOptions(localChatRoom: LocalChatRoom): Map<HexKey, List<MemberActionOption>> {
+        val chatRoom = localChatRoom.chatRoom
+        val me = chatRoom.userPublicKey
+        val rows = localChatRoom.localParticipants.map { it.participant.participantPublicKey }
+        val hasLeft = chatRoom.leftGroupAt != null
+        // Off the current profile there is no admin policy to read: the room's kind
+        // is the whole answer, and the participants' flags say which role to name.
+        val flaggedAdmins = localChatRoom.localParticipants
+            .filter { it.participant.adminAt != null }
+            .map { it.participant.participantPublicKey }
+            .toSet()
+        val context = when {
+            chatRoom.mlsGroupState == null ->
+                MemberActionContext(MemberActionRoom.NIP17, me, admins = flaggedAdmins, members = emptySet(), hasLeft = hasLeft)
+            chatRoom.marmotProfile() != MarmotProfile.CURRENT ->
+                MemberActionContext(MemberActionRoom.LEGACY, me, admins = flaggedAdmins, members = emptySet(), hasLeft = hasLeft)
+            else -> {
+                // A row whose state this build cannot read has no rules to read either.
+                val group = runCatching { chatRoom.toMlsGroup() }.getOrNull() ?: return emptyMap()
+                val context = AdminGovernance.context(group, me, AdminGovernance.adminFloor(database, chatRoom.id, group))
+                context.copy(
+                    hasLeft = hasLeft,
+                    // Only asked when it is the answer: a keyed room not yet governed.
+                    waitingOn = if (context.isKeyed && !context.governed) GovernanceSupport.missing(database, chatRoom.id, group) else emptySet(),
+                )
+            }
+        }
+        return MemberActionPolicy.options(context, rows)
     }
 
     override suspend fun requireSignatures(localChatRoom: LocalChatRoom) {

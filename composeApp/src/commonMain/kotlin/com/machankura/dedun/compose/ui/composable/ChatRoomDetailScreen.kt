@@ -1468,6 +1468,9 @@ fun ChatRoomDetailScreen(
                                         trailingContent = {
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
                                             val actions = chatRoomDetailUIState.memberActions[memberPublicKey].orEmpty()
+                                                .filter { it.isAvailable }
+                                                .map { it.action }
+                                                .toSet()
                                             if (actions.isNotEmpty()) {
                                                 // What this device may do to this member, decided by the
                                                 // view model from the group's state. Every one is a commit
