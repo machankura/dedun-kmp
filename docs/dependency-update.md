@@ -33,6 +33,7 @@ records what it turned out to be in the results table below.
 | 0 | the baseline, at `25f14aa4`. `check` green. `jvmTest` 1,407 run, 0 failed, 0 skipped, 182 classes; `testDebugUnitTest` 529 run, 0 failed, 65 classes. `m3-audit`: every budget 0, adaptive APIs **12 against a floor of 12**, navigation components 2 against 2. Resolved graphs: 277 coordinates on `jvmRuntimeClasspath`, 342 on `debugRuntimeClasspath`, 336 on `releaseRuntimeClasspath`. The newest versions were as the tables below say. The build's own warnings are AGP 9's seven deprecated opt-out flags in `gradle.properties` (each "removed in version 10.0"), the obsolete `applicationVariants` API, Kotlin's deprecation of KMP beside `com.android.application`, and three Gradle 10 deprecations (`by getting`, `by registering`), all of them in the composite's scripts rather than Giza's |
 | 1 | built. Eight library entries, the `sqldelight` plugin alias and six version keys removed, with the six commented-out lines in `composeApp/build.gradle.kts` that named them or Room 2's aliases. All three resolved graphs are identical to Phase 0's, line for line. `check` green |
 | 2a | built. serialization 1.13.0, kermit 2.2.0, okio 3.18.2. The graph diff is those three families and nothing else; serialization moved 1.12.0 → 1.13.0, since quartz had already lifted it past the declared 1.11.0. kermit 2.2.0 publishes one `kermit-android` where 2.1.0 had `kermit-android-debug`. `jvmTest` 1,407 run, 0 failed, once the `IdentitySwitchJvmTest` 5 s timeout seen under the first full run (the one [giza-wallet-removal.md](./giza-wallet-removal.md) Phase 3 records) passed three times alone and in a second full run |
+| 2b | built, as ktor 3.6.1 alone: coil went to Phase 3 (every coil 3.6.x needs Compose 1.12.0), and so did qrose (2d; 1.2.0 on is built for Compose 1.12). ktor 3.6's `ktor-serialization-kotlinx` now depends on `ktor-openapi-schema`, which brings kaml 0.79.0, snakeyaml-engine-kmp 3.1.1 and urlencoder-lib 1.6.0 onto every runtime classpath, and asks for `kotlinx-datetime:0.8.0-0.6.x-compat`, which Gradle ranks above the app's 0.8.0 and picks. The compat build is 0.8.0 plus the old `kotlinx.datetime.Instant` and `Clock`, so it is a superset, and the app compiles unchanged. It is recorded here because it is a change of artifact, not just of version. `IdentitySwitchJvmTest`'s 5 s wait failed in the first runs, and with the build cache off it fails 1 run in 4 at the Phase 1 baseline and 1 in 4 on ktor 3.6.1: a flake that predates this plan. (The cache had been replaying one failing result as if it were three.) `check` otherwise green |
 
 | phase | what it is | rough size |
 |---|---|---|
@@ -101,10 +102,10 @@ it.
 | `kotlinx-coroutines` | 1.11.0 | 1.11.0 | 1.11.0 | — |
 | `kotlinx-datetime` | 0.8.0 | 0.8.0 | 0.8.0 | — |
 | `io.ktor:*` | 3.5.2 | 3.6.1 | **3.6.1** | 2.3.21 |
-| `io.coil-kt.coil3:*` | 3.5.0 | 3.6.3 | **3.6.3** | 2.4.10 |
+| `io.coil-kt.coil3:*` | 3.5.0 | 3.6.3 | **3.6.3**, in Phase 3: it needs Compose 1.12.0 | 2.4.10 |
 | `com.squareup.okio:okio` | 3.18.1 | 3.18.2 | **3.18.2** | 2.1.21 |
 | `co.touchlab:kermit` | 2.1.0 | 2.2.0 | **2.2.0** | 2.3.21 |
-| `io.github.alexzhirkevich:qrose` | 1.1.2 | 1.3.1 | **1.3.1** | 2.4.0 |
+| `io.github.alexzhirkevich:qrose` | 1.1.2 | 1.3.1 | **1.3.1**, in Phase 3: 1.2.0 on needs Compose 1.12 | 2.4.0 |
 | `androidx.room3:*` (runtime, compiler, plugin) | 3.0.1 | 3.0.3 | **3.0.3** | 2.1.20 |
 | `androidx.sqlite:sqlite-bundled` | 2.7.0 | 2.7.1 | **2.7.1** | 2.1.20 |
 | `androidx.datastore:*` | 1.2.1 | 1.3.0 | **1.3.0** | 2.2.20 |
@@ -268,8 +269,10 @@ read an entry, and it goes back.
 - Serialization changes only which version is *declared*, since Gradle already resolves 1.12.0.
 - Check: `jvmTest`. The event and CBOR round trips are the ones that would notice.
 
-**2b — network and images.** `ktor` 3.6.1 and `coilCompose` 3.6.3, together, because
-`coil-network-ktor3` is built against a ktor 3 and the two should land at once.
+**2b — network.** `ktor` 3.6.1. The plan first paired coil 3.6.3 with it. As built, coil went
+to Phase 3, because every coil 3.6.x needs Compose 1.12.0: `coil-compose-core`'s module
+metadata requires foundation 1.12.0. Taking it here would have moved Compose under a 1.11.1
+plugin. `coil-network-ktor3` 3.5.0 runs on ktor 3.6.1 meanwhile, as it ran on 3.5.2.
 - `lightning-kmp` asks for ktor 3.4.1. Gradle gives it 3.6.1, as it already gives it 3.5.2.
   ktor keeps binary compatibility inside 3.x, and nothing of the node runs any more, but
   `compileDebugKotlinAndroid` compiles the library against it, and that is the check.
@@ -287,8 +290,10 @@ and the four are the stack under every profile (C1).
 - An Android install over the current build is Phase 8's first item.
 
 **2d — QR codes.** `qrose` 1.1.2 → 1.3.1. This is two minors of a library with a rendering
-surface.
-- Read its changelog for API changes to the painter the app builds.
+surface. As built, it went to Phase 3 for the same reason as coil: 1.2.0's release notes say
+"Compose updated to 1.12". Those notes also move "some declarations" to the core module under
+a new package, and `QRCodeView.kt` imports `QrLogoShape`, `QrLogoPadding`, `QrBrush` and
+`solid`. 1.3.0 mirrored the code, and 1.3.1 fixed that, so 1.3.0 is never the target.
 - Check: the share-profile and key-package QR codes still scan from another device. The
   `m3-color-exempt` site keeps its pure black on pure white.
 
@@ -304,7 +309,9 @@ Move together:
 - `composeMultiplatform` (plugin, runtime, foundation, ui, resources, tooling);
 - `material3`, which also versions `material3-adaptive-navigation-suite`;
 - `navigationCompose` 2.10.0;
-- `composeHotReload` 1.3.0.
+- `composeHotReload` 1.3.0;
+- `coilCompose` 3.6.3, which needs Compose 1.12.0 (moved here from 2b);
+- `qrose` 1.3.1, which needs Compose 1.12 (moved here from 2d).
 
 `material3Adaptive` stays at 1.2.0. `lifecycle` and `activity` are already current.
 

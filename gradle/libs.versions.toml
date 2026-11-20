@@ -26,7 +26,7 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-datetime = "0.8.0"
 kotlinxSerialization = "1.13.0"
 ksp = "2.3.6"
-ktor = "3.5.2"
+ktor = "3.6.1"
 # Marmot (MIP-00..05), the three processors, convergence, the publish gate, the app
 # components and the KeyPackage managers (vitorpamplona/marmot-kmp). This is quartz's
 # former `marmot` package: 2.3.0 dropped the engine and kept only the event classes.
