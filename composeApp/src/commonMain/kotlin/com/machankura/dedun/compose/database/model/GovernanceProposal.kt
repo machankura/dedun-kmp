@@ -50,6 +50,12 @@ data class GovernanceProposal(
     val priorStateHex: String,
     val pendingStateHex: String,
     val stage: GovernanceProposalStage = GovernanceProposalStage.SIGNING,
+    /**
+     * A member whose live share has to be rotated away once this change lands: one
+     * it demotes or removes (docs/member-admin-promotion.md, Phase 9). Persisted,
+     * because the change can land long after it was proposed, across a restart.
+     */
+    val thenRotateWithout: HexKey? = null,
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,
@@ -64,4 +70,10 @@ enum class GovernanceProposalStage {
 
     /** The group moved past its epoch before it was signed or sent; nothing can land it now. */
     STALE,
+
+    /** A relay accepted it, so the change is the group's. */
+    APPLIED,
+
+    /** Applied, and what had to follow it -- a rotation without a demoted member -- has been started. */
+    DONE,
 }

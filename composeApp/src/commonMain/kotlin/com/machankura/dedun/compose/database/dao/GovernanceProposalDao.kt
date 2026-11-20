@@ -19,4 +19,10 @@ interface GovernanceProposalDao {
 
     @Upsert
     suspend fun upsert(proposal: GovernanceProposal)
+
+    @Query("SELECT * FROM GovernanceProposal ORDER BY createdAt ASC")
+    fun observeAll(): kotlinx.coroutines.flow.Flow<List<GovernanceProposal>>
+
+    @Query("SELECT * FROM GovernanceProposal ORDER BY createdAt ASC")
+    suspend fun getAll(): List<GovernanceProposal>
 }

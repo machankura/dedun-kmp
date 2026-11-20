@@ -45,6 +45,13 @@ data class ShareRepairSession(
     val helpApprovedAt: Instant? = null,
     val approvalRequested: Boolean = false,
     val failureReason: String? = null,
+    /**
+     * The `n` the reduced enrollment runs with, when it is not the key's: for an
+     * enrollment at a new id it is that id -- the table had n entries before the
+     * new member's public share was added (docs/member-admin-promotion.md, Phase 8).
+     * Null for a repair, which uses the current table's size.
+     */
+    val nParticipants: Int? = null,
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,

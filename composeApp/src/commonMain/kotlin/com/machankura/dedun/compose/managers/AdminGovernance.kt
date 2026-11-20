@@ -4,6 +4,7 @@ import com.vitorpamplona.marmot.groups.MarmotGroupPermissions
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.mls.group.MlsGroup
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.types.ChatRoomType
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
@@ -82,8 +83,19 @@ object AdminGovernance {
      * account, which is stepping down.
      */
     fun canDemote(group: MlsGroup, actor: HexKey, target: HexKey): Boolean =
-        !isKeyedRoom(group) &&
+        (!isKeyedRoom(group) || (keyedChangesAllowed(group) && actor != target)) &&
             MarmotGroupPermissions.canDemote(group.currentAdminIdentities(), members(group), actor, target)
+
+    /**
+     * Whether a keyed room's admins can be changed at all from this build: the room
+     * has to need the group's signature for its changes (R2), and share rotation and
+     * enrollment have to be on, since every admin change moves a share (R1). Even
+     * then an admin does not step down on their own in a keyed room: the rotation
+     * that has to follow is the remaining holders', so another admin proposes it.
+     * docs/member-admin-promotion.md, Phases 8 and 9.
+     */
+    fun keyedChangesAllowed(group: MlsGroup): Boolean =
+        isKeyedRoom(group) && GovernanceGate.isGoverned(group) && ExperimentalFeatures.shareRefresh
 
     /**
      * What [me] may do to each member of [group], for the member rows' menus. Empty
@@ -99,7 +111,7 @@ object AdminGovernance {
                     if (canDemote(group, me, me)) add(MemberAction.STEP_DOWN)
                 } else {
                     if (canPromote(group, me, member)) add(MemberAction.MAKE_ADMIN)
-                    if (canDemote(group, me, member)) add(MemberAction.REMOVE_AS_ADMIN)
+                    if (canDemote(group, me, member) && keepsFloor(group, member, floor)) add(MemberAction.REMOVE_AS_ADMIN)
                     if (MarmotGroupPermissions.canRemove(group.currentAdminIdentities(), me, member) && keepsFloor(group, member, floor)) {
                         add(MemberAction.REMOVE_FROM_GROUP)
                     }

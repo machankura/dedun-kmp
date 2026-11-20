@@ -256,7 +256,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 51,
+    version = 52,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -562,6 +562,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // change this device proposed to a governed room, held while the group signs
         // it. One new table, so Room generates it. Giza's v41, Bennu's v40.
         AutoMigration(from = 50, to = 51),
+        // v52 adds GovernanceProposal.thenRotateWithout and ShareRepairSession.nParticipants
+        // (docs/member-admin-promotion.md, Phases 8 and 9): two nullable columns, so
+        // Room generates it. Giza's v42, Bennu's v41.
+        AutoMigration(from = 51, to = 52),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)

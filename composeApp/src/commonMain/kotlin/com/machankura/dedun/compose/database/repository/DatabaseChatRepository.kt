@@ -50,6 +50,7 @@ import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceFollowThrough
 import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.managers.MarmotInboundManager
 import com.machankura.dedun.compose.managers.AdminFlags
@@ -70,6 +71,7 @@ import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -157,8 +159,14 @@ class DatabaseChatRepository(
 
     override suspend fun reconcileAdminFlags(): Int = AdminFlags.reconcileAll(database)
 
-    override suspend fun followThroughCeremonies(keyPair: KeyPair) =
-        CeremonyFollowThrough.observe(database = database, chatRepository = this, keyPair = keyPair)
+    override suspend fun followThroughCeremonies(keyPair: KeyPair) = kotlinx.coroutines.coroutineScope {
+        launch { CeremonyFollowThrough.observe(database = database, chatRepository = this@DatabaseChatRepository, keyPair = keyPair) }
+        // What a governed room's signed changes need after they land: a rotation
+        // without a demoted member, a promotion's next steps.
+        // docs/member-admin-promotion.md, Phases 8 and 9.
+        launch { GovernanceFollowThrough.observe(database = database, keyPair = keyPair) }
+        Unit
+    }
 
     override suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>> {
         return database.chatRoomDao().observeChatRoomListByUserPublicKey(publicKey)

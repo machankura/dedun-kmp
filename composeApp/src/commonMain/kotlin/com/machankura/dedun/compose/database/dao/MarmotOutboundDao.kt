@@ -71,6 +71,8 @@ import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Instant
 import com.machankura.dedun.compose.managers.AdminGovernance
+import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.managers.GovernanceGate
 import com.machankura.dedun.compose.managers.GovernanceManager
 import com.machankura.dedun.compose.managers.GovernanceMarker
@@ -916,7 +918,11 @@ abstract class MarmotOutboundDao(
         // docs/member-admin-promotion.md, Phase 5.
         if (GovernanceGate.isGoverned(group)) {
             val admins = group.currentAdminIdentities()
-            GovernanceManager.propose(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, propose = GovernanceManager.removal(leafIndex, memberPublicKey, admins))
+            GovernanceManager.propose(
+                database, localChatRoom, localChatRoom.chatRoom.userPublicKey,
+                thenRotateWithout = memberPublicKey.takeIf { holdsLiveShare(localChatRoom, it) },
+                propose = GovernanceManager.removal(leafIndex, memberPublicKey, admins),
+            )
             return
         }
 
@@ -994,7 +1000,27 @@ abstract class MarmotOutboundDao(
     open suspend fun demote(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
         val group = governedGroup(localChatRoom)
         if (adminPublicKey !in group.currentAdminIdentities()) return
-        check(!AdminGovernance.isKeyedRoom(group)) { KEYED_ROOM_REFUSAL }
+
+        // A keyed room: proposed for the group's signature, and their share rotated
+        // away once it lands (docs/member-admin-promotion.md, Phase 9).
+        if (AdminGovernance.isKeyedRoom(group)) {
+            check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
+            check(adminPublicKey != localChatRoom.chatRoom.userPublicKey) {
+                "In a group with a shared key, another admin removes you as admin, so the group can rotate your share away"
+            }
+            val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
+            if (!AdminGovernance.keepsFloor(group, adminPublicKey, floor)) {
+                throw IllegalStateException("A group with a shared key needs at least $floor admins. Make someone else an admin first")
+            }
+            val admins = group.currentAdminIdentities()
+            GovernanceManager.propose(
+                database, localChatRoom, localChatRoom.chatRoom.userPublicKey,
+                thenRotateWithout = adminPublicKey.takeIf { holdsLiveShare(localChatRoom, it) },
+            ) { copy ->
+                copy.proposeAppDataUpdate(AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(admins - adminPublicKey).encode())
+            }
+            return
+        }
         if (!AdminGovernance.canDemote(group, localChatRoom.chatRoom.userPublicKey, adminPublicKey)) {
             throw IllegalStateException(
                 if (adminPublicKey == localChatRoom.chatRoom.userPublicKey) "You're the only admin. Make someone else an admin first"
@@ -1090,6 +1116,11 @@ abstract class MarmotOutboundDao(
             )
         }
     }
+
+    /** Whether [memberPublicKey] holds a live share of the room's key, with rotation on. */
+    private suspend fun holdsLiveShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean =
+        ExperimentalFeatures.shareRefresh &&
+            runCatching { ShareRefreshManager.liveIdOf(database, localChatRoom, memberPublicKey) != null }.getOrDefault(false)
 
     /** The room's live group, when this device may change who administers it. */
     private suspend fun governedGroup(localChatRoom: LocalChatRoom): MlsGroup {

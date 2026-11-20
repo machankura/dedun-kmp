@@ -101,6 +101,7 @@ object GovernanceManager {
         localChatRoom: LocalChatRoom,
         userPublicKey: HexKey,
         peerKeyPackageEventId: HexKey? = null,
+        thenRotateWithout: HexKey? = null,
         propose: (MlsGroup) -> Unit,
     ): String {
         val engine = database.marmotEngine
@@ -131,7 +132,7 @@ object GovernanceManager {
             content = prepared.commitEvent.toJson(),
         )
         val statementId = database.frostSigningSessionDao().getItems(session.id).single().eventId
-        record(database, localChatRoom, userPublicKey, prepared, statementId, session.id, peerKeyPackageEventId)
+        record(database, localChatRoom, userPublicKey, prepared, statementId, session.id, peerKeyPackageEventId, thenRotateWithout)
         return session.id
     }
 
@@ -149,6 +150,7 @@ object GovernanceManager {
         statementId: HexKey,
         sessionId: String,
         peerKeyPackageEventId: HexKey? = null,
+        thenRotateWithout: HexKey? = null,
     ): GovernanceProposal {
         val roomId = localChatRoom.chatRoom.id
         database.marmotCommitResultDao().upsert(
@@ -173,6 +175,7 @@ object GovernanceManager {
             peerKeyPackageEventId = peerKeyPackageEventId,
             priorStateHex = prepared.staged.priorState.encodeTls().toHex(),
             pendingStateHex = prepared.staged.pendingState.encodeTls().toHex(),
+            thenRotateWithout = thenRotateWithout,
         )
         database.governanceProposalDao().upsert(proposal)
         return proposal
@@ -248,7 +251,19 @@ object GovernanceManager {
         val commitEvent = Event.fromJson(proposal.commitEventJson).let {
             GroupEvent(it.id, it.pubKey, it.createdAt, it.tags, it.content, it.sig)
         }
-        sendEnvelope(
+        // When a relay accepts it, the change is the group's: what has to follow it
+        // -- a rotation without a member it demoted -- reads that off the row
+        // (GovernanceFollowThrough). Registered before the gate is raised, so the
+        // acceptance cannot overtake it; a restart in between is caught there too.
+        engine.afterConfirmed(routingId) {
+            database.governanceProposalDao().getById(proposal.id)?.let { current ->
+                if (current.stage == GovernanceProposalStage.PUBLISHED) {
+                    database.governanceProposalDao().upsert(current.copy(stage = GovernanceProposalStage.APPLIED, updatedAt = Clock.System.now()))
+                }
+            }
+        }
+        try {
+            sendEnvelope(
             database = database,
             chatRoomId = proposal.chatRoomId,
             routingId = routingId,
@@ -258,9 +273,13 @@ object GovernanceManager {
             commitRow = commitRow,
             carrierKind = GovernanceCarrierEvent.KIND,
             carrierContent = signed.toJson(),
-            carrierTags = GovernanceCarrierEvent.assembleTags(proposal.chatRoomId),
-            relays = relays,
-        )
+                carrierTags = GovernanceCarrierEvent.assembleTags(proposal.chatRoomId),
+                relays = relays,
+            )
+        } catch (e: Throwable) {
+            engine.cancelFollowUp(routingId)
+            throw e
+        }
         database.governanceProposalDao().upsert(proposal.copy(stage = GovernanceProposalStage.PUBLISHED, updatedAt = Clock.System.now()))
     }
 

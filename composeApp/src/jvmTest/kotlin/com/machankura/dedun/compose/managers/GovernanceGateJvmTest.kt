@@ -509,4 +509,59 @@ class GovernanceGateJvmTest {
         assertFalse(erin.hex in appGroup().currentMemberIdentities())
         assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).isEmpty())
     }
+
+    // --- Phase 9: demotion and removal in a keyed room, then a rotation ------------
+
+    @Test
+    fun `in a governed keyed room an admin is offered demoting another, never stepping down`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        try {
+            val actions = AdminGovernance.memberActions(appGroup(), userHex, floor = 1)
+            assertTrue(com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_AS_ADMIN in actions[dana.hex].orEmpty())
+            assertFalse(com.machankura.dedun.compose.ui.view.state.MemberAction.STEP_DOWN in actions[userHex].orEmpty(), "an admin was offered stepping down from a keyed room")
+            assertFalse(com.machankura.dedun.compose.ui.view.state.MemberAction.REMOVE_AS_ADMIN in AdminGovernance.memberActions(appGroup(), userHex, floor = 2)[dana.hex].orEmpty(), "the floor was ignored")
+        } finally {
+            com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        }
+    }
+
+    @Test
+    fun `a signed demotion that lands owes a rotation without the member, and asks for one`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        val prepared = GovernanceManager.prepare(appGroup(), routingId, ::demoteDana)
+        val signed = statement(prepared.commitEvent, prepared.change, prepared.epoch)
+        val proposal = GovernanceManager.record(db, room(), userHex, prepared, signed.id, "s", thenRotateWithout = dana.hex)
+
+        GovernanceManager.publish(db, proposal, signed)
+        assertTrue(GovernanceFollowThrough.rotationsOwed(db).isEmpty(), "a rotation was owed before the change landed")
+        okTheLatestCommit()
+
+        assertEquals(com.machankura.dedun.compose.database.model.GovernanceProposalStage.APPLIED, db.governanceProposalDao().getById(proposal.id)!!.stage)
+        assertEquals(listOf(proposal.id), GovernanceFollowThrough.rotationsOwed(db).map { it.id })
+
+        // This room has no ceremony behind it, so the rotation cannot start: the
+        // room says so, and the change is not asked about again.
+        GovernanceFollowThrough.pass(db, user)
+        assertEquals(com.machankura.dedun.compose.database.model.GovernanceProposalStage.DONE, db.governanceProposalDao().getById(proposal.id)!!.stage)
+        assertTrue(lines(ChatMessage.TYPE_CHANGE_NOT_APPLIED).any { "Shares section" in it.content })
+        assertTrue(GovernanceFollowThrough.rotationsOwed(db).isEmpty())
+    }
+
+    @Test
+    fun `a demotion that landed while nobody watched still owes its rotation`() = runBlocking {
+        governedRoom()
+        appIsAdmin()
+        val prepared = GovernanceManager.prepare(appGroup(), routingId, ::demoteDana)
+        val signed = statement(prepared.commitEvent, prepared.change, prepared.epoch)
+        val proposal = GovernanceManager.record(db, room(), userHex, prepared, signed.id, "s", thenRotateWithout = dana.hex)
+        GovernanceManager.publish(db, proposal, signed)
+        okTheLatestCommit()
+        // A restart between the OK and the row being marked.
+        db.governanceProposalDao().upsert(db.governanceProposalDao().getById(proposal.id)!!.copy(stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.PUBLISHED))
+
+        assertEquals(listOf(proposal.id), GovernanceFollowThrough.rotationsOwed(db).map { it.id })
+    }
 }
