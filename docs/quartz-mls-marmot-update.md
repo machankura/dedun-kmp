@@ -244,8 +244,8 @@ carry the same manifest hash, so a lock line is per module and a manifest is per
 - `./gradlew check` is green, and all four audits pass.
 
 The submodules had to be initialised, as Phase 0 of marmot-kmp.md found. So did the
-gitignored `local.properties` at each of the five composite levels, which a fresh worktree
-does not have. Without them, configuring fails with "SDK location not found" from
+gitignored `local.properties` at each of the five composite levels, as the README's
+Building section says. Without them, configuring fails with "SDK location not found" from
 `secp256k1-kmp`.
 
 ## Phase 1 — Java 21, pinned
@@ -259,6 +259,16 @@ developer's build starts. If it bites, it should bite before any dependency has 
 
 **Check:** `./gradlew --stop`, then `./gradlew :composeApp:jvmTest` with `java` on the path
 at 17. The daemon comes up on 21 and the suite matches Phase 0's count.
+
+**Built.** `updateDaemonJvm` wrote `toolchainVersion=21` and foojay download URLs for each
+OS and architecture. The foojay resolver was already applied in `settings.gradle.kts`, so a
+machine with no local 21 gets one downloaded. A machine with one, like this one with
+`/usr/lib/jvm/java-21-openjdk-amd64`, uses it.
+
+With `JAVA_HOME` pointed at 17, `./gradlew --version` reports a 17 launcher and "Daemon JVM:
+Compatible with Java 21 … (from gradle/gradle-daemon-jvm.properties)". The suite, rerun from
+that launcher, matches Phase 0. The README's Building section says the same for Android
+Studio.
 
 ## Phase 2 — the swap, in one commit
 

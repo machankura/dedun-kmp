@@ -12,6 +12,12 @@ This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM).
 * [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
   you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
 
+### Gradle runs on Java 21
+
+Gradle's daemon has to run on Java 21. [gradle/gradle-daemon-jvm.properties](gradle/gradle-daemon-jvm.properties)
+makes Gradle pick it whatever `java` is on the path. In Android Studio, set Settings → Build,
+Execution, Deployment → Build Tools → Gradle → Gradle JDK to 21 as well.
+
 ### Build and Run Android Application
 
 The Android app embeds the wallet daemon, whose bindings are built from the source the
