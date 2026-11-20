@@ -124,7 +124,8 @@ hdr 'Colour  (phases 1, 3)'
 declared=$(grep -oE '^\s{4}[a-zA-Z]+ = ' "$THEME/Theme.kt" 2>/dev/null \
   | tr -d ' =' | sort -u)
 # The 49 roles of androidx.compose.material3.ColorScheme, as of material3
-# 1.10.0-alpha05. Hardcoded because the artifact is not on this script's path.
+# 1.10.0-alpha05, and unchanged at 1.12.0-alpha03 (its ColorScheme declares the
+# same getters; docs/dependency-update.md, Phase 7). Hardcoded because the artifact is not on this script's path.
 all_roles="primary onPrimary primaryContainer onPrimaryContainer inversePrimary
 secondary onSecondary secondaryContainer onSecondaryContainer
 tertiary onTertiary tertiaryContainer onTertiaryContainer

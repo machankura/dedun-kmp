@@ -229,6 +229,9 @@ kotlin {
  * graph has at least one statement in its body, and something in this module's graph arrives
  * with an empty one. The pass is an optimization only; disabling it costs the redundant
  * initializer calls it would have removed and nothing else.
+ *
+ * Seen on 2.4.10. The app is on 2.4.21 now, which has not yet been linked on a mac without
+ * this flag; remove it only once a release link passes there (docs/dependency-update.md, C5).
  */
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEach {
     if (name.startsWith("linkRelease")) {

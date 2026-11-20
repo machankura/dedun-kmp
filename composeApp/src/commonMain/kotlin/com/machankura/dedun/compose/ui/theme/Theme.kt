@@ -471,8 +471,8 @@ internal fun appColorScheme(darkTheme: Boolean, contrast: ThemeContrast): ColorS
  * The app's theme: colour, shape, type and motion, in one place.
  *
  * **Expressive, deliberately.** `MaterialExpressiveTheme` rather than `MaterialTheme` is a
- * product decision taken 2026-09-08. The pinned material3 1.10.0-alpha05 ships the whole
- * expressive set -- button groups, split buttons, floating toolbars, wide navigation rails,
+ * product decision taken 2026-09-08. The pinned material3 (1.10.0-alpha05 then,
+ * 1.12.0-alpha03 now) ships the whole expressive set -- button groups, split buttons, floating toolbars, wide navigation rails,
  * loading indicators, the eight-step shape scale, thirty type roles -- and the tree already
  * opts into `ExperimentalMaterial3ExpressiveApi` in 66 places. The visible effect is that
  * components take their expressive defaults: rounder, larger, more motion. It is one

@@ -114,7 +114,7 @@ plugin at v0.2.3: `MagpieSettingsPlugin.kt`, `docs/ARCHITECTURE.md`, `LockFile.k
 - **Requirements.**
   - The Gradle daemon must run on Java 21+, or the build throws at configuration time
     (`MIN_DAEMON_JAVA = 21`).
-  - Gradle 8.8+. The app is on 9.7.1.
+  - Gradle 8.8+. The app was on 9.7.1, and is on 9.9.2 since [dependency-update.md](./dependency-update.md), Phase 4.
   - Configuration cache is supported, which is moot here: the app has it off for
     `lightning-kmp-app`'s sake.
   - The engine is about 21 MB in its own class loader per daemon.
@@ -713,7 +713,8 @@ None of these can be automated here, and all of them stand between this work and
 GroupInfo-aware `validateJoin` for the robust-room joiner check, and the authored-fork fix.
 All are library-enabled behaviour (D5). `marmot-quic` and the `com.vitorpamplona.quic`
 group. Kotlin 2.4.10 → 2.4.21, which would close the stdlib skew the app already lives with
-and is a toolchain change rather than a library one.
+and is a toolchain change rather than a library one. [dependency-update.md](./dependency-update.md)
+did it, in its Phase 6.
 
 ## Where the numbers come from
 

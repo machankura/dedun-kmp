@@ -25,8 +25,17 @@ Researched on 2026-11-20 against `390d4bc3`. The composite's pins were read from
 
 ### Where the build stands
 
-**Being built** on `claude/dependency-update-plan-1b853a`, one commit per step. Each phase
-records what it turned out to be in the results table below.
+**Built but for a mac, devices, and pushing the submodules**, on
+`claude/dependency-update-plan-1b853a`, one commit per step. Each phase records what it turned
+out to be in the results table below. Three things are left:
+
+- **The submodule commits are local.** secp256k1-kmp, bitcoin-kmp, lightning-kmp and
+  lightning-kmp-app each have a `claude/dependency-update` branch, two commits deep, that Giza's
+  pointer names. They have to be pushed, bottom up, before this branch is merged, or a fresh
+  clone cannot resolve `lightning-kmp-app`.
+- **Phase 8:** an Android install over the current build, a desktop run on existing profiles,
+  QR codes scanned, and iOS on a mac, including the Kotlin/Native link without its workaround.
+- **Compose 1.13.0**, once it is final: a follow-up that changes two lines (D3).
 
 | phase | result |
 |---|---|
@@ -39,6 +48,7 @@ records what it turned out to be in the results table below.
 | 4 | built. Gradle 9.9.2, with the wrapper run twice. 9.9.2's wrapper adds `retries=0` and `retryBackOffMs=500` to `gradle-wrapper.properties` and regenerates both scripts. The daemon still resolves Java 21 from `gradle-daemon-jvm.properties`. Resolved graphs identical to Phase 3's. `check` green, `jvmTest` 1,407 / 0, `testDebugUnitTest` 529 / 0. Gradle 10 deprecations are the same as before, all from the composite's scripts or plugins: `by getting` ×3, `by registering` ×2, `AbstractTestTask.afterSuite(Closure)` and `Configuration.getTaskDependencyFromProjectDependency` |
 | 5 | built, in the submodules and here: secp256k1-kmp `b0f0e37` (both pins), bitcoin-kmp `3ea162a` and lightning-kmp `9ec407fe` (pointers), lightning-kmp-app `63a48b2` (catalogue and pointer), each on a `claude/dependency-update` branch and **not pushed**. AGP 9.5.1 found three things 9.4.0 had not. **(1)** It registers `generate<Variant>ComposePreviewRunfiles` on every variant with Compose on and refuses to configure it while unit tests exclude Android resources, so `composeApp` sets `testOptions.unitTests.isIncludeAndroidResources = true`. **(2)** It refuses the same task for a variant with no unit tests, and AGP 9 gives unit tests to the tested build type only, while Kotlin's `allTests` realizes the release one, so `check` would not configure. `gradle.properties` sets `android.onlyEnableUnitTestForTheTestedBuildType=false`, and `check` now runs `testReleaseUnitTest` too (529 run, 0 failed). There is no option for turning the preview task off: it is gated only on the Compose build feature. **(3)** Its lint now reads `commonMain` and found three real errors, fixed in `3e0a16b1` before this commit: an unremembered `mutableStateOf`, and two `Scaffold`s that ignored `innerPadding`. Merged manifests (debug and release) are byte-identical to 9.4.0's. Resolved graphs unchanged. Debug APK 50.4 MB, unsigned release 38.1 MB. `jvmTest` 1,407 / 0. The seven opt-out flags all still warn "removed in version 10.0", as at Phase 0. **Not done here:** an Android Studio sync, and the submodule-level checks, which Phase 6 makes once for both versions |
 | 6 | built: secp256k1-kmp `bcaa985`, bitcoin-kmp `0fd254b`, lightning-kmp `f8835338` and lightning-kmp-app `d87af50`, each a Kotlin commit on top of its Phase 5 commit on `claude/dependency-update`, **not pushed**, with `engine-interop/new` moved too. The resolved graphs did not change at all: stdlib was already resolving 2.4.21 under quartz, and now the declared version matches it. Giza: `check` green, `jvmTest` 1,407 / 0, `testDebugUnitTest` and `testReleaseUnitTest` 529 / 0 each, both APKs built. Down the chain, run standalone for both phases: secp256k1-kmp `:tests:jvmTest`, bitcoin-kmp `jvmTest`, and lightning-kmp-app `:library:compileKotlinJvm :library:compileAndroidMain` all pass. engine-interop prints ALL PASSED both ways through epoch 3. A full recompile under 2.4.21 reports 31 warnings in the app's sources and none is an error: nullability redundancies, the deprecations already named in Phase 3, and two `ExperimentalCoroutinesApi` opt-ins in tests. **Not done here:** the mac link without `-Xdisable-phases` (C5), so the workaround stays |
+| 7 | built. The comments that stated a current version now state the new one: the two material3 comments in the catalogue (adaptive 1.2.0 is still what the navigation suite asks for, at 1.12.0-alpha03 and 1.13.0-rc01), `Theme.kt`'s expressive note, `m3-audit.sh`'s role list (checked: `ColorScheme` declares the same getters at 1.12.0-alpha03 as at 1.10.0-alpha05, so the hardcoded roles still hold), the Kotlin/Native comment (seen on 2.4.10, not yet re-linked at 2.4.21), and two lines of quartz-mls-marmot-update.md. Left as written, because they record what was true when they were written: `Color.kt`'s citation of the 1.10.0-alpha05 token file, jvm-target.md's dependency table, marmot-kmp.md's skew notes, material-design-conformance.md's versions, and quartz-mls-marmot-update.md's before/after tables |
 
 | phase | what it is | rough size |
 |---|---|---|
