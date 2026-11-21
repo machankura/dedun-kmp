@@ -28,10 +28,6 @@ LEDGER = "docs/giza-ledger.md"
 DEDUN_OVERRIDES = {
     "8dd09aa0": ("bennu", "0", "held (D7)"),
     "4e106fb5": ("bennu", "—", "skip"),
-    # Taken, then reverted by a8331b90: wavelength-kmp is an included build on AGP 9.4.0 and
-    # Kotlin 2.4.10, and AGP refuses two versions in one build (giza-into-dedun.md, Phase 4).
-    "a3c0b830": ("dependency update", "4", "held (wavelength-kmp's toolchain)"),
-    "302ce3ca": ("dependency update", "4", "held (wavelength-kmp's toolchain)"),
 }
 
 

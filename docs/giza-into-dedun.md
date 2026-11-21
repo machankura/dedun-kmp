@@ -487,7 +487,7 @@ had.
 - the Wavelength signet run passes, or is recorded as not run;
 - a desktop run pays out a member over Lightning.
 
-**As built: half of it, held at AGP 9.4.0 and Kotlin 2.4.10.** The composite does not
+**As built, first: held at AGP 9.4.0 and Kotlin 2.4.10.** The composite does not
 configure with wavelength-kmp on AGP 9.4.0 beside the app on 9.5.1. The error is "Using
 multiple versions of the Android Gradle plugin(9.4.0, 9.5.1) in the same build is not
 allowed", and `wavelength-core`, `-engine` and `-embedded` stop resolving for Android. So
@@ -506,8 +506,18 @@ Everything else in the phase is in:
 - Gradle 9.9.2;
 - the three lint fixes.
 
-**What finishes the phase:** move wavelength-kmp's `descriptors` branch to AGP 9.5.1 and
-Kotlin 2.4.21, move Dedun's pin to it, revert `a8331b90`, and run this phase's checks again.
+**Finished.** wavelength-kmp's `descriptors` branch moved to AGP 9.5.1 and Kotlin 2.4.21
+(`bd5c647`, pushed to `machankura/wavelength-kmp`). Dedun pins it and reverts `a8331b90` in
+`27957e12`, which brings back AGP 9.5.1, Kotlin 2.4.21 and `lightning-kmp-app` at `d87af507`.
+
+The checks:
+
+- jvmTest: 3,028 run, 0 failed.
+- `magpieLockAudit`, `marmotAudit`, `m3Audit` and `compileDebugKotlinAndroid`: green.
+- Regtest: the four suites pass, each on a fresh network.
+- wavelength-kmp's own `check`: passes but for one iOS test compile, which fails the same way on
+  the old toolchain. A test name in `FacadeWavelengthClientTest` has a comma, and Kotlin/Native
+  refuses it.
 
 ## Phase 5: automatic key ceremonies
 

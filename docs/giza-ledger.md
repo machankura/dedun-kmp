@@ -41,6 +41,7 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 |---|---|---|---|---|
 | before Phase 4, on `87ebf456` | pass | pass | pass | pass (3) |
 | after Phase 4, on `a8331b90` | pass | pass | pass | pass (3) |
+| AGP 9.5.1, Kotlin 2.4.21 and `lightning-kmp-app` at `d87af507`, on `27957e12` | pass | pass | pass | pass (3) |
 
 Each suite ran on a fresh `dedun-regtest` network.
 
@@ -216,8 +217,8 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `b6d4c709` | — | icon | — | skip | skip | docs: the icon is built, and what is left to see on devices (giza-app-icon, Phase 5) |
 | `3f8336fc` | `cc3a8e30` | dependency update | 4 | taken | `9dd3732f` | build: Gradle 9.9.2 (dependency-update, Phase 4) |
 | `3e0a16b1` | `cb6912ca` | dependency update | 4 | taken | `ce0d3bc1` | fix: the three lint errors AGP 9.5's lint finds in commonMain |
-| `a3c0b830` | `86679a93` | dependency update | 4 | adapted | held (wavelength-kmp's toolchain) | build: AGP 9.5.1 across the composite (dependency-update, Phase 5) |
-| `302ce3ca` | `01d4d8e7` | dependency update | 4 | taken | held (wavelength-kmp's toolchain) | build: Kotlin 2.4.21 across the composite (dependency-update, Phase 6) |
+| `a3c0b830` | `86679a93` | dependency update | 4 | adapted | `27957e12` | build: AGP 9.5.1 across the composite (dependency-update, Phase 5) |
+| `302ce3ca` | `01d4d8e7` | dependency update | 4 | taken | `27957e12` | build: Kotlin 2.4.21 across the composite (dependency-update, Phase 6) |
 | `65a2507a` | `fc7a045d` | dependency update | 4 | taken | `fe17f43b` | docs: the comments that named the old versions (dependency-update, Phase 7) |
 | `36be1efc` | — | — | — | pending | `8692bebd` | fix: one Shares row per member, so a reinstated admin no longer crashes the room detail |
 
