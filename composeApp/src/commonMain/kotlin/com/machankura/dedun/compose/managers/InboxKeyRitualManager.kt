@@ -28,7 +28,9 @@ import com.machankura.dedun.compose.database.model.InboxKeyCeremonyStage
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
+import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.machankura.dedun.compose.nostr.inbox.InboxWire
 
 /**
@@ -109,6 +111,8 @@ object InboxKeyRitualManager {
         localChatRoom: LocalChatRoom,
         userPublicKey: HexKey,
         nostrPrivateKey: ByteArray,
+        /** Where the group's mail should arrive, for the first generation's 10050 (D6). */
+        relays: List<NormalizedRelayUrl> = Relays.DefaultDMRelayList,
     ): InboxKeyCeremony {
         val roomId = localChatRoom.chatRoom.id
         database.inboxKeyDao().getRunningCeremoniesIn(roomId).firstOrNull { it.userPublicKey == userPublicKey }?.let { return it }
@@ -116,10 +120,12 @@ object InboxKeyRitualManager {
         refusal(database, localChatRoom, userPublicKey)?.let { throw IllegalStateException(it) }
         val admins = RoomAdmins.of(database, roomId)!!.admins
 
+        val generation = nextGeneration(database, roomId, userPublicKey)
         val ceremony = InboxKeyCeremony(
             id = RandomInstance.bytes(32).toHex(),
             chatRoomId = roomId,
-            generation = nextGeneration(database, roomId, userPublicKey),
+            generation = generation,
+            announceRelays = relays.takeIf { generation == 0 }?.joinToString(",") { it.url },
             coordinatorPublicKey = userPublicKey,
             userPublicKey = userPublicKey,
             participantPublicKeys = InboxKeyCeremony.formatParticipants(admins),
@@ -303,12 +309,17 @@ object InboxKeyRitualManager {
             InboxKeyRitualEvents.CERTIFICATE -> {
                 if (sender != ceremony.coordinatorPublicKey) return true
                 store(database, ceremony, sender, innerEvent.kind, innerEvent.content)
-                // A member who only watches cannot check the certificate; the admins can, and
-                // will fail it out loud if it is wrong. The watcher's line says it was issued.
+                // A member who only watches holds no secret, but every message the
+                // coordinator aggregated is public in the room, so it can aggregate them too
+                // and learn the key the admins made -- which is what lets it check the
+                // group's announcement of that key before signing it (D5).
                 if (!ceremony.isParticipant()) {
                     val current = database.inboxKeyDao().getCeremony(ceremony.id) ?: ceremony
                     if (current.isRunning) {
-                        database.inboxKeyDao().upsertCeremony(current.copy(stage = InboxKeyCeremonyStage.COMPLETE, updatedAt = Clock.System.now()))
+                        val watched = runCatching { watchedKey(database, current) }.getOrNull()
+                        database.inboxKeyDao().upsertCeremony(
+                            current.copy(stage = InboxKeyCeremonyStage.COMPLETE, inboxPublicKey = watched, updatedAt = Clock.System.now())
+                        )
                         announce(database, current, ChatMessage.TYPE_INBOX_KEY_COMPLETE, "The group's admins finished making its inbox key.", current.coordinatorPublicKey)
                     }
                 }
@@ -415,6 +426,7 @@ object InboxKeyRitualManager {
             )
             logger.i("Inbox key ceremony ${sessionId.take(8)} complete: generation ${done.generation}")
             InboxFollowThrough.onKeyMade(database, localChatRoom, done)
+            FrostSigningManager.resumeInboxAnnouncements(database, localChatRoom, done.userPublicKey)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -424,6 +436,27 @@ object InboxKeyRitualManager {
             fail(database, current, reason, current.userPublicKey)
             broadcast(database, localChatRoom, current, InboxKeyRitualEvents.FAILURE, reason)
         }
+    }
+
+    /**
+     * The key a ceremony made, as a member who only watched it can compute: the coordinator's
+     * two aggregations need no secret, and every message they take is in the room. Null while
+     * any is missing, or if they do not aggregate.
+     */
+    internal suspend fun keyWatched(database: DedunDatabase, ceremony: InboxKeyCeremony): HexKey? =
+        runCatching { watchedKey(database, ceremony) }.getOrNull()?.also { key ->
+            database.inboxKeyDao().getCeremony(ceremony.id)?.let { database.inboxKeyDao().upsertCeremony(it.copy(inboxPublicKey = key)) }
+        }
+
+    private suspend fun watchedKey(database: DedunDatabase, ceremony: InboxKeyCeremony): HexKey? {
+        val hostPublicKeys = hostPublicKeys(database, ceremony) ?: return null
+        val pmsgs1 = ordered(database, ceremony, InboxKeyRitualEvents.ROUND_1) ?: return null
+        val pmsgs2 = ordered(database, ceremony, InboxKeyRitualEvents.ROUND_2) ?: return null
+        val state = ChillDKG.coordinatorStep1(pmsgs1.map { ByteVector(it) }, hostPublicKeys, InboxKeyRitualEvents.THRESHOLD)
+            .takeIf { it.fault.isOk }?.state ?: return null
+        val certified = ChillDKG.coordinatorFinalize(state, pmsgs2.map { ByteVector64(it) }, InboxKeyRitualEvents.THRESHOLD)
+            .takeIf { it.fault.isOk } ?: return null
+        return certified.thresholdPublicKey?.xOnly()?.value?.toHex()
     }
 
     /** The participants' host keys, sorted, or null while any is outstanding. */

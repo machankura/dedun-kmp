@@ -45,6 +45,12 @@ data class InboxKeyCeremony(
     val hostPublicKey: HexKey? = null,
     val round1Random: HexKey? = null,
     val round2AuxRandom: HexKey? = null,
+    /**
+     * Where the group's mail should arrive, comma-separated, as the member who opened the first
+     * ceremony chose it: the 10050 the coordinator proposes beside the first 10044 (D6). Null
+     * for a rotation, which keeps the relays the group already announced.
+     */
+    val announceRelays: String? = null,
     /** The ceremony's public key `E`, x-only, once it is certified. */
     val inboxPublicKey: HexKey? = null,
     val failureReason: String? = null,

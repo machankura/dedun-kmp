@@ -34,6 +34,10 @@ interface InboxKeyDao {
     @Query("SELECT * FROM InboxKeyCeremony WHERE chatRoomId = :chatRoomId AND stage NOT IN ('COMPLETE', 'FAILED')")
     suspend fun getRunningCeremoniesIn(chatRoomId: String): List<InboxKeyCeremony>
 
+    /** Every finished ceremony in a room as this identity saw it, newest generation first. */
+    @Query("SELECT * FROM InboxKeyCeremony WHERE chatRoomId = :chatRoomId AND userPublicKey = :userPublicKey AND stage = 'COMPLETE' ORDER BY generation DESC, createdAt DESC")
+    suspend fun getCompletedCeremonies(chatRoomId: String, userPublicKey: HexKey): List<InboxKeyCeremony>
+
     @Upsert
     suspend fun upsertCeremony(ceremony: InboxKeyCeremony)
 

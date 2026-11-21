@@ -79,6 +79,21 @@ interface GroupInboxDao {
     @Query("SELECT * FROM GroupInboxPublication WHERE signingSessionId = :signingSessionId")
     suspend fun getPublicationsFor(signingSessionId: String): List<GroupInboxPublication>
 
+    @Query("SELECT * FROM GroupInboxPublication WHERE publishedAt IS NULL ORDER BY createdAt")
+    fun observeUnpublished(): Flow<List<GroupInboxPublication>>
+
+    @Query("UPDATE GroupInboxPublication SET publishedAt = :at WHERE eventId = :eventId")
+    suspend fun markPublished(eventId: HexKey, at: Instant)
+
+    @Query("UPDATE GroupInboxPublication SET attempts = attempts + 1, nextAttemptAt = :next WHERE eventId = :eventId")
+    suspend fun markAttempted(eventId: HexKey, next: Instant)
+
+    @Upsert
+    suspend fun upsertSigning(signing: com.machankura.dedun.compose.database.model.InboxSigning)
+
+    @Query("SELECT * FROM InboxSigning WHERE sessionId = :sessionId")
+    suspend fun getSigning(sessionId: String): com.machankura.dedun.compose.database.model.InboxSigning?
+
     @Query("SELECT * FROM GroupInboxPublication WHERE signingSessionId = :signingSessionId")
     fun observePublicationsFor(signingSessionId: String): Flow<List<GroupInboxPublication>>
 }

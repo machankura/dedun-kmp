@@ -25,6 +25,7 @@ import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
+import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
@@ -135,6 +136,20 @@ object ProposedEvent {
             detail = GroupWalletStatementEvent.read(event.tags, event.content)?.let { statement ->
                 "On ${GroupWalletStatementEvent.chainName(statement.chain)}, account ${statement.account}"
             } ?: "A wallet statement this device cannot read"
+        )
+
+        // The group's inbox (docs/group-inbox.md, D5 and D6): the key anyone writing to
+        // the group will encrypt to, shown by its fingerprint, and the relays its mail is
+        // to arrive on. Deciding to sign the first is deciding the group has an inbox.
+        InboxAnnouncement.KEY_KIND -> Summary(
+            label = "The group's inbox key",
+            detail = InboxAnnouncement.announcedKeyOf(event)?.let { "Key ${it.take(8)}…${it.takeLast(8)}" }
+                ?: "Names no key",
+        )
+        InboxAnnouncement.RELAYS_KIND -> Summary(
+            label = "Where the group receives private messages",
+            detail = InboxAnnouncement.announcedRelaysOf(event).joinToString(", ") { it.url.removePrefix("wss://").trimEnd('/') }
+                .ifEmpty { "No relays" },
         )
 
         // The group's own profile. Named by what the group would be called and

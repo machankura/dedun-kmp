@@ -908,6 +908,22 @@ object FrostSigningManager {
             }
         }
 
+        // The group's inbox: an announcement of a key its admins did not make together, or
+        // of one since replaced, or relays a stranger could not reach, is declined before
+        // anybody is asked. docs/group-inbox.md, D5.
+        if (InboxRefusal.involves(unsignedEvents)) {
+            InboxRefusal.of(database, localChatRoom, userPublicKey, unsignedEvents)?.let { why ->
+                logger.w("Signing proposal $sessionId: $why")
+                val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
+                    .copy(signDeclinedAt = Clock.System.now())
+                database.frostSigningSessionDao().upsert(declined)
+                database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+                InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, why)
+                announceStarted(database, declined)
+                return declined
+            }
+        }
+
         // A share of the generation the proposal names, or a refusal said out loud.
         // Signing with any other generation's share would put a partial signature
         // behind the wrong public share -- it cannot aggregate -- and staying
@@ -2526,6 +2542,14 @@ object FrostSigningManager {
             logger.e("Signed session ${session.id} but could not publish its change", e)
         }
 
+        // The group's inbox announced: its key's state moves, and the device that
+        // proposed the announcement owes it to relays. docs/group-inbox.md, D7.
+        try {
+            InboxAnnouncements.onSigned(database, session, signedEvents)
+        } catch (e: Throwable) {
+            logger.e("Signed session ${session.id} but could not file its inbox announcement", e)
+        }
+
         announce(
             database = database,
             session = session,
@@ -3177,6 +3201,46 @@ object FrostSigningManager {
     }
 
     /**
+     * Takes another pass at every open session in [localChatRoom] once an inbox key ceremony has
+     * finished here (docs/group-inbox.md, D5): an announcement of the key it made, proposed
+     * before this device had made it, can now be vouched for or asked about.
+     */
+    suspend fun resumeInboxAnnouncements(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey) {
+        database.frostSigningSessionDao().getOpenUnansweredSessionsFor(userPublicKey)
+            .filter { it.chatRoomId == localChatRoom.chatRoom.id }
+            .forEach { session ->
+                approveIfVouched(database, session)
+                advance(database, localChatRoom, session.id)
+            }
+    }
+
+    /**
+     * The one inbox question a device answers for its owner: the group's announcement of the
+     * key a rotation made, once the group has announced an inbox before and this device holds
+     * the new key. docs/group-inbox.md, D5.
+     */
+    private suspend fun announcesItsRotatedInbox(database: DedunDatabase, session: FrostSigningSession): Boolean {
+        val current = database.frostSigningSessionDao().getSessionById(session.id) ?: return false
+        if (current.signApprovedAt != null || current.signDeclinedAt != null) return false
+        if (current.stage == FrostSigningStage.COMPLETE || current.stage == FrostSigningStage.FAILED) return false
+        val room = database.chatRoomDao().findChatRoomById(current.chatRoomId) ?: return false
+        return InboxRefusal.vouchesFor(database, room, current, database.frostSigningSessionDao().getItems(current.id))
+    }
+
+    /** The inbox refusal that applies to [session] now. docs/group-inbox.md, D5. */
+    private suspend fun inboxRefusalNow(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        session: FrostSigningSession,
+        items: List<FrostSigningItem>
+    ): String? {
+        if (session.subject != FrostSigningSubject.EVENTS) return null
+        val events = items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
+        if (!InboxRefusal.involves(events)) return null
+        return InboxRefusal.of(database, localChatRoom, session.userPublicKey, events)
+    }
+
+    /**
      * Signs every open key state this user's device can now vouch for and has not
      * been answered about -- what a build that asked about them left waiting. Run
      * by the sweep beside the rituals' (docs/rotate-shares-single-approval.md,
@@ -3195,7 +3259,7 @@ object FrostSigningManager {
 
     /** Approves [session] on its owner's behalf when [signsAsItsOwnKeyState] says this device can. */
     private suspend fun approveIfVouched(database: DedunDatabase, session: FrostSigningSession): Boolean {
-        if (!signsAsItsOwnKeyState(database, session)) return false
+        if (!signsAsItsOwnKeyState(database, session) && !announcesItsRotatedInbox(database, session)) return false
         logger.i("Session ${session.id} is a key state this device can vouch for; signing")
         update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
         return true
@@ -3340,6 +3404,16 @@ object FrostSigningManager {
         // session an older build filed before it declined those on arrival.
         if (isUnshowableSession(session, items)) {
             logger.w("Session $sessionId signs a profile or a post nothing could show; declining")
+            update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
+            advance(database, localChatRoom, sessionId)
+            return
+        }
+
+        // And the inbox's, checked again: a newer key can be made, or the admins change,
+        // while a member decides. docs/group-inbox.md, D5.
+        inboxRefusalNow(database, localChatRoom, session, items)?.let { why ->
+            logger.w("Session $sessionId: $why")
+            InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, why)
             update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
             advance(database, localChatRoom, sessionId)
             return
@@ -3847,7 +3921,9 @@ object FrostSigningManager {
         session: FrostSigningSession
     ) {
         val items = database.frostSigningSessionDao().getItems(session.id)
+        val inboxReason = InboxRefusal.reasonFor(database, session.id)
         val reason = when {
+            inboxReason != null -> inboxReason
             isUnshowableSession(session, items) -> GroupStatementRefusal.REASON
             !holdsShareFor(database, session) -> GENERATION_REFUSAL
             else -> "Declined to sign"

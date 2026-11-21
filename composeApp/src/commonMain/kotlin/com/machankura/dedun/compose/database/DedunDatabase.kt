@@ -158,6 +158,7 @@ import com.machankura.dedun.compose.database.model.GroupInboxWrap
 import com.machankura.dedun.compose.database.model.InboxKey
 import com.machankura.dedun.compose.database.model.InboxKeyCeremony
 import com.machankura.dedun.compose.database.model.InboxKeyCeremonyMessage
+import com.machankura.dedun.compose.database.model.InboxSigning
 import com.machankura.dedun.compose.database.model.FrostSignerMessage
 import com.machankura.dedun.compose.database.model.FrostSigningItem
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -230,6 +231,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         InboxKey::class,
         InboxKeyCeremony::class,
         InboxKeyCeremonyMessage::class,
+        InboxSigning::class,
         KeyShareGeneration::class,
         KeyShareMember::class,
         ShareRefreshConfirmation::class,
@@ -583,7 +585,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // v53 adds the group's inbox (docs/group-inbox.md, Phase 3, Giza's v45; docs/giza-second-batch.md,
         // Phase 6): InboxKeyCeremony, InboxKeyCeremonyMessage and InboxKey, kept apart from DkgSession so
         // no signing path can find a threshold-1 key, and GroupInboxWrap, GroupInboxMessage and
-        // GroupInboxPublication. New tables only, so Room generates it.
+        // GroupInboxPublication, and InboxSigning (Phase 5). New tables only, so Room generates it.
         AutoMigration(from = 52, to = 53),
     ]
 )

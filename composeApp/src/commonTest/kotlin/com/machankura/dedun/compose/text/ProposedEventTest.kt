@@ -120,14 +120,19 @@ class ProposedEventTest {
     }
 
     /**
-     * docs/group-inbox.md, Phase 1: the events a group's inbox is made of are, today, kinds
-     * the app has no words for. Phases 5 and 8 give them words.
+     * docs/group-inbox.md: the group's inbox key and its relays are said by what they are
+     * (Phase 5). A seal is still said by its number until Phase 8 gives it words.
      */
     @Test
-    fun `an inbox key, a DM relay list and a seal are said by their numbers today`() {
-        listOf(10044, 10050, 13).forEach { kind ->
-            assertEquals("Event of kind $kind", ProposedEvent.summarize(event(kind)).label)
-        }
+    fun `an inbox key and its relays are named, and a seal is still a number`() {
+        val key = "e".repeat(64)
+        val announcement = ProposedEvent.summarize(event(10044, tags = arrayOf(arrayOf("n", key))))
+        assertEquals("The group's inbox key", announcement.label)
+        assertEquals("Key eeeeeeee…eeeeeeee", announcement.detail)
+        val relays = ProposedEvent.summarize(event(10050, tags = arrayOf(arrayOf("relay", "wss://inbox.example.com/"))))
+        assertEquals("Where the group receives private messages", relays.label)
+        assertEquals("inbox.example.com", relays.detail)
+        assertEquals("Event of kind 13", ProposedEvent.summarize(event(13)).label)
     }
 
     private fun event(

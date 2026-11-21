@@ -16,9 +16,9 @@ import com.machankura.dedun.compose.text.ProposedEvent
  * What Dedun does today with the events a group's inbox is made of (docs/group-inbox.md,
  * Phase 1). Written to pass now and flipped on purpose by the phase that changes each:
  *
- * - a peer's proposal to sign a kind 10044 (an encryption key) or a kind 13 (a NIP-17 seal)
- *   reaches the member as a bare number, and nothing declines it. Phase 5 and Phase 8 put a
- *   refusal in front of each;
+ * - a peer's proposal to sign a kind 13 (a NIP-17 seal) reaches the member as a bare number,
+ *   and nothing declines it. Phase 8 puts a refusal in front of it, as Phase 5 did for a kind
+ *   10044 (an encryption key), which this pins declined now;
  * - the only gift wraps the app asks relays for are its own identity's. Phase 6 adds the
  *   group's.
  */
@@ -52,9 +52,13 @@ class GroupInboxTodayJvmTest {
     }
 
     @Test
-    fun `a peer's inbox key reaches the member as a number, and can be signed`() {
+    fun `a peer's inbox key nobody here made is declined out loud`() = runBlocking {
+        // Flipped by Phase 5: the signer refuses an announcement of a key the group's
+        // admins did not make together (docs/group-inbox.md, D5).
         val sent = proposeAndDeliver(10044, arrayOf(arrayOf("n", "e".repeat(64))), "")
-        assertPutToTheMemberByNumber(sent, 10044)
+        val session = assertNotNull(harness.db.frostSigningSessionDao().getSessionById(sent.session.id))
+        assertNotNull(session.signDeclinedAt)
+        assertEquals(listOf(InboxRefusal.KEY_NOT_MADE), harness.queued(FrostSigningEvents.DECLINE).map { it.content })
     }
 
     @Test

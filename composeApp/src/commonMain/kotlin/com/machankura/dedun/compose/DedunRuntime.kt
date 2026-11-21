@@ -28,6 +28,7 @@ import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.repository.DatabaseDkgRepository
 import com.machankura.dedun.compose.database.repository.DatabaseFrostSigningRepository
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
+import com.machankura.dedun.compose.database.repository.DatabaseGroupInboxRepository
 import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
 import com.machankura.dedun.compose.database.repository.DatabaseSearchRepository
 import com.machankura.dedun.compose.identity.Identity
@@ -96,6 +97,10 @@ class DedunRuntime(
         DatabaseFrostSigningRepository(database = auxDatabaseManager.auxDatabase, ioScope)
     }
 
+    val groupInboxRepository: DatabaseGroupInboxRepository by lazy {
+        DatabaseGroupInboxRepository(database = auxDatabaseManager.auxDatabase, ioScope)
+    }
+
     val marmotRepository: DatabaseMarmotRepository by lazy {
         DatabaseMarmotRepository(database = auxDatabaseManager.auxDatabase, ioScope)
     }
@@ -123,6 +128,7 @@ class DedunRuntime(
             chatRepository = chatRepository,
             relayRepository = nostrRepository,
             scope = ioScope,
+            groupInboxRepository = groupInboxRepository,
         )
     }
 

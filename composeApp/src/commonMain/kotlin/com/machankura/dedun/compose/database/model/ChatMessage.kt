@@ -22,6 +22,7 @@ import com.machankura.dedun.compose.nostr.GizaProtocolEvents
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
+import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
@@ -705,10 +706,16 @@ data class ChatMessage(
         const val TYPE_INBOX_KEY_COMPLETE = "inboxKeyComplete"
         const val TYPE_INBOX_KEY_FAILED = "inboxKeyFailed"
 
+        /** The group signed an announcement of its inbox's key (10044) or relays (10050). */
+        const val TYPE_INBOX_ANNOUNCED = "inboxAnnounced"
+        const val TYPE_INBOX_RELAYS_ANNOUNCED = "inboxRelaysAnnounced"
+
         val INBOX_TYPES = setOf(
             TYPE_INBOX_KEY_STARTED,
             TYPE_INBOX_KEY_COMPLETE,
             TYPE_INBOX_KEY_FAILED,
+            TYPE_INBOX_ANNOUNCED,
+            TYPE_INBOX_RELAYS_ANNOUNCED,
         )
 
         val GROUP_IDENTITY_TYPES = setOf(
@@ -2178,6 +2185,37 @@ data class ChatMessage(
                 // through the room -- identity plumbing nobody sends on purpose --
                 // and is neither a line nor a raw-JSON bubble.
                 // docs/group-nostr-profile-and-posts.md.
+                // The group announcing its inbox (docs/group-inbox.md, D5 and D6): a 10044
+                // naming the key its admins made, or a 10050 naming where mail should go.
+                // Verified, as a post is, so no member can put the announcement in the group's
+                // mouth; anything else of these kinds says nothing here.
+                InboxAnnouncement.KEY_KIND, InboxAnnouncement.RELAYS_KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    if (!event.pubKey.equals(groupId, ignoreCase = true) || !signed.verifies()) return null
+                    val content = if (event.kind == InboxAnnouncement.KEY_KIND) {
+                        val announced = database.groupSignedEventDao().getByChatRoomIdAndKind(groupId, InboxAnnouncement.KEY_KIND)
+                            .count { it.publicKey.equals(groupId, ignoreCase = true) }
+                        if (announced <= 1) {
+                            "The group has an inbox. Anyone on nostr can now write to it privately, and every admin can read what arrives."
+                        } else {
+                            "The group changed its inbox key. Mail sent to the old key can still be read by the admins who held it."
+                        }
+                    } else {
+                        "The group said where its private mail should arrive."
+                    }
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = if (event.kind == InboxAnnouncement.KEY_KIND) TYPE_INBOX_ANNOUNCED else TYPE_INBOX_RELAYS_ANNOUNCED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = content,
+                    )
+                }
+
                 MetadataEvent.KIND -> {
                     if (!event.pubKey.equals(groupId, ignoreCase = true)) return null
 

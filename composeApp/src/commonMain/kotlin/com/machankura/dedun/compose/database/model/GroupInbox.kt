@@ -112,3 +112,25 @@ data class GroupInboxPublication(
 ) {
     fun relayList(): List<String> = relays.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 }
+
+/**
+ * What a signing session that touches the group's inbox carried, and why this device refused it,
+ * if it did (docs/group-inbox.md, D5 and D12): kept past arrival because approval checks again,
+ * and the decline has to say why.
+ */
+@Entity(
+    foreignKeys = [
+        ForeignKey(entity = ChatRoom::class, parentColumns = ["id"], childColumns = ["chatRoomId"], onDelete = ForeignKey.CASCADE)
+    ],
+    indices = [Index("chatRoomId")],
+)
+data class InboxSigning(
+    @PrimaryKey
+    val sessionId: String,
+    val chatRoomId: String,
+    /** A reply's sealed manifest, as its proposal carried it (D11). */
+    val manifest: String? = null,
+    /** Why this device declined, in the words the decline carries. */
+    val refusal: String? = null,
+    val createdAt: Instant = Clock.System.now(),
+)

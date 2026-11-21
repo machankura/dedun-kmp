@@ -59,6 +59,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.nostr.SignInSync
 import kotlinx.coroutines.sync.withPermit
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.managers.GroupInboxPublisher
+import com.machankura.dedun.compose.repository.GroupInboxRepository
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -68,6 +71,7 @@ class SynchronizationViewModel(
     val chatRepository: ChatRepository,
     val relayRepository: RelayRepository,
     val scope: CoroutineScope,
+    val groupInboxRepository: GroupInboxRepository? = null,
 ): ViewModel() {
 
     val relaysSocketManager = RelaysSocketManager(
@@ -88,6 +92,11 @@ class SynchronizationViewModel(
         chatRepository = chatRepository,
         holdConnections = AppLifecycle.holdConnections,
     )
+
+    /** Sends what this device owes relays for its groups' inboxes (docs/group-inbox.md, D7). */
+    private val groupInboxPublisher = groupInboxRepository?.let {
+        GroupInboxPublisher(repository = it, transport = relaysSocketManager)
+    }
 
     companion object {
         private const val TAG = "SynchronizationViewModel"
@@ -139,6 +148,7 @@ class SynchronizationViewModel(
             chatRepository: ChatRepository,
             relayRepository: RelayRepository,
             scope: CoroutineScope,
+            groupInboxRepository: GroupInboxRepository? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SynchronizationViewModel(
@@ -146,7 +156,8 @@ class SynchronizationViewModel(
                     nostrRepository = nostrRepository,
                     chatRepository = chatRepository,
                     relayRepository = relayRepository,
-                    scope = scope
+                    scope = scope,
+                    groupInboxRepository = groupInboxRepository,
                 )
             }
         }
@@ -266,6 +277,17 @@ class SynchronizationViewModel(
                             // belongs here for the same reason the pumps do: it needs the
                             // active wallet's key pair, and a wallet switch must tear it down.
                             launch(Dispatchers.IO) { liveSubscriptionManager.observe(keyPair) }
+                            // The group inbox's announcements and replies this device
+                            // owes relays. docs/group-inbox.md, D7 and D10.
+                            groupInboxPublisher?.takeIf { ExperimentalFeatures.groupInbox }?.let { publisher ->
+                                launch(Dispatchers.IO) {
+                                    runCatching { publisher.run() }
+                                        .onFailure {
+                                            if (it is CancellationException) throw it
+                                            logger.e("Publishing inbox events stopped", it)
+                                        }
+                                }
+                            }
                             // A key ceremony this profile opened, taken from a key to a
                             // working room without anybody pressing a button: the key
                             // state proposed, a subgroup's certificate asked for, the
