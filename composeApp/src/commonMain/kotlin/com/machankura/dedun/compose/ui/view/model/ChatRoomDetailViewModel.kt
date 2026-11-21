@@ -111,7 +111,7 @@ class ChatRoomDetailViewModel(
                 // Initiate new chat... and navigate to new chat...
                 ChatRoomDetailUIState.Error("Missing chat room")
             } else {
-                // One read of the capability for the two things that need it. It
+                // One read of the capability for the things that need it. It
                 // walks the room's ceremonies looking for a share, so asking twice
                 // would do the same walk twice for one answer.
                 val canSign = localChatRoom.chatRoom.mlsGroupState != null &&
@@ -148,6 +148,8 @@ class ChatRoomDetailViewModel(
                     groupKeyState = chatRepository.groupKeyState(chatRoomId),
                     signedGroupKeyStateEvent = chatRepository.signedGroupKeyStateEvent(chatRoomId),
                     subgroups = chatRepository.subgroupsOf(chatRoomId),
+                    groupNostrProfile = chatRepository.groupNostrProfile(chatRoomId),
+                    canProposeAsGroup = canSign && roomIsOpen,
                     parentChatRoomId = chatRepository.parentOf(chatRoomId),
                     walletPolicy = chatRepository.walletPolicyOf(chatRoomId),
                     guardianDelay = chatRepository.guardiansOf(chatRoomId)?.firstOrNull()?.delay,

@@ -20,6 +20,8 @@ import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.activeUserPublicKey
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRoomId
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
@@ -43,8 +45,9 @@ import kotlin.time.Instant
  * The row on the group's screen that stands for its signed work, and what it
  * opens.
  *
- * The group's nostr profile, relay lists and posts had rows here, and a paste
- * for proposing any of them; they are gone, and the wallet is what is left.
+ * The group's wallets, and what the group says as itself on nostr: its profile
+ * (docs/group-nostr-profile-and-posts.md). The relay lists were not brought back
+ * with it (D1), so their row stays absent.
  */
 @OptIn(ExperimentalTestApi::class)
 class GroupSignedWorkRowsJvmTest {
@@ -155,14 +158,35 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     @Test
-    fun `the group's screen has no nostr profile, relays, posts or paste`() = render(state()) {
-        onNodeWithText("Nostr profile").assertDoesNotExist()
-        onNodeWithText("Relays").assertDoesNotExist()
-        onNodeWithText("Posts").assertDoesNotExist()
-        onNodeWithText("Propose event").assertDoesNotExist()
+    fun `a Marmot room names its profile, and the row opens it`() {
+        var opened: Route? = null
 
-        // The rest of the screen is there, so the rows' absence is an absence
-        // rather than a screen that failed to draw.
+        render(state(groupNostrProfile = GroupSignedWorkFixtures.profile), onNavigateToRoute = { opened = it }) {
+            onNodeWithText("Nostr profile").assertIsDisplayed()
+            onNodeWithText("Translation collective · group@example.com").assertIsDisplayed()
+                .performClick()
+        }
+
+        assertEquals(GroupNostrProfileRoute(activeUserPublicKey, chatRoomId, relayHint = null), opened)
+    }
+
+    @Test
+    fun `a room whose profile this device does not hold says it is not described`() = render(state()) {
+        onNodeWithText("Nostr profile").assertIsDisplayed()
+        onNodeWithText("Not described yet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a NIP-17 room has no nostr identity of its own to show`() = render(
+        state(groupNostrProfile = GroupSignedWorkFixtures.profile, mlsGroupState = null)
+    ) {
+        onNodeWithText("Nostr profile").assertDoesNotExist()
+        onNodeWithText("Subgroups").assertIsDisplayed()
+    }
+
+    @Test
+    fun `there is no relays row`() = render(state(groupNostrProfile = GroupSignedWorkFixtures.profile)) {
+        onNodeWithText("Relays").assertDoesNotExist()
         onNodeWithText("Subgroups").assertIsDisplayed()
     }
 
@@ -184,11 +208,15 @@ class GroupSignedWorkRowsJvmTest {
         mlsGroupState: String? = "state",
         groupWallet: GroupWallet? = null,
         wavelengthOnchainChains: Set<Chain> = emptySet(),
+        groupNostrProfile: GroupNostrProfile? = null,
+        canProposeAsGroup: Boolean = true,
     ) = ChatRoomDetailUIState.Loaded(
         localChatRoom = GroupSignedWorkFixtures.localChatRoom(mlsGroupState),
         groupKeyState = GroupSignedWorkFixtures.groupKeyState,
         groupWallet = groupWallet,
         wavelengthOnchainChains = wavelengthOnchainChains,
+        groupNostrProfile = groupNostrProfile,
+        canProposeAsGroup = canProposeAsGroup,
     )
 
     /** An onchain wallet on the Lightning wallet's network; only its presence matters to these rows. */

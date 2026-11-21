@@ -1,5 +1,11 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.not_described_yet
+import dedun.composeapp.generated.resources.no_name_on_this_profile
+import dedun.composeapp.generated.resources.nostr_profile
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import androidx.compose.material.icons.filled.Badge
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
 import dedun.composeapp.generated.resources.disappearing_messages
 import dedun.composeapp.generated.resources.disappearing_messages_room_supporting
@@ -984,6 +990,34 @@ fun ChatRoomDetailScreen(
                                             )
                                         }
                                     }
+                                }
+
+                                item {
+                                    HorizontalDivider()
+                                }
+                            }
+
+                            // What the group says about itself on nostr, as the group
+                            // signed it (docs/group-nostr-profile-and-posts.md). A
+                            // Marmot room only: the room's id is the key it signs as,
+                            // and a NIP-17 room has no key of its own to describe.
+                            // Shown to every member -- the profile is worth reading
+                            // without a share -- and the screen behind it is where a
+                            // member who holds one finds the editor.
+                            if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState != null) {
+                                item {
+                                    GroupNostrProfileRow(
+                                        groupNostrProfile = chatRoomDetailUIState.groupNostrProfile,
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                GroupNostrProfileRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    relayHint = relayHint
+                                                )
+                                            )
+                                        }
+                                    )
                                 }
 
                                 item {
@@ -2275,6 +2309,7 @@ private fun SubgroupCard(
                             else -> stringResource(Res.string.created_you_are_not_a_member)
                         }
                     )
+
                     // What the parent decided about its wallet, from the certificate:
                     // founding history, like the name the row falls back to.
                     walletPolicyLabel(subgroup.walletPolicy, subgroup.guardianDelay)?.let { Text(it) }
@@ -2896,5 +2931,46 @@ private fun GroupDmRowCard(
         Card(modifier = Modifier.fillMaxWidth()) { content() }
     } else {
         Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) { content() }
+    }
+}
+
+/**
+ * The row on the group's screen that leads to its nostr profile: what the group is
+ * called and its nostr address, or that this device holds no profile for it. The
+ * signing-key card's shape, since both are the group's identity rather than its
+ * members' business.
+ */
+@Composable
+private fun GroupNostrProfileRow(
+    groupNostrProfile: GroupNostrProfile?,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            leadingContent = {
+                Icon(Icons.Default.Badge, contentDescription = Decorative)
+            },
+            trailingContent = {
+                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+            },
+            headlineContent = {
+                Text(text = stringResource(Res.string.nostr_profile))
+            },
+            supportingContent = {
+                Text(
+                    text = groupNostrProfile?.let { profile ->
+                        listOfNotNull(
+                            profile.name() ?: stringResource(Res.string.no_name_on_this_profile),
+                            profile.nip05()
+                        ).joinToString(" · ")
+                    } ?: stringResource(Res.string.not_described_yet),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        )
     }
 }

@@ -1959,4 +1959,25 @@
     <string name="duration_days">%1$d days</string>
     <string name="duration_one_week">1 week</string>
     <string name="duration_weeks">%1$d weeks</string>
+    <!-- The group's nostr profile: docs/group-nostr-profile-and-posts.md -->
+    <string name="about">About</string>
+    <string name="could_not_ask_the_group_to_sign_this_profile">Couldn't ask the group to sign this profile.</string>
+    <string name="edit_nostr_profile">Edit Nostr profile</string>
+    <string name="eg_a_group_translating_hard_books">eg. A group translating hard books into Sesotho</string>
+    <string name="eg_group_example_com">eg. group@example.com</string>
+    <string name="eg_https_example_com">eg. https://example.com</string>
+    <string name="eg_https_example_com_group_png">eg. https://example.com/group.png</string>
+    <string name="eg_translation_collective">eg. Translation collective</string>
+    <string name="no_name_on_this_profile">No name on this profile</string>
+    <string name="nostr_address">Nostr address</string>
+    <string name="nostr_profile">Nostr profile</string>
+    <string name="picture_url">Picture URL</string>
+    <string name="propose_nostr_profile">Propose Nostr profile</string>
+    <string name="signed_by_the_group_on">Signed by the group on %1$s</string>
+    <string name="the_group_signs_its_profile_so_it_takes_a_quorum">The group signs this, so it takes a quorum. An empty field unsays what the group had said.</string>
+    <string name="this_group_has_no_shared_key_to_sign_a_profile">This group has no shared key, so it cannot sign a profile. Run a shared key ceremony first.</string>
+    <string name="website">Website</string>
+    <string name="what_the_group_says_about_itself_on_nostr">What the group says about itself on Nostr</string>
+    <string name="not_described_yet">Not described yet</string>
+    <string name="this_device_holds_no_profile_for_this_group">This device holds no profile for this group. A profile signed before you joined isn't passed on.</string>
 </resources>

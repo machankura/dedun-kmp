@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.EditGroupNostrProfileRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
+import com.machankura.dedun.compose.ui.composable.EditGroupNostrProfileScreen
+import com.machankura.dedun.compose.ui.composable.GroupNostrProfileScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
 import com.machankura.dedun.compose.ui.composable.DisappearingMessagesScreen
 import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
@@ -2253,6 +2257,46 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     },
+                )
+            }
+            // The group's nostr profile: docs/group-nostr-profile-and-posts.md.
+            composable<GroupNostrProfileRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupNostrProfileRoute>()
+
+                GroupNostrProfileScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    onNavigateToRoute = { actionRoute ->
+                        navController.navigate(route = actionRoute)
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<EditGroupNostrProfileRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<EditGroupNostrProfileRoute>()
+
+                EditGroupNostrProfileScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the form so back returns to the profile rather
+                        // than to an edit whose proposal has already gone out.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<EditGroupNostrProfileRoute> {
+                                inclusive = true
+                            }
+                        }
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
                 )
             }
             composable<ImplementationPendingRoute> { backStackEntry ->

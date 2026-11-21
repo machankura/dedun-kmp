@@ -5,6 +5,7 @@ import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import fr.acinq.bitcoin.Chain
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -103,6 +104,20 @@ sealed interface ChatRoomDetailUIState {
          * missing and what to do about it.
          */
         val canAddSubgroup: Boolean = false,
+        /**
+         * The kind:0 the group signed about itself, or null while this device holds
+         * none. docs/group-nostr-profile-and-posts.md.
+         */
+        val groupNostrProfile: GroupNostrProfile? = null,
+        /**
+         * Whether this device could put a profile or a post to the group's quorum:
+         * a Marmot room it has not left, not disbanded, where it holds a share of
+         * the key (D4 of docs/group-nostr-profile-and-posts.md). Capability, not
+         * permission -- any member with a share may propose, and the quorum is what
+         * decides. The identity's own capability, an npub that cannot sign at all,
+         * is the screen's to add: it is a composition local, not room state.
+         */
+        val canProposeAsGroup: Boolean = false,
         /**
          * Whether this device administers a current-profile room: it may remove a
          * member and disband the group, both commits through the publish gate. A
