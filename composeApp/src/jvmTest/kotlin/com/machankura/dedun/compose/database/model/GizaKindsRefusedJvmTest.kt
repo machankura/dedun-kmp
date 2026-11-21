@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import androidx.room3.Room
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
@@ -34,7 +35,7 @@ import kotlin.time.Instant
  * are refused by every Dedun reader that owns the same number: docs/giza-into-dedun.md,
  * Phase 1.
  *
- * Until Dedun's kinds move (Phase K), 30340-30343 are its deposit attribution, coin
+ * Until K3 (Phase K), 30340-30343 are the legacy numbers of its deposit attribution, coin
  * assignment and the two transfer kinds, and 30370-30377 its Wavelength wallet's. A Giza or
  * Bennu device sends refresh rounds at the first numbers and governance envelopes at the
  * second. A reader that believed one would put a line in a member's ledger, so each is fed
@@ -131,11 +132,12 @@ class GizaKindsRefusedJvmTest {
 
     @Test
     fun `the numbers this test covers are the ones the two apps share`() {
-        assertEquals(30340, DepositAttributionEvent.KIND)
-        assertEquals(30341, CoinAssignmentEvent.KIND)
-        assertEquals(30342, TransferRequestEvent.KIND)
-        assertEquals(30343, MemberTransferEvent.KIND)
-        assertEquals(30370..30377, GroupWavelengthEvents.WALLET_STATEMENT..GroupWavelengthEvents.HIGH_WATER)
+        // Dedun's kinds have moved (Phase K, K1), but these are still their legacy numbers, read on every device.
+        assertEquals(30340, MovedKinds.NEW_TO_LEGACY[DepositAttributionEvent.KIND])
+        assertEquals(30341, MovedKinds.NEW_TO_LEGACY[CoinAssignmentEvent.KIND])
+        assertEquals(30342, MovedKinds.NEW_TO_LEGACY[TransferRequestEvent.KIND])
+        assertEquals(30343, MovedKinds.NEW_TO_LEGACY[MemberTransferEvent.KIND])
+        assertEquals((30370..30377).toList(), (GroupWavelengthEvents.WALLET_STATEMENT..GroupWavelengthEvents.HIGH_WATER).map { MovedKinds.NEW_TO_LEGACY[it] })
         assertTrue((30340..30343).all { it in GizaProtocolEvents.ALL })
         assertTrue((30370..30377).all { it in GizaProtocolEvents.ALL })
     }

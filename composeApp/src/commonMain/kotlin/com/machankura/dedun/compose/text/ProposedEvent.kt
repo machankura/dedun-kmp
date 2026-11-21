@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.text
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
@@ -51,7 +52,7 @@ object ProposedEvent {
      * person: a caller with profiles to hand passes them, and one without gets
      * the summary without a name rather than a wrong one.
      */
-    fun summarize(event: Event, nameOf: (HexKey) -> String? = { null }): Summary = when (event.kind) {
+    fun summarize(event: Event, nameOf: (HexKey) -> String? = { null }): Summary = when (MovedKinds.current(event.kind)) {
         // The one thing a group signs that is about the group rather than about
         // its work, and the only one a member sees before the room has done
         // anything. Shown as the path and the ceremony rather than as the key:

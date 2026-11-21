@@ -9,6 +9,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
 import kotlin.time.Clock
 import kotlinx.coroutines.flow.Flow
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
+import com.machankura.dedun.compose.nostr.MovedKinds
 
 @Dao
 abstract class GroupSignedEventDao {
@@ -25,18 +26,36 @@ abstract class GroupSignedEventDao {
     @Query("SELECT * FROM GroupSignedEvent WHERE chatRoomId = :chatRoomId ORDER BY createdAt ASC, id ASC")
     abstract suspend fun getByChatRoomId(chatRoomId: String): List<GroupSignedEvent>
 
-    @Query("SELECT * FROM GroupSignedEvent WHERE chatRoomId = :chatRoomId AND kind = :kind ORDER BY createdAt ASC, id ASC")
-    abstract suspend fun getByChatRoomIdAndKind(chatRoomId: String, kind: Kind): List<GroupSignedEvent>
+    /**
+     * A room's signed events of one kind, oldest first -- under either of its numbers.
+     *
+     * A kind that moved out of Giza's way (docs/giza-into-dedun.md, Phase K) is asked for by its new
+     * number, and its events signed before the move keep the legacy one: a group-signed event's id hashes
+     * its kind. So every query here by kind asks for both, through [MovedKinds.both], and a kind that never
+     * moved is asked for alone.
+     */
+    suspend fun getByChatRoomIdAndKind(chatRoomId: String, kind: Kind): List<GroupSignedEvent> =
+        getByChatRoomIdAndKinds(chatRoomId, MovedKinds.both(kind))
+
+    @Query("SELECT * FROM GroupSignedEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds) ORDER BY createdAt ASC, id ASC")
+    abstract suspend fun getByChatRoomIdAndKinds(chatRoomId: String, kinds: List<Kind>): List<GroupSignedEvent>
 
     /**
      * How many events of one kind a room has signed, as it changes: what the group's Lightning node watches
      * to act on a payment or channel action the moment the group authorises it, rather than at its next poll.
+     * Under either of the kind's numbers, as [getByChatRoomIdAndKind].
      */
-    @Query("SELECT COUNT(*) FROM GroupSignedEvent WHERE chatRoomId = :chatRoomId AND kind = :kind")
-    abstract fun observeCountByChatRoomIdAndKind(chatRoomId: String, kind: Kind): Flow<Int>
+    fun observeCountByChatRoomIdAndKind(chatRoomId: String, kind: Kind): Flow<Int> =
+        observeCountByChatRoomIdAndKinds(chatRoomId, MovedKinds.both(kind))
+
+    @Query("SELECT COUNT(*) FROM GroupSignedEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds)")
+    abstract fun observeCountByChatRoomIdAndKinds(chatRoomId: String, kinds: List<Kind>): Flow<Int>
+
+    /** How many signed events of these kinds every room holds, as it changes -- under either of each kind's numbers. */
+    fun observeCountOfKinds(kinds: List<Kind>): Flow<Int> = observeCountOfEveryNumber(MovedKinds.both(kinds))
 
     @Query("SELECT COUNT(*) FROM GroupSignedEvent WHERE kind IN (:kinds)")
-    abstract fun observeCountOfKinds(kinds: List<Kind>): Flow<Int>
+    abstract fun observeCountOfEveryNumber(kinds: List<Kind>): Flow<Int>
 
     /**
      * Every signed event of one kind, whatever room it was signed in.

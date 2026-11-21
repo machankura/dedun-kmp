@@ -4,14 +4,25 @@ import androidx.room3.Dao
 import androidx.room3.Query
 import androidx.room3.Upsert
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
+import com.machankura.dedun.compose.nostr.MovedKinds
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MarmotInnerEventDao {
 
-    /** When each sender last sent anything of [kinds] in a room. */
+    /**
+     * When each sender last sent anything of [kinds] in a room -- under either of each kind's numbers.
+     *
+     * A kind that moved out of Giza's way (docs/giza-into-dedun.md, Phase K) is asked for by its new
+     * number, and devices on an earlier release still send, and this device stored, the legacy one. So
+     * the kind queries here ask for both through [MovedKinds.both]; a kind that never moved is asked
+     * for alone.
+     */
+    suspend fun newestBySender(chatRoomId: String, kinds: List<Int>): List<SenderSeen> =
+        newestBySenderOfEveryNumber(chatRoomId, MovedKinds.both(kinds))
+
     @Query("SELECT publicKey, MAX(createdAt) AS at FROM MarmotInnerEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds) GROUP BY publicKey")
-    suspend fun newestBySender(chatRoomId: String, kinds: List<Int>): List<SenderSeen>
+    suspend fun newestBySenderOfEveryNumber(chatRoomId: String, kinds: List<Int>): List<SenderSeen>
 
     /**
      * Everything this key has queued for the group and not yet sent, oldest first.
@@ -63,15 +74,22 @@ interface MarmotInnerEventDao {
      * decrypt, but one that arrives before the proposal opening its session has
      * nowhere to be filed at the time.
      */
+    suspend fun getByChatRoomAndKinds(chatRoomId: String, kinds: List<Int>): List<MarmotInnerEvent> =
+        getByChatRoomAndEveryNumber(chatRoomId, MovedKinds.both(kinds))
+
+    /** [getByChatRoomAndKinds] for exactly these numbers. */
     @Query("SELECT * FROM MarmotInnerEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds) ORDER BY createdAt ASC")
-    suspend fun getByChatRoomAndKinds(chatRoomId: String, kinds: List<Int>): List<MarmotInnerEvent>
+    suspend fun getByChatRoomAndEveryNumber(chatRoomId: String, kinds: List<Int>): List<MarmotInnerEvent>
 
     /**
      * How many of a room's inner events are of the given kinds, as it changes: what the group's Lightning
      * node watches to answer an invoice request the moment one arrives, rather than at its next poll.
      */
+    fun observeCountByChatRoomAndKinds(chatRoomId: String, kinds: List<Int>): Flow<Int> =
+        observeCountByChatRoomAndEveryNumber(chatRoomId, MovedKinds.both(kinds))
+
     @Query("SELECT COUNT(*) FROM MarmotInnerEvent WHERE chatRoomId = :chatRoomId AND kind IN (:kinds)")
-    fun observeCountByChatRoomAndKinds(chatRoomId: String, kinds: List<Int>): Flow<Int>
+    fun observeCountByChatRoomAndEveryNumber(chatRoomId: String, kinds: List<Int>): Flow<Int>
 
     @Query("DELETE FROM MarmotInnerEvent WHERE id = :id")
     suspend fun deleteById(id: String)

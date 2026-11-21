@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -60,7 +61,7 @@ object GroupWavelengthReports {
     /** Files one inbound snapshot or stopped message. A malformed one is nobody's business but the log's. */
     suspend fun process(database: DedunDatabase, localChatRoom: LocalChatRoom, innerEvent: Event) {
         runCatching {
-            when (innerEvent.kind) {
+            when (MovedKinds.current(innerEvent.kind)) {
                 GroupWavelengthEvents.SNAPSHOT -> receive(database, localChatRoom.chatRoom.id, innerEvent.pubKey, CommonJson.decodeFromString(GroupWavelengthSnapshot.serializer(), innerEvent.content))
                 GroupWavelengthEvents.STOPPED -> receiveStopped(database, localChatRoom.chatRoom.id, innerEvent)
             }

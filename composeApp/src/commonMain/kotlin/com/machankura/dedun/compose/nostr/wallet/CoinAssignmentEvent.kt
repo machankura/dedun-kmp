@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wallet
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -36,12 +37,16 @@ import kotlin.time.Clock
  * deposit would count its money twice: once when it came in, and again now. An assignment says
  * who *owns* a coin, moves no tally, and is read only by the owner rule and the balances.
  *
- * ### Why 30341
+ * ### Why 30391, and 30341 before it
  *
  * After the deposit attribution, 30340. Nothing used 30341 to 30348.
+ *
+ * It was 30341 until Giza and Bennu took that number for a share refresh round. It moved to
+ * 30391 (docs/giza-into-dedun.md, Phase K), and 30341 is its legacy number: an event signed
+ * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object CoinAssignmentEvent {
-    val KIND: Kind = 30341
+    val KIND: Kind = 30391
 
     private const val CHAIN_TAG = "chain"
     private const val COIN_TAG = "coin"
@@ -67,7 +72,7 @@ object CoinAssignmentEvent {
         }
         return EventTemplate<Nothing>(
             createdAt = createdAt,
-            kind = KIND,
+            kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(CHAIN_TAG, GroupWalletStatementEvent.chainName(chain)),
                 *coins.flatMap { coin ->
@@ -85,7 +90,7 @@ object CoinAssignmentEvent {
      * coin it doesn't list.
      */
     fun read(event: Event): Assignments? = runCatching {
-        if (event.kind != KIND) return null
+        if (!MovedKinds.isKind(event.kind, KIND)) return null
         val chain = event.tags.filter { it.isNotEmpty() && it[0] == CHAIN_TAG }.singleOrNull()?.getOrNull(1)
             ?.let(GroupWalletStatementEvent::chainNamed) ?: return null
         val amounts = event.tags.filter { it.isNotEmpty() && it[0] == COIN_TAG }.map { tag ->

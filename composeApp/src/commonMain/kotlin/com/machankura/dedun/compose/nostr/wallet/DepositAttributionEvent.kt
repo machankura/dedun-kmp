@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wallet
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -28,12 +29,16 @@ import kotlin.time.Clock
  *
  * The newest signed attribution of a deposit wins, so a mistake is corrected by signing again.
  *
- * ### Why 30340
+ * ### Why 30390, and 30340 before it
  *
  * After the depositor statement, 30339.
+ *
+ * It was 30340 until Giza and Bennu took that number for a share refresh round. It moved to
+ * 30390 (docs/giza-into-dedun.md, Phase K), and 30340 is its legacy number: an event signed
+ * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object DepositAttributionEvent {
-    val KIND: Kind = 30340
+    val KIND: Kind = 30390
 
     private const val CHAIN_TAG = "chain"
     private const val DEPOSIT_TAG = "deposit"
@@ -91,7 +96,7 @@ object DepositAttributionEvent {
         require(attributions.all { it.amount > 0 }) { "an amount is positive" }
         return EventTemplate<Nothing>(
             createdAt = createdAt,
-            kind = KIND,
+            kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(CHAIN_TAG, GroupWalletStatementEvent.chainName(chain)),
                 *attributions.map { arrayOf(DEPOSIT_TAG, it.key.text, it.member?.lowercase() ?: GROUP, it.amount.toString()) }.toTypedArray(),
@@ -102,7 +107,7 @@ object DepositAttributionEvent {
 
     /** What [event] attributes, by its shape: a network, and at least one deposit, none twice, each well formed. */
     fun read(event: Event): Attributions? = runCatching {
-        if (event.kind != KIND) return null
+        if (!MovedKinds.isKind(event.kind, KIND)) return null
         val chain = event.tags.filter { it.isNotEmpty() && it[0] == CHAIN_TAG }.singleOrNull()?.getOrNull(1)
             ?.let(GroupWalletStatementEvent::chainNamed) ?: return null
         val attributions = event.tags.filter { it.isNotEmpty() && it[0] == DEPOSIT_TAG }.map { tag ->

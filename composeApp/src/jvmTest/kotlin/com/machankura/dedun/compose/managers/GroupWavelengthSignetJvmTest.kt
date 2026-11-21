@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.StaticConfig
 import co.touchlab.kermit.platformLogWriter
@@ -98,7 +99,7 @@ class GroupWavelengthSignetJvmTest {
         val fixture = GroupLightningFixture(chain = Chain.Signet).also { f ->
             val inherited = f.dispatch
             f.dispatch = { to, event ->
-                when (event.kind) {
+                when (MovedKinds.current(event.kind)) {
                     in GroupWavelengthEvents.CO_SIGNING -> GroupArkCoSigner.process(to.db, to.room, event, to.publicKey)
                     else -> inherited(to, event)
                 }

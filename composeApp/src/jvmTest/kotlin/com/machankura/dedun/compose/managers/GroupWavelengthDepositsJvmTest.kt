@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
@@ -40,7 +41,7 @@ class GroupWavelengthDepositsJvmTest {
     private val fixture = GroupLightningFixture().also { f ->
         val inherited = f.dispatch
         f.dispatch = { to, event ->
-            when (event.kind) {
+            when (MovedKinds.current(event.kind)) {
                 GroupWavelengthEvents.DEPOSIT_REQUEST, GroupWavelengthEvents.DEPOSIT_ANSWER -> GroupWavelengthDeposits.process(to.db, to.room, event)
                 else -> inherited(to, event)
             }

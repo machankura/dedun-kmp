@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wallet
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -44,12 +45,16 @@ import kotlin.time.Clock
  * carries an inner event of this kind whose content is the signed request, whole: [carried], as
  * [GroupPayoutDestinationEvent] does.
  *
- * ### Why 30342
+ * ### Why 30392, and 30342 before it
  *
  * After the coin assignment, 30341. Nothing used 30342 to 30348.
+ *
+ * It was 30342 until Giza and Bennu took that number for a share refresh round. It moved to
+ * 30392 (docs/giza-into-dedun.md, Phase K), and 30342 is its legacy number: an event signed
+ * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object TransferRequestEvent {
-    val KIND: Kind = 30342
+    val KIND: Kind = 30392
 
     private const val D_TAG = "d"
     private const val ROOM_TAG = "h"
@@ -171,9 +176,10 @@ object TransferRequestEvent {
 
     private fun signed(privateKey: PrivateKey, createdAt: Long, tags: Array<Array<String>>): Event {
         val giver = privateKey.xOnlyPublicKey().value.toHex()
-        val id = EventHasher.hashId(giver, createdAt, KIND, tags, "")
+        val kind = MovedKinds.written(KIND)
+        val id = EventHasher.hashId(giver, createdAt, kind, tags, "")
         val sig = Crypto.signSchnorr(ByteVector32(id), privateKey, null)
-        return Event(id = id, pubKey = giver, createdAt = createdAt, kind = KIND, tags = tags, content = "", sig = sig.toHex())
+        return Event(id = id, pubKey = giver, createdAt = createdAt, kind = kind, tags = tags, content = "", sig = sig.toHex())
     }
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
@@ -183,7 +189,7 @@ object TransferRequestEvent {
      * The signature is [verified]'s.
      */
     fun read(event: Event): Statement? = runCatching {
-        if (event.kind != KIND || event.content.isNotEmpty()) return null
+        if (!MovedKinds.isKind(event.kind, KIND) || event.content.isNotEmpty()) return null
         fun all(name: String) = event.tags.filter { it.isNotEmpty() && it[0] == name }
         fun single(name: String): String? = all(name).singleOrNull()?.takeIf { it.size >= 2 }?.get(1)
 
@@ -224,8 +230,8 @@ object TransferRequestEvent {
      * by somebody other than the member who signed it.
      */
     fun carried(inner: Event): Event? {
-        if (inner.kind != KIND) return null
-        val request = Event.fromJsonOrNull(inner.content)?.takeIf { it.kind == KIND } ?: return null
+        if (!MovedKinds.isKind(inner.kind, KIND)) return null
+        val request = Event.fromJsonOrNull(inner.content)?.takeIf { MovedKinds.isKind(it.kind, KIND) } ?: return null
         return request.takeIf { it.pubKey.equals(inner.pubKey, ignoreCase = true) }
     }
 }

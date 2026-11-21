@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
@@ -294,7 +295,7 @@ object GroupWavelengthPayouts {
             .filter { it.session.stage != FrostSigningStage.FAILED && it.session.stage != FrostSigningStage.COMPLETE }
             .flatMap { it.items }
             .mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
-            .filter { it.kind == GroupWavelengthPaymentEvent.KIND }
+            .filter { MovedKinds.isKind(it.kind, GroupWavelengthPaymentEvent.KIND) }
             .mapNotNull { event ->
                 GroupWavelengthOnchainPayoutEvent.read(event.tags)?.takeIf { it.chain == chain && it.member.equals(member, ignoreCase = true) }?.let { it.id to it.maxSat }
                     ?: GroupWavelengthPaymentEvent.read(event.tags)?.takeIf { it.chain == chain && it.payout?.member.equals(member, ignoreCase = true) }

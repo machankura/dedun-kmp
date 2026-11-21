@@ -18,7 +18,7 @@ import kotlin.test.assertNull
  * The coin assignment (30341), read and believed -- one mutation per check.
  * `docs/payouts-only.md`, Phase 1.
  */
-class CoinAssignmentEventJvmTest {
+open class CoinAssignmentEventJvmTest {
     private val chain = Chain.Regtest
     private val group = keyMaterial("6a0b")
     private val room = roomOf(group)

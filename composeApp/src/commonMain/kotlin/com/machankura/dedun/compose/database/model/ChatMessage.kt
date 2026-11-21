@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.text.grouped
@@ -1143,7 +1144,7 @@ data class ChatMessage(
                         event.kind in DkgRitualEvents.ALL ||
                             event.kind in FrostSigningEvents.ALL ||
                             event.kind in GroupLightningEvents.PROTOCOL ||
-                            event.kind in GroupWavelengthEvents.PROTOCOL
+                            MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL
                     )
 
                     database.marmotInnerEventDao().upsert(
@@ -1438,7 +1439,7 @@ data class ChatMessage(
                 content = event.toJson(),
             )
 
-            return when (event.kind) {
+            return when (MovedKinds.current(event.kind)) {
                 // First, above every content kind: protocol kinds are never
                 // content, whatever else might share their number, and a `when`
                 // takes the first arm that matches. The ceremony's 30310 and 30311

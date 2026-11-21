@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wavelength
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.Kind
@@ -73,7 +74,7 @@ object GroupWavelengthWalletStatementEvent {
     fun template(statement: Statement, createdAt: Long = Clock.System.now().epochSeconds): EventTemplate<*> =
         EventTemplate<Nothing>(
             createdAt = createdAt,
-            kind = KIND,
+            kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(D_TAG, identifier(statement.chain, statement.wallet)),
                 arrayOf(CHAIN_TAG, GroupWalletStatementEvent.chainName(statement.chain)),

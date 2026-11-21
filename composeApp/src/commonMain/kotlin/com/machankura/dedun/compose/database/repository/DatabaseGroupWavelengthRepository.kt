@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
@@ -68,7 +69,7 @@ class DatabaseGroupWavelengthRepository(
             .filter { it.session.stage != FrostSigningStage.FAILED && it.session.stage != FrostSigningStage.COMPLETE }
             .firstOrNull { signing ->
                 signing.items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
-                    .any { it.kind == GroupWavelengthWalletStatementEvent.KIND && GroupWavelengthWalletStatementEvent.read(it.tags)?.ceremonyId == keyId }
+                    .any { MovedKinds.isKind(it.kind, GroupWavelengthWalletStatementEvent.KIND) && GroupWavelengthWalletStatementEvent.read(it.tags)?.ceremonyId == keyId }
             }?.session?.id
 
     override suspend fun wallets(chatRoomId: String, chain: Chain): List<GroupWavelengthWalletManager.Wallet> =

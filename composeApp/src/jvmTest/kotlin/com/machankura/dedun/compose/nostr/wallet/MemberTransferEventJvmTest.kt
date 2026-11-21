@@ -25,7 +25,7 @@ import kotlin.test.assertNull
  * The giver's request (30342) and the group's transfer (30343), read and believed -- one mutation per check, each enough on
  * its own to refuse it. `docs/member-transfers.md`, Phase 1.
  */
-class MemberTransferEventJvmTest {
+open class MemberTransferEventJvmTest {
     private val chain = Chain.Regtest
     private val group = keyMaterial("6a0b")
     private val room = roomOf(group)

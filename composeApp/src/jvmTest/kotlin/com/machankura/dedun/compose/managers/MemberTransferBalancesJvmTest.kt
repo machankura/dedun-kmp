@@ -216,7 +216,8 @@ class MemberTransferBalancesJvmTest {
     @Test
     fun `a late joiner is handed every transfer`() {
         assertTrue(ChronicleEvent.isChroniclable(MemberTransferEvent.KIND))
-        assertEquals(ChronicleEvent.KINDS.all.size - 1, ChronicleEvent.KINDS.applyRank(MemberTransferEvent.KIND), "and applied last")
+        val last = ChronicleEvent.KINDS.all.maxOf { ChronicleEvent.KINDS.applyRank(it)!! }
+        assertEquals(last, ChronicleEvent.KINDS.applyRank(MemberTransferEvent.KIND), "and applied last")
     }
 
     @Test

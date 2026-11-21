@@ -18,7 +18,7 @@ import kotlin.test.assertNull
  * checks before signing, and an attribution signed through the real signing manager, then
  * corrected, reaching every device's tallies.
  */
-class DepositAttributionJvmTest {
+open class DepositAttributionJvmTest {
     private val fixture = GroupLightningFixture()
 
     @AfterTest

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.chronicle
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 
@@ -24,14 +25,18 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
  */
 class ChronicleKinds(private val applyOrder: List<Kind>) {
 
-    /** Every kind a chronicle may carry. */
-    val all: Set<Kind> = applyOrder.toSet()
+    /**
+     * Every kind a chronicle may carry, under each of its numbers. A kind that moved out of Giza's way
+     * (docs/giza-into-dedun.md, Phase K) is listed by its new number, and the events a chronicle hands
+     * on were mostly signed under the legacy one, which their ids still hash.
+     */
+    val all: Set<Kind> = MovedKinds.both(applyOrder).toSet()
 
     /** A chronicle that may carry nothing asks for nothing and sends nothing. */
     fun isEmpty(): Boolean = applyOrder.isEmpty()
 
     /** Where [kind] sits in apply order, or null if a chronicle may not carry it at all. */
-    fun applyRank(kind: Kind): Int? = applyOrder.indexOf(kind).takeIf { it >= 0 }
+    fun applyRank(kind: Kind): Int? = applyOrder.indexOf(MovedKinds.current(kind)).takeIf { it >= 0 }
 
     fun isChroniclable(kind: Kind): Boolean = kind in all
 

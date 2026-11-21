@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.wallet.wavelength.group
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.model.GroupArkLeave
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
 import com.machankura.dedun.compose.database.model.GroupArkDepositAddress
@@ -63,7 +64,7 @@ class GroupWavelengthRunnerJvmTest {
     private val fixture = GroupLightningFixture().also { f ->
         val inherited = f.dispatch
         f.dispatch = { to, event ->
-            when (event.kind) {
+            when (MovedKinds.current(event.kind)) {
                 in GroupWavelengthEvents.CO_SIGNING -> GroupArkCoSigner.process(to.db, to.room, event, to.publicKey)
                 else -> inherited(to, event)
             }

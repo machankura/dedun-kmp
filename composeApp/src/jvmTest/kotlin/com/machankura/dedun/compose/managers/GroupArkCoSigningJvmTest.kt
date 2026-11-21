@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkPendingRound
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
@@ -71,13 +72,13 @@ import kotlin.time.Duration.Companion.seconds
  * Phase 6 of `docs/group-wavelength-wallet.md`: four devices, one operator, and signatures that have to satisfy bitcoin's own
  * interpreter, through the same pipe a daemon's requests take.
  */
-class GroupArkCoSigningJvmTest {
-    private var fixture = fixture()
+open class GroupArkCoSigningJvmTest {
+    protected var fixture = fixture()
 
     private fun fixture(onDisk: Boolean = false) = GroupLightningFixture(onDisk = onDisk).also { f ->
         val inherited = f.dispatch
         f.dispatch = { to, event ->
-            when (event.kind) {
+            when (MovedKinds.current(event.kind)) {
                 in GroupWavelengthEvents.CO_SIGNING -> GroupArkCoSigner.process(to.db, to.room, event, to.publicKey)
                 else -> inherited(to, event)
             }
@@ -581,7 +582,7 @@ class GroupArkCoSigningJvmTest {
         val cheat = group.all[1]
         val inherited = fixture.dispatch
         fixture.dispatch = { to, event ->
-            val tampered = if (event.kind == GroupWavelengthEvents.SIGNATURE_SHARES && event.pubKey == cheat.publicKey) {
+            val tampered = if (MovedKinds.current(event.kind) == GroupWavelengthEvents.SIGNATURE_SHARES && event.pubKey == cheat.publicKey) {
                 val batch = CommonJson.decodeFromString(ArkWire.ShareBatch.serializer(), event.content)
                 val spoiled = batch.copy(items = batch.items.map { it.copy(share = it.share.dropLast(2) + if (it.share.endsWith("00")) "01" else "00") })
                 Event(event.id, event.pubKey, event.createdAt, event.kind, event.tags, CommonJson.encodeToString(ArkWire.ShareBatch.serializer(), spoiled), event.sig)
@@ -620,7 +621,7 @@ class GroupArkCoSigningJvmTest {
         val inherited = fixture.dispatch
         val lost = mutableSetOf<Int>()
         fixture.dispatch = { to, event ->
-            if (event.kind == GroupWavelengthEvents.PROVISION && event.pubKey == operatorKey && to.index in setOf(1, 2) && lost.add(to.index)) Unit
+            if (MovedKinds.current(event.kind) == GroupWavelengthEvents.PROVISION && event.pubKey == operatorKey && to.index in setOf(1, 2) && lost.add(to.index)) Unit
             else inherited(to, event)
         }
         val group = group()

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -112,7 +113,7 @@ object MemberTransfers {
      */
     suspend fun beingSigned(database: DedunDatabase, chatRoomId: String): List<MemberTransferEvent.Transfer> =
         beingSignedEvents(database, chatRoomId)
-            .filter { it.kind == MemberTransferEvent.KIND }
+            .filter { MovedKinds.isKind(it.kind, MemberTransferEvent.KIND) }
             .mapNotNull { MemberTransferEvent.read(it) }
 
     /** Whether [member] is giving something on [rail] and [chain] that the group is still signing, other than [except]. */
@@ -423,7 +424,7 @@ object MemberTransfers {
             .firstOrNull { session ->
                 database.frostSigningSessionDao().getItems(session.id)
                     .mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
-                    .any { it.kind == MemberTransferEvent.KIND && MemberTransferEvent.read(it)?.requestId == request.id }
+                    .any { MovedKinds.isKind(it.kind, MemberTransferEvent.KIND) && MemberTransferEvent.read(it)?.requestId == request.id }
             }
 
     /**
@@ -450,7 +451,7 @@ object MemberTransfers {
 
     /** [signed], a request or a withdrawal, into [chatRoomId] whole, as an inner event's content, with its line on this device. */
     private suspend fun carry(database: DedunDatabase, chatRoomId: String, signed: Event) {
-        require(signed.kind == TransferRequestEvent.KIND) { "not a transfer request" }
+        require(MovedKinds.isKind(signed.kind, TransferRequestEvent.KIND)) { "not a transfer request" }
         val createdAt = Clock.System.now()
         val tags = arrayOf(arrayOf("h", chatRoomId.lowercase()))
         val content = signed.toJson()
@@ -460,10 +461,10 @@ object MemberTransfers {
             userPublicKey = signed.pubKey,
             tags = tags,
             content = content,
-            kind = TransferRequestEvent.KIND,
+            kind = MovedKinds.written(TransferRequestEvent.KIND),
             createdAt = createdAt,
         )
-        val inner = Event(id, signed.pubKey, createdAt.epochSeconds, TransferRequestEvent.KIND, tags, content, "")
+        val inner = Event(id, signed.pubKey, createdAt.epochSeconds, MovedKinds.written(TransferRequestEvent.KIND), tags, content, "")
         ChatMessage.applyInnerEvent(
             database = database,
             groupId = chatRoomId,

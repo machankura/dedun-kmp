@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
@@ -54,7 +55,7 @@ object GroupWavelengthDeposits {
 
     suspend fun process(database: DedunDatabase, localChatRoom: LocalChatRoom, innerEvent: Event) {
         runCatching {
-            when (innerEvent.kind) {
+            when (MovedKinds.current(innerEvent.kind)) {
                 GroupWavelengthEvents.DEPOSIT_REQUEST -> {
                     val request = CommonJson.decodeFromString(GroupWavelengthDepositRequest.serializer(), innerEvent.content)
                     fileRequest(database, localChatRoom.chatRoom.id, innerEvent.pubKey, request, Instant.fromEpochSeconds(innerEvent.createdAt))

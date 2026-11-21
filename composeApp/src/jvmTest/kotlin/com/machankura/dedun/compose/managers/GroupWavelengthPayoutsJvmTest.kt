@@ -35,7 +35,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /** The Wavelength wallet pays only its members, from what they put in. Until this rule, a quorum could approve paying anyone. */
-class GroupWavelengthPayoutsJvmTest {
+open class GroupWavelengthPayoutsJvmTest {
     private val fixture = GroupLightningFixture()
     private val now get() = Clock.System.now().epochSeconds
     private val key get() = GroupArkCoSigner.walletKey(fixture.roomId, fixture.chain, 0)

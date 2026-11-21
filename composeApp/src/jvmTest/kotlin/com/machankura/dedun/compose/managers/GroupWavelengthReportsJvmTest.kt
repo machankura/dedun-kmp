@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.database.model.IcebergKeySession
@@ -104,7 +105,7 @@ class GroupWavelengthReportsJvmTest {
         val all = elected()
         fixture.dispatch.let { inherited ->
             fixture.dispatch = { to, event ->
-                when (event.kind) {
+                when (MovedKinds.current(event.kind)) {
                     GroupWavelengthEvents.SNAPSHOT, GroupWavelengthEvents.STOPPED -> GroupWavelengthReports.process(to.db, to.room, event)
                     else -> inherited(to, event)
                 }

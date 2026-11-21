@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.model.GroupArkVtxo
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import kotlin.time.Clock
@@ -130,7 +131,7 @@ class GroupLightningFixture(
 
     /** What the inbound path does with one message, per kind. Later phases add theirs. */
     var dispatch: suspend (to: Device, event: Event) -> Unit = { to, event ->
-        when (event.kind) {
+        when (MovedKinds.current(event.kind)) {
             in FrostSigningEvents.ALL -> FrostSigningManager.processSigningPayload(to.db, to.room, event, to.publicKey)
             in GroupLightningEvents.CEREMONY -> IcebergRitualManager.processCeremonyPayload(to.db, to.room, event, to.publicKey, to.privateKey)
             GroupLightningEvents.NODE_SEED -> GroupLightningWalletManager.receiveSeed(to.db, to.room, event, to.publicKey, to.privateKey)

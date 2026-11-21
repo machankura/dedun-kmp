@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.database.model.ChatMessage
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -224,8 +225,13 @@ object GroupLightningWalletManager {
     /**
      * Queues one of this device's messages as a Marmot inner event for the room, as the ritual managers do,
      * and returns the row: a message worth a line gets it from here, since this device never reads its own back.
+     *
+     * The Wavelength wallet's messages come through here too, so [kind] is put through [MovedKinds.written]: a kind
+     * that moved goes out under the number this release writes (docs/giza-into-dedun.md, Phase K), and any other
+     * kind goes out as it is.
      */
-    internal suspend fun queue(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, kind: Int, content: String, tags: Array<Array<String>> = emptyArray()): MarmotInnerEvent {
+    internal suspend fun queue(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey, newKind: Int, content: String, tags: Array<Array<String>> = emptyArray()): MarmotInnerEvent {
+        val kind = MovedKinds.written(newKind)
         val createdAt = Clock.System.now().epochSeconds
         val id = EventHasher.hashId(pubKey = userPublicKey, createdAt = createdAt, kind = kind, tags = tags, content = content)
         val queued = MarmotInnerEvent(id = id, publicKey = userPublicKey, kind = kind, createdAt = Instant.fromEpochSeconds(createdAt), tags = tags, content = content, chatRoomId = localChatRoom.chatRoom.id)

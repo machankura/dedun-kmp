@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.wallet.PayoutFees
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -191,7 +192,7 @@ object GroupArkCoSigner {
     /** Routes one inbound co-signing message. */
     suspend fun process(database: DedunDatabase, localChatRoom: LocalChatRoom, innerEvent: Event, userPublicKey: HexKey) {
         try {
-            when (innerEvent.kind) {
+            when (MovedKinds.current(innerEvent.kind)) {
                 GroupWavelengthEvents.PROVISION -> fileProvision(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.SIGNING_REQUEST -> handleBatch(database, localChatRoom, innerEvent, userPublicKey)
                 GroupWavelengthEvents.ECHO -> fileEchoes(database, localChatRoom, innerEvent, userPublicKey)

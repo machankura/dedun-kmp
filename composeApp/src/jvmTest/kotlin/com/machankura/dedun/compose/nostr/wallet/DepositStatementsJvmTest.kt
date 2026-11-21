@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
  * The depositor statement (30339) and the deposit attribution (30340), read and believed --
  * one mutation per check. `docs/member-deposits.md`, Phase 1.
  */
-class DepositStatementsJvmTest {
+open class DepositStatementsJvmTest {
     private val chain = Chain.Regtest
     private val group = keyMaterial("6a0b")
     private val room = roomOf(group)

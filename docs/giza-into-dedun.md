@@ -349,6 +349,26 @@ compare against a number itself.
   - a two-device test: a K1 device and a device writing the new numbers co-sign one
     Wavelength payment and agree on one ledger.
 
+**K1 as built.** One object, `MovedKinds`, holds the map of 17 legacy numbers to new ones.
+Each kind's `KIND` constant is now its new number. Writers go through `MovedKinds.written`,
+which gives the legacy number while `writesNew` is false. The event builders and the shared
+`GroupLightningWalletManager.queue` are the only places that write. Dispatch is on
+`MovedKinds.current(kind)`: `ChatMessage`, `ProposedEvent`, `NostrDao`'s routing, the
+Wavelength co-signer, reports and deposits. So are the signers' checks in
+`FrostSigningManager` and `MemberTransfers`.
+
+Every kind query goes through the DAOs, which ask for both numbers themselves.
+`GroupSignedEventDao.getByChatRoomIdAndKind`, its counts, and `MarmotInnerEventDao`'s three kind
+queries are now concrete functions over `MovedKinds.both`, so no caller had to change.
+`ChronicleKinds` carries both numbers, and ranks them as one kind.
+
+The tests:
+
+- `MovedKindsJvmTest`;
+- nine wallet suites rerun with `writesNew` on (`UnderNewKindsJvmTest`);
+- `GroupArkCoSigningAcrossReleasesJvmTest`: the whole Wavelength co-signing suite, with alternate
+  devices on the two releases.
+
 ### K2: write new
 
 - **Writers** switch to the new numbers. That covers the FROST proposals for attributions,

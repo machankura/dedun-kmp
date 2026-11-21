@@ -40,7 +40,7 @@ import kotlin.time.Clock
  * Asking for, checking and signing a transfer: `docs/member-transfers.md`, Phase 3. One test per check in T4, each enough on
  * its own to refuse, and the whole way from a giver's request to every device's balances.
  */
-class MemberTransfersJvmTest {
+open class MemberTransfersJvmTest {
     private val fixture = GroupLightningFixture()
     private val now get() = Clock.System.now().epochSeconds
 

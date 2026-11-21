@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wallet
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent.Rail
@@ -40,12 +41,16 @@ import kotlin.time.Clock
  * disagree about three balances. The group's signature puts them in an order, and each signer refuses the second, as it
  * refuses a second payout.
  *
- * ### Why 30343
+ * ### Why 30393, and 30343 before it
  *
  * After the giver's request, 30342.
+ *
+ * It was 30343 until Giza and Bennu took that number for a share refresh round. It moved to
+ * 30393 (docs/giza-into-dedun.md, Phase K), and 30343 is its legacy number: an event signed
+ * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object MemberTransferEvent {
-    val KIND: Kind = 30343
+    val KIND: Kind = 30393
 
     private const val D_TAG = "d"
     private const val D_PREFIX = "transfer:"
@@ -92,7 +97,7 @@ object MemberTransferEvent {
         }
         return EventTemplate<Nothing>(
             createdAt = createdAt,
-            kind = KIND,
+            kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(D_TAG, D_PREFIX + request.id.lowercase()),
                 arrayOf(CHAIN_TAG, GroupWalletStatementEvent.chainName(request.chain)),
@@ -112,7 +117,7 @@ object MemberTransferEvent {
      * with every tag beside it -- or null. Whose room signed it, and whether the request was about that room, is [verify]'s.
      */
     fun read(event: Event): Transfer? = runCatching {
-        if (event.kind != KIND || event.content.isNotEmpty()) return null
+        if (!MovedKinds.isKind(event.kind, KIND) || event.content.isNotEmpty()) return null
         fun all(name: String) = event.tags.filter { it.isNotEmpty() && it[0] == name }
         fun single(name: String): String? = all(name).singleOrNull()?.takeIf { it.size >= 2 }?.get(1)
 

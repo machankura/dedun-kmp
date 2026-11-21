@@ -42,7 +42,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Phase 4 of `docs/group-wavelength-wallet.md`: the ceremony's purpose, the statement and the seed. */
-class GroupWavelengthWalletJvmTest {
+open class GroupWavelengthWalletJvmTest {
     private val fixture = GroupLightningFixture()
     private val arkOperator = "02" + "ab".repeat(32)
 
@@ -401,7 +401,7 @@ class GroupWavelengthWalletJvmTest {
 
     @Test
     fun `its kinds stand apart from the Lightning wallet's and each other's`() {
-        assertEquals((30370..30382).toSet(), GroupWavelengthEvents.ALL)
+        assertEquals((30400..30412).toSet(), GroupWavelengthEvents.ALL)
         assertTrue(GroupWavelengthEvents.ALL.intersect(GroupLightningEvents.ALL).isEmpty())
         assertTrue(GroupWavelengthEvents.ALL.min() > GroupLightningEvents.ALL.max())
     }

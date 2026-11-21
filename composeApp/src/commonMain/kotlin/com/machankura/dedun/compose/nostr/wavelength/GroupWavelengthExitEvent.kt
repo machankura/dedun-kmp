@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wavelength
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -24,7 +25,7 @@ object GroupWavelengthExitEvent {
     fun template(exit: Exit): EventTemplate<*> =
         EventTemplate<Nothing>(
             createdAt = exit.askedAt,
-            kind = KIND,
+            kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(D_TAG, "exit:${GroupWalletStatementEvent.chainName(exit.chain)}:${exit.wallet}:${exit.askedAt}"),
                 arrayOf(TYPE_TAG, TYPE_EXIT),

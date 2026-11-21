@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import androidx.room3.Room
@@ -867,7 +868,12 @@ class ChronicleApplyJvmTest {
      */
     @Test
     fun `the app's own list carries the deposit, assignment and transfer kinds, and nothing else`() {
-        assertEquals(setOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND, com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent.KIND), ChronicleEvent.CHRONICLABLE_KINDS)
+        // Each under both numbers: the three that moved out of Giza's way (docs/giza-into-dedun.md, Phase K)
+        // are still handed on under their legacy ones, which the signed events' ids hash.
+        assertEquals(
+            MovedKinds.both(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND, com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent.KIND)).toSet(),
+            ChronicleEvent.CHRONICLABLE_KINDS,
+        )
         assertTrue(ChronicleEvent.KINDS.applyRank(DepositorStatementEvent.KIND)!! < ChronicleEvent.KINDS.applyRank(DepositAttributionEvent.KIND)!!)
     }
 

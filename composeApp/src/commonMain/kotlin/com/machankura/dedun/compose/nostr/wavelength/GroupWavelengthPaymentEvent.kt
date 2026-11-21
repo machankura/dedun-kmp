@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wavelength
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -123,7 +124,7 @@ object GroupWavelengthPaymentEvent {
     fun template(payment: Payment, createdAt: Long = Clock.System.now().epochSeconds): EventTemplate<*> =
         EventTemplate<Nothing>(
             createdAt = createdAt,
-            kind = KIND,
+            kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(D_TAG, "${GroupWalletStatementEvent.chainName(payment.chain)}:${payment.wallet}:${payment.paymentHash}"),
                 arrayOf(INVOICE_TAG, payment.invoice),

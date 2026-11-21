@@ -3,26 +3,32 @@ package com.machankura.dedun.compose.nostr.wavelength
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 
 /**
- * The kinds of a group's Wavelength wallet (`docs/group-wavelength-wallet.md`), from 30370, past the Lightning
- * family and with room after it. Every one is an MLS inner event and none is ever broadcast. The key ceremony
- * isn't here: it is the Lightning wallet's ceremony with a purpose on it.
+ * The kinds of a group's Wavelength wallet (`docs/group-wavelength-wallet.md`). Every one is an MLS inner event
+ * and none is ever broadcast. The key ceremony isn't here: it is the Lightning wallet's ceremony with a purpose on
+ * it.
+ *
+ * They were 30370-30382, from just past the Lightning family, until Giza and Bennu took 30370-30377 for governed
+ * rooms. The whole family moved to 30400-30412, keeping its order (docs/giza-into-dedun.md, Phase K), and each old
+ * number is its kind's legacy number: an event signed or sent under it keeps it, and every reader takes either
+ * through [com.machankura.dedun.compose.nostr.MovedKinds]. Every set below holds the new numbers; dispatch on
+ * `MovedKinds.current(kind)`.
  */
 object GroupWavelengthEvents {
-    val WALLET_STATEMENT: Kind = 30370
-    val OPERATOR_STATEMENT: Kind = 30371
-    val AUTH_SEED: Kind = 30372
+    val WALLET_STATEMENT: Kind = 30400
+    val OPERATOR_STATEMENT: Kind = 30401
+    val AUTH_SEED: Kind = 30402
 
-    val SIGNING_REQUEST: Kind = 30373
-    val ECHO: Kind = 30374
-    val PROVISION: Kind = 30375
-    val SIGNATURE_SHARES: Kind = 30376
-    val HIGH_WATER: Kind = 30377
+    val SIGNING_REQUEST: Kind = 30403
+    val ECHO: Kind = 30404
+    val PROVISION: Kind = 30405
+    val SIGNATURE_SHARES: Kind = 30406
+    val HIGH_WATER: Kind = 30407
 
-    val SNAPSHOT: Kind = 30378
-    val AUTHORISATION: Kind = 30379
-    val DEPOSIT_REQUEST: Kind = 30380
-    val DEPOSIT_ANSWER: Kind = 30381
-    val STOPPED: Kind = 30382
+    val SNAPSHOT: Kind = 30408
+    val AUTHORISATION: Kind = 30409
+    val DEPOSIT_REQUEST: Kind = 30410
+    val DEPOSIT_ANSWER: Kind = 30411
+    val STOPPED: Kind = 30412
 
     /** The co-signing protocol's kinds, for routing to the co-signer. */
     val CO_SIGNING: Set<Kind> = setOf(SIGNING_REQUEST, ECHO, PROVISION, SIGNATURE_SHARES, HIGH_WATER)

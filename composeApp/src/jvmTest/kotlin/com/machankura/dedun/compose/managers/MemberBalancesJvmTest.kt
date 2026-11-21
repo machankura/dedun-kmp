@@ -59,7 +59,7 @@ import kotlin.time.Instant
  * What each member may be paid out, and where to, and the ledger's paid-out column made fit to
  * compute it from -- `docs/payouts-only.md`, Phase 2.
  */
-class MemberBalancesJvmTest {
+open class MemberBalancesJvmTest {
     private val db: DedunDatabase = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
 
     @AfterTest

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.MovedKinds
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -109,7 +110,7 @@ object GroupWavelengthWalletManager {
 
     /** [verify], saying why. */
     suspend fun checked(database: DedunDatabase, chatRoomId: String, signed: GroupSignedEvent): Verdict {
-        if (signed.kind != GroupWavelengthWalletStatementEvent.KIND || !signed.verifies()) return Verdict.Refused(Refusal.UNREADABLE)
+        if (!MovedKinds.isKind(signed.kind, GroupWavelengthWalletStatementEvent.KIND) || !signed.verifies()) return Verdict.Refused(Refusal.UNREADABLE)
         val statement = GroupWavelengthWalletStatementEvent.read(signed.tags) ?: return Verdict.Refused(Refusal.UNREADABLE)
         fun refused(why: Refusal) = Verdict.Refused(why, statement)
         // Not only what this device offers: a statement it doesn't believe is a wallet it has nothing to co-sign for.
