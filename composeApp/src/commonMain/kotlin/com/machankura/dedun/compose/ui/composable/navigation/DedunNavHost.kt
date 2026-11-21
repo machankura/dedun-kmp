@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
+import com.machankura.dedun.compose.ui.composable.BroadcastGroupSignedEventScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.AddGroupPostRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
 import com.machankura.dedun.compose.ui.composable.AddGroupPostScreen
@@ -2338,6 +2340,26 @@ fun DedunNavHost(
                             }
                         }
                     },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            // A group-signed event, sent to relays: docs/group-nostr-profile-and-posts.md.
+            composable<BroadcastGroupSignedEventRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<BroadcastGroupSignedEventRoute>()
+
+                BroadcastGroupSignedEventScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    signedEventId = route.signedEventId,
+                    chatRepository = databaseChatRepository,
+                    // Handed the pool itself rather than a queue to write to: a
+                    // group-signed event must not become a `NostrEvent` row, and
+                    // the queue hangs off one (D7). See
+                    // `BroadcastGroupSignedEventViewModel`.
+                    publishTransport = synchronizationViewModel.relaysSocketManager,
                     onNavigateBack = {
                         navController.popBackStack()
                     }

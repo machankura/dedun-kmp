@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.widgets.buttons.BroadcastButton
+import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -67,8 +69,8 @@ import kotlin.time.Instant
  * What the group says about itself on nostr, as the group signed it.
  *
  * Pushed from its row on the group's screen, which names the profile and
- * nothing more. This is where it is read: the card and -- for a member holding
- * a share of the key -- the way into the editor. A device that holds no profile
+ * nothing more. This is where it is read: the card, the broadcast under it,
+ * and -- for a member holding a share of the key -- the way into the editor. A device that holds no profile
  * for the group says so, and offers the editor from the same place.
  *
  * "Holds no profile", not "has none": the group's signed work is not handed to
@@ -168,10 +170,33 @@ fun GroupNostrProfileScreen(
                     ) {
                         item {
                             state.groupNostrProfile?.let { groupNostrProfile ->
-                                GroupNostrProfileCard(
-                                    groupNostrProfile = groupNostrProfile,
-                                    publicKey = chatRoomId
-                                )
+                                // The card and its broadcast button as one item,
+                                // so the button stays under the event it sends
+                                // however the list is arranged.
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    GroupNostrProfileCard(
+                                        groupNostrProfile = groupNostrProfile,
+                                        publicKey = chatRoomId
+                                    )
+
+                                    // Not gated on a share: the signature is the
+                                    // group's, whoever repeats it (D4).
+                                    BroadcastButton(
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                BroadcastGroupSignedEventRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    relayHint = relayHint,
+                                                    signedEventId = groupNostrProfile.signedEvent.id
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
                             } ?: EmptyState(
                                 message = stringResource(
                                     Res.string.this_device_holds_no_profile_for_this_group
@@ -213,7 +238,8 @@ fun GroupNostrProfileScreen(
  * The signing date is here because a group's profile is standing state with no
  * other clue to its age -- and because the alternative reading, that this arrived
  * from a relay a moment ago, is exactly what has not happened. Nothing on this card
- * was published by being signed -- see `GroupNostrProfile`.
+ * was published by being signed -- see `GroupNostrProfile` -- and the broadcast
+ * button under it is how it gets to a relay.
  */
 @Composable
 private fun GroupNostrProfileCard(

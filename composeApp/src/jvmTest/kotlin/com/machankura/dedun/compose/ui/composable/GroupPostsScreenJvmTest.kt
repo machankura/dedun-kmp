@@ -21,6 +21,7 @@ import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRo
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.post
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.profile
 import com.machankura.dedun.compose.ui.composable.navigation.routes.AddGroupPostRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
@@ -32,7 +33,8 @@ import kotlin.test.assertTrue
 
 /**
  * The group's posts on their own screen: newest first and whole, under the
- * group's name, and the composer for a member holding a share.
+ * group's name, each with its broadcast, and the composer for a member holding
+ * a share.
  * docs/group-nostr-profile-and-posts.md.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -61,6 +63,39 @@ class GroupPostsScreenJvmTest {
     ) {
         onNodeWithText("Something the group said").assertIsDisplayed()
         onNodeWithText(chatRoomId.take(16).chunked(8).joinToString(" ")).assertIsDisplayed()
+    }
+
+    @Test
+    fun `every post offers a broadcast under its card`() {
+        var opened: Route? = null
+
+        render(
+            state(posts = listOf(post("The second thing", 1_700_000_900), post("The first thing", 1_700_000_000)), canSign = false),
+            onNavigateToRoute = { opened = it }
+        ) {
+            val buttons = onAllNodesWithText("Broadcast")
+            buttons.assertCountEquals(2)
+
+            val newest = onNodeWithText("The second thing").getBoundsInRoot().top
+            val oldest = onNodeWithText("The first thing").getBoundsInRoot().top
+            val first = buttons[0].getBoundsInRoot().top
+            val second = buttons[1].getBoundsInRoot().top
+
+            assertTrue(newest < first && first < oldest, "the first post's broadcast is not under its card")
+            assertTrue(oldest < second, "the second post's broadcast is not under its card")
+
+            buttons[1].performClick()
+        }
+
+        assertEquals(
+            BroadcastGroupSignedEventRoute(
+                activeUserPublicKey = activeUserPublicKey,
+                chatRoomId = chatRoomId,
+                relayHint = null,
+                signedEventId = post("The first thing", 1_700_000_000).signedEvent.id
+            ),
+            opened
+        )
     }
 
     @Test

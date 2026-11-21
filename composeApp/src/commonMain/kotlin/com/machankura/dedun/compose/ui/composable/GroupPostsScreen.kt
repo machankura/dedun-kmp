@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.widgets.buttons.BroadcastButton
+import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,8 +71,9 @@ import kotlin.time.Instant
  * What the group has said publicly, as itself, newest first.
  *
  * Pushed from its row on the group's screen, which counts the posts and nothing
- * more. This is where they are read: one card per post and -- for a member
- * holding a share of the key -- the way into the composer. A device holding no
+ * more. This is where they are read: one card per post with a broadcast under
+ * it, and -- for a member holding a share of the key -- the way into the
+ * composer. A device holding no
  * posts says so, and offers the composer from the same place; a post signed
  * before this member joined is not passed on (docs/group-nostr-profile-and-posts.md,
  * D8), so "holds none" is all it can say.
@@ -183,11 +186,32 @@ fun GroupPostsScreen(
                                 items = state.groupPosts,
                                 key = { post -> post.signedEvent.id }
                             ) { post ->
-                                GroupPostCard(
-                                    post = post,
-                                    publicKey = chatRoomId,
-                                    groupNostrProfile = state.groupNostrProfile
-                                )
+                                // The card and its broadcast button as one item,
+                                // so the button stays under the event it sends
+                                // however the list is arranged.
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    GroupPostCard(
+                                        post = post,
+                                        publicKey = chatRoomId,
+                                        groupNostrProfile = state.groupNostrProfile
+                                    )
+
+                                    BroadcastButton(
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                BroadcastGroupSignedEventRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    relayHint = relayHint,
+                                                    signedEventId = post.signedEvent.id
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
                             }
 
                             if (canPropose) {

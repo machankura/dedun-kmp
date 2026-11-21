@@ -8,6 +8,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -18,6 +19,7 @@ import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.activeUserPublicKey
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRoomId
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.profile
+import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.EditGroupNostrProfileRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
@@ -26,10 +28,11 @@ import com.machankura.dedun.compose.ui.theme.DedunTheme
 import com.machankura.dedun.compose.ui.view.state.GroupNostrProfileUIState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
- * The group's nostr profile on its own screen: what is drawn, and who is offered
- * the editor. docs/group-nostr-profile-and-posts.md.
+ * The group's nostr profile on its own screen: what is drawn, what the broadcast
+ * under it sends, and who is offered the editor. docs/group-nostr-profile-and-posts.md.
  */
 @OptIn(ExperimentalTestApi::class)
 class GroupNostrProfileScreenJvmTest {
@@ -40,6 +43,37 @@ class GroupNostrProfileScreenJvmTest {
         onNodeWithText("group@example.com").assertIsDisplayed()
         onNodeWithText("A group translating hard books into Sesotho.").assertIsDisplayed()
         onAllNodesWithText("Signed by the group on", substring = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun `the broadcast under the card sends the profile's event, share or no share`() {
+        var opened: Route? = null
+
+        render(state(groupNostrProfile = profile, canSign = false), onNavigateToRoute = { opened = it }) {
+            // One, under the card it sends. Not gated on a share: the signature is
+            // the group's, whoever repeats it (D4).
+            val buttons = onAllNodesWithText("Broadcast")
+            buttons.assertCountEquals(1)
+            val card = onNodeWithText("group@example.com").getBoundsInRoot().top
+            assertTrue(card < buttons[0].getBoundsInRoot().top, "the broadcast is not under the card")
+
+            buttons[0].performClick()
+        }
+
+        assertEquals(
+            BroadcastGroupSignedEventRoute(
+                activeUserPublicKey = activeUserPublicKey,
+                chatRoomId = chatRoomId,
+                relayHint = null,
+                signedEventId = profile.signedEvent.id
+            ),
+            opened
+        )
+    }
+
+    @Test
+    fun `nothing held, nothing to broadcast`() = render(state(groupNostrProfile = null)) {
+        onAllNodesWithText("Broadcast").assertCountEquals(0)
     }
 
     /** docs/group-nostr-profile-and-posts.md, D6. */

@@ -1995,4 +1995,24 @@
     <string name="no_posts_yet">No posts yet</string>
     <string name="one_post">1 post</string>
     <string name="n_posts">%1$d posts</string>
+    <!-- Sending a group-signed event to relays: docs/group-nostr-profile-and-posts.md -->
+    <string name="accepted_by_n_of_m_relays">Accepted by %1$s of %2$s relays.</string>
+    <string name="add_a_relay_to_broadcast_to">Add a relay to broadcast to.</string>
+    <string name="add_relay">Add relay</string>
+    <string name="broadcast">Broadcast</string>
+    <string name="copied_the_raw_json">Copied the raw JSON</string>
+    <string name="copy_raw_json">Copy raw JSON</string>
+    <string name="eg_wss_relay_example_com">eg. wss://relay.example.com</string>
+    <string name="no_relays_to_broadcast_to">No relays to broadcast to. Add one above.</string>
+    <string name="relay_accepted">Accepted</string>
+    <string name="relay_could_not_send">Couldn't send: %1$s</string>
+    <string name="relay_no_answer">No answer</string>
+    <string name="relay_rejected">Rejected: %1$s</string>
+    <string name="relays">Relays</string>
+    <string name="relay_sending">Sending…</string>
+    <string name="relay_url">Relay URL</string>
+    <string name="sends_the_event_exactly_as_the_group_signed_it">Sends the event to each relay below, exactly as the group signed it. Any member holding it can send it: the signature is the group's, not yours.</string>
+    <string name="that_is_not_a_relay_address">That isn't a relay address. Relays start with wss:// and cannot be on this device.</string>
+    <string name="that_relay_is_already_in_this_list">That relay is already in this list.</string>
+    <string name="the_app_s_publishing_relays_are_filled_in">The app's own publishing relays are filled in. Add or remove relays before sending.</string>
 </resources>

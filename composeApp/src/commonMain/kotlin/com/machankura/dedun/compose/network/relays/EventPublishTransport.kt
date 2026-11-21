@@ -16,9 +16,9 @@ import com.machankura.dedun.compose.network.dto.RelayDTO
  * `BroadcastNostrEventRequest` queue instead, which is durable and retried. This
  * exists for the one thing that must not: an event the group signed. The queue
  * hangs off a `NostrEvent` row, and a row for the group's event would put it into
- * the home feed and offer it to every relay the sync loop reconciles with. In Dedun
- * its callers are the group inbox's publishers (docs/group-inbox.md, D7); Giza's
- * broadcast screen, which it was made for, was not taken.
+ * the home feed and offer it to every relay the sync loop reconciles with -- see
+ * `BroadcastGroupSignedEventViewModel` for the whole of that argument. The group
+ * inbox's and direct messages' publishers send through it too (docs/group-inbox.md, D7).
  */
 interface EventPublishTransport {
 
