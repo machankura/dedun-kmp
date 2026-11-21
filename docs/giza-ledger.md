@@ -85,11 +85,11 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `051b339a` | `a0d2e4c2` | submodule refresh | 4 | taken | `613b1405` | build: lightning-kmp-app with reduced FROST enrollment down the chain |
 | `70a38d06` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is built, and what is left to push and check |
 | `d4dd87f2` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is pushed, and what is left |
-| `8dd710a1` | `cf210849` | share refresh | 7 | taken | pending | docs: rotating a group's shares without moving its key (plan) |
+| `8dd710a1` | `cf210849` | share refresh | 7 | taken | `a60855ad` | docs: rotating a group's shares without moving its key (plan) |
 | `4040ae74` | `91d0771a` | share refresh | 7 | adapted; backup half held (D5) | pending | fix: a deleted share is gone from aux.db, and aux.db leaves the phone in no backup (frost-share-refresh, Phase 5) |
 | `ebe240a4` | `9e2b06bf` | automatic key ceremony | 5 | taken | `f512a960` | docs: joining is the only approval in a key ceremony (plan) |
 | `e9c413ac` | `97841ef5` | automatic key ceremony | 5 | taken | `78287114` | test: a key ceremony run across devices with real ChillDKG (automatic ceremony, Phase 1) |
-| `fce51e20` | `af804765` | share refresh | 6 | adapted | pending | feat: a key's shares have generations, and signing reads the one it names (frost-share-refresh, Phase 6) |
+| `fce51e20` | `af804765` | share refresh | 6 | adapted | `1be93830` | feat: a key's shares have generations, and signing reads the one it names (frost-share-refresh, Phase 6) |
 | `ca5cda81` | `445d57e5` | automatic key ceremony | 5 | taken | `a3329959` | feat: joining is the only approval a key ceremony asks for (automatic ceremony, Phase 2) |
 | `9278ccd5` | `16df4c8d` | automatic key ceremony | 5 | taken | `10a9f6e1` | feat: running key ceremonies resume when the app starts (automatic ceremony, Phase 3) |
 | `d71cf0c0` | `2f51e0ae` | automatic key ceremony | 5 | adapted | `206f2d08` | feat: one approval screen for a key ceremony (automatic ceremony, Phase 4) |

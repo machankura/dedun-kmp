@@ -563,6 +563,19 @@ Bennu's port mended the shared ones. List these in the PR with what each now rea
 
 **Done when** those pass and the regtest suites are at baseline.
 
+**As built.** `fce51e20` came in as Bennu adapted it, at schema 47. Two things it needed in Dedun:
+
+- **Room's schema check outgrew a JVM method.** With 83 tables (Bennu has 64), Room's generated
+  `onValidateSchema2` passed the 64 KB limit, so `composeApp` sets Room's own processor option
+  `room.validationSplitSize` to 200.
+- **Bennu's generation-1 spend tests paid change,** which payouts-only refuses. They now pay a
+  member out.
+
+The Dedun-only tests are in: an attribution, a coin assignment, a transfer and a Wavelength
+payment approval, each signed at generation 1 after the wipe. The group swap-in reads the key
+through `thresholdKeyFor`, and its inputs are Iceberg's, so it needed nothing. jvmTest:
+2,966 run, 0 failed.
+
 ## Phase 7: rotation, re-enrollment and the Shares section, behind a flag
 
 Bennu's port Phase 7:
