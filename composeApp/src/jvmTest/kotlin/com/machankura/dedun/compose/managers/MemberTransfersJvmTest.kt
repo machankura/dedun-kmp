@@ -106,6 +106,22 @@ open class MemberTransfersJvmTest {
     }
 
     @Test
+    fun `after a refresh and the wipe, a transfer signs at generation 1 and moves the balance on every device`() = runBlocking<Unit> {
+        opened()
+        fixture.refreshOnchainKey(all)
+        val (asked, session) = MemberTransfers.request(alice.db, alice.room, keyOf(alice), fixture.chain, Rail.WAVELENGTH, bob.publicKey, 20_000, "groceries")
+        assertEquals(1, assertNotNull(session).generation, "proposed after the refresh: docs/giza-into-dedun.md, Phase 6")
+        fixture.pump(all, setOf(TransferRequestEvent.KIND))
+        fixture.signSession(all, alice, session.id)
+
+        all.forEach { device ->
+            assertEquals(10_000, wavelengthOf(device, alice), "device ${device.index}")
+            assertEquals(20_000, wavelengthOf(device, bob), "device ${device.index}")
+            assertEquals(MemberTransfers.State.SIGNED, MemberTransfers.requestsIn(device.db, fixture.roomId).single { it.request.id == asked.id }.state)
+        }
+    }
+
+    @Test
     fun `a member who holds no share asks, and another puts it to the group`() = runBlocking<Unit> {
         opened()
         // Carol's device puts Alice's signed request to the group, as a sponsor does (T10).

@@ -384,14 +384,16 @@ class GroupSpendSigningJvmTest {
     }
 
     @Test
-    fun `after a refresh and the wipe, a quorum spends the group's coins with the new shares`() = runBlocking<Unit> {
+    fun `after a refresh and the wipe, a quorum pays a member out with the new shares`() = runBlocking<Unit> {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
         openWallet(proposer, other)
+        alicesFunding(proposer, other)
         refresh(proposer)
         refresh(other)
 
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        // A payout, the only spend Dedun's group wallet signs (docs/payouts-only.md, Phase 6).
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, payoutPsbt(), chain)
         assertEquals(1, session.generation, "a spend proposed after the refresh signs at the new generation")
         val proposal = outbox(proposer).single { it.kind == FrostSigningEvents.TRANSACTION_PROPOSAL }
         assertEquals(1, FrostSigningEvents.parseGeneration(proposal.tags))
@@ -412,14 +414,15 @@ class GroupSpendSigningJvmTest {
     }
 
     @Test
-    fun `a device that missed the refresh declines a spend out loud, and reserves nothing`() = runBlocking<Unit> {
+    fun `a device that missed the refresh declines a payout out loud, and reserves nothing`() = runBlocking<Unit> {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
         openWallet(proposer, other)
+        alicesFunding(proposer, other)
         refresh(proposer)
         // The other device never heard of generation 1.
 
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, payoutPsbt(), chain)
         pump(proposer, other)
 
         val onOther = assertNotNull(other.session(session.id), "silence would leave the group waiting on it")

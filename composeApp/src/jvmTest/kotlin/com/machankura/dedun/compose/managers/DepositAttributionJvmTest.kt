@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.Attribution
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent.DepositKey
@@ -12,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The group saying whose a deposit is -- `docs/member-deposits.md`, Phase 9: what every signer
@@ -79,6 +81,47 @@ open class DepositAttributionJvmTest {
             val tallies = DepositLedger.tallies(d.db, fixture.roomId, fixture.chain)
             assertEquals(50_000_000, tallies.members.getValue(all[2].publicKey).onchainMsat, "device ${d.index}")
             assertNull(tallies.members[all[1].publicKey], "device ${d.index}")
+        }
+    }
+
+    // ---- After a share refresh (docs/giza-into-dedun.md, Phase 6) --------
+    //
+    // A refresh moves every share and leaves the key, so what the group signed with the old
+    // shares and what it signs with the new ones are one signature to anybody reading them. These
+    // are Dedun's own statements -- whose deposit it is, and whose a coin is -- signed after a
+    // refresh and the wipe that deletes the ceremony's share.
+
+    @Test
+    fun `after a refresh and the wipe, an attribution signs at generation 1 and reaches every tally`(): Unit = runBlocking {
+        val all = fixture.group()
+        fixture.openDeposits(all, all[1])
+        legacyDeposit(all)
+        fixture.refreshOnchainKey(all)
+
+        val session = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to all[1].publicKey))
+        assertEquals(1, session.generation, "proposed after the refresh, it signs at the new generation")
+        fixture.signSession(all, all[0], session.id)
+        all.forEach { d ->
+            assertEquals(50_000_000, DepositLedger.tallies(d.db, fixture.roomId, fixture.chain).members.getValue(all[1].publicKey).onchainMsat, "device ${d.index}")
+        }
+    }
+
+    @Test
+    fun `after a refresh and the wipe, a coin assignment signs at generation 1 and verifies as the room`(): Unit = runBlocking {
+        val all = fixture.group()
+        fixture.openDeposits(all, all[1])
+        fixture.openDeposits(all, all[2])
+        legacyDeposit(all)
+        fixture.refreshOnchainKey(all)
+
+        val coin = CoinAssignmentEvent.Coin(legacy, 50_000, mapOf(all[1].publicKey to 30_000, all[2].publicKey to 20_000))
+        val session = CoinAssignments.propose(all[0].db, all[0].room, all[0].publicKey, fixture.chain, listOf(coin))
+        assertEquals(1, session.generation)
+        fixture.signSession(all, all[0], session.id)
+        all.forEach { d ->
+            val signed = d.db.groupSignedEventDao().getByChatRoomIdAndKind(fixture.roomId, CoinAssignmentEvent.KIND).single()
+            assertTrue(signed.verifies(), "device ${d.index}: signed by the room, whose key the refresh left alone")
+            assertEquals(listOf(coin), CoinAssignmentEvent.read(signed.toEvent())?.coins)
         }
     }
 }

@@ -318,6 +318,27 @@ open class GroupWavelengthWalletJvmTest {
     }
 
     @Test
+    fun `after a refresh and the wipe, a payment is approved at generation 1`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        val payout = fixture.payable(all, all[1], wallet, 200_000)
+        fixture.refreshOnchainKey(all)
+        val pay = invoice(10_000_500, metadata = fixture.metadataOf(all[1]))
+        val expiresAt = Clock.System.now().epochSeconds + 3600
+
+        // The approval is the FROST key's; the Wavelength wallet's own Iceberg key never refreshes
+        // (docs/giza-into-dedun.md, Phase 6).
+        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, expiresAt, payout, fixture.metadataOf(all[1]))
+        assertEquals(1, session.generation)
+        fixture.signSession(all, all[1], session.id)
+        all.forEach { d ->
+            assertNotNull(GroupWavelengthPayments.approved(d.db, fixture.roomId, wallet, now = expiresAt - 1)[pay.paymentHash], "device ${d.index}")
+        }
+    }
+
+    @Test
     fun `an invoice with no amount can't be approved, and a label can't say another hash than its invoice`() = runBlocking<Unit> {
         val all = fixture.group()
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
