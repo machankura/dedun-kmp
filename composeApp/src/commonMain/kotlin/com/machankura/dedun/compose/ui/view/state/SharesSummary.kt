@@ -42,7 +42,8 @@ data class SharesSummary(
          */
         data class Held(val reason: Reason, val canAskForSignature: Boolean = false) : Rotation
 
-        enum class Reason { ROTATION_RUNNING, AWAITING_SIGNATURES, BEHIND }
+        /** [SPEND_OPEN] is Dedun's: a wallet spend or sweep still being signed. */
+        enum class Reason { ROTATION_RUNNING, AWAITING_SIGNATURES, BEHIND, SPEND_OPEN }
     }
 
     /**

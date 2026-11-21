@@ -127,9 +127,39 @@ object IcebergRitualManager {
      * proposal has already applied it, and every device computes the same set.
      */
     suspend fun holdersInRoom(database: DedunDatabase, chatRoomId: String, onchainKey: DkgSession): Set<HexKey> {
-        val holders = onchainKey.participantPublicKeySet()?.map { it.lowercase() }?.toSet().orEmpty()
+        val holders = liveHolders(database, onchainKey)
         val inRoom = database.participantDao().findParticipantsByChatRoomId(chatRoomId).filter { it.deletedAt == null }.map { it.participantPublicKey.lowercase() }.toSet()
         return holders intersect inRoom
+    }
+
+    /**
+     * Who holds a live share of [onchainKey] at the generation the group signs with now
+     * (docs/giza-into-dedun.md, Phase 7). Before any rotation that is the ceremony's
+     * participants, as it always was. After one, a member the rotation retired or left
+     * stale is not a holder, and a member re-enrolled under a new identity is -- so a new
+     * Lightning wallet is made over the people who can actually sign for the onchain
+     * wallet it closes to.
+     */
+    suspend fun liveHolders(database: DedunDatabase, onchainKey: DkgSession): Set<HexKey> {
+        val shares = ShareGenerations.active(database, onchainKey)
+        val holders = if (shares.generation == 0) onchainKey.participantPublicKeySet() else shares.signerIds.keys
+        return holders?.map { it.lowercase() }?.toSet().orEmpty()
+    }
+
+    /**
+     * Everyone who has held a share of [onchainKey] at any generation: the ceremony's
+     * participants and every member a rotation or a repair named since. A Lightning wallet
+     * names the holders of its day, so one made before a rotation still names a member the
+     * rotation retired, and stays believable (D1, as Phase 14 narrows it).
+     */
+    suspend fun everHeld(database: DedunDatabase, onchainKey: DkgSession): Set<HexKey>? {
+        val later = database.keyShareDao().getGenerations(onchainKey.id).flatMap { generation ->
+            database.keyShareDao().getMembers(onchainKey.id, generation.generation).map { it.memberPublicKey }
+        }
+        // Null for a ceremony that recorded no participants and was never rotated: nothing
+        // to check against, as before.
+        val ceremony = onchainKey.participantPublicKeySet() ?: if (later.isEmpty()) return null else emptySet()
+        return (ceremony + later).map { it.lowercase() }.toSet()
     }
 
     /** A participant's nostr key as the compressed point [IcebergDkg.Params] orders and binds. */

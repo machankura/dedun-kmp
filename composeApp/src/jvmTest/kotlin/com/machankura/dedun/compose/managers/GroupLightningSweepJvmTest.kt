@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.lightning.GroupLightningWalletStatementEvent
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.wallet.lightning.WalletWire
@@ -125,6 +126,26 @@ class GroupLightningSweepJvmTest {
         }
         val signed = Transaction.read(assertNotNull(all[0].db.groupTransactionDao().getBySessionId(session.id)?.signedTransaction))
         Transaction.correctlySpends(signed, outputs.associate { it.outPoint to it.txOut }, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+    }
+
+    /**
+     * After a rotation that left a member out, a new Lightning wallet is made over who
+     * can sign for the onchain wallet now, while the wallet made before still verifies:
+     * it names the holders of its day. docs/giza-into-dedun.md, Phase 7.
+     */
+    @Test
+    fun `after a rotation leaves a member out, a new Lightning wallet is made without them, and the old one still verifies`() = runBlocking<Unit> {
+        val (all, wallet) = opened()
+        fixture.refreshOnchainKey(all, withheld = setOf(2))
+
+        val key = FrostSigningManager.completedKey(all[0].db, fixture.roomId)!!
+        val holders = IcebergRitualManager.holdersInRoom(all[0].db, fixture.roomId, key)
+        assertEquals(fixture.members.filterIndexed { i, _ -> i != 2 }.map { it.lowercase() }.toSet(), holders)
+        assertTrue(fixture.members[2].lowercase() in IcebergRitualManager.everHeld(all[0].db, key)!!)
+
+        val statement = all[0].db.groupSignedEventDao().getByKind(GroupLightningWalletStatementEvent.KIND).single()
+        assertNotNull(GroupLightningWalletManager.verify(all[0].db, fixture.roomId, statement), "the wallet made before the rotation")
+        assertEquals(wallet.statement.icebergKey, GroupLightningWalletManager.walletFor(all[0].db, fixture.roomId, fixture.chain)?.statement?.icebergKey)
     }
 
     @Test

@@ -821,6 +821,7 @@ class DatabaseChatRepository(
                         canAskForSignature = hold.signingSessionId == null,
                     )
                     is RotationHold.Behind -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.BEHIND)
+                    is RotationHold.SpendOpen -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.SPEND_OPEN)
                 }
             },
             canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,

@@ -249,7 +249,7 @@ class GroupLightningFixture(
      * wallets and the Lightning basepoints where they are. docs/giza-into-dedun.md,
      * Phase 6.
      */
-    suspend fun refreshOnchainKey(all: List<Device>) {
+    suspend fun refreshOnchainKey(all: List<Device>, withheld: Set<Int> = emptySet()) {
         val coefficient = PrivateKey(ByteVector32("0de17a".padEnd(62, '0') + "0e"))
         fun delta(participant: Int) = coefficient * PrivateKey(ByteVector32(ByteArray(32).also { it[31] = (participant + 1).toByte() }))
         val publicShares = keyMaterial.publicShares.mapIndexed { i, share -> share + delta(i).publicKey() }
@@ -258,7 +258,7 @@ class GroupLightningFixture(
                 KeyShareGeneration(
                     dkgSessionId = onchainCeremonyId,
                     generation = 1,
-                    secretShare = (keyMaterial.secretShares[d.index] + delta(d.index)).value.toHex(),
+                    secretShare = (keyMaterial.secretShares[d.index] + delta(d.index)).value.toHex().takeIf { d.index !in withheld },
                     publicShares = publicShares.joinToString(",") { it.value.toHex() },
                     state = ShareGenerationState.ACTIVE,
                 )
@@ -267,7 +267,8 @@ class GroupLightningFixture(
                 members.mapIndexed { i, member ->
                     KeyShareMember(
                         dkgSessionId = onchainCeremonyId, generation = 1, participantId = i,
-                        memberPublicKey = member, hostPublicKey = hostKeys[i], standing = ShareStanding.LIVE,
+                        memberPublicKey = member, hostPublicKey = hostKeys[i],
+                        standing = if (i in withheld) ShareStanding.STALE else ShareStanding.LIVE,
                     )
                 }
             )

@@ -155,6 +155,7 @@
     <string name="shares_action_sent">Sent to the group</string>
     <string name="rotation_held_running">A rotation is in progress</string>
     <string name="rotation_held_awaiting_signatures">Waiting for the group to sign the new shares before another rotation</string>
+    <string name="rotation_held_spend_open">A spend from the group's wallet is still being signed. Rotate once it is signed or has failed, or it would have to be proposed again.</string>
     <string name="rotation_held_behind">This device is catching up with the group's latest rotation</string>
     <string name="rotation_held_after_removal">Removal sent. They still hold a share; rotate without them once the group has signed the current shares.</string>
     <string name="ask_the_group_to_sign_the_new_shares">Ask the group to sign the new shares</string>

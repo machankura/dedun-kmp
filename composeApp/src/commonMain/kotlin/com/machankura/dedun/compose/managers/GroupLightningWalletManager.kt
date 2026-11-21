@@ -118,8 +118,10 @@ object GroupLightningWalletManager {
         }
         // D1 as Phase 14 narrows it: every participant holds the onchain key. A wallet made after a member
         // left names fewer of them; the one before still names everyone, and both stay believable.
-        FrostSigningManager.completedKey(database, chatRoomId)?.participantPublicKeySet()?.let { holders ->
-            if (!holders.map { it.lowercase() }.containsAll(statement.participants)) {
+        // Any generation's holders, since a rotation can retire one after the wallet named them
+        // (docs/giza-into-dedun.md, Phase 7).
+        FrostSigningManager.completedKey(database, chatRoomId)?.let { IcebergRitualManager.everHeld(database, it) }?.let { holders ->
+            if (!holders.containsAll(statement.participants)) {
                 logger.w("Lightning wallet ${signed.id} names participants who do not hold the onchain key")
                 return null
             }

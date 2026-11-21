@@ -563,6 +563,15 @@ object FrostSigningManager {
         return declined
     }
 
+    /**
+     * A spend or a sweep signed with [dkgSessionId] that has not finished: what a
+     * rotation waits for (`RotationHold.SpendOpen`). Dedun's. docs/giza-into-dedun.md, Phase 7.
+     */
+    suspend fun openWalletSession(database: DedunDatabase, dkgSessionId: String): FrostSigningSession? =
+        database.frostSigningSessionDao().getOpenSessionsForKey(dkgSessionId).firstOrNull {
+            it.subject == FrostSigningSubject.TRANSACTION || it.subject == FrostSigningSubject.SWEEP
+        }
+
     /** A session for [innerEvent]'s proposal at [generation] of [key]'s shares. */
     private fun newSession(
         sessionId: String,

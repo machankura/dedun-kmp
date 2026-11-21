@@ -285,6 +285,7 @@ object ShareRefreshManager {
      */
     suspend fun rotationHold(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
         running(database, key)?.let { return RotationHold.Running(it.id) }
+        FrostSigningManager.openWalletSession(database, key.id)?.let { return RotationHold.SpendOpen(it.id) }
 
         val active = ShareGenerations.active(database, key).generation
         val signed = GroupKeyStateManager.keyStateFor(database, localChatRoom.chatRoom.id)

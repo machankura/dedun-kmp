@@ -437,6 +437,23 @@ class GroupSpendSigningJvmTest {
         )
     }
 
+    @Test
+    fun `a rotation waits for a spend still being signed, and not after it`() = runBlocking<Unit> {
+        val proposer = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+        openWallet(proposer, other)
+        val key = proposer.db.dkgSessionDao().getSessionById(ceremonyId)!!
+
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        assertEquals(RotationHold.SpendOpen(session.id), ShareRefreshManager.rotationHold(proposer.db, proposer.room, key))
+
+        pump(proposer, other)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(proposer, other)
+        assertEquals(FrostSigningStage.COMPLETE, proposer.session(session.id)?.stage)
+        assertNull(ShareRefreshManager.rotationHold(proposer.db, proposer.room, key))
+    }
+
     // ---- What a member refuses ------------------------------------------
 
     @Test

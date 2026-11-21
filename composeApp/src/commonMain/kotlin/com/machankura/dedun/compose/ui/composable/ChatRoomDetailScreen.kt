@@ -238,6 +238,7 @@ import dedun.composeapp.generated.resources.rotate_shares_confirm_everyone
 import dedun.composeapp.generated.resources.rotate_shares_confirm_left_out
 import dedun.composeapp.generated.resources.rotation_held_awaiting_signatures
 import dedun.composeapp.generated.resources.rotation_held_behind
+import dedun.composeapp.generated.resources.rotation_held_spend_open
 import dedun.composeapp.generated.resources.rotation_held_after_removal
 import dedun.composeapp.generated.resources.ask_the_group_to_sign_the_new_shares
 import dedun.composeapp.generated.resources.key_state_requested
@@ -830,6 +831,7 @@ fun ChatRoomDetailScreen(
                                                             SharesSummary.Rotation.Reason.ROTATION_RUNNING -> Res.string.rotation_held_running
                                                             SharesSummary.Rotation.Reason.AWAITING_SIGNATURES -> Res.string.rotation_held_awaiting_signatures
                                                             SharesSummary.Rotation.Reason.BEHIND -> Res.string.rotation_held_behind
+                                                            SharesSummary.Rotation.Reason.SPEND_OPEN -> Res.string.rotation_held_spend_open
                                                         }
                                                     ),
                                                     style = MaterialTheme.typography.bodyMedium,

@@ -22,6 +22,16 @@ sealed interface RotationHold {
         override val reason get() = "the group has not yet signed the key state at generation $generation"
     }
 
+    /**
+     * Dedun's: a spend or a sweep from the group's wallet is still being signed with
+     * this key. Rotating would fail it -- every unfinished session below the new
+     * generation is failed when the old shares go -- and a spend with every partial
+     * signature in would have to be proposed again. docs/giza-into-dedun.md, Phase 7.
+     */
+    data class SpendOpen(val signingSessionId: String) : RotationHold {
+        override val reason get() = "a spend from the group's wallet is still being signed"
+    }
+
     /** The group signs at a generation this device has not reached: it missed a certificate. */
     data class Behind(val groupGeneration: Int, val localGeneration: Int) : RotationHold {
         override val reason get() = "the group is at generation $groupGeneration and this device at $localGeneration"
