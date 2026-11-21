@@ -15,6 +15,7 @@ import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.machankura.dedun.compose.text.LightningAddress
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.Chain
