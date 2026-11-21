@@ -119,6 +119,17 @@ class ProposedEventTest {
         )
     }
 
+    /**
+     * docs/group-inbox.md, Phase 1: the events a group's inbox is made of are, today, kinds
+     * the app has no words for. Phases 5 and 8 give them words.
+     */
+    @Test
+    fun `an inbox key, a DM relay list and a seal are said by their numbers today`() {
+        listOf(10044, 10050, 13).forEach { kind ->
+            assertEquals("Event of kind $kind", ProposedEvent.summarize(event(kind)).label)
+        }
+    }
+
     private fun event(
         kind: Int,
         tags: Array<Array<String>> = emptyArray(),
