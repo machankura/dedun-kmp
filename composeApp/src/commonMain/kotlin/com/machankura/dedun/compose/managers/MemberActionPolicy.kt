@@ -56,6 +56,8 @@ data class MemberActionContext(
     val rotationPending: MemberActionBlocker.RotationPending? = null,
     /** Who holds a live share of the room's key: their removal waits on a rotation too. */
     val shareHolders: Set<HexKey> = emptySet(),
+    /** Dedun's: the room keeps a Lightning wallet, whose key no admin change reaches (D4). */
+    val hasLightningWallet: Boolean = false,
 )
 
 /**
@@ -119,6 +121,7 @@ object MemberActionPolicy {
             listOfNotNull(
                 MemberActionBlocker.SignaturesNotRequired(context.waitingOn).takeUnless { context.governed },
                 MemberActionBlocker.ShareRotationUnavailable.takeUnless { context.shareRefresh },
+                MemberActionBlocker.LightningWalletHeld.takeIf { context.hasLightningWallet },
             )
         } else {
             emptyList()

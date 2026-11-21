@@ -80,6 +80,14 @@ sealed interface MemberActionBlocker {
      * Phase 3). [waitingOn]: whom the rotation is waiting on, when it is still dealing.
      */
     data class RotationPending(val waitingOn: Set<HexKey> = emptySet()) : MemberActionBlocker
+
+    /**
+     * Dedun's: the room has a Lightning wallet. Making someone an admin of a keyed
+     * room enrols them into its onchain key and taking it away rotates their share
+     * out, but the Lightning wallet's Iceberg key has neither, so its signers would
+     * stop being the room's admins. docs/giza-into-dedun.md, D4.
+     */
+    data object LightningWalletHeld : MemberActionBlocker
 }
 
 /**

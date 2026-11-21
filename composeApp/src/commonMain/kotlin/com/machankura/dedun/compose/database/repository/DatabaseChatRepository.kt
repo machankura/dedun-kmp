@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import fr.acinq.bitcoin.Chain
@@ -904,6 +905,9 @@ class DatabaseChatRepository(
                     changePending = engine.groupFor(localChatRoom.routingId) != null &&
                         !engine.gate.canPrepareLocalCommit(localChatRoom.routingId),
                     offeredAdmin = if (context.isKeyed) PromotionManager.unansweredOfferTargets(database, chatRoom.id) else emptySet(),
+                    // Dedun's: no admin change in a room with a Lightning wallet (D4).
+                    hasLightningWallet = context.isKeyed && GroupLightningRollout.ENABLED &&
+                        GroupLightningWalletManager.walletFor(database, chatRoom.id, GroupLightningRollout.NETWORK) != null,
                 ).let { if (it.isKeyed) withShares(localChatRoom, it) else it }
             }
         }
@@ -936,12 +940,29 @@ class DatabaseChatRepository(
     }
 
     override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
+        refuseAdminChangeOverLightning(localChatRoom)
         // The key, for the rotation a first promotion starts (docs/admin-change-rotation.md, Phase 6).
         database.marmotOutboundDao().promote(localChatRoom, memberPublicKey, privateKeyOrNull()?.second)
     }
 
     override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
+        refuseAdminChangeOverLightning(localChatRoom)
         database.marmotOutboundDao().demote(localChatRoom, adminPublicKey)
+    }
+
+    /**
+     * Dedun's: a keyed room with a Lightning wallet changes no admins (D4 in
+     * docs/giza-into-dedun.md). Promotion enrols into the onchain key and demotion
+     * rotates the share out of it, but the Lightning wallet's Iceberg key has no
+     * enrolment and no refresh, so its signers would stop being the room's admins.
+     * The menu says so first (`MemberActionBlocker.LightningWalletHeld`); this is the
+     * same rule where the change would be made.
+     */
+    private suspend fun refuseAdminChangeOverLightning(localChatRoom: LocalChatRoom) {
+        if (!GroupLightningRollout.ENABLED || AdminGovernance.keyOf(database, localChatRoom.chatRoom.id) == null) return
+        check(GroupLightningWalletManager.walletFor(database, localChatRoom.chatRoom.id, GroupLightningRollout.NETWORK) == null) {
+            "This group has a Lightning wallet, whose key no change of admins can move. Open a new Lightning wallet for the new admins first."
+        }
     }
 
     override suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer? {

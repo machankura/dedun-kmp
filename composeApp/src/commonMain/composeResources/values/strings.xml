@@ -1816,6 +1816,8 @@
     <string name="member_action_signatures_body">In a group with a shared key, a change to who runs it needs the group's signature. An admin can switch that on from the group's page.</string>
     <string name="member_action_signatures_waiting">That waits until %1$s update Dedun.</string>
     <string name="member_action_share_rotation_title">Not in this version of Dedun yet</string>
+    <string name="member_action_lightning_wallet_title">This group has a Lightning wallet</string>
+    <string name="member_action_lightning_wallet_body">Its admins hold the Lightning wallet's key, which no change of admins can move. Open a new Lightning wallet for the group's new admins first, or keep the admins as they are.</string>
     <string name="member_action_share_rotation_body">Changing the admins of a group with a shared key moves a share of the key, and this version of Dedun can't do that yet.</string>
     <string name="member_action_not_in_group_title">%1$s isn't fully in the group</string>
     <string name="member_action_not_in_group_body">They're still being added, or they're already being removed. Try again once that has happened.</string>

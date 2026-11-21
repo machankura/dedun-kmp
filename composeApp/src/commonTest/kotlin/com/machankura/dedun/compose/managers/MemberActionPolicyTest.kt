@@ -49,6 +49,20 @@ class MemberActionPolicyTest {
     private fun MemberActionContext.blockers(member: String, action: MemberAction) =
         requireNotNull(option(member, action)) { "$action was not offered on $member's row" }.blockers
 
+    /**
+     * Dedun's D4: in a keyed room with a Lightning wallet, a role change is not open,
+     * since the wallet's Iceberg key follows no admin change; removing someone from
+     * the group is a different question, and is not held by it.
+     */
+    @Test
+    fun `a Lightning wallet holds every role change in a keyed room, and only those`() {
+        val context = keyed().copy(hasLightningWallet = true)
+        val role = if (bob in context.admins) MemberAction.REMOVE_AS_ADMIN else MemberAction.MAKE_ADMIN
+        assertTrue(MemberActionBlocker.LightningWalletHeld in context.blockers(bob, role))
+        assertTrue(MemberActionBlocker.LightningWalletHeld !in context.blockers(bob, MemberAction.REMOVE_FROM_GROUP))
+        assertTrue(MemberActionBlocker.LightningWalletHeld !in keyed().blockers(bob, role))
+    }
+
     @Test
     fun `a member is offered make admin and removal, an admin removal as admin and removal, in that order`() {
         val options = MemberActionPolicy.options(convenient(admins = setOf(me, carol)), listOf(bob, carol))
