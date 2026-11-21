@@ -638,6 +638,37 @@ when a Giza member's rotation stalls on a Dedun device without a word.
 **Done when** the flag-on suite passes, a release build has no Rotate button, and a debug
 desktop build rotates a three-device group and then pays a member out onchain.
 
+**As built.** Bennu's commits #55-#80 and `993f26b8` are in, with Giza's `36be1efc`, which
+Bennu's port lacks. The schema is 49: refresh is 48 and repair is 49. The flag is
+`dedun.experimental`, off in release.
+
+Before K3, the refresh kinds and Dedun's legacy numbers share 30340-30343. A refresh message is
+told apart by its `refresh_session` tag (`ShareRefreshEvents.isShareRefresh`), which no Dedun
+event carries, so refresh works between Dedun devices in a debug build before K3. `ChatMessage`
+dispatches on the current number, so a refresh round at those four numbers reaches the ledger
+kinds' arms, which refuse it.
+
+Dedun-only work:
+
+- the Wavelength wallet's holder check reads every generation's holders, through Bennu's
+  `IcebergRitualManager.everHeld`, as the Lightning wallet's does;
+- `RotationHold.StatementOpen`, with its own line on the Shares section, holds a rotation while a
+  deposit attribution, coin assignment, member transfer, or Wavelength or Lightning payout is
+  being signed. A transfer *request* is the giver's own signature, which a rotation never
+  touches, so it holds nothing.
+
+Tests: a Wavelength wallet is still believed after a rotation; a rotation waits for a payment
+approval, and not once it is signed.
+
+Not done here:
+
+- a release build declining a 30340, which only means something after K3;
+- a Dedun device rotating with a Giza-shaped one, for the same reason;
+- a test pinning that re-enrollment moves nothing in the ledger. No ledger code reads
+  `KeyShareMember` or a participant id -- balances, attributions, coin assignments and payout
+  destinations are all keyed by the member's Nostr key -- but that is a reading of the code, not
+  a test.
+
 ## Phase 8: governed rooms, receiving and sending (D1, D2)
 
 Bennu's port Phase 8: robust-group-admins, `0a4453da` (`Quorum`), admin changes in

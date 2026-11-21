@@ -86,7 +86,7 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `70a38d06` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is built, and what is left to push and check |
 | `d4dd87f2` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is pushed, and what is left |
 | `8dd710a1` | `cf210849` | share refresh | 7 | taken | `a60855ad` | docs: rotating a group's shares without moving its key (plan) |
-| `4040ae74` | `91d0771a` | share refresh | 7 | adapted; backup half held (D5) | pending | fix: a deleted share is gone from aux.db, and aux.db leaves the phone in no backup (frost-share-refresh, Phase 5) |
+| `4040ae74` | `91d0771a` | share refresh | 7 | adapted; backup half held (D5) | `db9e7e3d` | fix: a deleted share is gone from aux.db, and aux.db leaves the phone in no backup (frost-share-refresh, Phase 5) |
 | `ebe240a4` | `9e2b06bf` | automatic key ceremony | 5 | taken | `f512a960` | docs: joining is the only approval in a key ceremony (plan) |
 | `e9c413ac` | `97841ef5` | automatic key ceremony | 5 | taken | `78287114` | test: a key ceremony run across devices with real ChillDKG (automatic ceremony, Phase 1) |
 | `fce51e20` | `af804765` | share refresh | 6 | adapted | `1be93830` | feat: a key's shares have generations, and signing reads the one it names (frost-share-refresh, Phase 6) |
@@ -95,41 +95,41 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `d71cf0c0` | `2f51e0ae` | automatic key ceremony | 5 | adapted | `206f2d08` | feat: one approval screen for a key ceremony (automatic ceremony, Phase 4) |
 | `4c75ca1b` | `97f0cf2a` | automatic key ceremony | 5 | taken | `6ca7a6a5` | feat: a stalled key ceremony says on whom, and offers abandon there (automatic ceremony, Phase 5) |
 | `73fcfff0` | `2a90b3f0` | automatic key ceremony | 5 | taken | `10f24092` | feat: the coordinator's device takes a finished ceremony to its room (automatic ceremony, Phase 6) |
-| `c8a529a1` | `9277ee80` | submodule refresh | 4 | doc taken; pointer in 4 | `a8331b90` | build: lightning-kmp-app with FROST share refresh down the chain (frost-share-refresh, Phase 4) |
-| `f8974aec` | `b0e193a7` | share refresh | 7 | adapted | pending | feat: a group rotates its shares, end to end between devices (frost-share-refresh, Phase 7) |
+| `c8a529a1` | `9277ee80` | submodule refresh | 4 | doc taken; pointer in 4 | `d71198fd` | build: lightning-kmp-app with FROST share refresh down the chain (frost-share-refresh, Phase 4) |
+| `f8974aec` | `b0e193a7` | share refresh | 7 | adapted | `9e3a0bed` | feat: a group rotates its shares, end to end between devices (frost-share-refresh, Phase 7) |
 | `0a60da6e` | `ca129b5e` | automatic key ceremony | 5 | adapted | `c8f3f932` | feat: a ceremony's own key state signs itself (automatic ceremony, Phase 7) |
 | `6491d2aa` | `aa88a097` | automatic key ceremony | 5 | taken | `117c9b43` | docs: joining is the only approval, as built (automatic ceremony, Phase 8) |
-| `51615992` | `b343cfb7` | share refresh | 7 | adapted | pending | feat: the group signs its new generation, and every device deletes the old share (frost-share-refresh, Phase 8) |
-| `c4fe4c9c` | `b7c15d2b` | share refresh | 7 | adapted | pending | feat: rotating a group's shares without a member it removed (frost-share-refresh, Phase 9) |
-| `1c3e0e93` | `73631aa5` | share refresh | 7 | adapted | pending | feat: re-enrollment, a stale member repaired into the generation the group signs with (frost-share-refresh, Phase 10) |
-| `99229090` | `4f1a5c3c` | share refresh | 7 | adapted | pending | feat: a Shares section, behind a flag that is off in release (frost-share-refresh, Phases 11 and 13) |
-| `4949f0fe` | `3a9e6e61` | share refresh | 7 | taken | pending | feat: the recovery walk, from the host key to the live share (frost-share-refresh, Phase 12) |
-| `8278ffd5` | `fb344fd5` | share refresh | 7 | taken | pending | docs: share refresh is built, phase by phase, and what is left |
-| `08b5c56f` | `5a0cd033` | share refresh | 7 | taken | pending | docs: the share refresh chain is pushed |
-| `fc437d05` | `f0810010` | share refresh | 7 | taken | pending | fix: a device does not vouch for a rotation's key state on its own |
-| `a25ff2e2` | `9b3e7ba9` | rotation waits for key state | 7 | taken | pending | docs: a rotation waits for the last one to be signed |
-| `159ae402` | `8be9d92f` | rotation waits for key state | 7 | taken | pending | feat: a rotation waits for the group to sign the last one (Phase 1) |
-| `d358a0db` | `571d5b80` | rotation waits for key state | 7 | adapted | pending | feat: the Shares section holds Rotate shares and says why (Phase 2) |
-| `98567629` | `49728f45` | rotation waits for key state | 7 | taken | pending | feat: the Shares section follows the group while it is open (Phase 3) |
-| `95131248` | `0cf21a24` | rotation waits for key state | 7 | taken | pending | feat: the proposer is not asked about their own rotation (Phase 4) |
-| `5820be9b` | `4217f056` | rotate shares, single approval | 7 | taken | pending | docs: taking part is the only approval a share rotation needs, as a plan |
+| `51615992` | `b343cfb7` | share refresh | 7 | adapted | `58ede176` | feat: the group signs its new generation, and every device deletes the old share (frost-share-refresh, Phase 8) |
+| `c4fe4c9c` | `b7c15d2b` | share refresh | 7 | adapted | `f92c017a` | feat: rotating a group's shares without a member it removed (frost-share-refresh, Phase 9) |
+| `1c3e0e93` | `73631aa5` | share refresh | 7 | adapted | `edad2c7c` | feat: re-enrollment, a stale member repaired into the generation the group signs with (frost-share-refresh, Phase 10) |
+| `99229090` | `4f1a5c3c` | share refresh | 7 | adapted | `0aac9a02` | feat: a Shares section, behind a flag that is off in release (frost-share-refresh, Phases 11 and 13) |
+| `4949f0fe` | `3a9e6e61` | share refresh | 7 | taken | `57fdaa05` | feat: the recovery walk, from the host key to the live share (frost-share-refresh, Phase 12) |
+| `8278ffd5` | `fb344fd5` | share refresh | 7 | taken | `73729852` | docs: share refresh is built, phase by phase, and what is left |
+| `08b5c56f` | `5a0cd033` | share refresh | 7 | taken | `58473c07` | docs: the share refresh chain is pushed |
+| `fc437d05` | `f0810010` | share refresh | 7 | taken | `51ed5728` | fix: a device does not vouch for a rotation's key state on its own |
+| `a25ff2e2` | `9b3e7ba9` | rotation waits for key state | 7 | taken | `f21f6256` | docs: a rotation waits for the last one to be signed |
+| `159ae402` | `8be9d92f` | rotation waits for key state | 7 | taken | `fc0f892d` | feat: a rotation waits for the group to sign the last one (Phase 1) |
+| `d358a0db` | `571d5b80` | rotation waits for key state | 7 | adapted | `5112bd55` | feat: the Shares section holds Rotate shares and says why (Phase 2) |
+| `98567629` | `49728f45` | rotation waits for key state | 7 | taken | `6f60f483` | feat: the Shares section follows the group while it is open (Phase 3) |
+| `95131248` | `0cf21a24` | rotation waits for key state | 7 | taken | `ebd72d89` | feat: the proposer is not asked about their own rotation (Phase 4) |
+| `5820be9b` | `4217f056` | rotate shares, single approval | 7 | taken | `867ddaf9` | docs: taking part is the only approval a share rotation needs, as a plan |
 | `f2b0aa91` | `94ddaa86` | robust-group-admins | 8 | taken | pending | docs: every founding member of a robust group is its admin, phased |
-| `2664f6ca` | `8abff8be` | rotation waits for key state | 7 | taken | pending | docs: a rotation waits for the last one to be signed, built (Phase 5) |
-| `18f426ca` | `9317fad9` | rotate shares, single approval | 7 | taken | pending | test: a rotation's approvals, counted as they are today (rotate-shares-single-approval, Phase 1) |
-| `b4103bcb` | `3ecc7bd2` | rotate shares, single approval | 7 | taken | pending | feat: taking part is a rotation's only approval (rotate-shares-single-approval, Phase 2) |
-| `959c120d` | `a7e329e6` | rotate shares, single approval | 7 | taken | pending | feat: running rotations resume without a message (rotate-shares-single-approval, Phase 3) |
+| `2664f6ca` | `8abff8be` | rotation waits for key state | 7 | taken | `d4b038a1` | docs: a rotation waits for the last one to be signed, built (Phase 5) |
+| `18f426ca` | `9317fad9` | rotate shares, single approval | 7 | taken | `344fa455` | test: a rotation's approvals, counted as they are today (rotate-shares-single-approval, Phase 1) |
+| `b4103bcb` | `3ecc7bd2` | rotate shares, single approval | 7 | taken | `fc484e48` | feat: taking part is a rotation's only approval (rotate-shares-single-approval, Phase 2) |
+| `959c120d` | `a7e329e6` | rotate shares, single approval | 7 | taken | `d467f6f7` | feat: running rotations resume without a message (rotate-shares-single-approval, Phase 3) |
 | `3efa1af5` | `f13a2478` | robust-group-admins | 8 | taken | pending | test: every founding member of a robust group is its admin (robust-group-admins, Phase 0) |
-| `69871c68` | `e6b26e0d` | rotate shares, single approval | 7 | adapted | pending | feat: proposing a rotation is the proposer's approval (rotate-shares-single-approval, Phase 4) |
+| `69871c68` | `e6b26e0d` | rotate shares, single approval | 7 | adapted | `81032e9e` | feat: proposing a rotation is the proposer's approval (rotate-shares-single-approval, Phase 4) |
 | `d7fb7103` | `51fe16f9` | robust-group-admins | 8 | taken | pending | feat: a robust group's admin room takes its admins from the ceremony (robust-group-admins, Phase 1) |
 | `8088efd7` | `c63026c4` | member-admin-promotion | 8 | taken | pending | docs: making a member an admin and back, a phased plan |
 | `83711419` | `93235e3f` | robust-group-admins | 8 | taken | pending | fix: a member welcomed into a room sees its admins at once (robust-group-admins, Phase 2) |
-| `46eb23b7` | `554ddfdd` | rotate shares, single approval | 7 | adapted | pending | feat: a rotation's key state signs itself (rotate-shares-single-approval, Phase 5) |
+| `46eb23b7` | `554ddfdd` | rotate shares, single approval | 7 | adapted | `58c58a1f` | feat: a rotation's key state signs itself (rotate-shares-single-approval, Phase 5) |
 | `2ed83c55` | `8ba35258` | member-admin-promotion | 1 | taken | `f1954991` | fix: an admin's refused leave is shown, not thrown out of the view model (member-admin-promotion, Phase 10a) |
 | `53acae68` | `cccb2c12` | member-admin-promotion | 8 | adapted | pending | feat: a member's admin flag is true from the room's first moment (member-admin-promotion, Phase 1) |
 | `4671a86a` | `f4c03ad0` | robust-group-admins | 8 | taken | pending | feat: a device checks its admin room against the ceremony it took part in (robust-group-admins, Phase 3) |
-| `11f2cb2b` | `baedb44d` | rotate shares, single approval | 7 | adapted | pending | feat: the Shares section, with one approval (rotate-shares-single-approval, Phase 6) |
+| `11f2cb2b` | `baedb44d` | rotate shares, single approval | 7 | adapted | `0edaccc2` | feat: the Shares section, with one approval (rotate-shares-single-approval, Phase 6) |
 | `19f0fc0f` | `8bc893c2` | member-admin-promotion | 8 | adapted | pending | feat: the room says who became an admin, and who stopped (member-admin-promotion, Phase 2) |
-| `99261876` | `f1b4a0f9` | rotate shares, single approval | 7 | taken | pending | docs: taking part is the only approval, as built (rotate-shares-single-approval, Phase 7) |
+| `99261876` | `f1b4a0f9` | rotate shares, single approval | 7 | taken | `817a6e00` | docs: taking part is the only approval, as built (rotate-shares-single-approval, Phase 7) |
 | `1dc94ad4` | `004be0ff` | robust-group-admins | 8 | taken | pending | feat: a founding invite that never went out is finished (robust-group-admins, Phase 4) |
 | `baf63b8d` | `f627c8e3` | robust-group-admins | 8 | adapted | pending | feat: the room's details say who administers it, and whether the founders do (robust-group-admins, Phase 5) |
 | `d95412ff` | `c0be080e` | member-admin-promotion | 8 | adapted | pending | feat: an admin makes a member an admin, or not, in a convenient room (member-admin-promotion, Phase 6) |
@@ -219,7 +219,7 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `a3c0b830` | `86679a93` | dependency update | 4 | adapted | held (wavelength-kmp's toolchain) | build: AGP 9.5.1 across the composite (dependency-update, Phase 5) |
 | `302ce3ca` | `01d4d8e7` | dependency update | 4 | taken | held (wavelength-kmp's toolchain) | build: Kotlin 2.4.21 across the composite (dependency-update, Phase 6) |
 | `65a2507a` | `fc7a045d` | dependency update | 4 | taken | `fe17f43b` | docs: the comments that named the old versions (dependency-update, Phase 7) |
-| `36be1efc` | — | — | — | pending | pending | fix: one Shares row per member, so a reinstated admin no longer crashes the room detail |
+| `36be1efc` | — | — | — | pending | `8692bebd` | fix: one Shares row per member, so a reinstated admin no longer crashes the room detail |
 
 ## Bennu-only commits in the port
 
@@ -233,7 +233,7 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `9fd354c6` | skip: Bennu's own notes | docs: the toolchain and the submodule chain are in, measured in Bennu (giza-into-bennu, Phase 4) |
 | `168f4524` | `7a13435d` | test: an automatic ceremony's subgroup keeps its wallet policy and guardian keys (giza-into-bennu, Phase 5) |
 | `44fba704` | skip: Bennu's own notes | docs: share generations are in, with Bennu's wallets signing at them (giza-into-bennu, Phase 6) |
-| `993f26b8` | pending | feat: rotation and the Lightning wallet, and a rotation that waits for a spend (giza-into-bennu, Phase 7) |
+| `993f26b8` | `04699c7d` | feat: rotation and the Lightning wallet, and a rotation that waits for a spend (giza-into-bennu, Phase 7) |
 | `5ce77c08` | skip: Bennu's own notes | docs: rotation is in, and D5 stays open (giza-into-bennu, Phase 7) |
 | `b86b3a0d` | skip: Bennu's own notes | docs: governed rooms are in, receiving and sending (giza-into-bennu, Phase 8) |
 | `1785a284` | skip: Bennu's own notes | docs: Bennu keeps convenient groups, said where Giza's plan to remove them landed |
