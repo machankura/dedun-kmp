@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
+import com.machankura.dedun.compose.ui.composable.ProposeGroupEventScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
 import com.machankura.dedun.compose.ui.composable.BroadcastGroupSignedEventScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.AddGroupPostRoute
@@ -2360,6 +2362,31 @@ fun DedunNavHost(
                     // the queue hangs off one (D7). See
                     // `BroadcastGroupSignedEventViewModel`.
                     publishTransport = synchronizationViewModel.relaysSocketManager,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            // An unsigned event, pasted for the group to sign: D9 of
+            // docs/group-nostr-profile-and-posts.md.
+            composable<ProposeGroupEventRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<ProposeGroupEventRoute>()
+
+                ProposeGroupEventScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the paste so back returns to the group rather
+                        // than to an event whose proposal has already gone out.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<ProposeGroupEventRoute> {
+                                inclusive = true
+                            }
+                        }
+                    },
                     onNavigateBack = {
                         navController.popBackStack()
                     }

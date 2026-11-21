@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
+import dedun.composeapp.generated.resources.propose_event
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
+import androidx.compose.material.icons.filled.DataObject
 import dedun.composeapp.generated.resources.n_posts
 import dedun.composeapp.generated.resources.one_post
 import dedun.composeapp.generated.resources.no_posts_yet
@@ -407,6 +411,10 @@ fun ChatRoomDetailScreen(
 
     // Read outside the click handlers: stringResource and rememberNotifier are both
     // composable, and a lambda passed to onClick is not.
+    // Read here rather than in the list's DSL, which is not composable: whether the
+    // identity can sign at all, for the one write entrance below that is not its own
+    // screen. docs/npub-sign-in.md.
+    val identityCanSign = LocalCanSign.current
     val notify = rememberNotifier(rememberCoroutineScope())
     val removalRequested = stringResource(Res.string.member_removal_requested)
     val removalLeavesLightningShare = stringResource(Res.string.member_removal_requested_lightning)
@@ -1041,6 +1049,40 @@ fun ChatRoomDetailScreen(
                                             )
                                         }
                                     )
+                                }
+
+                                // The untyped way in: an unsigned event, pasted. It
+                                // lands on its kind's screen above once the quorum
+                                // signs. Behind the same gate as the editors, and the
+                                // identity's: an npub-only profile cannot propose.
+                                // docs/group-nostr-profile-and-posts.md, D9.
+                                if (chatRoomDetailUIState.canProposeAsGroup && identityCanSign) {
+                                    item {
+                                        TextButton(
+                                            onClick = {
+                                                onNavigateToRoute.invoke(
+                                                    ProposeGroupEventRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = chatRoomId,
+                                                        relayHint = relayHint
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Default.DataObject,
+                                                contentDescription = Decorative
+                                            )
+
+                                            Spacer(
+                                                modifier = Modifier.width(
+                                                    MaterialTheme.spacing.space125
+                                                )
+                                            )
+
+                                            Text(stringResource(Res.string.propose_event))
+                                        }
+                                    }
                                 }
 
                                 item {

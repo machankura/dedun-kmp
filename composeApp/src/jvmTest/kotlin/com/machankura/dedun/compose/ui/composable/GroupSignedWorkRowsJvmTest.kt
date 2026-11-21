@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.composable
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -24,6 +25,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrPr
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
+import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
@@ -220,6 +223,33 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     @Test
+    fun `a member who can propose is offered the paste, and it opens`() {
+        var opened: Route? = null
+
+        render(state(groupNostrProfile = GroupSignedWorkFixtures.profile), onNavigateToRoute = { opened = it }) {
+            onNodeWithText("Propose event").assertIsDisplayed().performClick()
+        }
+
+        assertEquals(ProposeGroupEventRoute(activeUserPublicKey, chatRoomId, relayHint = null), opened)
+    }
+
+    @Test
+    fun `a member who cannot propose is not offered the paste`() = render(
+        state(groupNostrProfile = GroupSignedWorkFixtures.profile, canProposeAsGroup = false)
+    ) {
+        onNodeWithText("Nostr profile").assertIsDisplayed()
+        onNodeWithText("Propose event").assertDoesNotExist()
+    }
+
+    @Test
+    fun `an identity that cannot sign is not offered the paste`() = render(
+        state(groupNostrProfile = GroupSignedWorkFixtures.profile),
+        identityCanSign = false,
+    ) {
+        onNodeWithText("Propose event").assertDoesNotExist()
+    }
+
+    @Test
     fun `there is no relays row`() = render(state(groupNostrProfile = GroupSignedWorkFixtures.profile)) {
         onNodeWithText("Relays").assertDoesNotExist()
         onNodeWithText("Subgroups").assertIsDisplayed()
@@ -288,11 +318,13 @@ class GroupSignedWorkRowsJvmTest {
     private fun render(
         uiState: ChatRoomDetailUIState,
         onNavigateToRoute: (Route) -> Unit = {},
+        identityCanSign: Boolean = true,
         assertions: ComposeUiTest.() -> Unit
     ) = runDesktopComposeUiTest(width = 400, height = 4000) {
         setContent {
             DedunTheme {
                 ProvideSnackbarHost {
+                    CompositionLocalProvider(LocalCanSign provides identityCanSign) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         ChatRoomDetailScreen(
                             activeUserPublicKey = activeUserPublicKey,
@@ -305,6 +337,7 @@ class GroupSignedWorkRowsJvmTest {
                             onPopBackToRoute = {},
                             onNavigateBack = {},
                         )
+                    }
                     }
                 }
             }
