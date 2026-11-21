@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
 import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
@@ -1281,6 +1282,49 @@ class SignedGroupKeyStateTest {
             val post = assertNotNull(device.db.groupSignedEventDao().getById(device.item(session.id).eventId))
             assertTrue(post.verifies(), "the room's reader would refuse its own post")
             assertEquals(device.room.chatRoom.id, post.chatRoomId)
+        }
+    }
+
+    /**
+     * The premise of docs/group-inbox.md's replies (Phase 0, check 4): a NIP-17 seal is
+     * signed by its author's identity, and a group's identity is its room. A batch of kind
+     * 13 events the quorum signs has to verify as the room, or no recipient's app would
+     * accept a reply from the group's inbox, whatever was sealed inside it.
+     */
+    @Test
+    fun `a batch of seals the group signs verifies as the room's own`() = runBlocking {
+        val creator = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+
+        val inboxKey = "a".repeat(64)
+        val seals = listOf("first", "second").map { ciphertext ->
+            EventTemplate<Event>(
+                createdAt = 1_700_000_000L,
+                kind = 13,
+                tags = arrayOf(arrayOf("n", inboxKey)),
+                content = ciphertext,
+            )
+        }
+        val session = FrostSigningManager.proposeSigningBatch(
+            database = creator.db,
+            localChatRoom = creator.room,
+            userPublicKey = creator.publicKey,
+            events = seals,
+        )
+        pump(creator, other)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(creator, other)
+
+        listOf(creator, other).forEach { device ->
+            val signed = device.items(session.id).map {
+                assertNotNull(device.db.groupSignedEventDao().getById(it.eventId))
+            }
+            assertEquals(2, signed.size)
+            signed.forEach { seal ->
+                assertEquals(13, seal.kind)
+                assertEquals(adminRoomId, seal.publicKey)
+                assertTrue(seal.verifies(), "a seal the group signed must verify as the room")
+            }
         }
     }
 

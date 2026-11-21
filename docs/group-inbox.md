@@ -175,9 +175,9 @@ one admin can sign with alone would be found there. So the inbox ceremony is kep
 the way the confederation's is:
 
 - **Kinds:** a family of seven, the same shape as 30310–30316 (proposal, host key, round 1,
-  coordinator round 1, round 2, certificate, failure). Candidate numbers are 30390–30396.
-  Phase 0 checks them against the NIP kind table, quartz, Curare, Bennu and `RetiredKinds`,
-  as confederation Phase 0 did for 9430–9433. New kinds also keep a Bennu admin's device
+  coordinator round 1, round 2, certificate, failure). 30410–30416, checked in Phase 0 against the NIP
+  kind table, quartz, Curare, Bennu and `RetiredKinds`, as confederation Phase 0 did for
+  9430–9433. New kinds also keep a Bennu admin's device
   from mistaking the ceremony for a subgroup's, which a 30310 with a subset of `p` tags in
   a Marmot room would be to it.
 - **Tables:** `InboxKeyCeremony` and `InboxKeyCeremonyMessage` (the ceremony's inputs and
@@ -493,7 +493,7 @@ This document and its row in [README.md](./README.md). Then, before any code:
    key's discrete log (`secretShare·G == thresholdPublicKey`). If the library refuses
    `t = 1` or the shares differ, stop: the fallback is a `t = n` ceremony followed by a
    reveal round to host keys, checked against `publicShares`, and D2 and Phase 4 change.
-2. **Kinds** (D3). 30390–30396 against the NIP README's table, quartz 2.20.1, Curare,
+2. **Kinds** (D3). A family of seven against the NIP README's table, quartz 2.20.1, Curare,
    Bennu and `RetiredKinds`. Record the result here.
 3. **quartz.** That `Nip44.v2.computeConversationKey` / `encrypt` / `decrypt` take an
    arbitrary secret and public key; that `EncryptionKeyListEvent` parses #1647's form;
@@ -505,6 +505,16 @@ This document and its row in [README.md](./README.md). Then, before any code:
 5. **The spec.** Re-read #1647 and #2361 at their heads and record the commits in
    *The specification, as it stands*. If #2361 has moved the `n` tag or added a second
    `p`, the wire phase follows it.
+
+**Done**, on 2026-11-22:
+
+| check | result |
+|---|---|
+| 1. `t = 1` ChillDKG | holds. `InboxKeyPremiseTest` 3/3: three admins finish with one secret, that secret times `G` is the ceremony's threshold key, and NIP-44 between a stranger and the x-only inbox key agrees from both sides whatever the key's parity |
+| 2. kinds | the plan's 30390–30396 **collide**: quartz 2.20.1 has 30392–30395 (experimental trusted lists). **30410–30416** are in none of the NIP README's table (whose 30300–30499 rows are 30311–30315, 30382–30384, 30402–30403), quartz, Curare at `dc1895ee`, Bennu at `2db6dde5`, `RetiredKinds` or the app. D3 now says 30410–30416. (The ceremony's own 30311–30315 and the confederation's 30382–30385 share numbers with public kinds; they travel only inside encryption, which is why that never mattered, and why it would not here either. A clean range costs nothing.) |
+| 3. quartz | `Nip44v2.computeConversationKey`, `encrypt`, `encryptWithNonce` and `decrypt` take any secret and any x-only key. `EncryptionKeyListEvent` (kind 10044, `encryptionKey()`, `build(pubkey)`) and `KeyTag` read #1647's `["n", key]`. `EventTemplate<Event>(createdAt, 13, tags, content)` goes through `proposeSigningBatch` unchanged |
+| 4. the premise | holds. `SignedGroupKeyStateTest`'s `a batch of seals the group signs verifies as the room's own`: two kind 13 events, signed by a quorum, authored by the room and passing `verifies()` on both devices |
+| 5. the spec | #1647 read at its `per-device-keys` head (5 commits, last pushed 2025-10-08); #2361 at `bee7463` (2026-06-02). Neither merged. #2361 has one `p` on the wrap and the `n` on the seal, as this plan has it |
 
 ### Phase 1: pin today
 
@@ -799,6 +809,6 @@ else to rotate.
 ```
 
 `wallet-audit.sh` greps for retired kinds and sats: none of 10044, 10050, 13, 14, 1059 or
-30390–30396 is retired. `brand-audit.sh` fails on a Bennu name outside a comment, which the
+30410–30416 is retired. `brand-audit.sh` fails on a Bennu name outside a comment, which the
 D4 explanation for a Bennu admin has to put in a comment or say without naming it ("an admin
 whose app cannot take part").
