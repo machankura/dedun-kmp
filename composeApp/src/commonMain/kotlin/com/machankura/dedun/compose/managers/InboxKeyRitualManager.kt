@@ -427,6 +427,7 @@ object InboxKeyRitualManager {
             logger.i("Inbox key ceremony ${sessionId.take(8)} complete: generation ${done.generation}")
             InboxFollowThrough.onKeyMade(database, localChatRoom, done)
             FrostSigningManager.resumeInboxAnnouncements(database, localChatRoom, done.userPublicKey)
+            GroupInboxManager.reopen(database, roomId, done.userPublicKey)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

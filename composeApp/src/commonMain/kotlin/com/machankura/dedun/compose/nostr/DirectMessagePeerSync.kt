@@ -5,6 +5,7 @@ import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.vitorpamplona.quartz.nip17Dm.settings.DmRelayListEvent
 import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
+import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.SynchronizeNostrEventRequest
 import com.machankura.dedun.compose.database.model.types.SynchronizationFilter
@@ -51,6 +52,9 @@ object DirectMessagePeerSync {
         KeyPackageEvent.KIND,
         DmRelayListEvent.KIND,
         AdvertisedRelayListEvent.KIND,
+        // The key a peer reads encrypted mail with, if they decoupled it (NIP-4E): what a
+        // group's reply to them is sealed to (docs/group-inbox.md, D10).
+        InboxAnnouncement.KEY_KIND,
     )
 
     /**

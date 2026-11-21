@@ -19,8 +19,8 @@ import com.machankura.dedun.compose.text.ProposedEvent
  * - a peer's proposal to sign a kind 13 (a NIP-17 seal) reaches the member as a bare number,
  *   and nothing declines it. Phase 8 puts a refusal in front of it, as Phase 5 did for a kind
  *   10044 (an encryption key), which this pins declined now;
- * - the only gift wraps the app asks relays for are its own identity's. Phase 6 adds the
- *   group's.
+ * - the identity's own gift wraps are asked for on their own subscription, beside the
+ *   group's that Phase 6 added.
  */
 class GroupInboxTodayJvmTest {
     private val harness = SigningProposalHarness()
@@ -70,9 +70,12 @@ class GroupInboxTodayJvmTest {
     }
 
     @Test
-    fun `the only gift wraps asked for are the identity's own`() {
+    fun `the identity's own gift wraps are asked for apart from its groups'`() {
+        // Flipped by Phase 6: a group's mail has its own subscription
+        // (`LiveSubscriptionManager.groupInboxFilters`), and the identity's stays its own.
         val filter = LiveSubscriptionManager.giftWrapFilter(alice)
         assertEquals(listOf(1059), filter.kinds)
         assertEquals(mapOf("p" to listOf(alice)), filter.tags)
+        assertEquals(mapOf("p" to listOf(harness.roomId)), LiveSubscriptionManager.groupInboxFilters(listOf(harness.roomId)).single().tags)
     }
 }

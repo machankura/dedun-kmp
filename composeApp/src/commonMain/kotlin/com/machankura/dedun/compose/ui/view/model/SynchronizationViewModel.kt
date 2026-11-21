@@ -91,6 +91,7 @@ class SynchronizationViewModel(
         nostrRepository = nostrRepository,
         chatRepository = chatRepository,
         holdConnections = AppLifecycle.holdConnections,
+        groupInboxRepository = groupInboxRepository,
     )
 
     /** Sends what this device owes relays for its groups' inboxes (docs/group-inbox.md, D7). */

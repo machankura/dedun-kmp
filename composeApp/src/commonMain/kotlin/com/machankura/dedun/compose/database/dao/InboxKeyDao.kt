@@ -74,6 +74,10 @@ interface InboxKeyDao {
     @Query("SELECT * FROM InboxKey WHERE chatRoomId = :chatRoomId AND publicKey = :publicKey LIMIT 1")
     suspend fun findByPublicKey(chatRoomId: String, publicKey: HexKey): InboxKey?
 
+    /** The room an inbox key belongs to, for a wrap tagged with the key rather than the group. */
+    @Query("SELECT * FROM InboxKey WHERE userPublicKey = :userPublicKey AND publicKey = :publicKey LIMIT 1")
+    suspend fun findHeldByPublicKey(userPublicKey: HexKey, publicKey: HexKey): InboxKey?
+
     @Upsert
     suspend fun upsertKey(key: InboxKey)
 

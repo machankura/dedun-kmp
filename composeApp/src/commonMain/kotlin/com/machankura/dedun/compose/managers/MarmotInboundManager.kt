@@ -279,6 +279,14 @@ object MarmotInboundManager {
             database.chatRoomDao().upsert(localChatRoom.chatRoom.copy(leftGroupAt = Clock.System.now()))
         }
 
+        // An admin no longer: this device lets go of the group's inbox (docs/group-inbox.md, D14).
+        GroupInboxManager.forgetIfNotAdmin(
+            database = database,
+            chatRoomId = localChatRoom.chatRoom.id,
+            userPublicKey = userPublicKey,
+            stillAdmin = !disbanded && !removedUs && userPublicKey in mlsGroup.currentAdminIdentities(),
+        )
+
         // A member added since this profile said where the group pays it has never seen
         // that: send it again, after the commit, so it goes out at the epoch they can read.
         // docs/group-payout-destination.md, Phase 6.

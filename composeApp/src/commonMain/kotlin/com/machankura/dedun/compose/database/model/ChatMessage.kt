@@ -710,12 +710,16 @@ data class ChatMessage(
         const val TYPE_INBOX_ANNOUNCED = "inboxAnnounced"
         const val TYPE_INBOX_RELAYS_ANNOUNCED = "inboxRelaysAnnounced"
 
+        /** This device wiped the group's inbox when its owner stopped being an admin (D14). */
+        const val TYPE_INBOX_FORGOTTEN = "inboxForgotten"
+
         val INBOX_TYPES = setOf(
             TYPE_INBOX_KEY_STARTED,
             TYPE_INBOX_KEY_COMPLETE,
             TYPE_INBOX_KEY_FAILED,
             TYPE_INBOX_ANNOUNCED,
             TYPE_INBOX_RELAYS_ANNOUNCED,
+            TYPE_INBOX_FORGOTTEN,
         )
 
         val GROUP_IDENTITY_TYPES = setOf(
