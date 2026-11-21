@@ -22,6 +22,8 @@ import com.machankura.dedun.compose.database.model.MarmotRetainedEpochSecret
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.exceptions.MarmotCommitPendingException
+import com.machankura.dedun.compose.exceptions.MarmotGovernedRoomException
+import com.machankura.dedun.compose.managers.refusesBareCommits
 import com.machankura.dedun.compose.exceptions.MarmotKeyPackageProfileException
 import com.machankura.dedun.compose.exceptions.MarmotMissingChatGroupException
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -190,6 +192,7 @@ abstract class MarmotOutboundDao(
             ?: throw MarmotMissingChatGroupException(
                 "No MLS group state for chat room ${localChatRoom.chatRoom.id}; cannot invite $peerPublicKey"
             )
+        if (mlsGroup.refusesBareCommits()) throw MarmotGovernedRoomException()
 
         val relays = Relays.DefaultDMRelayList.map { it.url }
 
@@ -832,6 +835,9 @@ abstract class MarmotOutboundDao(
         val routingId = localChatRoom.routingId
         val group = engine.groupFor(routingId) ?: return
         if (!group.isLocalAdmin() || !engine.groupManager.hasPendingProposals(routingId)) return
+        // A governed room's admins commit a leave inside the group's signature; a bare
+        // one from here would fork it. A Giza admin commits it instead.
+        if (group.refusesBareCommits()) return
         if (!engine.gate.canPrepareLocalCommit(routingId)) return
 
         publishGatedCommit(localChatRoom) { manager, id -> manager.stageCommit(id) }
@@ -851,6 +857,7 @@ abstract class MarmotOutboundDao(
         require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room can remove a member" }
         val group = database.marmotEngine.groupFor(localChatRoom.routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
+        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
         val leafIndex = group.members()
             .firstOrNull { (_, leaf) -> (leaf.credential as? Credential.Basic)?.identity?.toHexKey() == memberPublicKey }
             ?.first
@@ -876,6 +883,7 @@ abstract class MarmotOutboundDao(
         val group = engine.groupFor(routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
         require(group.isLocalAdmin()) { "Only an admin can disband the group" }
+        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
         if (!engine.gate.canPrepareLocalCommit(routingId)) {
             throw MarmotCommitPendingException(
                 "An earlier change to this room is still waiting for a relay to accept it; try again in a moment"
@@ -896,6 +904,7 @@ abstract class MarmotOutboundDao(
         val group = engine.groupFor(routingId) ?: return
         if (engine.gate.outboundGate(routingId) != LocalOutboundGate.DISBANDING) return
         if (group.currentGroupState().isDisbanded) return
+        if (group.refusesBareCommits()) return
         // The gate this device raised is the one it is acting under, so it is the
         // one exception to "no commit while gated".
         if (!engine.gate.canPrepareLocalCommit(routingId, ignoringGate = LocalOutboundGate.DISBANDING)) return

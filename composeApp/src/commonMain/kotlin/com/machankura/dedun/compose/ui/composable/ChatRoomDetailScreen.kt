@@ -216,6 +216,7 @@ import dedun.composeapp.generated.resources.remove_from_group
 import dedun.composeapp.generated.resources.disband_group
 import dedun.composeapp.generated.resources.disband_group_explainer
 import dedun.composeapp.generated.resources.group_disbanded
+import dedun.composeapp.generated.resources.group_governed_elsewhere
 import dedun.composeapp.generated.resources.member_removal_requested
 import dedun.composeapp.generated.resources.members_2
 import dedun.composeapp.generated.resources.proposals
@@ -830,7 +831,7 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
-                            item {
+                            if (!chatRoomDetailUIState.isGoverned) item {
                                 TextButton(
                                     onClick = {
                                         // Navigate to the invite user screen...
@@ -981,6 +982,20 @@ fun ChatRoomDetailScreen(
 
                             item {
                                 HorizontalDivider()
+                            }
+
+                            if (chatRoomDetailUIState.isGoverned && !chatRoomDetailUIState.isDisbanded) {
+                                item {
+                                    Text(
+                                        text = stringResource(Res.string.group_governed_elsewhere),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(
+                                            horizontal = MaterialTheme.spacing.containerPadding,
+                                            vertical = MaterialTheme.spacing.compactPadding,
+                                        )
+                                    )
+                                }
                             }
 
                             if (chatRoomDetailUIState.isDisbanded) {

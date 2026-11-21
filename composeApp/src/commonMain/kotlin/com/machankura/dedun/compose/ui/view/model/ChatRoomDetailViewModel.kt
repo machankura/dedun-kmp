@@ -28,6 +28,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
+import com.machankura.dedun.compose.managers.isGoverned
 import com.machankura.dedun.compose.repository.MemberWalletRepository
 import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
@@ -103,7 +104,10 @@ class ChatRoomDetailViewModel(
                 // names, in a room still open. Read off the stored state once.
                 val group = localChatRoom.chatRoom.takeIf { it.marmotProfile() == MarmotProfile.CURRENT }?.toMlsGroup()
                 val isDisbanded = group?.currentGroupState()?.isDisbanded == true
-                val canGovern = group != null && group.isLocalAdmin() && !isDisbanded && localChatRoom.chatRoom.leftGroupAt == null
+                // A room whose changes need the group's signature takes none from this
+                // build: a bare commit would fork it. docs/giza-into-dedun.md, Phase 1.
+                val isGoverned = group?.isGoverned() == true
+                val canGovern = group != null && group.isLocalAdmin() && !isDisbanded && !isGoverned && localChatRoom.chatRoom.leftGroupAt == null
 
                 // A direct chat is a Marmot room of two with no key, and not a group
                 // that guards anybody's wallet: no section, no button.
@@ -134,6 +138,7 @@ class ChatRoomDetailViewModel(
                     wavelengthParticipants = chatRepository.wavelengthParticipants(chatRoomId),
                     canAddSubgroup = canSign,
                     canGovern = canGovern,
+                    isGoverned = isGoverned,
                     isDisbanded = isDisbanded,
                     memberWallets = memberWalletRepository.memberWalletsOf(chatRoomId),
                     // Offered wherever the new-wallet screen could get somewhere:

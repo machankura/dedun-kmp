@@ -14,6 +14,7 @@ import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.GizaProtocolEvents
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
@@ -1956,6 +1957,15 @@ data class ChatMessage(
                 // a White Noise member. Every other unknown kind keeps the bubble,
                 // which is the only trace an unrecognised payload leaves.
                 MarmotAppEvent.KIND_SYSTEM, MarmotAppEvent.KIND_EDIT -> null
+
+                // Giza's share refresh and governed-room traffic, in a room a Giza or Bennu
+                // member shares. This build does not act on them yet, and a raw bubble per
+                // envelope is no account of anything. Last, after every arm of Dedun's own:
+                // until Dedun's kinds move (docs/giza-into-dedun.md, Phase K), 30340-30343
+                // and 30370-30377 are still Dedun's deposit, transfer and Wavelength kinds,
+                // and their arms above read them first -- and return null for an event of
+                // Giza's that does not parse as theirs.
+                in GizaProtocolEvents.ALL -> null
 
                 else -> unsupported()
             }
