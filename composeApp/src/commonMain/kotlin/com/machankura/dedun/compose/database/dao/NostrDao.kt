@@ -101,6 +101,9 @@ import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.extensions.exporterSecret
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.managers.InboxKeyRitualManager
+import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
@@ -1809,6 +1812,21 @@ abstract class NostrDao(
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
                             )
+
+                        // The group's inbox key, made by its admins in the group's own
+                        // room (docs/group-inbox.md, D3). Off with the feature: a release
+                        // build takes no part in a ceremony for a key it would not use.
+                        InboxKeyRitualEvents.isInboxKeyKind(innerEvent.kind) -> {
+                            if (ExperimentalFeatures.groupInbox) {
+                                InboxKeyRitualManager.process(
+                                    database = database,
+                                    localChatRoom = localChatRoom,
+                                    innerEvent = innerEvent,
+                                    userPublicKey = activeKeyPair.pubKey.toHex(),
+                                    nostrPrivateKey = activeKeyPair.privKey!!
+                                )
+                            }
+                        }
 
                         // And a repair, in the same room (Phase 10).
                         ShareRepairEvents.isShareRepairKind(innerEvent.kind) ->

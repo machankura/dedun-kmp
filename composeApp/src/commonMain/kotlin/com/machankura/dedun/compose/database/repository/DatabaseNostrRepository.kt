@@ -61,6 +61,7 @@ import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.InboxKeyRitualManager
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.identity.Identity
 
@@ -158,6 +159,10 @@ class DatabaseNostrRepository(
             ) + FrostSigningManager.resumeVouched(
                 database = database,
                 userPublicKey = userPublicKey,
+            ) + InboxKeyRitualManager.resumeRunning(
+                database = database,
+                userPublicKey = userPublicKey,
+                nostrPrivateKey = privateKey
             )
         }
     }

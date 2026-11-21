@@ -22,6 +22,7 @@ import com.machankura.dedun.compose.nostr.GizaProtocolEvents
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
+import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
@@ -693,6 +694,23 @@ data class ChatMessage(
          * dispatches on. A type missing from here renders as a chat bubble,
          * silently, looking exactly like somebody having said it.
          */
+        /**
+         * The group's inbox (docs/group-inbox.md): its key ceremony starting, finishing or
+         * failing, written by `InboxKeyRitualManager` on every device in the room. Three lines a
+         * ceremony rather than a ladder per step: nobody is asked anything in it, so there is
+         * nobody whose door the ladder would tell a member to knock on until it stalls, and the
+         * ceremony's screen names them then.
+         */
+        const val TYPE_INBOX_KEY_STARTED = "inboxKeyStarted"
+        const val TYPE_INBOX_KEY_COMPLETE = "inboxKeyComplete"
+        const val TYPE_INBOX_KEY_FAILED = "inboxKeyFailed"
+
+        val INBOX_TYPES = setOf(
+            TYPE_INBOX_KEY_STARTED,
+            TYPE_INBOX_KEY_COMPLETE,
+            TYPE_INBOX_KEY_FAILED,
+        )
+
         val GROUP_IDENTITY_TYPES = setOf(
             TYPE_GROUP_PROFILE_SIGNED,
             TYPE_LEGACY_GROUP_RELAYS_SIGNED,
@@ -724,7 +742,7 @@ data class ChatMessage(
             TYPE_CONTACT_PAYOUT_DESTINATION,
             TYPE_MEMBER_TRANSFER_ASKED,
             TYPE_MEMBER_TRANSFER_RECORDED,
-        )
+        ) + INBOX_TYPES
 
         /** The lines in [GROUP_IDENTITY_TYPES] about the Lightning wallet, which open its screen. */
         val GROUP_LIGHTNING_SIGNED_TYPES = setOf(
@@ -1717,6 +1735,10 @@ data class ChatMessage(
                 in ShareRefreshEvents.ALL -> null
                 // Re-enrolling a stale member: 30346-30349, which Dedun never used.
                 in ShareRepairEvents.ALL -> null
+
+                // The inbox key ceremony's messages (docs/group-inbox.md).
+                // `InboxKeyRitualManager` files them and writes its own lines.
+                in InboxKeyRitualEvents.ALL -> null
 
                 ChatEvent.KIND -> {
                     ChatMessage(

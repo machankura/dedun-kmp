@@ -28,6 +28,19 @@ object ExperimentalFeatures {
      */
     val backgroundSync: Boolean
         get() = backgroundSyncOverride ?: isDevelopmentBuild()
+
+    /** Set by a test that has to see the build a release would be. */
+    var groupInboxOverride: Boolean? = null
+
+    /**
+     * A group that can be written to privately (docs/group-inbox.md): an inbox key its admins
+     * make together and the group announces, the messages sent to it, and replies the quorum
+     * signs. Off in a release while NIP-4E is a draft: off, the app offers no inbox, starts no
+     * ceremony and listens for nothing. A device still declines, out loud, an inbox
+     * announcement or a reply it finds wrong -- that is a refusal, not a feature.
+     */
+    val groupInbox: Boolean
+        get() = groupInboxOverride ?: isDevelopmentBuild()
 }
 
 /** Whether this is a debug or development build of the app, rather than a release. */
