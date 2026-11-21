@@ -339,6 +339,35 @@ open class GroupWavelengthWalletJvmTest {
     }
 
     @Test
+    fun `a wallet the group opened before a rotation is still believed after it`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        fixture.refreshOnchainKey(all)
+        // Its holders are checked against everyone who has held a share of the key, at any
+        // generation (docs/giza-into-dedun.md, Phase 7), as the Lightning wallet's are.
+        all.forEach { d -> assertNotNull(GroupWavelengthWalletManager.current(d.db, fixture.roomId, fixture.chain), "device ${d.index}") }
+    }
+
+    @Test
+    fun `a rotation waits while a payment is being signed, and not once it is`() = runBlocking<Unit> {
+        val all = fixture.group()
+        fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)
+        fixture.openWallet(all)
+        val wallet = assertNotNull(GroupWavelengthWalletManager.current(all[0].db, fixture.roomId, fixture.chain))
+        val key = assertNotNull(FrostSigningManager.completedKey(all[1].db, fixture.roomId))
+        val pay = invoice(10_000_500, metadata = fixture.metadataOf(all[1]))
+        val expiresAt = Clock.System.now().epochSeconds + 3600
+
+        val session = GroupWavelengthPayments.propose(all[1].db, all[1].room, all[1].publicKey, wallet, pay.write(), 1_000, 400_000, expiresAt, fixture.payable(all, all[1], wallet, 200_000), fixture.metadataOf(all[1]))
+        val hold = ShareRefreshManager.rotationHold(all[1].db, all[1].room, key)
+        assertEquals(RotationHold.StatementOpen(session.id), hold, "rotating now would fail the approval: docs/giza-into-dedun.md, Phase 7")
+
+        fixture.signSession(all, all[1], session.id)
+        assertTrue(ShareRefreshManager.rotationHold(all[1].db, all[1].room, key) !is RotationHold.StatementOpen)
+    }
+
+    @Test
     fun `an invoice with no amount can't be approved, and a label can't say another hash than its invoice`() = runBlocking<Unit> {
         val all = fixture.group()
         fixture.runCeremony(all, purpose = IcebergKeySession.PURPOSE_WAVELENGTH)

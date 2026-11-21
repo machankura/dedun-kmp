@@ -438,13 +438,15 @@ class GroupSpendSigningJvmTest {
     }
 
     @Test
-    fun `a rotation waits for a spend still being signed, and not after it`() = runBlocking<Unit> {
+    fun `a rotation waits for a payout still being signed, and not after it`() = runBlocking<Unit> {
         val proposer = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
         openWallet(proposer, other)
+        alicesFunding(proposer, other)
         val key = proposer.db.dkgSessionDao().getSessionById(ceremonyId)!!
 
-        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, psbt(), chain)
+        // A payout, the only spend Dedun's group wallet signs (docs/payouts-only.md, Phase 6).
+        val session = FrostSigningManager.proposeSpend(proposer.db, proposer.room, proposer.publicKey, payoutPsbt(), chain)
         assertEquals(RotationHold.SpendOpen(session.id), ShareRefreshManager.rotationHold(proposer.db, proposer.room, key))
 
         pump(proposer, other)

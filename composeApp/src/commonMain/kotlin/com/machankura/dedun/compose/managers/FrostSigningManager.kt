@@ -572,6 +572,33 @@ object FrostSigningManager {
             it.subject == FrostSigningSubject.TRANSACTION || it.subject == FrostSigningSubject.SWEEP
         }
 
+    /**
+     * The kinds of Dedun's money statements: whose a deposit is, whose a coin is, a member's
+     * transfer, and a payout approved from the Wavelength or the Lightning wallet.
+     */
+    private val MONEY_STATEMENTS: Set<Int> = setOf(
+        DepositAttributionEvent.KIND,
+        CoinAssignmentEvent.KIND,
+        MemberTransferEvent.KIND,
+        GroupWavelengthPaymentEvent.KIND,
+        GroupLightningAuthorisationEvent.KIND,
+    )
+
+    /**
+     * One of Dedun's money statements still being signed with [dkgSessionId]: what a rotation
+     * also waits for (`RotationHold.StatementOpen`). Failing it would lose nothing -- nothing is
+     * paid until the statement is signed -- but a member's payout or transfer would quietly need
+     * proposing again. docs/giza-into-dedun.md, Phase 7.
+     */
+    suspend fun openMoneyStatementSession(database: DedunDatabase, dkgSessionId: String): FrostSigningSession? =
+        database.frostSigningSessionDao().getOpenSessionsForKey(dkgSessionId)
+            .filter { it.subject == FrostSigningSubject.EVENTS }
+            .firstOrNull { session ->
+                database.frostSigningSessionDao().getItems(session.id)
+                    .mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
+                    .any { MovedKinds.current(it.kind) in MONEY_STATEMENTS }
+            }
+
     /** A session for [innerEvent]'s proposal at [generation] of [key]'s shares. */
     private fun newSession(
         sessionId: String,

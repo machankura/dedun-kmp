@@ -119,8 +119,10 @@ object GroupWavelengthWalletManager {
         // The echo rule only holds for a group of this shape: see [GroupArkCoSigner].
         if (!IcebergDkg.isDeployable(statement.participants.size, statement.threshold)) return refused(Refusal.SIZE_NOT_DEPLOYABLE)
         if (GroupWalletManager.walletFor(database, chatRoomId, statement.chain, statement.onchainAccount) == null) return refused(Refusal.NO_ONCHAIN_WALLET)
-        FrostSigningManager.completedKey(database, chatRoomId)?.participantPublicKeySet()?.let { holders ->
-            if (!holders.map { it.lowercase() }.containsAll(statement.participants)) return refused(Refusal.NOT_KEY_HOLDERS)
+        // Any generation's holders, since a rotation can retire one after the wallet named them, and a
+        // re-enrolled member holds a share under a new id (docs/giza-into-dedun.md, Phase 7).
+        FrostSigningManager.completedKey(database, chatRoomId)?.let { IcebergRitualManager.everHeld(database, it) }?.let { holders ->
+            if (!holders.containsAll(statement.participants)) return refused(Refusal.NOT_KEY_HOLDERS)
         }
 
         val ceremony = database.icebergKeySessionDao().getSessionById(statement.ceremonyId)

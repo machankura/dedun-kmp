@@ -32,6 +32,15 @@ sealed interface RotationHold {
         override val reason get() = "a spend from the group's wallet is still being signed"
     }
 
+    /**
+     * Dedun's: one of its money statements -- a deposit attribution, a coin assignment, a
+     * transfer, or a payout from the Wavelength or the Lightning wallet -- is still being
+     * signed with this key. docs/giza-into-dedun.md, Phase 7.
+     */
+    data class StatementOpen(val signingSessionId: String) : RotationHold {
+        override val reason get() = "a payout, transfer or attribution is still being signed"
+    }
+
     /** The group signs at a generation this device has not reached: it missed a certificate. */
     data class Behind(val groupGeneration: Int, val localGeneration: Int) : RotationHold {
         override val reason get() = "the group is at generation $groupGeneration and this device at $localGeneration"
