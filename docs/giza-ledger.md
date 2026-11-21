@@ -16,7 +16,24 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 
 ## Baseline, on `693e522a`
 
-Filled in when the Phase 0 runs finish.
+- `./gradlew :composeApp:jvmTest`: 2,700 run, 1 failed, 7 skipped. The failure is
+  `IdentitySwitchJvmTest` "the last profile opened is the one a cold boot resolves, until it
+  is forgotten", a coroutine timeout under the full suite's load -- the flake
+  [dedun-rename.md](./dedun-rename.md) and `frost-session-resend.md` describe. Bennu's
+  baseline had the same one.
+- `./gradlew :composeApp:m3Audit`: all budgets met. `.copy(alpha =)` 9, string literals in
+  composables 21, adaptive APIs 16 (floor 12), navigation components 2 (floor 2),
+  "Something went wrong" sites 3.
+- The regtest suites and the Wavelength signet run: not run for the baseline. Phase 4 runs
+  the regtest suites before and after it moves the toolchain, which is the comparison that
+  matters; no signet operator was available.
+- The trial merge of Bennu's whole port (`4e106fb5..2db6dde5`, renamed) onto `693e522a`
+  conflicts in 22 files: six schema JSONs (36-41, regenerated rather than merged),
+  `DedunDatabase`, `ChatMessage`, `ChatRoomDetailScreen`, `ChatRoomDetailViewModel`,
+  `ChatRoomDetailUIState`, `ChatTranscript`, `strings.xml`, `composeApp/build.gradle.kts`,
+  `gradle/libs.versions.toml`, five jvmTest files, `docs/README.md` and `README.md`.
+  `FrostSigningManager` merges without a conflict, which says nothing about whether it is
+  right: Phases 6 and 7 read it.
 
 | giza | bennu port | group | phase | Bennu | Dedun | subject |
 |---|---|---|---|---|---|---|
@@ -98,7 +115,7 @@ Filled in when the Phase 0 runs finish.
 | `8088efd7` | `c63026c4` | member-admin-promotion | 8 | taken | pending | docs: making a member an admin and back, a phased plan |
 | `83711419` | `93235e3f` | robust-group-admins | 8 | taken | pending | fix: a member welcomed into a room sees its admins at once (robust-group-admins, Phase 2) |
 | `46eb23b7` | `554ddfdd` | rotate shares, single approval | 7 | adapted | pending | feat: a rotation's key state signs itself (rotate-shares-single-approval, Phase 5) |
-| `2ed83c55` | `8ba35258` | member-admin-promotion | 1 | taken | pending | fix: an admin's refused leave is shown, not thrown out of the view model (member-admin-promotion, Phase 10a) |
+| `2ed83c55` | `8ba35258` | member-admin-promotion | 1 | taken | `f1954991` | fix: an admin's refused leave is shown, not thrown out of the view model (member-admin-promotion, Phase 10a) |
 | `53acae68` | `cccb2c12` | member-admin-promotion | 8 | adapted | pending | feat: a member's admin flag is true from the room's first moment (member-admin-promotion, Phase 1) |
 | `4671a86a` | `f4c03ad0` | robust-group-admins | 8 | taken | pending | feat: a device checks its admin room against the ceremony it took part in (robust-group-admins, Phase 3) |
 | `11f2cb2b` | `baedb44d` | rotate shares, single approval | 7 | adapted | pending | feat: the Shares section, with one approval (rotate-shares-single-approval, Phase 6) |
@@ -201,7 +218,7 @@ Filled in when the Phase 0 runs finish.
 |---|---|---|
 | `040e5746` | skip: Bennu's own notes | docs: a phased plan to take Giza's work back into Bennu |
 | `e242ab59` | skip: Bennu's own notes | docs: the Giza mirror, a ledger of every Giza commit, and the baseline (giza-into-bennu, Phase 0) |
-| `360f772c` | pending | feat: Bennu makes no bare commit in a room Giza governs (giza-into-bennu, Phase 1) |
+| `360f772c` | `c33a3fb3` | feat: Bennu makes no bare commit in a room Giza governs (giza-into-bennu, Phase 1) |
 | `4f49e6a7` | skip: Bennu's own notes | docs: the marmot-kmp group is in, and Bennu's schema is 36 (giza-into-bennu, Phase 2) |
 | `505df0ac` | skip: Bennu's own notes | docs: quartz 2.20.1 through Magpie is in (giza-into-bennu, Phase 3) |
 | `9fd354c6` | skip: Bennu's own notes | docs: the toolchain and the submodule chain are in, measured in Bennu (giza-into-bennu, Phase 4) |
