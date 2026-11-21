@@ -445,6 +445,13 @@ silently into the lock. If they do either, record how this phase settles it.
 **Done when** `./gradlew check` passes with the Magpie lock audit in it, and
 `engine-interop` passes.
 
+**As built.** Magpie is declared for the six `com.vitorpamplona` groups and nothing else, so the
+Wavelength bindings' file repository never reaches it, and neither the build nor the lock
+audit sees them. The commits applied without a conflict except `971dd459`'s README line,
+which went into Dedun's own README. jvmTest: 2,915 run, 0 failed. `magpieLockAudit`,
+`marmotAudit`, `m3Audit` and `compileDebugKotlinAndroid` are green, and `engine-interop`
+passes 20/20.
+
 ## Phase 4: the toolchain and the submodule chain
 
 Bennu's port Phase 4, in one PR. Take `3e0a16b1`'s lint fixes first, then the catalogue

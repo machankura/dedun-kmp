@@ -176,20 +176,20 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 | `521135c8` | `af8d4bee` | admin-change-rotation | 9 | adapted | pending | feat: one rule for what a rotation and an admin change wait on (admin-change-rotation, Phase 2) |
 | `c7d46258` | `bc9ff6a0` | admin-change-rotation | 9 | adapted | pending | feat: admin changes and rotations take turns (admin-change-rotation, Phases 3 and 4) |
 | `8bf0a240` | `ce21e236` | admin-change-rotation | 9 | adapted | pending | feat: the rotation an admin change owes asks nobody (admin-change-rotation, Phase 5) |
-| `d51fdde0` | `41466e33` | quartz/mls/marmot update | 3 | taken | pending | docs: plan the move to quartz 2.20.1, mls-kmp 1.4.0, marmot-kmp 2.3.0 and crypto-kmp 2.1.1 |
+| `d51fdde0` | `41466e33` | quartz/mls/marmot update | 3 | taken | `e3ad4380` | docs: plan the move to quartz 2.20.1, mls-kmp 1.4.0, marmot-kmp 2.3.0 and crypto-kmp 2.1.1 |
 | `9fddb0c3` | `dc04d41d` | admin-change-rotation | 9 | taken | pending | feat: the first promotion rotates the shares itself (admin-change-rotation, Phase 6) |
-| `3a1dbf87` | `bbcf8e7a` | quartz/mls/marmot update | 3 | taken | pending | docs: Magpie adopted, and mls-kmp 1.4.0 is a tag not a release (quartz-mls-marmot-update, Phase 0) |
-| `971dd459` | `1ace8417` | quartz/mls/marmot update | 3 | adapted | pending | build: the Gradle daemon runs on Java 21 whatever java is on the path (quartz-mls-marmot-update, Phase 1) |
+| `3a1dbf87` | `bbcf8e7a` | quartz/mls/marmot update | 3 | taken | `e9ebfcde` | docs: Magpie adopted, and mls-kmp 1.4.0 is a tag not a release (quartz-mls-marmot-update, Phase 0) |
+| `971dd459` | `1ace8417` | quartz/mls/marmot update | 3 | adapted | `b2bd1390` | build: the Gradle daemon runs on Java 21 whatever java is on the path (quartz-mls-marmot-update, Phase 1) |
 | `cc21d683` | `cd67377f` | admin-change-rotation | 9 | adapted | pending | feat: the Shares section says whose share a rotation takes away; the record (admin-change-rotation, Phases 7 and 8) |
-| `f56be2b3` | `eb4c120e` | quartz/mls/marmot update | 3 | taken | pending | build: quartz 2.20.0, marmot-kmp 2.3.0, mls-kmp 1.3.1 and crypto-kmp 2.1.1, through Magpie (quartz-mls-marmot-update, Phase 2) |
-| `c81e4a2d` | `6db5af5c` | quartz/mls/marmot update | 3 | taken | pending | test: an old epoch-0 room moves forward on mls-kmp 1.3.1 (quartz-mls-marmot-update, Phase 3) |
-| `a08a8789` | `822b924b` | quartz/mls/marmot update | 3 | taken | pending | docs(tools): the shipped engine against the old one, both ways, three epochs (quartz-mls-marmot-update, Phase 3) |
-| `0b43295a` | `4e63c4f1` | quartz/mls/marmot update | 3 | taken | pending | test: pin the state version a save is written at (quartz-mls-marmot-update, Phase 4) |
-| `0ecc179d` | `269410be` | quartz/mls/marmot update | 3 | taken | pending | build: quartz 2.20.1, one past marmot's pin (quartz-mls-marmot-update, Phase 5a) |
+| `f56be2b3` | `eb4c120e` | quartz/mls/marmot update | 3 | taken | `d66b1330` | build: quartz 2.20.0, marmot-kmp 2.3.0, mls-kmp 1.3.1 and crypto-kmp 2.1.1, through Magpie (quartz-mls-marmot-update, Phase 2) |
+| `c81e4a2d` | `6db5af5c` | quartz/mls/marmot update | 3 | taken | `2dbf74c0` | test: an old epoch-0 room moves forward on mls-kmp 1.3.1 (quartz-mls-marmot-update, Phase 3) |
+| `a08a8789` | `822b924b` | quartz/mls/marmot update | 3 | taken | `027fd301` | docs(tools): the shipped engine against the old one, both ways, three epochs (quartz-mls-marmot-update, Phase 3) |
+| `0b43295a` | `4e63c4f1` | quartz/mls/marmot update | 3 | taken | `5acf9a70` | test: pin the state version a save is written at (quartz-mls-marmot-update, Phase 4) |
+| `0ecc179d` | `269410be` | quartz/mls/marmot update | 3 | taken | `e3cb2816` | build: quartz 2.20.1, one past marmot's pin (quartz-mls-marmot-update, Phase 5a) |
 | `d6c34a77` | `1ff82201` | admin-change-rotation | 9 | taken | pending | fix: a rotation reads the admin policy alone, now the founding-admins check is gone |
-| `7222df01` | `5f38e389` | quartz/mls/marmot update | 3 | taken | pending | build: the lock holds only what resolves (quartz-mls-marmot-update, Phase 6, Linux half) |
-| `7fe64930` | `bea28974` | quartz/mls/marmot update | 3 | taken | pending | build: check fails when the catalogue and the Magpie lock disagree (quartz-mls-marmot-update, Phase 7) |
-| `a6d04ec5` | `1775b3ff` | quartz/mls/marmot update | 3 | taken | pending | docs: the notes that still said quartz 2.7.3 (quartz-mls-marmot-update, Phase 7) |
+| `7222df01` | `5f38e389` | quartz/mls/marmot update | 3 | taken | `83c00bc8` | build: the lock holds only what resolves (quartz-mls-marmot-update, Phase 6, Linux half) |
+| `7fe64930` | `bea28974` | quartz/mls/marmot update | 3 | taken | `29e345dc` | build: check fails when the catalogue and the Magpie lock disagree (quartz-mls-marmot-update, Phase 7) |
+| `a6d04ec5` | `1775b3ff` | quartz/mls/marmot update | 3 | taken | `0aaad433` | docs: the notes that still said quartz 2.7.3 (quartz-mls-marmot-update, Phase 7) |
 | `25f14aa4` | `7ebcd810` | dependency update | 4 | taken | pending | docs: a phased plan to update every dependency outside the Magpie four |
 | `2e07fda0` | — | dependency update | — | skip | skip | docs: the baselines (dependency-update, Phase 0) |
 | `dafcff2c` | `2f889b25` | dependency update | 4 | taken | pending | build: the catalogue entries nothing reads (dependency-update, Phase 1) |
