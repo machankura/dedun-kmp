@@ -174,7 +174,16 @@ class ChatRoomMemberRowJvmTest {
     fun `an admin's row says so, and a share holder's says that apart`() {
         render(
             onNavigateToRoute = {},
-            state = state().copy(adminPublicKeys = setOf(named), shareHolders = setOf(stillLoading)),
+            state = state().let { loaded ->
+                loaded.copy(
+                    localChatRoom = loaded.localChatRoom.copy(
+                        localParticipants = loaded.localChatRoom.localParticipants.map {
+                            if (it.participant.participantPublicKey == named) it.copy(participant = it.participant.copy(adminAt = kotlin.time.Instant.fromEpochSeconds(1_700_000_000))) else it
+                        },
+                    ),
+                    shareHolders = setOf(stillLoading),
+                )
+            },
         ) {
             onNodeWithText("Admin").assertExists()
             onNodeWithText("Holds a share").assertExists()
