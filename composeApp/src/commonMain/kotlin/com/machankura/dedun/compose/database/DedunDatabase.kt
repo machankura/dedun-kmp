@@ -67,6 +67,8 @@ import com.machankura.dedun.compose.database.dao.GroupKeyStateDao
 import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
 import com.machankura.dedun.compose.database.dao.NotificationDao
 import com.machankura.dedun.compose.database.migrations.ReadMarkMigrationSpec
+import com.machankura.dedun.compose.database.dao.GroupInboxDao
+import com.machankura.dedun.compose.database.dao.InboxKeyDao
 import com.machankura.dedun.compose.database.dao.InReplyToRelationDao
 import com.machankura.dedun.compose.database.dao.KeyShareDao
 import com.machankura.dedun.compose.database.dao.ShareRefreshDao
@@ -150,6 +152,12 @@ import com.machankura.dedun.compose.database.model.Reaction
 import com.machankura.dedun.compose.database.model.RecentSearch
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
 import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.GroupInboxMessage
+import com.machankura.dedun.compose.database.model.GroupInboxPublication
+import com.machankura.dedun.compose.database.model.GroupInboxWrap
+import com.machankura.dedun.compose.database.model.InboxKey
+import com.machankura.dedun.compose.database.model.InboxKeyCeremony
+import com.machankura.dedun.compose.database.model.InboxKeyCeremonyMessage
 import com.machankura.dedun.compose.database.model.FrostSignerMessage
 import com.machankura.dedun.compose.database.model.FrostSigningItem
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -181,6 +189,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GiftWrapMessage::class,
         GiftWrapSeal::class,
         GiftWrapPayload::class,
+        GroupInboxMessage::class,
+        GroupInboxPublication::class,
+        GroupInboxWrap::class,
         GroupKeyState::class,
         GroupLightningInvoiceRow::class,
         DepositRow::class,
@@ -216,6 +227,9 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         IcebergNonceRow::class,
         IcebergParticipantMessage::class,
         IcebergShareRow::class,
+        InboxKey::class,
+        InboxKeyCeremony::class,
+        InboxKeyCeremonyMessage::class,
         KeyShareGeneration::class,
         KeyShareMember::class,
         ShareRefreshConfirmation::class,
@@ -256,7 +270,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 52,
+    version = 53,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -566,6 +580,11 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // (docs/member-admin-promotion.md, Phases 8 and 9): two nullable columns, so
         // Room generates it. Giza's v42, Bennu's v41.
         AutoMigration(from = 51, to = 52),
+        // v53 adds the group's inbox (docs/group-inbox.md, Phase 3, Giza's v45; docs/giza-second-batch.md,
+        // Phase 6): InboxKeyCeremony, InboxKeyCeremonyMessage and InboxKey, kept apart from DkgSession so
+        // no signing path can find a threshold-1 key, and GroupInboxWrap, GroupInboxMessage and
+        // GroupInboxPublication. New tables only, so Room generates it.
+        AutoMigration(from = 52, to = 53),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -608,6 +627,10 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun groupSignedEventDao(): GroupSignedEventDao
 
     abstract fun groupTransactionDao(): GroupTransactionDao
+
+    abstract fun inboxKeyDao(): InboxKeyDao
+
+    abstract fun groupInboxDao(): GroupInboxDao
 
     abstract fun notificationDao(): NotificationDao
 

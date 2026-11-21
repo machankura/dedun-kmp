@@ -66,10 +66,11 @@ class ShippedProfileUpgradeJvmTest {
      * refresh and 49 for share repair (docs/frost-share-refresh.md, Phases 6, 7 and
      * 10), 50 for notifications' read marks and ledger (docs/giza-second-batch.md,
      * Phase 3), 51 for governance proposals and 52 for what a demotion rotates away
-     * (docs/member-admin-promotion.md, Phases 5, 8 and 9), so the upgrade crosses seven
+     * (docs/member-admin-promotion.md, Phases 5, 8 and 9), 53 for the group's inbox
+     * (docs/group-inbox.md, Phase 3), so the upgrade crosses eight
      * generated migrations and the file has to come out at the last.
      */
-    private val current = 52
+    private val current = 53
 
     private val directory: File = Files.createTempDirectory("dedun-shipped-profile").toFile()
     private val file: File = File(directory, "aux.db")
