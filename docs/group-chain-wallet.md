@@ -453,7 +453,9 @@ address out of it.
 chain, to anyone. `BroadcastGroupSignedEventScreen` refused this kind, and a test
 said it refused it. That screen has since been removed with the group's nostr
 profile, relay lists and posts, and nothing in the app now sends a group-signed
-event to a relay.
+event to a relay. *(Later: Giza brought the screen back with the group's profile and
+posts, and it sends those two kinds and refuses every other, this one included --
+[group-nostr-profile-and-posts.md](../group-nostr-profile-and-posts.md), D7.)*
 
 `GroupWallet` is a read model over `GroupSignedEvent`, in the shape the
 since-removed `GroupRelayList.of`/`newestAmong` had. There is no table: a wallet is a signed event

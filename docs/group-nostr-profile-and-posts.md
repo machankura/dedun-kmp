@@ -17,10 +17,37 @@ read [member-chronicle.md](./member-chronicle.md), for why a group-signed event 
 `NostrEvent`, and [giza-wallet-removal.md](./giza-wallet-removal.md), for the fail-closed
 rule that D5 extends.
 
-**Not built.** Written against `d0437d6c`, on 2026-11-21. The reference implementation is
-Curare at `dc1895ee` (`databending/curated-kmp`, package `to.curare.compose`). Below,
-paths starting `K/` are under `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`, and
-paths starting `C/` are the same tree in Curare under `to/curare/compose/`.
+**Built** on `claude/nostr-group-proposal-plan-95ace6`, against `d0437d6c`, on 2026-11-21,
+one commit per phase (`bdb0b3f0` to the commit that adds this header), plus one fix in
+Phase 7. jvmTest 1,447 → 1,511, all passing. `m3Audit`, `brandAudit` and `walletAudit`
+are at their budgets, and `compileDebugKotlinAndroid` builds. The phases are kept as
+written, because they are the reasoning. Where the build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 1: pin `ProposedEvent` saying "Event of kind 0/1" | already pinned (`a profile, a post and a relay list are no longer described`). Phase 2 split it into three: a profile, a post, and a relay list still said by its number |
+| Phase 1: the premise test in `FrostSigningRoundTest` or `ShareRefreshRitualJvmTest` | in `SignedGroupKeyStateTest`, whose harness already signs a post in a keyed room: `a post the group signs verifies as the room's own statement`. It passed, so the plan went on |
+| Phase 2: rework the profile template tests for quartz 2.20.1's tag mirroring | not needed: they read the content, which is unchanged. That the tags agree with the content is **not** asserted |
+| D4: a Marmot room, a share, not disbanded, and `LocalCanSign` | also **not left**: a member who left cannot send the proposal into the group. The room's half is `GroupStatementCapability.roomIsOpen`, shared by the five view models that gate on it |
+| Phase 4: decline in `acceptProposal`, the `approve` backstop and `publishDecline` | as planned. The redelivery path (`declinesAsWallet` on a repeated proposal) was not extended: a session filed before Phase 4 is declined when its owner approves |
+| Phase 4: tests in the signing harness | `GroupStatementDeclineJvmTest`, on `WalletDeclineJvmTest`'s harness, where a real proposal crosses the inbound path |
+| Phase 5: edit `ChatRoomDetailWithoutWalletsJvmTest` | the absence test moved to a new `GroupSignedWorkRowsJvmTest` (Curare's name), which checks the rows are there, open their screens, and stay out of a NIP-17 room |
+| D8: the empty state says the device holds nothing | a new string, `this_device_holds_no_profile_for_this_group` (and `…_no_posts_…`), in place of Curare's "hasn't said anything" |
+| Phase 6: the composer says a post cannot be taken back | added to Curare's `the_group_signs_a_post_so_it_takes_a_quorum`. The composer's blank check is `GroupStatementRefusal.isBlankPost`, the same predicate the signer declines on |
+| Phase 7: `defaultRelaysFor` is the publish set | as planned; the screen's hint string says the app's relays are filled in, not the group's. The screen test empties the seeded list through the UI, since there is no Blocked list to seed nothing with |
+| (not in the plan) | **the broadcast screen refuses every kind but 0 and 1.** The id is a navigation argument, and the wallet removal kept every `GroupSignedEvent`, Bennu-era wallet statements included, whose xpub on a relay is the group's history on chain. Curare refused the wallet's kind; this refuses all others. `BroadcastLeavesNoRowJvmTest` pins it beside D7 |
+| Phase 8: a "Propose event" `TextButton` when `canProposeAsGroup` | and when the identity can sign. `LocalCanSign` is read at the top of `ChatRoomDetailScreen`, since a `LazyColumn`'s DSL is not composable |
+| (not in the plan) | the worktree's build needed `lightning-kmp-app` and its nested submodules initialised from the main checkout's copies, and their `local.properties` copied in |
+
+**Not done:** Phase 9's device run. Nothing here has run on a device or a desktop
+client. No profile has been proposed, signed and broadcast across real devices, no
+public client has shown the group's name, and nothing has been tried against a Curare
+peer.
+
+The reference implementation is Curare at `dc1895ee` (`databending/curated-kmp`, package
+`to.curare.compose`). Below, paths starting `K/` are under
+`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`, and paths starting `C/` are the same
+tree in Curare under `to/curare/compose/`.
 
 ---
 
