@@ -35,6 +35,15 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
   `FrostSigningManager` merges without a conflict, which says nothing about whether it is
   right: Phases 6 and 7 read it.
 
+## Regtest
+
+| when | GroupLightning | LiquidityPurchase | MemberBranches | PayoutAddress |
+|---|---|---|---|---|
+| before Phase 4, on `87ebf456` | pass | pass | pass | pass (3) |
+| after Phase 4, on `a8331b90` | pass | pass | pass | pass (3) |
+
+Each suite ran on a fresh `dedun-regtest` network.
+
 | giza | bennu port | group | phase | Bennu | Dedun | subject |
 |---|---|---|---|---|---|---|
 | `8dd09aa0` | — | bennu | 0 | pending | held (D7) | chore: license the project under GPL-3.0-or-later |
@@ -73,7 +82,7 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 | `e07bb680` | `de800c1a` | marmot-kmp | 2 | adapted | `ce1a62d7` | feat: the sender ratchet as its own row, and the receive side beside it (marmot-kmp, Phase 8) |
 | `1321962b` | `3c5d0505` | marmot-kmp | 2 | adapted | `0fd95ee2` | test: the version the app ships, opened by the version it builds (marmot-kmp, Phase 9) |
 | `33492cff` | — | submodule refresh | — | skip | skip | docs: carrying reduced FROST enrollment up the submodule chain (plan) |
-| `051b339a` | `a0d2e4c2` | submodule refresh | 4 | taken | pending | build: lightning-kmp-app with reduced FROST enrollment down the chain |
+| `051b339a` | `a0d2e4c2` | submodule refresh | 4 | taken | `613b1405` | build: lightning-kmp-app with reduced FROST enrollment down the chain |
 | `70a38d06` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is built, and what is left to push and check |
 | `d4dd87f2` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is pushed, and what is left |
 | `8dd710a1` | `cf210849` | share refresh | 7 | taken | pending | docs: rotating a group's shares without moving its key (plan) |
@@ -86,7 +95,7 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 | `d71cf0c0` | `2f51e0ae` | automatic key ceremony | 5 | adapted | pending | feat: one approval screen for a key ceremony (automatic ceremony, Phase 4) |
 | `4c75ca1b` | `97f0cf2a` | automatic key ceremony | 5 | taken | pending | feat: a stalled key ceremony says on whom, and offers abandon there (automatic ceremony, Phase 5) |
 | `73fcfff0` | `2a90b3f0` | automatic key ceremony | 5 | taken | pending | feat: the coordinator's device takes a finished ceremony to its room (automatic ceremony, Phase 6) |
-| `c8a529a1` | `9277ee80` | submodule refresh | 4 | doc taken; pointer in 4 | pending | build: lightning-kmp-app with FROST share refresh down the chain (frost-share-refresh, Phase 4) |
+| `c8a529a1` | `9277ee80` | submodule refresh | 4 | doc taken; pointer in 4 | `a8331b90` | build: lightning-kmp-app with FROST share refresh down the chain (frost-share-refresh, Phase 4) |
 | `f8974aec` | `b0e193a7` | share refresh | 7 | adapted | pending | feat: a group rotates its shares, end to end between devices (frost-share-refresh, Phase 7) |
 | `0a60da6e` | `ca129b5e` | automatic key ceremony | 5 | adapted | pending | feat: a ceremony's own key state signs itself (automatic ceremony, Phase 7) |
 | `6491d2aa` | `aa88a097` | automatic key ceremony | 5 | taken | pending | docs: joining is the only approval, as built (automatic ceremony, Phase 8) |
@@ -190,26 +199,26 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 | `7222df01` | `5f38e389` | quartz/mls/marmot update | 3 | taken | `83c00bc8` | build: the lock holds only what resolves (quartz-mls-marmot-update, Phase 6, Linux half) |
 | `7fe64930` | `bea28974` | quartz/mls/marmot update | 3 | taken | `29e345dc` | build: check fails when the catalogue and the Magpie lock disagree (quartz-mls-marmot-update, Phase 7) |
 | `a6d04ec5` | `1775b3ff` | quartz/mls/marmot update | 3 | taken | `0aaad433` | docs: the notes that still said quartz 2.7.3 (quartz-mls-marmot-update, Phase 7) |
-| `25f14aa4` | `7ebcd810` | dependency update | 4 | taken | pending | docs: a phased plan to update every dependency outside the Magpie four |
+| `25f14aa4` | `7ebcd810` | dependency update | 4 | taken | `b925b3f6` | docs: a phased plan to update every dependency outside the Magpie four |
 | `2e07fda0` | — | dependency update | — | skip | skip | docs: the baselines (dependency-update, Phase 0) |
-| `dafcff2c` | `2f889b25` | dependency update | 4 | taken | pending | build: the catalogue entries nothing reads (dependency-update, Phase 1) |
-| `56df0a2b` | `f5ef3160` | dependency update | 4 | taken | pending | build: serialization 1.13.0, kermit 2.2.0, okio 3.18.2 (dependency-update, Phase 2a) |
+| `dafcff2c` | `2f889b25` | dependency update | 4 | taken | `b5f0ad60` | build: the catalogue entries nothing reads (dependency-update, Phase 1) |
+| `56df0a2b` | `f5ef3160` | dependency update | 4 | taken | `a0002de5` | build: serialization 1.13.0, kermit 2.2.0, okio 3.18.2 (dependency-update, Phase 2a) |
 | `a4f54ad4` | — | icon | — | skip | skip | Update icon. |
-| `3371fb3a` | `e227e0a7` | dependency update | 4 | taken | pending | build: ktor 3.6.1 (dependency-update, Phase 2b) |
+| `3371fb3a` | `e227e0a7` | dependency update | 4 | taken | `e765ab0c` | build: ktor 3.6.1 (dependency-update, Phase 2b) |
 | `873d76aa` | — | icon | — | skip | skip | docs: the sphinx icon on iOS, desktop and in the app, a phased plan (giza-app-icon) |
-| `572515b9` | `c91a674e` | dependency update | 4 | taken | pending | build: room3 3.0.3, sqlite 2.7.1, DataStore 1.3.0, KSP 2.3.14 (dependency-update, Phase 2c) |
+| `572515b9` | `c91a674e` | dependency update | 4 | taken | `d5043c0b` | build: room3 3.0.3, sqlite 2.7.1, DataStore 1.3.0, KSP 2.3.14 (dependency-update, Phase 2c) |
 | `16dde956` | — | icon | — | skip | skip | docs: the sphinx master, and the baseline it is matched against (giza-app-icon, Phase 0) |
 | `0cbc9cc5` | — | icon | — | skip | skip | build: one generator for every icon outside Android (giza-app-icon, Phase 1) |
-| `ae418b5d` | `9ddfa8c0` | dependency update | 4 | taken | pending | build: Compose 1.12.2, material3 1.12.0-alpha03, navigation 2.10.0, coil 3.6.3, qrose 1.3.1, Hot Reload 1.3.0 (dependency-update, Phase 3) |
+| `ae418b5d` | `9ddfa8c0` | dependency update | 4 | taken | `3c2ab780` | build: Compose 1.12.2, material3 1.12.0-alpha03, navigation 2.10.0, coil 3.6.3, qrose 1.3.1, Hot Reload 1.3.0 (dependency-update, Phase 3) |
 | `554c653d` | — | icon | — | skip | skip | feat: the in-app logo is the sphinx on black (giza-app-icon, Phase 2) |
 | `658a69a3` | — | icon | — | skip | skip | feat(ios): the sphinx app icon in light, dark and tinted (giza-app-icon, Phase 3) |
 | `aaf037bf` | — | icon | — | skip | skip | feat(desktop): the sphinx on the installers and the window (giza-app-icon, Phase 4) |
 | `b6d4c709` | — | icon | — | skip | skip | docs: the icon is built, and what is left to see on devices (giza-app-icon, Phase 5) |
-| `3f8336fc` | `cc3a8e30` | dependency update | 4 | taken | pending | build: Gradle 9.9.2 (dependency-update, Phase 4) |
-| `3e0a16b1` | `cb6912ca` | dependency update | 4 | taken | pending | fix: the three lint errors AGP 9.5's lint finds in commonMain |
-| `a3c0b830` | `86679a93` | dependency update | 4 | adapted | pending | build: AGP 9.5.1 across the composite (dependency-update, Phase 5) |
-| `302ce3ca` | `01d4d8e7` | dependency update | 4 | taken | pending | build: Kotlin 2.4.21 across the composite (dependency-update, Phase 6) |
-| `65a2507a` | `fc7a045d` | dependency update | 4 | taken | pending | docs: the comments that named the old versions (dependency-update, Phase 7) |
+| `3f8336fc` | `cc3a8e30` | dependency update | 4 | taken | `9dd3732f` | build: Gradle 9.9.2 (dependency-update, Phase 4) |
+| `3e0a16b1` | `cb6912ca` | dependency update | 4 | taken | `ce0d3bc1` | fix: the three lint errors AGP 9.5's lint finds in commonMain |
+| `a3c0b830` | `86679a93` | dependency update | 4 | adapted | held (wavelength-kmp's toolchain) | build: AGP 9.5.1 across the composite (dependency-update, Phase 5) |
+| `302ce3ca` | `01d4d8e7` | dependency update | 4 | taken | held (wavelength-kmp's toolchain) | build: Kotlin 2.4.21 across the composite (dependency-update, Phase 6) |
+| `65a2507a` | `fc7a045d` | dependency update | 4 | taken | `fe17f43b` | docs: the comments that named the old versions (dependency-update, Phase 7) |
 | `36be1efc` | — | — | — | pending | pending | fix: one Shares row per member, so a reinstated admin no longer crashes the room detail |
 
 ## Bennu-only commits in the port
