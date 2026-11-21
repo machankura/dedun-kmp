@@ -522,6 +522,9 @@ on the one join screen.
 **Done when** the ceremony tests and Bennu's subgroup test pass, and `m3Audit` is within
 budget.
 
+**As built.** All ten commits are in, Bennu's subgroup test among them. The one join screen keeps
+the wallet-policy and guardian-delay rows. jvmTest: 2,946 run, 0 failed.
+
 ## Phase 6: share generations in every signer
 
 `fce51e20` (**schema 46 → 47**) and the signing half of `51615992`, as Bennu adapted them.

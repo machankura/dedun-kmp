@@ -87,18 +87,18 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `d4dd87f2` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is pushed, and what is left |
 | `8dd710a1` | `cf210849` | share refresh | 7 | taken | pending | docs: rotating a group's shares without moving its key (plan) |
 | `4040ae74` | `91d0771a` | share refresh | 7 | adapted; backup half held (D5) | pending | fix: a deleted share is gone from aux.db, and aux.db leaves the phone in no backup (frost-share-refresh, Phase 5) |
-| `ebe240a4` | `9e2b06bf` | automatic key ceremony | 5 | taken | pending | docs: joining is the only approval in a key ceremony (plan) |
-| `e9c413ac` | `97841ef5` | automatic key ceremony | 5 | taken | pending | test: a key ceremony run across devices with real ChillDKG (automatic ceremony, Phase 1) |
+| `ebe240a4` | `9e2b06bf` | automatic key ceremony | 5 | taken | `f512a960` | docs: joining is the only approval in a key ceremony (plan) |
+| `e9c413ac` | `97841ef5` | automatic key ceremony | 5 | taken | `78287114` | test: a key ceremony run across devices with real ChillDKG (automatic ceremony, Phase 1) |
 | `fce51e20` | `af804765` | share refresh | 6 | adapted | pending | feat: a key's shares have generations, and signing reads the one it names (frost-share-refresh, Phase 6) |
-| `ca5cda81` | `445d57e5` | automatic key ceremony | 5 | taken | pending | feat: joining is the only approval a key ceremony asks for (automatic ceremony, Phase 2) |
-| `9278ccd5` | `16df4c8d` | automatic key ceremony | 5 | taken | pending | feat: running key ceremonies resume when the app starts (automatic ceremony, Phase 3) |
-| `d71cf0c0` | `2f51e0ae` | automatic key ceremony | 5 | adapted | pending | feat: one approval screen for a key ceremony (automatic ceremony, Phase 4) |
-| `4c75ca1b` | `97f0cf2a` | automatic key ceremony | 5 | taken | pending | feat: a stalled key ceremony says on whom, and offers abandon there (automatic ceremony, Phase 5) |
-| `73fcfff0` | `2a90b3f0` | automatic key ceremony | 5 | taken | pending | feat: the coordinator's device takes a finished ceremony to its room (automatic ceremony, Phase 6) |
+| `ca5cda81` | `445d57e5` | automatic key ceremony | 5 | taken | `a3329959` | feat: joining is the only approval a key ceremony asks for (automatic ceremony, Phase 2) |
+| `9278ccd5` | `16df4c8d` | automatic key ceremony | 5 | taken | `10a9f6e1` | feat: running key ceremonies resume when the app starts (automatic ceremony, Phase 3) |
+| `d71cf0c0` | `2f51e0ae` | automatic key ceremony | 5 | adapted | `206f2d08` | feat: one approval screen for a key ceremony (automatic ceremony, Phase 4) |
+| `4c75ca1b` | `97f0cf2a` | automatic key ceremony | 5 | taken | `6ca7a6a5` | feat: a stalled key ceremony says on whom, and offers abandon there (automatic ceremony, Phase 5) |
+| `73fcfff0` | `2a90b3f0` | automatic key ceremony | 5 | taken | `10f24092` | feat: the coordinator's device takes a finished ceremony to its room (automatic ceremony, Phase 6) |
 | `c8a529a1` | `9277ee80` | submodule refresh | 4 | doc taken; pointer in 4 | `a8331b90` | build: lightning-kmp-app with FROST share refresh down the chain (frost-share-refresh, Phase 4) |
 | `f8974aec` | `b0e193a7` | share refresh | 7 | adapted | pending | feat: a group rotates its shares, end to end between devices (frost-share-refresh, Phase 7) |
-| `0a60da6e` | `ca129b5e` | automatic key ceremony | 5 | adapted | pending | feat: a ceremony's own key state signs itself (automatic ceremony, Phase 7) |
-| `6491d2aa` | `aa88a097` | automatic key ceremony | 5 | taken | pending | docs: joining is the only approval, as built (automatic ceremony, Phase 8) |
+| `0a60da6e` | `ca129b5e` | automatic key ceremony | 5 | adapted | `c8f3f932` | feat: a ceremony's own key state signs itself (automatic ceremony, Phase 7) |
+| `6491d2aa` | `aa88a097` | automatic key ceremony | 5 | taken | `117c9b43` | docs: joining is the only approval, as built (automatic ceremony, Phase 8) |
 | `51615992` | `b343cfb7` | share refresh | 7 | adapted | pending | feat: the group signs its new generation, and every device deletes the old share (frost-share-refresh, Phase 8) |
 | `c4fe4c9c` | `b7c15d2b` | share refresh | 7 | adapted | pending | feat: rotating a group's shares without a member it removed (frost-share-refresh, Phase 9) |
 | `1c3e0e93` | `73631aa5` | share refresh | 7 | adapted | pending | feat: re-enrollment, a stale member repaired into the generation the group signs with (frost-share-refresh, Phase 10) |
@@ -231,7 +231,7 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `4f49e6a7` | skip: Bennu's own notes | docs: the marmot-kmp group is in, and Bennu's schema is 36 (giza-into-bennu, Phase 2) |
 | `505df0ac` | skip: Bennu's own notes | docs: quartz 2.20.1 through Magpie is in (giza-into-bennu, Phase 3) |
 | `9fd354c6` | skip: Bennu's own notes | docs: the toolchain and the submodule chain are in, measured in Bennu (giza-into-bennu, Phase 4) |
-| `168f4524` | pending | test: an automatic ceremony's subgroup keeps its wallet policy and guardian keys (giza-into-bennu, Phase 5) |
+| `168f4524` | `7a13435d` | test: an automatic ceremony's subgroup keeps its wallet policy and guardian keys (giza-into-bennu, Phase 5) |
 | `44fba704` | skip: Bennu's own notes | docs: share generations are in, with Bennu's wallets signing at them (giza-into-bennu, Phase 6) |
 | `993f26b8` | pending | feat: rotation and the Lightning wallet, and a rotation that waits for a spend (giza-into-bennu, Phase 7) |
 | `5ce77c08` | skip: Bennu's own notes | docs: rotation is in, and D5 stays open (giza-into-bennu, Phase 7) |
