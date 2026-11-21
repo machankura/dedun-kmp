@@ -61,17 +61,17 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 | `005cbc2f` | — | wallet removal | — | skip | skip | refactor: composeApp stops importing lightning-kmp (wallet removal, Phase 7a) |
 | `b27ed2a0` | — | wallet removal | — | skip | skip | docs: retire the wallet notes, and guard against a wallet coming back (wallet removal, Phase 8) |
 | `8b066795` | — | wallet removal | — | skip | skip | docs: follow Bennu by cherry-picking, and record what is left (wallet removal, Phase 9) |
-| `f2059eb1` | `28c010bf` | marmot-kmp | 2 | taken | pending | docs: the Marmot engine left quartz, and a plan to follow it (marmot-kmp, the plan) |
-| `1775ae7d` | `696e83c4` | marmot-kmp | 2 | taken | pending | build: the rule that says where a Marmot class comes from (marmot-kmp, Phase 0) |
-| `fc80a089` | `56548a56` | marmot-kmp | 2 | adapted | pending | build: the Marmot engine comes from marmot-kmp (marmot-kmp, Phase 1) |
-| `9bc05c11` | `8d946e6b` | marmot-kmp | 2 | taken | pending | refactor: the names quartz 2.x gave the kinds (marmot-kmp, Phase 2) |
-| `763edcde` | `799906c5` | marmot-kmp | 2 | taken | pending | test: the app's orchestration against the library's own client (marmot-kmp, Phase 3) |
-| `b2539773` | `0c8a0b47` | marmot-kmp | 2 | taken | pending | test: the state on every device still opens (marmot-kmp, Phase 4) |
-| `3b2b5e36` | `3798a1ce` | marmot-kmp | 2 | taken | pending | test: the skipped keys, half closed and half pinned (marmot-kmp, Phases 5 and 6) |
-| `f0f1c179` | `371597c2` | marmot-kmp | 2 | adapted | pending | build: the engine cannot come back from quartz (marmot-kmp, Phase 7) |
-| `7fb56b8f` | `a8dc2e44` | marmot-kmp | 2 | taken | pending | docs: the move is built, and what it does not claim (marmot-kmp) |
-| `e07bb680` | `de800c1a` | marmot-kmp | 2 | adapted | pending | feat: the sender ratchet as its own row, and the receive side beside it (marmot-kmp, Phase 8) |
-| `1321962b` | `3c5d0505` | marmot-kmp | 2 | adapted | pending | test: the version the app ships, opened by the version it builds (marmot-kmp, Phase 9) |
+| `f2059eb1` | `28c010bf` | marmot-kmp | 2 | taken | `522cbc72` | docs: the Marmot engine left quartz, and a plan to follow it (marmot-kmp, the plan) |
+| `1775ae7d` | `696e83c4` | marmot-kmp | 2 | taken | `e5e4cd5e` | build: the rule that says where a Marmot class comes from (marmot-kmp, Phase 0) |
+| `fc80a089` | `56548a56` | marmot-kmp | 2 | adapted | `3e5a6807` | build: the Marmot engine comes from marmot-kmp (marmot-kmp, Phase 1) |
+| `9bc05c11` | `8d946e6b` | marmot-kmp | 2 | taken | `a7d4053b` | refactor: the names quartz 2.x gave the kinds (marmot-kmp, Phase 2) |
+| `763edcde` | `799906c5` | marmot-kmp | 2 | taken | `afa5b2c7` | test: the app's orchestration against the library's own client (marmot-kmp, Phase 3) |
+| `b2539773` | `0c8a0b47` | marmot-kmp | 2 | taken | `968452ca` | test: the state on every device still opens (marmot-kmp, Phase 4) |
+| `3b2b5e36` | `3798a1ce` | marmot-kmp | 2 | taken | `384d7557` | test: the skipped keys, half closed and half pinned (marmot-kmp, Phases 5 and 6) |
+| `f0f1c179` | `371597c2` | marmot-kmp | 2 | adapted | `55a80f1c` | build: the engine cannot come back from quartz (marmot-kmp, Phase 7) |
+| `7fb56b8f` | `a8dc2e44` | marmot-kmp | 2 | taken | `af0732b5` | docs: the move is built, and what it does not claim (marmot-kmp) |
+| `e07bb680` | `de800c1a` | marmot-kmp | 2 | adapted | `ce1a62d7` | feat: the sender ratchet as its own row, and the receive side beside it (marmot-kmp, Phase 8) |
+| `1321962b` | `3c5d0505` | marmot-kmp | 2 | adapted | `0fd95ee2` | test: the version the app ships, opened by the version it builds (marmot-kmp, Phase 9) |
 | `33492cff` | — | submodule refresh | — | skip | skip | docs: carrying reduced FROST enrollment up the submodule chain (plan) |
 | `051b339a` | `a0d2e4c2` | submodule refresh | 4 | taken | pending | build: lightning-kmp-app with reduced FROST enrollment down the chain |
 | `70a38d06` | — | submodule refresh | — | skip | skip | docs: the submodule refresh is built, and what is left to push and check |
