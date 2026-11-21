@@ -25,6 +25,8 @@ import com.machankura.dedun.compose.managers.GroupFixtures.roomOf
 import com.machankura.dedun.compose.managers.GroupFixtures.thresholdKeyOf
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
+import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
+import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.repository.ChatRepository
 
 /**
@@ -241,6 +243,90 @@ class CeremonyFollowThroughJvmTest {
         assertEquals(1, certificates.size)
         assertTrue(keyStateSessions(db, parentRoomId, session.id).isEmpty(), "no key state before it")
         assertTrue(created.isEmpty())
+    }
+
+    /**
+     * Dedun's: the certificate the follow-through asks for carries the wallet policy
+     * the subgroup's admins joined under, and the guardian keys a guarded policy needs,
+     * at the delay its coordinator chose. The join screen shows both; the automatic
+     * path must not drop either on the way to the parent. docs/giza-into-dedun.md,
+     * Phase 5.
+     */
+    @Test
+    fun `a guarded subgroup's certificate keeps its policy and its guardian keys`(): Unit = runBlocking {
+        val parentMaterial = keyMaterial("9a7e0000000000000000000000000000000000000000000000000000000000f6")
+        val parentRoom = GroupFixtures.signingRoom(db, parentMaterial, members = listOf(alice, bob))
+        val parentRoomId = parentRoom.chatRoom.id
+
+        val session = DkgSession(
+            id = "guarded-subgroup-ceremony",
+            chatRoomId = parentRoomId,
+            coordinatorPublicKey = owner,
+            userPublicKey = owner,
+            threshold = 2,
+            participantCount = 3,
+            participantPublicKeys = DkgSession.formatParticipants(setOf(owner, alice, bob)),
+            subject = "Treasury",
+            stage = DkgRitualStage.COMPLETE,
+            hostPublicKey = owner,
+            round1Random = "aa".repeat(32),
+            round2AuxRandom = "bb".repeat(32),
+            thresholdPublicKey = thresholdKeyOf(material),
+            secretShare = "dd".repeat(32),
+            parentChatRoomId = parentRoomId,
+            walletPolicy = SubgroupWalletPolicy.GUARDED.tagValue,
+            guardianDelay = 144,
+        )
+        db.dkgSessionDao().upsert(session)
+
+        assertEquals(CeremonyFollowThrough.Step.Proposed("birth certificate"), next(session))
+
+        val certificate = sessionsCarrying(db, parentRoomId, SubgroupBirthCertificateEvent.KIND).single()
+        val unsigned = Event.fromJsonOrNull(db.frostSigningSessionDao().getItems(certificate.id).single().unsignedEventJson)!!
+        assertEquals(
+            WalletPolicyReading.Decided(SubgroupWalletPolicy.GUARDED),
+            SubgroupBirthCertificateEvent.parseWalletPolicy(unsigned.tags),
+        )
+        val guardians = SubgroupBirthCertificateEvent.parseGuardians(unsigned.tags)!!
+        assertTrue(guardians.isNotEmpty(), "a guarded certificate with no guardian keys")
+        assertEquals(144L, guardians.first().delay, "the parent's leaf lost the delay its coordinator chose")
+    }
+
+    @Test
+    fun `an unguarded subgroup's certificate grants no guardian keys`(): Unit = runBlocking {
+        val parentMaterial = keyMaterial("9a7e0000000000000000000000000000000000000000000000000000000000f6")
+        val parentRoom = GroupFixtures.signingRoom(db, parentMaterial, members = listOf(alice, bob))
+        val parentRoomId = parentRoom.chatRoom.id
+
+        val session = DkgSession(
+            id = "unguarded-subgroup-ceremony",
+            chatRoomId = parentRoomId,
+            coordinatorPublicKey = owner,
+            userPublicKey = owner,
+            threshold = 2,
+            participantCount = 3,
+            participantPublicKeys = DkgSession.formatParticipants(setOf(owner, alice, bob)),
+            subject = "Petty cash",
+            stage = DkgRitualStage.COMPLETE,
+            hostPublicKey = owner,
+            round1Random = "aa".repeat(32),
+            round2AuxRandom = "bb".repeat(32),
+            thresholdPublicKey = thresholdKeyOf(material),
+            secretShare = "dd".repeat(32),
+            parentChatRoomId = parentRoomId,
+            walletPolicy = SubgroupWalletPolicy.UNGUARDED.tagValue,
+        )
+        db.dkgSessionDao().upsert(session)
+
+        assertEquals(CeremonyFollowThrough.Step.Proposed("birth certificate"), next(session))
+
+        val certificate = sessionsCarrying(db, parentRoomId, SubgroupBirthCertificateEvent.KIND).single()
+        val unsigned = Event.fromJsonOrNull(db.frostSigningSessionDao().getItems(certificate.id).single().unsignedEventJson)!!
+        assertEquals(
+            WalletPolicyReading.Decided(SubgroupWalletPolicy.UNGUARDED),
+            SubgroupBirthCertificateEvent.parseWalletPolicy(unsigned.tags),
+        )
+        assertEquals(emptyList(), SubgroupBirthCertificateEvent.parseGuardians(unsigned.tags))
     }
 
     private suspend fun keyStateSessions(database: DedunDatabase, roomId: String, dkgSessionId: String) =
