@@ -33,6 +33,7 @@ import com.machankura.dedun.compose.network.dto.RelayDTO
 import com.machankura.dedun.compose.network.relays.EventPublishTransport
 import com.machankura.dedun.compose.network.relays.NostrPublishResult
 import com.machankura.dedun.compose.network.sockets.NostrIncomingMessage
+import com.machankura.dedun.compose.nostr.RetiredKinds
 import com.machankura.dedun.compose.ui.view.state.BroadcastGroupSignedEventUIState
 
 /**
@@ -140,5 +141,45 @@ class BroadcastLeavesNoRowJvmTest {
             database.broadcastNostrEventRequestDao().getBroadcastNostrEventRequestsByNostrEventId(profile.id).isEmpty(),
             "a queued broadcast",
         )
+    }
+
+    /**
+     * A wallet's statement the group signed in its Dedun days is still on this device
+     * (the wallet removal kept every `GroupSignedEvent`), and its xpub on a public
+     * relay would be the group's whole history on chain. The screen names only the
+     * profile and posts, but the id is a navigation argument.
+     */
+    @Test
+    fun `a signed event of any other kind is not offered to the relays`(): Unit = runBlocking {
+        val ownerEventId = "0e".repeat(32)
+        database.nostrEventDao().upsert(
+            NostrEvent(id = ownerEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128))
+        )
+        database.profileDao().upsert(Profile(publicKey = member, nostrEventId = ownerEventId))
+        database.chatRoomDao().upsert(
+            ChatRoom(id = chatRoomId, userPublicKey = member, subject = "Translation room", description = null, mlsGroupState = "state")
+        )
+        val statement = profile.copy(id = "5".repeat(64), kind = RetiredKinds.ANNOUNCEMENTS.first(), content = "{}")
+        database.groupSignedEventDao().record(statement)
+
+        val transport = Transport()
+        val viewModel = BroadcastGroupSignedEventViewModel(
+            chatRoomId = chatRoomId,
+            signedEventId = statement.id,
+            activeUserPublicKey = member,
+            relayHint = null,
+            initialBroadcastGroupSignedEventUIState = BroadcastGroupSignedEventUIState.Loading,
+            chatRepository = DatabaseChatRepository(database, CoroutineScope(Dispatchers.Default)),
+            publishTransport = transport,
+        )
+
+        viewModel.initiateBroadcastGroupSignedEvent()
+        val state = withTimeout(5_000) {
+            while (viewModel.broadcastGroupSignedEventUIState is BroadcastGroupSignedEventUIState.Loading) delay(10)
+            viewModel.broadcastGroupSignedEventUIState
+        }
+
+        assertIs<BroadcastGroupSignedEventUIState.Error>(state)
+        assertNull(transport.sent, "nothing was handed to the relays")
     }
 }

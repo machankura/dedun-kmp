@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
+import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -167,6 +169,18 @@ class BroadcastGroupSignedEventViewModel(
                         "This device doesn't hold that signed event"
                     )
 
+                // Only what the group says publicly: its profile and its posts. The
+                // id arrives as a navigation argument, and this device still holds
+                // events of other kinds the group signed -- a Dedun-era wallet's,
+                // kept by the wallet removal, whose xpub on a public relay would be
+                // the group's whole history on chain to anyone. Curare's screen
+                // refused the wallet's kind; this refuses everything that is not
+                // one of the two. docs/group-nostr-profile-and-posts.md, D7.
+                signedEvent.kind !in BROADCASTABLE_KINDS ->
+                    BroadcastGroupSignedEventUIState.Error(
+                        "Only the group's profile and its posts are sent from here"
+                    )
+
                 else -> BroadcastGroupSignedEventUIState.Loaded(
                     localChatRoom = localChatRoom,
                     signedEvent = signedEvent,
@@ -279,6 +293,9 @@ class BroadcastGroupSignedEventViewModel(
          * down forever. The same bound the queue drainer puts on one attempt.
          */
         val BROADCAST_TIMEOUT = (RelayPool.PUBLISH_TIMEOUT * 2).milliseconds
+
+        /** The kinds this screen will put on a relay: the group's profile and posts. */
+        val BROADCASTABLE_KINDS: Set<Kind> = setOf(MetadataEvent.KIND, TextNoteEvent.KIND)
 
         /**
          * Sends [signedEvent] to [targets] and says what each relay answered.
