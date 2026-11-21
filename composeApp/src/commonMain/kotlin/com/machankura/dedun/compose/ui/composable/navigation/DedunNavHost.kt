@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.AddGroupPostRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
+import com.machankura.dedun.compose.ui.composable.AddGroupPostScreen
+import com.machankura.dedun.compose.ui.composable.GroupPostsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.EditGroupNostrProfileRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
 import com.machankura.dedun.compose.ui.composable.EditGroupNostrProfileScreen
@@ -2290,6 +2294,46 @@ fun DedunNavHost(
                         // than to an edit whose proposal has already gone out.
                         navController.navigate(route = signingRoute) {
                             popUpTo<EditGroupNostrProfileRoute> {
+                                inclusive = true
+                            }
+                        }
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            // The group's posts: docs/group-nostr-profile-and-posts.md.
+            composable<GroupPostsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupPostsRoute>()
+
+                GroupPostsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    onNavigateToRoute = { actionRoute ->
+                        navController.navigate(route = actionRoute)
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<AddGroupPostRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<AddGroupPostRoute>()
+
+                AddGroupPostScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the composer so back returns to the posts rather
+                        // than to a draft whose proposal has already gone out.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<AddGroupPostRoute> {
                                 inclusive = true
                             }
                         }

@@ -1,5 +1,11 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.n_posts
+import dedun.composeapp.generated.resources.one_post
+import dedun.composeapp.generated.resources.no_posts_yet
+import dedun.composeapp.generated.resources.posts
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
+import androidx.compose.material.icons.filled.Campaign
 import dedun.composeapp.generated.resources.not_described_yet
 import dedun.composeapp.generated.resources.no_name_on_this_profile
 import dedun.composeapp.generated.resources.nostr_profile
@@ -997,8 +1003,9 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
-                            // What the group says about itself on nostr, as the group
-                            // signed it (docs/group-nostr-profile-and-posts.md). A
+                            // What the group says about itself on nostr and what it has
+                            // posted, as the group signed them
+                            // (docs/group-nostr-profile-and-posts.md). A
                             // Marmot room only: the room's id is the key it signs as,
                             // and a NIP-17 room has no key of its own to describe.
                             // Shown to every member -- the profile is worth reading
@@ -1011,6 +1018,22 @@ fun ChatRoomDetailScreen(
                                         onClick = {
                                             onNavigateToRoute.invoke(
                                                 GroupNostrProfileRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    relayHint = relayHint
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
+
+                                // What the group has said publicly, as itself.
+                                item {
+                                    GroupPostsRow(
+                                        postCount = chatRoomDetailUIState.groupPosts.size,
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                GroupPostsRoute(
                                                     activeUserPublicKey = activeUserPublicKey,
                                                     chatRoomId = chatRoomId,
                                                     relayHint = relayHint
@@ -2969,6 +2992,43 @@ private fun GroupNostrProfileRow(
                     } ?: stringResource(Res.string.not_described_yet),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+        )
+    }
+}
+
+/**
+ * The row on the group's screen that leads to its posts, counting them. A count
+ * rather than the newest post: the posts screen is where they are read whole, and
+ * a quote here would be the words twice with the second copy cut short.
+ */
+@Composable
+private fun GroupPostsRow(
+    postCount: Int,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            leadingContent = {
+                Icon(Icons.Default.Campaign, contentDescription = Decorative)
+            },
+            trailingContent = {
+                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+            },
+            headlineContent = {
+                Text(text = stringResource(Res.string.posts))
+            },
+            supportingContent = {
+                Text(
+                    text = when (postCount) {
+                        0 -> stringResource(Res.string.no_posts_yet)
+                        1 -> stringResource(Res.string.one_post)
+                        else -> stringResource(Res.string.n_posts, postCount)
+                    }
                 )
             }
         )

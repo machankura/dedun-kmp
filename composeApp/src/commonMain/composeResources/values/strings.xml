@@ -1980,4 +1980,19 @@
     <string name="what_the_group_says_about_itself_on_nostr">What the group says about itself on Nostr</string>
     <string name="not_described_yet">Not described yet</string>
     <string name="this_device_holds_no_profile_for_this_group">This device holds no profile for this group. A profile signed before you joined isn't passed on.</string>
+    <!-- The group's posts: docs/group-nostr-profile-and-posts.md -->
+    <string name="add_post">Add post</string>
+    <string name="a_post_needs_something_to_say">A post needs something to say.</string>
+    <string name="a_reply">A reply</string>
+    <string name="could_not_ask_the_group_to_sign_this_post">Couldn't ask the group to sign this post.</string>
+    <string name="posted_on">Posted %1$s</string>
+    <string name="posts">Posts</string>
+    <string name="propose_post">Propose post</string>
+    <string name="the_group_signs_a_post_so_it_takes_a_quorum">The group signs a post, so it takes a quorum. It goes out in the group's name, not yours, and can't be taken back once signed.</string>
+    <string name="this_device_holds_no_posts_for_this_group">This device holds no posts by this group. Posts signed before you joined aren't passed on.</string>
+    <string name="this_group_has_no_shared_key_to_sign_a_post">This group has no shared key, so it cannot sign a post. Run a shared key ceremony first.</string>
+    <string name="what_should_the_group_say">What should the group say?</string>
+    <string name="no_posts_yet">No posts yet</string>
+    <string name="one_post">1 post</string>
+    <string name="n_posts">%1$d posts</string>
 </resources>

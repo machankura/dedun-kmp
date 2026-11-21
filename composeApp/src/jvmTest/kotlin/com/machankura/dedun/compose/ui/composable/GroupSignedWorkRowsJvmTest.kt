@@ -22,6 +22,8 @@ import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRo
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.machankura.dedun.compose.nostr.GroupPost
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
@@ -45,7 +47,7 @@ import kotlin.time.Instant
  * The row on the group's screen that stands for its signed work, and what it
  * opens.
  *
- * The group's wallets, and what the group says as itself on nostr: its profile
+ * The group's wallets, and what the group says as itself on nostr: its profile and its posts
  * (docs/group-nostr-profile-and-posts.md). The relay lists were not brought back
  * with it (D1), so their row stays absent.
  */
@@ -185,6 +187,39 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     @Test
+    fun `the posts row counts them, and opens them`() {
+        var opened: Route? = null
+
+        render(
+            state(
+                groupNostrProfile = GroupSignedWorkFixtures.profile,
+                groupPosts = listOf(GroupSignedWorkFixtures.post("One", 1_700_000_000), GroupSignedWorkFixtures.post("Two", 1_700_000_100)),
+            ),
+            onNavigateToRoute = { opened = it },
+        ) {
+            onNodeWithText("Posts").assertIsDisplayed()
+            onNodeWithText("2 posts").assertIsDisplayed().performClick()
+        }
+
+        assertEquals(GroupPostsRoute(activeUserPublicKey, chatRoomId, relayHint = null), opened)
+    }
+
+    @Test
+    fun `the posts row says when there are none, or one`() {
+        render(state()) {
+            onNodeWithText("No posts yet").assertIsDisplayed()
+        }
+        render(state(groupPosts = listOf(GroupSignedWorkFixtures.post("One", 1_700_000_000)))) {
+            onNodeWithText("1 post").assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun `a NIP-17 room has no posts row either`() = render(state(mlsGroupState = null)) {
+        onNodeWithText("Posts").assertDoesNotExist()
+    }
+
+    @Test
     fun `there is no relays row`() = render(state(groupNostrProfile = GroupSignedWorkFixtures.profile)) {
         onNodeWithText("Relays").assertDoesNotExist()
         onNodeWithText("Subgroups").assertIsDisplayed()
@@ -209,6 +244,7 @@ class GroupSignedWorkRowsJvmTest {
         groupWallet: GroupWallet? = null,
         wavelengthOnchainChains: Set<Chain> = emptySet(),
         groupNostrProfile: GroupNostrProfile? = null,
+        groupPosts: List<GroupPost> = emptyList(),
         canProposeAsGroup: Boolean = true,
     ) = ChatRoomDetailUIState.Loaded(
         localChatRoom = GroupSignedWorkFixtures.localChatRoom(mlsGroupState),
@@ -216,6 +252,7 @@ class GroupSignedWorkRowsJvmTest {
         groupWallet = groupWallet,
         wavelengthOnchainChains = wavelengthOnchainChains,
         groupNostrProfile = groupNostrProfile,
+        groupPosts = groupPosts,
         canProposeAsGroup = canProposeAsGroup,
     )
 

@@ -149,6 +149,7 @@ class ChatRoomDetailViewModel(
                     signedGroupKeyStateEvent = chatRepository.signedGroupKeyStateEvent(chatRoomId),
                     subgroups = chatRepository.subgroupsOf(chatRoomId),
                     groupNostrProfile = chatRepository.groupNostrProfile(chatRoomId),
+                    groupPosts = chatRepository.groupPosts(chatRoomId),
                     canProposeAsGroup = canSign && roomIsOpen,
                     parentChatRoomId = chatRepository.parentOf(chatRoomId),
                     walletPolicy = chatRepository.walletPolicyOf(chatRoomId),

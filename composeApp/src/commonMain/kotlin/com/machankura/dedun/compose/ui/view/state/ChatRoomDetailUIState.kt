@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
 import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import fr.acinq.bitcoin.Chain
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -109,6 +110,11 @@ sealed interface ChatRoomDetailUIState {
          * none. docs/group-nostr-profile-and-posts.md.
          */
         val groupNostrProfile: GroupNostrProfile? = null,
+        /**
+         * The kind:1s the group signed as itself, newest first, as many as this
+         * device holds. docs/group-nostr-profile-and-posts.md.
+         */
+        val groupPosts: List<GroupPost> = emptyList(),
         /**
          * Whether this device could put a profile or a post to the group's quorum:
          * a Marmot room it has not left, not disbanded, where it holds a share of
