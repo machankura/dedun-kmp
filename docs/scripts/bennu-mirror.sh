@@ -119,7 +119,8 @@ mirror_commit() {
         GIT_AUTHOR_NAME=$(git log -1 --format=%an "$full") \
         GIT_AUTHOR_EMAIL=$(git log -1 --format=%ae "$full") \
         GIT_AUTHOR_DATE=$(git log -1 --format=%aI "$full") \
-        git commit-tree "$tree" -p "$parent" -m "$message" -m "Bennu: $full"
+        git commit-tree "$tree" -p "$parent" \
+            -m "$(git interpret-trailers --if-exists addIfDifferent --trailer "Bennu: $full" <<<"$message")"
     )
     git update-ref "refs/bennu-mirror/$full" "$mirror"
     echo "$mirror"
