@@ -11,6 +11,7 @@ import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageRotationManager
 import com.vitorpamplona.marmot.mip00KeyPackages.KeyPackageUtils
 import com.vitorpamplona.mls.messages.CommitResult
 import com.vitorpamplona.mls.messages.KeyPackageBundle
+import com.vitorpamplona.mls.messages.MlsKeyPackage
 import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageEvent
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
@@ -106,6 +107,15 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
      * current-profile package is published first. Returns the app's room id.
      */
     suspend fun inviteApp(db: DedunDatabase, marmotRepository: DatabaseMarmotRepository, user: KeyPair, routingId: String, roomId: String = routingId): String {
+        val (ourEvent, ourKeyPackage) = appKeyPackage(db, marmotRepository, user)
+        val commit = commitLocally(routingId) { manager.addMember(routingId, ourKeyPackage.toTlsBytes()) }
+        welcomeApp(db, user, routingId, assertNotNull(commit.welcomeBytes), ourEvent.id)
+        assertNotNull(db.chatRoomDao().findChatRoomById(roomId), "the app did not join")
+        return roomId
+    }
+
+    /** The app's current-profile KeyPackage, published as the app publishes it, with the event carrying it. */
+    suspend fun appKeyPackage(db: DedunDatabase, marmotRepository: DatabaseMarmotRepository, user: KeyPair): Pair<KeyPackageEvent, MlsKeyPackage> {
         val userHex = user.pubKey.toHexKey()
         marmotRepository.publishMarmotKeyPackageBundle(user, setOf(MarmotProfile.CURRENT))
         val unsigned = db.unsignedNostrEventDao().getAllUnprocessedUnsignedNostrEvents()
@@ -113,12 +123,19 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
         val ourEvent = NostrSignerSync(user).signNormal<KeyPackageEvent>(
             createdAt = unsigned.createdAt.epochSeconds, kind = unsigned.kind, tags = unsigned.tags, content = unsigned.content,
         )
-        val ourKeyPackage = KeyPackageUtils.decodeKeyPackage(Base64.decode(ourEvent.content))
+        return ourEvent to KeyPackageUtils.decodeKeyPackage(Base64.decode(ourEvent.content))
+    }
 
-        val commit = commitLocally(routingId) { manager.addMember(routingId, ourKeyPackage.toTlsBytes()) }
+    /**
+     * Hands the app [welcomeBytes] for [routingId] the way a Welcome arrives: a kind:444
+     * rumor, sealed by this client, wrapped by a throwaway key and p-tagged to the app,
+     * through the sync funnel.
+     */
+    suspend fun welcomeApp(db: DedunDatabase, user: KeyPair, routingId: String, welcomeBytes: ByteArray, keyPackageEventId: String) {
+        val userHex = user.pubKey.toHexKey()
         val welcomeTemplate = WelcomeEvent.build(
-            welcomeBase64 = Base64.encode(assertNotNull(commit.welcomeBytes)),
-            keyPackageEventId = ourEvent.id,
+            welcomeBase64 = Base64.encode(welcomeBytes),
+            keyPackageEventId = keyPackageEventId,
             relays = Relays.DefaultDMRelayList,
             nostrGroupId = routingId,
         )
@@ -130,8 +147,6 @@ internal class MarmotStandIn(val keyPair: KeyPair = KeyPair()) {
         )
         val wrap = GiftWrapEvent.create(event = seal, recipientPubKey = userHex, createdAt = rumor.createdAt)
         storeInApp(db, user, wrap)
-        assertNotNull(db.chatRoomDao().findChatRoomById(roomId), "the app did not join")
-        return roomId
     }
 
     companion object {
