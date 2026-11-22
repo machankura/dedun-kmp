@@ -2041,4 +2041,8 @@
     <string name="open_room_named">Open %1$s</string>
     <string name="new_group_with_these_members">New group with these members</string>
     <string name="the_new_group_and_its_room_are_called_this">The new group and its room are called this.</string>
+    <string name="groups">Groups</string>
+    <string name="no_groups_have_been_made_in_this_conversation_yet">No groups have been made in this conversation yet.</string>
+    <string name="key_ceremony_in_progress">Key ceremony in progress</string>
+    <string name="waiting_for_its_room">Has its key, and is waiting for its room</string>
 </resources>

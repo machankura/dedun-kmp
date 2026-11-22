@@ -376,6 +376,14 @@ interface ChatRepository {
     suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom>
 
     /**
+     * Every group the members of NIP-17 room [chatRoomId] have made in it, newest
+     * first, failed ones left out: each one's ceremony and, once it has a key, the
+     * room it makes. Empty for a room that has made none, and for a Marmot room,
+     * which holds no group's ceremony of its own.
+     */
+    suspend fun groupsMadeIn(chatRoomId: String): List<GroupMadeHere>
+
+    /**
      * Brings every Marmot room's admin flags in line with its group's policy, for
      * the rooms joined before the Welcome wrote any. Once per start. See
      * `AdminFlags.reconcileAll` and docs/robust-group-admins.md, Phase 6.
@@ -752,6 +760,8 @@ interface ChatRepository {
             override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = emptySet()
 
             override suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom> = emptyList()
+
+            override suspend fun groupsMadeIn(chatRoomId: String): List<GroupMadeHere> = emptyList()
 
             override suspend fun reconcileAdminFlags(): Int = 0
 

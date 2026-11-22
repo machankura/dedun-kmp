@@ -11,7 +11,9 @@ import kotlin.test.assertEquals
  * - group creation (`SelectChatRoomTypeViewModel`), a new group's own key;
  * - the subgroup picker (`SelectSubgroupAdminsViewModel`), a subgroup's key,
  *   held in its parent's room;
- * - `CreateSharedKeyViewModel`, an existing NIP-17 group that has no key yet.
+ * - `CreateSharedKeyViewModel`, a new group from the members of an existing NIP-17
+ *   room: its first, or another beside the ones they have
+ *   (docs/nip17-multiple-ceremonies.md).
  *
  * A fourth used to exist: the ceremony screen offered "Start key ceremony" from
  * the same button slot its approvals used, and a member coming back from

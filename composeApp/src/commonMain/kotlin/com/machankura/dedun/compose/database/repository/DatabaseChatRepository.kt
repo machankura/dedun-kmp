@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.repository.GroupMadeHere
 import com.machankura.dedun.compose.repository.AdminRoom
 import com.machankura.dedun.compose.nostr.DisappearingMessages
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
@@ -177,6 +178,29 @@ class DatabaseChatRepository(
             .distinctBy { it.chatRoomId }
     } catch (e: Throwable) {
         logger.e("Error finding the admin rooms of $chatRoomId", e)
+        emptyList()
+    }
+
+    override suspend fun groupsMadeIn(chatRoomId: String): List<GroupMadeHere> = try {
+        val roomSubject = database.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.subject
+        database.dkgSessionDao().getOwnSessionsForChatRoom(chatRoomId)
+            .filter { it.stage != DkgRitualStage.FAILED }
+            .map { ceremony ->
+                val roomId = ceremony.thresholdPublicKey
+                    ?.takeIf { ceremony.stage == DkgRitualStage.COMPLETE }
+                    ?.let { SharedKeyDerivation.marmotGroupId(it) }
+                GroupMadeHere(
+                    dkgSessionId = ceremony.id,
+                    name = ceremony.subject ?: roomSubject,
+                    status = when {
+                        roomId == null -> GroupMadeHere.Status.KeyCeremonyRunning
+                        database.chatRoomDao().findChatRoomById(roomId) == null -> GroupMadeHere.Status.WaitingForRoom
+                        else -> GroupMadeHere.Status.Ready(roomId)
+                    },
+                )
+            }
+    } catch (e: Throwable) {
+        logger.e("Error listing the groups made in $chatRoomId", e)
         emptyList()
     }
 

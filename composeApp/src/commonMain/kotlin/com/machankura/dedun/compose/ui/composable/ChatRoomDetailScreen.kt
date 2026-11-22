@@ -1,5 +1,14 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
+import dedun.composeapp.generated.resources.new_group_with_these_members
+import dedun.composeapp.generated.resources.waiting_for_its_room
+import dedun.composeapp.generated.resources.key_ceremony_in_progress
+import dedun.composeapp.generated.resources.an_unnamed_group
+import dedun.composeapp.generated.resources.no_groups_have_been_made_in_this_conversation_yet
+import dedun.composeapp.generated.resources.groups
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRitualRoute
+import com.machankura.dedun.compose.repository.GroupMadeHere
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import dedun.composeapp.generated.resources.propose_event
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
@@ -826,39 +835,35 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
-                            // A robust group's NIP-17 room has no admins of its own;
-                            // its members are admins of the rooms its keys made, one
-                            // per group they have made here.
-                            chatRoomDetailUIState.adminRooms.forEach { adminRoom ->
-                                val adminRoomId = adminRoom.chatRoomId
-                                item(key = "admin-room-$adminRoomId") {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = {
+                            // A NIP-17 room has no admins of its own, and it is not a
+                            // group either: it is where the groups its members have
+                            // made had their ceremonies, and the same people share one
+                            // however many they make. Each group is listed with where
+                            // it stands; one with a room opens it, where its members
+                            // are admins. docs/nip17-multiple-ceremonies.md, Phase 5.
+                            if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) {
+                                item(key = "groups-made-here") {
+                                    GroupsMadeHere(
+                                        groups = chatRoomDetailUIState.groups,
+                                        onOpen = { group ->
                                             onNavigateToRoute.invoke(
-                                                ChatRoomDetailRoute(
-                                                    activeUserPublicKey = activeUserPublicKey,
-                                                    chatRoomId = adminRoomId,
-                                                    relayHint = relayHint
-                                                )
+                                                when (val status = group.status) {
+                                                    is GroupMadeHere.Status.Ready -> ChatRoomDetailRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = status.chatRoomId,
+                                                        relayHint = relayHint
+                                                    )
+                                                    // The ladder says what a group without
+                                                    // its room is still waiting on.
+                                                    else -> DkgRitualRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = chatRoomId,
+                                                        dkgSessionId = group.dkgSessionId
+                                                    )
+                                                }
                                             )
                                         }
-                                    ) {
-                                        ListItem(
-                                            leadingContent = {
-                                                Icon(Icons.Default.AdminPanelSettings, contentDescription = Decorative)
-                                            },
-                                            trailingContent = {
-                                                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
-                                            },
-                                            headlineContent = {
-                                                Text(text = adminRoom.name ?: stringResource(Res.string.admin_room))
-                                            },
-                                            supportingContent = {
-                                                Text(text = stringResource(Res.string.every_member_of_this_group_administers_it_there))
-                                            }
-                                        )
-                                    }
+                                    )
                                 }
                             }
                             item {
@@ -1521,10 +1526,11 @@ fun ChatRoomDetailScreen(
                             // names the ceremony they are about, never from here,
                             // which has no way to say which.
                             //
-                            // To the creation screen, which hands over to the group's
-                            // ceremony if it already has one: the ceremony screen only
-                            // shows a ceremony it is named, and this button has none
-                            // to name. See docs/ceremony-creation.md.
+                            // To the creation screen: the room's first group, or another
+                            // made by the same people beside the ones listed above
+                            // (docs/nip17-multiple-ceremonies.md). The ceremony screen
+                            // only shows a ceremony it is named, and this button has
+                            // none to name. See docs/ceremony-creation.md.
                             if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) {
                                 item {
                                     TextButton(
@@ -1539,14 +1545,20 @@ fun ChatRoomDetailScreen(
                                     ) {
                                         Icon(
                                             Icons.Default.Key,
-                                            contentDescription = "Shared key"
+                                            contentDescription = Decorative
                                         )
 
                                         Spacer(
                                             modifier = Modifier.width(MaterialTheme.spacing.space125)
                                         )
 
-                                        Text(stringResource(Res.string.shared_key))
+                                        Text(
+                                            if (chatRoomDetailUIState.groups.isEmpty()) {
+                                                stringResource(Res.string.shared_key)
+                                            } else {
+                                                stringResource(Res.string.new_group_with_these_members)
+                                            }
+                                        )
                                     }
                                 }
                             }
@@ -3076,5 +3088,75 @@ private fun GroupPostsRow(
                 )
             }
         )
+    }
+}
+
+/**
+ * The groups a NIP-17 room's members have made in it, each with where it stands.
+ *
+ * The same people share one NIP-17 room however many groups they make, so the room
+ * is not the group: each group is a ceremony held here and, once it has a key, a
+ * room of its own. This used to be one admin-room card, which showed the newest
+ * group and hid the rest (docs/nip17-multiple-ceremonies.md, Phase 5).
+ */
+@Composable
+internal fun GroupsMadeHere(
+    groups: List<GroupMadeHere>,
+    onOpen: (GroupMadeHere) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)
+    ) {
+        Text(
+            text = stringResource(Res.string.groups),
+            style = MaterialTheme.typography.labelMedium
+        )
+
+        if (groups.isEmpty()) {
+            EmptyState(
+                message = stringResource(Res.string.no_groups_have_been_made_in_this_conversation_yet),
+                icon = Icons.Default.AdminPanelSettings,
+            )
+        }
+
+        val unnamed = stringResource(Res.string.an_unnamed_group)
+        groups.forEach { group ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpen(group) }
+            ) {
+                ListItem(
+                    leadingContent = {
+                        // The status is said beside it, so the icon only echoes it.
+                        Icon(
+                            imageVector = when (group.status) {
+                                is GroupMadeHere.Status.Ready -> Icons.Default.AdminPanelSettings
+                                else -> Icons.Default.Key
+                            },
+                            contentDescription = Decorative
+                        )
+                    },
+                    trailingContent = {
+                        Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+                    },
+                    headlineContent = {
+                        Text(text = group.name?.takeIf { it.isNotBlank() } ?: unnamed)
+                    },
+                    supportingContent = {
+                        Text(
+                            text = when (group.status) {
+                                GroupMadeHere.Status.KeyCeremonyRunning ->
+                                    stringResource(Res.string.key_ceremony_in_progress)
+                                GroupMadeHere.Status.WaitingForRoom ->
+                                    stringResource(Res.string.waiting_for_its_room)
+                                is GroupMadeHere.Status.Ready ->
+                                    stringResource(Res.string.every_member_of_this_group_administers_it_there)
+                            }
+                        )
+                    }
+                )
+            }
+        }
     }
 }

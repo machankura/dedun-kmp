@@ -157,8 +157,14 @@ protocol checks this, so `ChillDkgRitualOrderingTest` does.
 A ceremony is started in exactly three places, each of which knows what it is
 for: group creation (`SelectChatRoomTypeViewModel`) for a new group's own key,
 the subgroup picker (`SelectSubgroupAdminsViewModel`) for a subgroup's, and
-`CreateSharedKeyScreen` for an existing NIP-17 group that has no key yet.
-`CeremonyEntryPointsJvmTest` counts them. `DkgRitualScreen` shows one ceremony,
+`CreateSharedKeyScreen` for a new group made from the members of an existing
+NIP-17 room. `CeremonyEntryPointsJvmTest` counts them.
+
+The same people always share one NIP-17 room, since its id is derived from
+them, so a second group they make is a second ceremony in that room. The room
+is where each group's ceremony is held, not the group, and every ceremony after
+the room's first carries a name of its own. The room's details list the groups
+made in it. See [nip17-multiple-ceremonies.md](./nip17-multiple-ceremonies.md). `DkgRitualScreen` shows one ceremony,
 named by its route, and never starts one: it used to, from the same button slot
 its approvals used, and a member coming back from approving a subgroup's
 ceremony opened a second, whole-room one in the parent's room. A Marmot room

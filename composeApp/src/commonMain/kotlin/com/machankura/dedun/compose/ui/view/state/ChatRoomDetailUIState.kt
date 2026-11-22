@@ -1,6 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
-import com.machankura.dedun.compose.repository.AdminRoom
+import com.machankura.dedun.compose.repository.GroupMadeHere
 import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.managers.MemberWalletManager
@@ -196,12 +196,13 @@ sealed interface ChatRoomDetailUIState {
          */
         val founderNames: Map<HexKey, String> = emptyMap(),
         /**
-         * The admin rooms this room's ceremonies made, when this is a NIP-17 room
-         * and this device holds them. A NIP-17 room has no admins of its own; these
-         * are where its members are admins, one per group they have made here.
-         * docs/robust-group-admins.md, Phase 5, and docs/nip17-multiple-ceremonies.md.
+         * The groups this room's members have made in it, when this is a NIP-17
+         * room: each one's ceremony, and the room its key makes once it has one. A
+         * NIP-17 room has no admins of its own; those rooms are where its members
+         * are admins, one per group. docs/robust-group-admins.md, Phase 5, and
+         * docs/nip17-multiple-ceremonies.md, Phase 5.
          */
-        val adminRooms: List<AdminRoom> = emptyList(),
+        val groups: List<GroupMadeHere> = emptyList(),
         /**
          * Who administers the room, read off the group's state rather than the
          * participants' `adminAt` flags. Labels each member row **Admin**.

@@ -9,6 +9,7 @@ import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.repository.AdminRoom
+import com.machankura.dedun.compose.repository.GroupMadeHere
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -85,6 +86,37 @@ class GroupsInOneRoomJvmTest {
                 repository.adminRoomsOf(network.roomId).toSet(),
                 "both groups, not the newest alone",
             )
+        }
+    }
+
+    /** The room's details list each group, from its ceremony to its room. */
+    @Test
+    fun `each group the room's members made is listed with where it stands`(): Unit = runBlocking {
+        CeremonyNetwork.nip17(size = 3, subject = "Ekklesia").use { network ->
+            val repository = DatabaseChatRepository(network.coordinator.db, CoroutineScope(Dispatchers.Default))
+
+            val ekklesia = completed(network, subject = null)
+            val agora = network.propose(threshold = 3, subject = "Agora")
+
+            assertEquals(
+                setOf(
+                    GroupMadeHere(ekklesia.id, "Ekklesia", GroupMadeHere.Status.WaitingForRoom),
+                    GroupMadeHere(agora.id, "Agora", GroupMadeHere.Status.KeyCeremonyRunning),
+                ),
+                repository.groupsMadeIn(network.roomId).toSet(),
+            )
+
+            val ekklesiaRoom = standUpRoom(network, ekklesia, "#Ekklesia")
+            assertEquals(
+                GroupMadeHere.Status.Ready(ekklesiaRoom),
+                repository.groupsMadeIn(network.roomId).single { it.dkgSessionId == ekklesia.id }.status,
+            )
+
+            // A failed one is gone from the list; it is there to be tried again.
+            network.coordinator.db.dkgSessionDao().upsert(
+                assertNotNull(network.session(network.coordinator, agora.id)).copy(stage = DkgRitualStage.FAILED)
+            )
+            assertEquals(listOf(ekklesia.id), repository.groupsMadeIn(network.roomId).map { it.dkgSessionId })
         }
     }
 
