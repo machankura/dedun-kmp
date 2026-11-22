@@ -132,8 +132,21 @@ class SelectChatRoomTypeViewModel(
                 nostrRepository.getProfileWithPublicKey(publicKey)
             }
 
+            // The groups these people already have together, read from the room they
+            // share without making it. A row from before ceremonies carried a name is
+            // named by its room, which is what named it then.
+            val existingGroups = dkgRepository
+                .getOwnSessionsAmong((memberPublicKeys + activeUserPublicKey).toSet())
+                .map { session ->
+                    SelectChatRoomTypeUIState.ExistingGroup(
+                        name = session.subject
+                            ?: chatRepository.getChatRoomByIdentifier(session.chatRoomId)?.chatRoom?.subject
+                    )
+                }
+
             selectChatRoomTypeUIState = SelectChatRoomTypeUIState.Loaded(
-                members = members
+                members = members,
+                existingGroups = existingGroups,
             )
         }
     }
@@ -351,14 +364,20 @@ class SelectChatRoomTypeViewModel(
 
             // The room's membership is the set this screen was opened for, so the
             // quorum picked against [adminCount] is the same t-of-n the ceremony is
-            // asked for. A room that already has a ceremony -- the id is derived from
-            // its members, so making the same group twice returns the same room --
-            // hands that one back instead of opening a second.
+            // asked for.
+            //
+            // Named outright, never left to the room. The room's id is derived from
+            // its members, so the same people making a second group get the first
+            // group's room back, still under the first group's name; the group being
+            // made here is called what the user typed, and so is the room its key
+            // makes. A ceremony still running under this name is handed back rather
+            // than opened twice. docs/nip17-multiple-ceremonies.md, Phase 2.
             val session = dkgRepository.proposeRitual(
                 localChatRoom = localChatRoom,
                 userPublicKey = keyPair.pubKey.toHexKey(),
                 nostrPrivateKey = nostrPrivateKey,
-                threshold = quorum.value
+                threshold = quorum.value,
+                subject = name.takeIf { it.isNotBlank() },
             )
 
             withContext(Dispatchers.Main) {

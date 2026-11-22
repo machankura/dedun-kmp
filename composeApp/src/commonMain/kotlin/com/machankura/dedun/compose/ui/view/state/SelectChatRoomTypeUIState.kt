@@ -5,8 +5,24 @@ import com.machankura.dedun.compose.database.model.Profile
 sealed interface SelectChatRoomTypeUIState {
     data class Loaded(
         /** The picked members, for naming them back to the user. */
-        val members: List<Profile>
-    ): SelectChatRoomTypeUIState
+        val members: List<Profile>,
+        /**
+         * The groups these same people have already made together, newest first.
+         *
+         * Said rather than refused: the same people may make as many groups as they
+         * like, and each one is a key and a room of its own. It is here for the user
+         * who meant to open one of these and started making another instead.
+         * docs/nip17-multiple-ceremonies.md, Phase 2.
+         */
+        val existingGroups: List<ExistingGroup> = emptyList(),
+    ): SelectChatRoomTypeUIState {
+        /** Whether the group being made would share its name with one of [existingGroups]. */
+        fun sharesNameWith(name: String): Boolean =
+            existingGroups.any { it.name?.trim()?.equals(name.trim(), ignoreCase = true) == true }
+    }
+
+    /** A group already made by the same people: its name, or null if it has none. */
+    data class ExistingGroup(val name: String?)
 
     data class Error(
         val message: String

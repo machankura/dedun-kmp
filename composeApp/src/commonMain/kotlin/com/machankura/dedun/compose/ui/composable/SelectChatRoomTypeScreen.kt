@@ -65,6 +65,10 @@ import dedun.composeapp.generated.resources.how_many_admins_have_to_approve_a_ch
 import dedun.composeapp.generated.resources.just_you_for_now
 import dedun.composeapp.generated.resources.open_chat
 import dedun.composeapp.generated.resources.this_decides_who_can_change_the_group_later
+import dedun.composeapp.generated.resources.you_already_have_a_group_with_these_people
+import dedun.composeapp.generated.resources.you_already_have_groups_with_these_people
+import dedun.composeapp.generated.resources.this_will_be_a_separate_group_with_the_same_name
+import dedun.composeapp.generated.resources.an_unnamed_group
 import dedun.composeapp.generated.resources.you_and_1_other
 import dedun.composeapp.generated.resources.how_should_be_run
 import dedun.composeapp.generated.resources.of
@@ -246,6 +250,13 @@ fun SelectChatRoomTypeScreen(
                                     }
                                 }
                             }
+                        }
+
+                        if (selectChatRoomTypeUIState.existingGroups.isNotEmpty()) {
+                            ExistingGroupsCard(
+                                existingGroups = selectChatRoomTypeUIState.existingGroups,
+                                sharesName = selectChatRoomTypeUIState.sharesNameWith(name),
+                            )
                         }
 
                         Text(
@@ -515,6 +526,49 @@ private fun SelectChatRoomTypeScreenPreview() {
                 onNavigateToRoute = {},
                 onNavigateBack = {},
             )
+        }
+    }
+}
+
+/**
+ * The groups the same people already have together, said before another is made. They
+ * may make as many as they like, and each is a key and a room of its own. It is for
+ * the member who meant to open one of these. docs/nip17-multiple-ceremonies.md, Phase 2.
+ */
+@Composable
+private fun ExistingGroupsCard(
+    existingGroups: List<SelectChatRoomTypeUIState.ExistingGroup>,
+    sharesName: Boolean,
+) {
+    val unnamed = stringResource(Res.string.an_unnamed_group)
+    val names = existingGroups.joinToString(", ") { it.name?.takeIf(String::isNotBlank) ?: unnamed }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.containerPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)
+        ) {
+            Text(
+                text = if (existingGroups.size == 1) {
+                    stringResource(Res.string.you_already_have_a_group_with_these_people, names)
+                } else {
+                    stringResource(Res.string.you_already_have_groups_with_these_people, names)
+                },
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (sharesName) {
+                Text(
+                    text = stringResource(Res.string.this_will_be_a_separate_group_with_the_same_name),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
     }
 }

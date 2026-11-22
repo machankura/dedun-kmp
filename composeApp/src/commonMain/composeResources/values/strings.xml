@@ -2032,4 +2032,8 @@
     <string name="this_group_has_no_shared_key_to_sign_an_event">This group has no shared key, so it cannot sign an event. Run a shared key ceremony first.</string>
     <string name="unsigned_event">Unsigned event</string>
     <string name="what_the_group_would_sign">What the group would sign</string>
+    <string name="you_already_have_a_group_with_these_people">You already have a group with these people: %1$s.</string>
+    <string name="you_already_have_groups_with_these_people">You already have groups with these people: %1$s.</string>
+    <string name="this_will_be_a_separate_group_with_the_same_name">This will be a separate group with the same name, with a key and room of its own.</string>
+    <string name="an_unnamed_group">an unnamed group</string>
 </resources>

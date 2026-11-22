@@ -33,7 +33,7 @@ import com.machankura.dedun.compose.network.dto.RelayDTO
 import com.machankura.dedun.compose.network.relays.EventPublishTransport
 import com.machankura.dedun.compose.network.relays.NostrPublishResult
 import com.machankura.dedun.compose.network.sockets.NostrIncomingMessage
-import com.machankura.dedun.compose.nostr.RetiredKinds
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.ui.view.state.BroadcastGroupSignedEventUIState
 
 /**
@@ -159,7 +159,7 @@ class BroadcastLeavesNoRowJvmTest {
         database.chatRoomDao().upsert(
             ChatRoom(id = chatRoomId, userPublicKey = member, subject = "Translation room", description = null, mlsGroupState = "state")
         )
-        val statement = profile.copy(id = "5".repeat(64), kind = RetiredKinds.ANNOUNCEMENTS.first(), content = "{}")
+        val statement = profile.copy(id = "5".repeat(64), kind = GroupWalletStatementEvent.KIND, content = "{}") // the group's onchain wallet, which only its room reads
         database.groupSignedEventDao().record(statement)
 
         val transport = Transport()

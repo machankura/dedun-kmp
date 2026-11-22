@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import androidx.compose.runtime.MutableState
@@ -294,8 +295,14 @@ class BroadcastGroupSignedEventViewModel(
          */
         val BROADCAST_TIMEOUT = (RelayPool.PUBLISH_TIMEOUT * 2).milliseconds
 
-        /** The kinds this screen will put on a relay: the group's profile and posts. */
-        val BROADCASTABLE_KINDS: Set<Kind> = setOf(MetadataEvent.KIND, TextNoteEvent.KIND)
+        /**
+         * The kinds this screen will put on a relay: the group's profile and posts, and its
+         * inbox's key and relays, which a member sends again by hand when the device that
+         * signed for them never got them out (docs/group-inbox.md, D7). Giza's confederation
+         * events are not here: Dedun takes no confederations (docs/giza-second-batch.md, D12).
+         */
+        val BROADCASTABLE_KINDS: Set<Kind> = setOf(MetadataEvent.KIND, TextNoteEvent.KIND) +
+            setOf(InboxAnnouncement.KEY_KIND, InboxAnnouncement.RELAYS_KIND)
 
         /**
          * Sends [signedEvent] to [targets] and says what each relay answered.

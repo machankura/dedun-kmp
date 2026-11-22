@@ -67,6 +67,26 @@ interface DkgRepository {
     suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession?
 
     /**
+     * Every group of its own [chatRoomId] holds, newest first, failed ones left
+     * out: in a NIP-17 room, the groups its members have made there.
+     *
+     * The same people always share one NIP-17 room -- its id is derived from them --
+     * so a second group they make is a second ceremony in that room rather than a
+     * room of its own (docs/nip17-multiple-ceremonies.md).
+     */
+    fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>>
+
+    /**
+     * The groups the people in [memberPublicKeys] have already made together, as
+     * [observeOwnSessionsForChatRoom] has them, read from the room they would share
+     * without making it. Empty if they have made none, or share no room yet.
+     *
+     * [memberPublicKeys] is everybody, the reader included: it is the set the room's
+     * id is derived from.
+     */
+    suspend fun getOwnSessionsAmong(memberPublicKeys: Set<HexKey>): List<DkgSession>
+
+    /**
      * Opens a ritual in [localChatRoom], making this device the coordinator.
      *
      * [parentChatRoomId] says what the ceremony is for when it is for a subgroup.
@@ -221,6 +241,12 @@ interface DkgRepository {
             override suspend fun roomAwaitingCreation(session: DkgSession): String? = null
 
             override suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession? = null
+
+            override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
+                flowOf(emptyList())
+
+            override suspend fun getOwnSessionsAmong(memberPublicKeys: Set<HexKey>): List<DkgSession> =
+                emptyList()
 
             override suspend fun proposeRitual(
                 localChatRoom: LocalChatRoom,
