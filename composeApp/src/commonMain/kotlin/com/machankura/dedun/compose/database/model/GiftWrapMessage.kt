@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.database.model
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Ignore
+import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -25,6 +26,7 @@ import kotlin.time.Instant
             onDelete = ForeignKey.CASCADE,
         ),
     ],
+    indices = [Index("giftWrapPayloadId"), Index("expiresAt")],
 )
 data class GiftWrapMessage(
     @PrimaryKey
@@ -72,6 +74,22 @@ data class GiftWrapMessage(
     override val savedAt: Instant = Clock.System.now(),
     override val viewedAt: Instant? = null,
     override val deletedAt: Instant? = null, // Who this message should be seen by (used to derive conversationId)
+
+    /**
+     * The payload this wrap carried, when this device knows it: every wrap it sealed, and every
+     * wrap it opened. Not a foreign key, on purpose -- the cascade already runs the other way,
+     * wrap to seal to payload -- but it is how the sweeper finds all of a payload's wraps, the
+     * sender's one-per-recipient copies included, and deletes them with it rather than before it.
+     * docs/disappearing-messages.md, Phase 4.
+     */
+    val giftWrapPayloadId: HexKey? = null,
+
+    /**
+     * When this device drops the wrap: its payload's expiry when that is known, else the wrap's
+     * own NIP-40 `expiration` -- a wrap addressed to somebody else is kept, unopened, and goes
+     * when the relay would have dropped it. Null for never. docs/disappearing-messages.md, D6.
+     */
+    val expiresAt: Instant? = null,
 ): com.machankura.dedun.compose.database.model.traits.NostrEventEntity,
     com.machankura.dedun.compose.database.model.traits.TimestampedEntity,
     com.machankura.dedun.compose.database.model.traits.LocalStoreEntity,

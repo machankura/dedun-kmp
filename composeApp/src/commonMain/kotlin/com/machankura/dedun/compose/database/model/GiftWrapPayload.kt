@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.database.model
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Ignore
+import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import com.machankura.dedun.compose.database.model.traits.LocalStoreEntity
 import com.machankura.dedun.compose.database.model.traits.SoftDeletableEntity
@@ -17,6 +18,7 @@ import com.vitorpamplona.quartz.nip01Core.tags.people.taggedUsers
 import com.vitorpamplona.quartz.nip14Subject.subject
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 
 @Entity(
     foreignKeys = [
@@ -27,6 +29,7 @@ import kotlin.time.Instant
             onDelete = ForeignKey.CASCADE,
         )
     ],
+    indices = [Index("expiresAt")],
 )
 data class GiftWrapPayload(
     @PrimaryKey
@@ -78,6 +81,14 @@ data class GiftWrapPayload(
     override val savedAt: Instant = Clock.System.now(),
     override val viewedAt: Instant? = null,
     override val deletedAt: Instant? = null, // Who this message should be seen by (used to derive conversationId)
+
+    /**
+     * The rumor's NIP-40 `expiration`, or null for never. Read off [tags] by default, so every
+     * producer -- and the inbound path, which builds this from an unsealed rumor -- records it
+     * without saying so, and the sweeper finds what is due without parsing every row's tags.
+     * docs/disappearing-messages.md, D2 and D6.
+     */
+    val expiresAt: Instant? = DisappearingMessages.expirationOf(tags, createdAt.epochSeconds)?.let { Instant.fromEpochSeconds(it) },
 ): TimestampedEntity, LocalStoreEntity, UserViewableEntity, SoftDeletableEntity {
     @Ignore
     private val logger = Logger.withTag(TAG)
@@ -132,6 +143,7 @@ data class GiftWrapPayload(
         if (content != other.content) return false
         if (quotedEventId != other.quotedEventId) return false
         if (giftWrapSealId != other.giftWrapSealId) return false
+        if (expiresAt != other.expiresAt) return false
         if (createdAt != other.createdAt) return false
         if (updatedAt != other.updatedAt) return false
         if (savedAt != other.savedAt) return false
@@ -149,6 +161,7 @@ data class GiftWrapPayload(
         result = 31 * result + content.hashCode()
         result = 31 * result + (quotedEventId?.hashCode() ?: 0)
         result = 31 * result + (giftWrapSealId?.hashCode() ?: 0)
+        result = 31 * result + (expiresAt?.hashCode() ?: 0)
         result = 31 * result + createdAt.hashCode()
         result = 31 * result + updatedAt.hashCode()
         result = 31 * result + savedAt.hashCode()

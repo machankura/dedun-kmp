@@ -155,6 +155,17 @@ data class ChatRoom(
     @ColumnInfo(defaultValue = NOTIFICATIONS_ALL)
     val notifications: String = NOTIFICATIONS_ALL,
 
+    /**
+     * How long what the user writes here lasts, in seconds: null follows the identity's default,
+     * `0` is Off for this conversation only. Read once per message, when it is queued, and only in
+     * a NIP-17 room -- an MLS room follows the group's own retention. Local: NIP-17 has no shared
+     * timer, so each sender's choice rides their own messages. docs/disappearing-messages.md, D4.
+     */
+    val disappearingMessageSecs: Long? = null,
+
+    /** When the one-time "messages now disappear" notice was shown here, or null for not yet (D9). */
+    val disappearingNoticeShownAt: Instant? = null,
+
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,

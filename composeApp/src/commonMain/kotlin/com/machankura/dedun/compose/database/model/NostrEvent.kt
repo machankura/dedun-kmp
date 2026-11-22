@@ -209,6 +209,10 @@ data class NostrEvent(
                     receiverRelayHit = receiverPTag.relayHint?.url,
                     signature = giftWrapEvent.sig,
                     nostrEventId = id,
+                    // The wrap's own expiry until it is opened; filing what it carries replaces
+                    // this with the rumor's (docs/disappearing-messages.md, D6).
+                    expiresAt = com.machankura.dedun.compose.nostr.DisappearingMessages.expirationOf(tags, createdAt.epochSeconds)
+                        ?.let { Instant.fromEpochSeconds(it) },
                 )
             }
 

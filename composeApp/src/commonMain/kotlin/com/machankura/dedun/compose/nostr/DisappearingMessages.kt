@@ -6,9 +6,6 @@ import com.vitorpamplona.quartz.nip09Deletions.DeletionRequestEvent
 import com.vitorpamplona.quartz.nip17Dm.files.ChatMessageEncryptedFileHeaderEvent
 import com.vitorpamplona.quartz.nip17Dm.messages.ChatMessageEvent
 import com.vitorpamplona.quartz.nip25Reactions.ReactionEvent
-import com.machankura.dedun.compose.nostr.confederation.ConfederationKinds
-import com.machankura.dedun.compose.nostr.confederation.ConfederationRitualEvents
-import com.machankura.dedun.compose.nostr.confederation.ConfederationSigningEvents
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
@@ -44,8 +41,13 @@ object DisappearingMessages {
     /** Long enough that "a long time" is a real choice, short enough that relays treat it sanely (D3). */
     const val MAX_SECONDS: Long = 365 * DAY
 
-    /** The policy a new identity starts with, and an existing one is given on upgrade (D9). */
-    const val DEFAULT_SECONDS: Long = DAY
+    /**
+     * The policy a new identity starts with, and what an existing one reads as on upgrade: Off.
+     * Giza gives everyone a day (its D9); Dedun does not, because members settle disagreements
+     * about money by pointing at what was said (docs/giza-second-batch.md, D11). Protocol
+     * messages still always expire, which is most of the gain.
+     */
+    const val DEFAULT_SECONDS: Long = OFF
 
     /** What the settings list offers, Off first. Anything else in bounds is a custom length. */
     val PRESETS: List<Long> = listOf(OFF, HOUR, 8 * HOUR, DAY, 7 * DAY, 28 * DAY)
@@ -77,14 +79,11 @@ object DisappearingMessages {
     )
 
     private val SIGNING_KINDS: Set<Kind> =
-        FrostSigningEvents.ALL + ConfederationSigningEvents.ALL + GroupEcdhEvents.ALL
+        FrostSigningEvents.ALL + GroupEcdhEvents.ALL
 
     private val CEREMONY_KINDS: Set<Kind> =
         DkgRitualEvents.ALL + InboxKeyRitualEvents.ALL + ShareRefreshEvents.ALL +
-            ShareRepairEvents.ALL + ConfederationRitualEvents.ALL + setOf(WelcomeEvent.KIND)
-
-    /** Confederation statements carry their own expiry, the proposal's; this is only its ceiling. */
-    private val STATEMENT_KINDS: Set<Kind> = ConfederationKinds.ALL
+            ShareRepairEvents.ALL + setOf(WelcomeEvent.KIND)
 
     sealed interface ExpiryClass {
         /** Something a person wrote: it follows their policy, Off included. */
@@ -102,7 +101,6 @@ object DisappearingMessages {
         in WRITTEN_KINDS -> ExpiryClass.Written
         in SIGNING_KINDS -> ExpiryClass.Protocol(SIGNING_FLOOR)
         in CEREMONY_KINDS -> ExpiryClass.Protocol(CEREMONY_FLOOR)
-        in STATEMENT_KINDS -> ExpiryClass.Protocol(ConfederationKinds.MAX_EXPIRY_SECONDS)
         else -> ExpiryClass.Protocol(UNCLASSIFIED_FLOOR, classified = false)
     }
 

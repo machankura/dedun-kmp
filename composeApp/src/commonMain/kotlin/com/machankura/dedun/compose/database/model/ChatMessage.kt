@@ -123,7 +123,7 @@ import com.machankura.dedun.compose.nostr.wallet.GuardedWalletNoticeEvent
     // room, and re-reads all of them each time a message lands anywhere. Without
     // this that is a scan of every message this device holds, per room, per
     // arrival -- work that grows with the whole history rather than with the room.
-    indices = [Index("chatRoomId")],
+    indices = [Index("chatRoomId"), Index("expiresAt")],
 )
 data class ChatMessage(
     @PrimaryKey(autoGenerate = true)
@@ -151,6 +151,13 @@ data class ChatMessage(
      * line everybody else gets. See docs/marmot-direct-messages.md.
      */
     val directMessageRecipientPublicKey: HexKey? = null,
+
+    /**
+     * When this line disappears, from its rumor's NIP-40 `expiration`, or null for never. The
+     * sweeper deletes it, and everything holding its words, from then on; a line that arrives
+     * already past it is never filed. docs/disappearing-messages.md, D6.
+     */
+    val expiresAt: Instant? = null,
 
     /**
      * The signing session a [FROST_TYPES] line belongs to, or null for anything else.

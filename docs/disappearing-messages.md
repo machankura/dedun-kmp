@@ -405,6 +405,30 @@ Migration 49 → 50, following the pattern in `database/migrations/`:
 Tests: a migration JVM test in the style of `ReadMarkMigrationJvmTest`, run against a version-49
 database with NIP-17 and MLS rooms in it.
 
+**Built.** `AutoMigration(from = 49, to = 50)`, with no spec, because nothing moves. It differs from
+the plan in two ways:
+
+- The identity's default is a table of its own, `DisappearingSetting(userPublicKey, defaultSeconds)`,
+  not a column of `NotificationLedger`. A ledger row exists only once notifications are armed, and
+  a policy has to apply before that. A missing row reads as one day, so D9's upgrade needs no data
+  step.
+- `ExpiredGiftWrap` holds inbound wrap ids only (D6 dropped the outbound tombstone).
+- `GiftWrapMessage` gains `giftWrapPayloadId` and `expiresAt`, which the plan did not have. The
+  cascade runs wrap → seal → payload → chat line, so deleting a wrap early would delete an
+  unfinished ceremony's round with it. The sender's one-per-recipient wraps also had no link to
+  their payload at all, only the first seal did. The sweeper needs both columns (Phase 4).
+- `GiftWrapPayload.expiresAt` defaults to the value read off the row's own tags. Every producer
+  and the inbound path therefore record it without being changed.
+
+`DisappearingDao` and `DisappearingSettingsStore` sit beside them. `DisappearingMessagesMigrationJvmTest`
+covers the upgrade, the store and the tombstones, and `ShippedProfileUpgradeJvmTest` now expects
+version 50.
+
+**Found while building, and Phase 4 has to handle it:** `ChatRoom.initialGiftWrapPayloadId` is a
+foreign key to `GiftWrapPayload` with `ON DELETE CASCADE`. `NostrDao` sets it to the payload that
+first created a NIP-17 room on this device. Deleting that payload would delete the whole
+conversation. The sweeper clears the reference before it deletes the payload.
+
 ### Phase 3: sending, for every kind
 
 - **One place applies the policy.** A single `DisappearingMessages.stamp(payload, room,

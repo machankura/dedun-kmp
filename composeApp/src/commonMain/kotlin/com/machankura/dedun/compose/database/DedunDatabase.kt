@@ -63,6 +63,7 @@ import com.machankura.dedun.compose.database.dao.FrostSigningSessionDao
 import com.machankura.dedun.compose.database.dao.GiftWrapMessageDao
 import com.machankura.dedun.compose.database.dao.GiftWrapPayloadDao
 import com.machankura.dedun.compose.database.dao.GiftWrapSealDao
+import com.machankura.dedun.compose.database.dao.DisappearingDao
 import com.machankura.dedun.compose.database.dao.GroupDmDao
 import com.machankura.dedun.compose.database.dao.GroupKeyStateDao
 import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
@@ -111,6 +112,8 @@ import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEven
 import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEventRequestRelation
 import com.machankura.dedun.compose.database.model.ChatMessageNostrEventRelation
 import com.machankura.dedun.compose.database.model.ChatRoom
+import com.machankura.dedun.compose.database.model.DisappearingSetting
+import com.machankura.dedun.compose.database.model.ExpiredGiftWrap
 import com.machankura.dedun.compose.database.model.GroupConversationKey
 import com.machankura.dedun.compose.database.model.GroupDmMessage
 import com.machankura.dedun.compose.database.model.GroupDmOutbound
@@ -197,6 +200,8 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GiftWrapMessage::class,
         GiftWrapSeal::class,
         GiftWrapPayload::class,
+        DisappearingSetting::class,
+        ExpiredGiftWrap::class,
         GroupConversationKey::class,
         GroupDmMessage::class,
         GroupDmOutbound::class,
@@ -285,7 +290,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 54,
+    version = 55,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -604,6 +609,14 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // docs/giza-second-batch.md, Phase 6): GroupEcdhRound, GroupEcdhPartial, GroupConversationKey,
         // GroupDmWrap, GroupDmMessage and GroupDmOutbound. New tables only, so Room generates it.
         AutoMigration(from = 53, to = 54),
+        // v55 adds disappearing messages' storage (docs/disappearing-messages.md, Phase 2, Giza's v50;
+        // docs/giza-second-batch.md, Phase 7): the nullable ChatRoom.disappearingMessageSecs and
+        // disappearingNoticeShownAt, the nullable ChatMessage.expiresAt and GiftWrapPayload.expiresAt
+        // with an index each, and the DisappearingSetting and ExpiredGiftWrap tables. Nullable columns
+        // and new tables only, so Room generates it. No data moves: an identity with no
+        // DisappearingSetting row reads as Off, Dedun's default (D11), so nothing anyone writes starts
+        // disappearing on upgrade.
+        AutoMigration(from = 54, to = 55),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -633,6 +646,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun dkgSessionDao(): DkgSessionDao
 
     abstract fun frostSigningSessionDao(): FrostSigningSessionDao
+
+    abstract fun disappearingDao(): DisappearingDao
 
     abstract fun groupDmDao(): GroupDmDao
 
