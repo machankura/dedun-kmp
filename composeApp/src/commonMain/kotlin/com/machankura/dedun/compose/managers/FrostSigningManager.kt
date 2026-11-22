@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
@@ -4305,11 +4306,21 @@ object FrostSigningManager {
         // the store is stepped past rather than written over. One second of drift
         // per collision is nothing a protocol message reads, and no caller
         // publishes faster than [MAX_ID_SEARCH] identical messages a second.
+        //
+        // On the NIP-17 transport the rumor also carries its expiry, after at least the signing
+        // floor (docs/disappearing-messages.md, D2). It is worked out from `created_at`, so it is
+        // stamped again each time the search steps the second on. A Marmot room's messages
+        // follow the group's own retention instead.
+        val store = DisappearingSettingsStore(database)
+        suspend fun stamped(at: Long): Array<Array<String>> =
+            if (isMarmotRoom) tags else store.stamp(localChatRoom.chatRoom.id, session.userPublicKey, kind, at, tags)
+
         var createdAt = Clock.System.now().epochSeconds
+        var rumorTags = stamped(createdAt)
         var id = EventHasher.hashId(
             pubKey = session.userPublicKey,
             createdAt = createdAt,
-            tags = tags,
+            tags = rumorTags,
             content = content,
             kind = kind
         )
@@ -4317,10 +4328,11 @@ object FrostSigningManager {
 
         while (attempts < MAX_ID_SEARCH && isQueued(database, isMarmotRoom, id)) {
             createdAt += 1
+            rumorTags = stamped(createdAt)
             id = EventHasher.hashId(
                 pubKey = session.userPublicKey,
                 createdAt = createdAt,
-                tags = tags,
+                tags = rumorTags,
                 content = content,
                 kind = kind
             )
@@ -4357,7 +4369,7 @@ object FrostSigningManager {
                     publicKey = session.userPublicKey,
                     kind = kind,
                     createdAt = Instant.fromEpochSeconds(createdAt),
-                    tags = tags,
+                    tags = rumorTags,
                     content = content,
                     chatRoomId = localChatRoom.chatRoom.id
                 )

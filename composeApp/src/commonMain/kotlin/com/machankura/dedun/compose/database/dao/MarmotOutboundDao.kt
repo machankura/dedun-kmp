@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.dao
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import androidx.room3.Dao
 import androidx.room3.Transaction
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -1316,11 +1317,17 @@ abstract class MarmotOutboundDao(
                 // the room's address, not its id.
                 nostrGroupId = database.marmotRoutingDao().activeRoutingIdFor(chatRoomId),
             )
+            // A Welcome travels as a NIP-17 wrap, and expires like one: after at least the
+            // ceremony floor, since the invitee may not open the app for days
+            // (docs/disappearing-messages.md, D2). Stamped before the id is hashed.
+            val welcomeTags = DisappearingSettingsStore(database).stamp(
+                chatRoomId, userPublicKey, welcomeEvent.kind, welcomeEvent.createdAt, welcomeEvent.tags,
+            )
             // Compute welcomeEventId
             val welcomeEventId = EventHasher.hashId(
                 pubKey = userPublicKey,
                 kind = welcomeEvent.kind,
-                tags = welcomeEvent.tags,
+                tags = welcomeTags,
                 createdAt = welcomeEvent.createdAt,
                 content = welcomeEvent.content
             )
@@ -1334,7 +1341,7 @@ abstract class MarmotOutboundDao(
                     publicKey = userPublicKey,
                     chatRoomId = chatRoomId,
                     kind = welcomeEvent.kind,
-                    tags = welcomeEvent.tags,
+                    tags = welcomeTags,
                     content = welcomeEvent.content,
                     createdAt = Instant.fromEpochSeconds(welcomeEvent.createdAt)
                 )

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import com.machankura.dedun.compose.nostr.subgroup.tags.GuardianDelayTag
 import com.machankura.dedun.compose.database.model.subgroupWalletPolicy
 import com.machankura.dedun.compose.nostr.subgroup.tags.WalletPolicyTag
@@ -1572,7 +1573,7 @@ object ChillDkgRitualManager {
                 )
             }
 
-        val tags = receiverTags.toTypedArray() + DkgRitualEvents.assembleTags(
+        val baseTags = receiverTags.toTypedArray() + DkgRitualEvents.assembleTags(
             sessionId = session.id,
             threshold = if (includeThreshold) session.threshold else null,
             parentChatRoomId = if (includeParent) session.parentChatRoomId else null,
@@ -1583,6 +1584,15 @@ object ChillDkgRitualManager {
         )
 
         val createdAt = Clock.System.now().epochSeconds
+
+        // A NIP-17 round expires like everything else in a wrap, after at least the ceremony
+        // floor (docs/disappearing-messages.md, D2). The tag is part of the rumor, so it goes on
+        // before the id is hashed. A Marmot room's rounds follow the group's own retention.
+        val tags = if (localChatRoom.chatRoom.mlsGroupState == null) {
+            DisappearingSettingsStore(database).stamp(localChatRoom.chatRoom.id, session.userPublicKey, kind, createdAt, baseTags)
+        } else {
+            baseTags
+        }
 
         // The rumor id the outbound pipeline will recompute from these same
         // fields when it assembles the event to encrypt, on either transport.

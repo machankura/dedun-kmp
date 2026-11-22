@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.managers.GuardianDerivation
@@ -710,25 +711,33 @@ class DatabaseChatRepository(
             }
 
             val createdAt = Clock.System.now().epochSeconds
+            // The expiry is one of the rumor's tags, so it goes on before the id is hashed: the
+            // payload id is the id the recipient arrives at. docs/disappearing-messages.md, D4.
+            val tags = DisappearingSettingsStore(database).stamp(
+                chatRoomId = localChatRoom.chatRoom.id,
+                userPublicKey = localChatRoom.chatRoom.userPublicKey,
+                kind = messageType,
+                createdAt = createdAt,
+                tags = receiverTags.toTypedArray(),
+            )
             val giftWrapPayloadId = EventHasher.hashId(
                 pubKey = localChatRoom.chatRoom.userPublicKey,
                 createdAt = createdAt,
-                tags = receiverTags.toTypedArray(),
+                tags = tags,
                 content = text,
                 kind = messageType
             )
 
-            database.giftWrapPayloadDao().upsert(
-                GiftWrapPayload(
-                    id = giftWrapPayloadId,
-                    kind = messageType,
-                    tags = receiverTags.toTypedArray(),
-                    createdAt = Instant.fromEpochSeconds(createdAt),
-                    content = text,
-                    chatRoomId = localChatRoom.chatRoom.id,
-                    publicKey = localChatRoom.chatRoom.userPublicKey
-                )
+            val payload = GiftWrapPayload(
+                id = giftWrapPayloadId,
+                kind = messageType,
+                tags = tags,
+                createdAt = Instant.fromEpochSeconds(createdAt),
+                content = text,
+                chatRoomId = localChatRoom.chatRoom.id,
+                publicKey = localChatRoom.chatRoom.userPublicKey
             )
+            database.giftWrapPayloadDao().upsert(payload)
 
             database.chatMessageDao().upsert(
                 ChatMessage(
@@ -738,7 +747,8 @@ class DatabaseChatRepository(
                     isUserMessage = true,
                     giftWrapPayloadId = giftWrapPayloadId,
                     marmotGroupEventId = null,
-                    marmotInnerEventId = null
+                    marmotInnerEventId = null,
+                    expiresAt = payload.expiresAt,
                 )
             )
         }
@@ -788,6 +798,16 @@ class DatabaseChatRepository(
             }
         }
 
+        // Sending it late would publish something its own tag says should already be gone: a
+        // relay is meant to drop it on arrival and a recipient to ignore it. It stays unsealed and
+        // the sweeper deletes it -- a person's message at once, a ceremony's round once its
+        // session has finished with it. docs/disappearing-messages.md, Phase 3.
+        val rumorExpiry = DisappearingMessages.expirationOf(giftWrapPayload.tags, giftWrapPayload.createdAt.epochSeconds)
+        if (rumorExpiry != null && DisappearingMessages.isExpired(rumorExpiry, Clock.System.now().epochSeconds)) {
+            logger.w("Not sealing payload ${giftWrapPayload.id}: it expired before it could be sent")
+            return
+        }
+
         database.participantDao().findParticipantsByChatRoomId(giftWrapPayload.chatRoomId).forEach { participant ->
             if (giftWrapPayload.kind == WelcomeEvent.KIND) {
                 logger.i("Only giftWrap welcomeEvent payload (${giftWrapPayload.id}) to the participant who published the related keyPackage")
@@ -832,11 +852,14 @@ class DatabaseChatRepository(
                     content = giftWrapPayload.content
                 )
             )
-            logger.d("GiftWrap Payload Rumor: ${giftWrapPayloadRumor.toJson()}")
-
-            logger.d("Seal to $participant")
+            // The rumor is the plaintext of somebody's words, so it is not logged: a log line would
+            // outlive the message (docs/disappearing-messages.md, Phase 0, check 7).
+            logger.d("Seal ${giftWrapPayload.id} to ${participant.participantPublicKey}")
             val payload = giftWrapPayloadRumor.toJson()
 
+            // The seal stays untagged, as NIP-59 says it MUST: Dedun's group-seal refusals reject
+            // a tagged one, and quartz's `mergeWith` would append its tag to every rumor it opens
+            // (docs/disappearing-messages.md, D5).
             val sealedRumorEvent = nostrSignerSync.signNormal<SealEvent>(
                 createdAt = TimeUtils.randomWithTwoDays(),
                 kind = SealEvent.KIND,
@@ -846,14 +869,20 @@ class DatabaseChatRepository(
                     toPublicKey = participant.participantPublicKey
                 )
             )
-            logger.d("SealEvent: ${sealedRumorEvent.toJson()}")
+            logger.d("SealEvent: ${sealedRumorEvent.id}")
 
+            // The wrap asks relays to drop it, by quartz's formula: its own randomized
+            // `created_at` plus the rumor's lifetime plus two days, which lands after the rumor's
+            // expiry and never gives away when the rumor was written (D5).
+            val wrapCreatedAt = TimeUtils.randomWithTwoDays()
+            val wrapExpiry = DisappearingMessages.wrapExpiration(rumorExpiry, giftWrapPayload.createdAt.epochSeconds, wrapCreatedAt)
             val giftWrapEvent = wrapperSigner.signNormal<GiftWrapEvent>(
-                createdAt = TimeUtils.randomWithTwoDays(),
+                createdAt = wrapCreatedAt,
                 kind = GiftWrapEvent.KIND,
-                tags = arrayOf(
-                    PTag.assemble(participant.participantPublicKey, participant.relayHint?.let { NormalizedRelayUrl(it) })
-                ),
+                tags = listOfNotNull(
+                    PTag.assemble(participant.participantPublicKey, participant.relayHint?.let { NormalizedRelayUrl(it) }),
+                    wrapExpiry?.let { arrayOf(DisappearingMessages.TAG, it.toString()) },
+                ).toTypedArray(),
                 content = wrapperSigner.nip44Encrypt(
                     plaintext = sealedRumorEvent.toJson(),
                     toPublicKey = participant.participantPublicKey
