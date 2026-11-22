@@ -1877,4 +1877,11 @@
     <string name="the_inbox_key_ceremony_started">The inbox key ceremony started</string>
     <string name="no_inbox_relays_were_valid">None of those is a relay a stranger could reach</string>
     <string name="the_ceremony_ended">The ceremony ended: %1$s</string>
+    <string name="reply_as_the_group">Reply as the group</string>
+    <string name="ask_the_group_to_sign_this_reply">Ask the group to sign this reply</string>
+    <string name="the_group_signs_a_reply">The group's quorum has to sign this before it is sent. It goes out in the group's name, not yours, and can't be taken back once signed.</string>
+    <string name="has_announced_no_inbox_key">%1$s has announced no inbox key, so their app may not be able to open a message from a group.</string>
+    <string name="could_not_ask_the_group_to_sign_this_reply">Couldn't ask the group to sign this reply.</string>
+    <string name="not_yet_on_a_relay">Not yet on a relay</string>
+    <string name="send_reply_again">Send again</string>
 </resources>

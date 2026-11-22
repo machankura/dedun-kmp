@@ -26,12 +26,18 @@ sealed interface GroupInboxConversationUIState {
         val createdAt: Long,
         val outgoing: Boolean,
         val senderName: String,
+        /** For a reply this device proposed: its signing session, while no relay has taken it. */
+        val unsentSessionId: String? = null,
     )
 
     data class Loaded(
         val localChatRoom: LocalChatRoom,
         val names: List<String>,
         val lines: List<Line>,
+        /** Recipients who have announced no inbox key (D13): their app may not open the reply. */
+        val withoutKey: List<String> = emptyList(),
+        /** Whether a reply this screen asked for is still on its way to the signing session. */
+        val proposing: Boolean = false,
     ): GroupInboxConversationUIState
 
     data class Error(val message: String): GroupInboxConversationUIState

@@ -80,9 +80,13 @@ class GroupInboxConversationViewModel(
             inboxRepository.observeConversation(chatRoomId, conversationId).collect { messages ->
                 val participants = messages.lastOrNull()?.participantList().orEmpty()
                 val names = inboxRepository.namesOf(participants)
+                val unsent = inboxRepository.unsentReplies(chatRoomId)
+                val withoutKey = inboxRepository.withoutAnnouncedKey(participants)
                 uiState = GroupInboxConversationUIState.Loaded(
                     localChatRoom = room,
                     names = participants.map { names[it] ?: it.take(8) },
+                    withoutKey = withoutKey.map { names[it] ?: it.take(8) },
+                    proposing = (uiState as? GroupInboxConversationUIState.Loaded)?.proposing ?: false,
                     lines = messages.map { message ->
                         GroupInboxConversationUIState.Line(
                             rumorId = message.rumorId,
@@ -90,12 +94,32 @@ class GroupInboxConversationViewModel(
                             createdAt = message.createdAt,
                             outgoing = message.outgoing,
                             senderName = if (message.outgoing) "" else names[message.senderPublicKey] ?: message.senderPublicKey.take(8),
+                            unsentSessionId = message.signingSessionId?.takeIf { it in unsent },
                         )
                     },
                 )
                 if (messages.any { !it.outgoing && it.readAt == null }) inboxRepository.markRead(chatRoomId, conversationId)
             }
         }
+    }
+
+    /**
+     * Asks the group to sign [text] as a reply. [onDone] gets the signing session's id, or null
+     * when it could not be asked.
+     */
+    fun propose(text: String, onDone: (String?) -> Unit) {
+        val loaded = uiState as? GroupInboxConversationUIState.Loaded ?: return
+        if (loaded.proposing || text.isBlank()) return
+        uiState = loaded.copy(proposing = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = runCatching { inboxRepository.proposeReply(loaded.localChatRoom, conversationId, text.trim()) }.getOrNull()
+            (uiState as? GroupInboxConversationUIState.Loaded)?.let { uiState = it.copy(proposing = false) }
+            onDone(session)
+        }
+    }
+
+    fun sendAgain(sessionId: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) { onDone(inboxRepository.sendAgain(sessionId)) }
     }
 
     companion object {

@@ -21,6 +21,7 @@ import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.GroupInboxManager
 import com.machankura.dedun.compose.managers.InboxAnnouncements
 import com.machankura.dedun.compose.managers.InboxKeyRitualManager
+import com.machankura.dedun.compose.managers.InboxReplies
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
 import com.machankura.dedun.compose.repository.GroupInboxRepository
 
@@ -112,4 +113,18 @@ class DatabaseGroupInboxRepository(
 
     override suspend fun abandon(localChatRoom: LocalChatRoom, ceremonyId: String): Boolean =
         InboxKeyRitualManager.abandon(database, localChatRoom, ceremonyId)
+
+    override suspend fun proposeReply(localChatRoom: LocalChatRoom, conversationId: String, text: String): String =
+        InboxReplies.propose(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, conversationId, text).id
+
+    override suspend fun withoutAnnouncedKey(publicKeys: List<HexKey>): List<HexKey> =
+        publicKeys.filterNot { InboxReplies.hasAnnouncedKey(database, it) }
+
+    override suspend fun unsentReplies(chatRoomId: String): Set<String> =
+        database.groupInboxDao().getMessages(chatRoomId)
+            .mapNotNull { it.signingSessionId }
+            .filter { session -> database.groupInboxDao().getPublicationsFor(session).any { it.publishedAt == null } }
+            .toSet()
+
+    override suspend fun sendAgain(sessionId: String): Boolean = InboxReplies.sendAgain(database, sessionId)
 }

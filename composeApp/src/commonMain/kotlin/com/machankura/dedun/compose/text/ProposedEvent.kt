@@ -26,6 +26,7 @@ import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
+import com.machankura.dedun.compose.nostr.inbox.InboxSeal
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
@@ -145,6 +146,13 @@ object ProposedEvent {
             label = "The group's inbox key",
             detail = InboxAnnouncement.announcedKeyOf(event)?.let { "Key ${it.take(8)}…${it.takeLast(8)}" }
                 ?: "Names no key",
+        )
+        // A reply from the group's inbox: sealed, so said for what it is. The signing screen
+        // reads it out for a device that holds the inbox key (docs/group-inbox.md, D12), and a
+        // member without one sees only that it exists (D11).
+        InboxSeal.KIND -> Summary(
+            label = "A private reply from the group's inbox",
+            detail = "Sealed: only the group's inbox key opens it",
         )
         InboxAnnouncement.RELAYS_KIND -> Summary(
             label = "Where the group receives private messages",

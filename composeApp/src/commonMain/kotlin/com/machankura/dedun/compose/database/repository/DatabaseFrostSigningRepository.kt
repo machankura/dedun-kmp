@@ -36,6 +36,12 @@ class DatabaseFrostSigningRepository(
 ): FrostSigningRepository {
     private val logger = Logger.withTag(TAG)
 
+    override suspend fun proposalNotes(chatRoomId: String, sessionId: String, events: List<Event>): List<String> =
+        runCatching {
+            val user = database.frostSigningSessionDao().getSessionById(sessionId)?.userPublicKey ?: return@runCatching emptyList()
+            com.machankura.dedun.compose.managers.InboxRefusal.notes(database, chatRoomId, user, sessionId, events)
+        }.getOrDefault(emptyList())
+
     override fun observeSessionById(sessionId: String): Flow<FrostSigningSession?> =
         database.frostSigningSessionDao().observeSessionById(sessionId)
 

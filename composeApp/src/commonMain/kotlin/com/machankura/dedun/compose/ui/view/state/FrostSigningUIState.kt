@@ -27,6 +27,9 @@ sealed interface FrostSigningUIState {
          */
         val items: List<FrostSigningItem> = emptyList(),
 
+        /** For a reply from the group's inbox: its words and recipients, and what could not be checked (docs/group-inbox.md, D12). */
+        val proposalNotes: List<String> = emptyList(),
+
         /** Who has offered a nonce, so the screen can name who it is waiting on. */
         val offeredNonce: Set<HexKey> = emptySet(),
 

@@ -81,6 +81,21 @@ interface GroupInboxRepository {
 
     suspend fun abandon(localChatRoom: LocalChatRoom, ceremonyId: String): Boolean = false
 
+    // ---- replying (Phase 8) -------------------------------------------------------------------
+
+    /** Asks the group to sign a reply to [conversationId]; the signing session's id. */
+    suspend fun proposeReply(localChatRoom: LocalChatRoom, conversationId: String, text: String): String =
+        throw UnsupportedOperationException()
+
+    /** Of [publicKeys], those who have announced no inbox key (D13's warning). */
+    suspend fun withoutAnnouncedKey(publicKeys: List<HexKey>): List<HexKey> = emptyList()
+
+    /** The reply sessions in [chatRoomId] whose wraps no relay has taken yet. */
+    suspend fun unsentReplies(chatRoomId: String): Set<String> = emptySet()
+
+    /** Wraps a signed reply again and owes it to relays. */
+    suspend fun sendAgain(sessionId: String): Boolean = false
+
     companion object {
         val NO_OP = object : GroupInboxRepository {
             override fun observeUnpublished(): Flow<List<GroupInboxPublication>> = flowOf(emptyList())

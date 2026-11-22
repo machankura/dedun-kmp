@@ -16,9 +16,9 @@ import com.machankura.dedun.compose.text.ProposedEvent
  * What Dedun does today with the events a group's inbox is made of (docs/group-inbox.md,
  * Phase 1). Written to pass now and flipped on purpose by the phase that changes each:
  *
- * - a peer's proposal to sign a kind 13 (a NIP-17 seal) reaches the member as a bare number,
- *   and nothing declines it. Phase 8 puts a refusal in front of it, as Phase 5 did for a kind
- *   10044 (an encryption key), which this pins declined now;
+ * - a peer's proposal to sign a kind 10044 (an encryption key) nobody made, or a kind 13 (a
+ *   NIP-17 seal) with no manifest to read it by, is declined out loud: Phases 5 and 8 put a
+ *   refusal in front of each;
  * - the identity's own gift wraps are asked for on their own subscription, beside the
  *   group's that Phase 6 added.
  */
@@ -62,11 +62,13 @@ class GroupInboxTodayJvmTest {
     }
 
     @Test
-    fun `a peer's sealed ciphertext reaches the member as a number, and can be signed`() {
-        // The member is asked to sign bytes it cannot read: the rubber stamp
-        // docs/dedun-wallet-removal.md says a Dedun device must not be. Phase 8 declines it.
+    fun `a peer's sealed ciphertext with nothing to read it by is declined out loud`() = runBlocking {
+        // Flipped by Phase 8: a member asked to sign bytes it cannot read would be the rubber
+        // stamp docs/dedun-wallet-removal.md says a Dedun device must not be (docs/group-inbox.md, D12).
         val sent = proposeAndDeliver(13, arrayOf(arrayOf("n", "e".repeat(64))), "AnOpaqueCiphertext")
-        assertPutToTheMemberByNumber(sent, 13)
+        val session = assertNotNull(harness.db.frostSigningSessionDao().getSessionById(sent.session.id))
+        assertNotNull(session.signDeclinedAt)
+        assertEquals(listOf(InboxRefusal.REPLY_UNREADABLE), harness.queued(FrostSigningEvents.DECLINE).map { it.content })
     }
 
     @Test

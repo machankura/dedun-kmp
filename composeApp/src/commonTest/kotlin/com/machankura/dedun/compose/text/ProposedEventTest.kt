@@ -121,10 +121,10 @@ class ProposedEventTest {
 
     /**
      * docs/group-inbox.md: the group's inbox key and its relays are said by what they are
-     * (Phase 5). A seal is still said by its number until Phase 8 gives it words.
+     * (Phase 5), and a seal as the sealed reply it is (Phase 8).
      */
     @Test
-    fun `an inbox key and its relays are named, and a seal is still a number`() {
+    fun `an inbox key, its relays and a sealed reply are named`() {
         val key = "e".repeat(64)
         val announcement = ProposedEvent.summarize(event(10044, tags = arrayOf(arrayOf("n", key))))
         assertEquals("The group's inbox key", announcement.label)
@@ -132,7 +132,7 @@ class ProposedEventTest {
         val relays = ProposedEvent.summarize(event(10050, tags = arrayOf(arrayOf("relay", "wss://inbox.example.com/"))))
         assertEquals("Where the group receives private messages", relays.label)
         assertEquals("inbox.example.com", relays.detail)
-        assertEquals("Event of kind 13", ProposedEvent.summarize(event(13)).label)
+        assertEquals("A private reply from the group's inbox", ProposedEvent.summarize(event(13)).label)
     }
 
     private fun event(

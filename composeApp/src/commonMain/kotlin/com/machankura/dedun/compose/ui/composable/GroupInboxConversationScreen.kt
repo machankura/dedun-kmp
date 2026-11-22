@@ -10,7 +10,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import dedun.composeapp.generated.resources.ask_the_group_to_sign_this_reply
+import dedun.composeapp.generated.resources.could_not_ask_the_group_to_sign_this_reply
+import dedun.composeapp.generated.resources.has_announced_no_inbox_key
+import dedun.composeapp.generated.resources.not_yet_on_a_relay
+import dedun.composeapp.generated.resources.reply_as_the_group
+import dedun.composeapp.generated.resources.send_reply_again
+import dedun.composeapp.generated.resources.sent_again
+import dedun.composeapp.generated.resources.the_group_signs_a_reply
+import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
+import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
+import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -69,8 +88,6 @@ fun GroupInboxConversationScreen(
     inboxRepository: GroupInboxRepository,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
-    /** Below the conversation: the way to reply, when there is one (Phase 8). */
-    composer: @Composable (GroupInboxConversationUIState.Loaded) -> Unit = {},
 ) {
     val viewModel: GroupInboxConversationViewModel = viewModel(
         factory = GroupInboxConversationViewModel.factory(chatRoomId, conversationId, initialUIState, chatRepository, inboxRepository)
@@ -78,6 +95,11 @@ fun GroupInboxConversationScreen(
     LaunchedEffect(true) {
         if (initialUIState == GroupInboxConversationUIState.Loading) viewModel.initiate()
     }
+    val notify = rememberNotifier(rememberCoroutineScope())
+    val couldNotPropose = stringResource(Res.string.could_not_ask_the_group_to_sign_this_reply)
+    val sentAgain = stringResource(Res.string.sent_again)
+    val canSign = LocalCanSign.current
+    var draft by rememberSaveable { mutableStateOf("") }
     val title = (viewModel.uiState as? GroupInboxConversationUIState.Loaded)?.names?.joinToString(", ")
         ?.let { stringResource(Res.string.you_and_the_group, it) }
         ?: stringResource(Res.string.the_group)
@@ -122,19 +144,76 @@ fun GroupInboxConversationScreen(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
                         ) {
-                            items(state.lines, key = { it.rumorId }) { line -> MessageCard(line) }
+                            items(state.lines, key = { it.rumorId }) { line ->
+                                MessageCard(line, onSendAgain = { session -> viewModel.sendAgain(session) { if (it) notify(sentAgain) } })
+                            }
                         }
                     }
-                    composer(state)
+                    if (canSign && state.lines.isNotEmpty()) {
+                        Composer(
+                            draft = draft,
+                            onDraft = { draft = it },
+                            withoutKey = state.withoutKey,
+                            proposing = state.proposing,
+                            onPropose = {
+                                viewModel.propose(draft) { session ->
+                                    if (session == null) {
+                                        notify(couldNotPropose)
+                                    } else {
+                                        draft = ""
+                                        onNavigateToRoute(FrostSigningRoute(activeUserPublicKey, chatRoomId, session))
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * The way to answer (D10, D13): the words, what signing it means, a warning for every recipient
+ * whose app may not open a message from a group, and the button that asks the quorum.
+ */
+@Composable
+private fun Composer(
+    draft: String,
+    onDraft: (String) -> Unit,
+    withoutKey: List<String>,
+    proposing: Boolean,
+    onPropose: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+        withoutKey.forEach { name ->
+            Text(
+                stringResource(Res.string.has_announced_no_inbox_key, name),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = draft,
+            onValueChange = onDraft,
+            label = { Text(stringResource(Res.string.reply_as_the_group)) },
+            minLines = 2,
+        )
+        Text(
+            stringResource(Res.string.the_group_signs_a_reply),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(onClick = onPropose, enabled = draft.isNotBlank() && !proposing) {
+            Text(stringResource(Res.string.ask_the_group_to_sign_this_reply))
+        }
+    }
+}
+
 /** One message: theirs on the leading edge, the group's on the trailing one, in its own colours. */
 @Composable
-private fun MessageCard(line: GroupInboxConversationUIState.Line) {
+private fun MessageCard(line: GroupInboxConversationUIState.Line, onSendAgain: (String) -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start,
@@ -163,6 +242,10 @@ private fun MessageCard(line: GroupInboxConversationUIState.Line) {
                     text = Instant.fromEpochSeconds(line.createdAt).toFormattedTimeAndDateString(),
                     style = MaterialTheme.typography.labelSmall,
                 )
+                line.unsentSessionId?.let { session ->
+                    Text(stringResource(Res.string.not_yet_on_a_relay), style = MaterialTheme.typography.labelSmall)
+                    TextButton(onClick = { onSendAgain(session) }) { Text(stringResource(Res.string.send_reply_again)) }
+                }
             }
         }
     }

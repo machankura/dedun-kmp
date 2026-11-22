@@ -253,6 +253,12 @@ fun FrostSigningScreen(
                         }
                     }
 
+                    // A reply from the group's inbox: its words, who it goes to and what could
+                    // not be checked, for the member to weigh. docs/group-inbox.md, D12.
+                    state.proposalNotes.forEach { note ->
+                        Text(text = note, style = MaterialTheme.typography.bodySmall)
+                    }
+
                     HorizontalDivider()
 
                     Text(

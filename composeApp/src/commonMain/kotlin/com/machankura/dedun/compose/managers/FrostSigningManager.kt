@@ -69,6 +69,7 @@ import com.machankura.dedun.compose.database.model.types.ShareGenerationState
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
+import com.machankura.dedun.compose.nostr.inbox.InboxReplyManifest
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
@@ -304,7 +305,8 @@ object FrostSigningManager {
         localChatRoom: LocalChatRoom,
         userPublicKey: HexKey,
         events: List<EventTemplate<*>>,
-        key: DkgSession? = null
+        key: DkgSession? = null,
+        proposalTags: Array<Array<String>> = emptyArray()
     ): FrostSigningSession = proposeSigningBatch(
         database = database,
         localChatRoom = localChatRoom,
@@ -312,6 +314,7 @@ object FrostSigningManager {
         lead = events.firstOrNull()
             ?: throw IllegalArgumentException("A signing session must be given something to sign"),
         dependents = { events.drop(1) },
+        proposalTags = proposalTags,
         key = key
     )
 
@@ -340,7 +343,13 @@ object FrostSigningManager {
         userPublicKey: HexKey,
         lead: EventTemplate<*>,
         dependents: (lead: Event) -> List<EventTemplate<*>>,
-        key: DkgSession? = null
+        key: DkgSession? = null,
+        /**
+         * Tags the proposal rumor carries beside the events, for what a signer needs to check
+         * them and the signed events must not show: the group inbox's reply manifest
+         * (docs/group-inbox.md, D11). Inside the group's encryption like the rest of it.
+         */
+        proposalTags: Array<Array<String>> = emptyArray()
     ): FrostSigningSession {
         val ceremony = key?.takeIf { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
             ?: completedKey(database, localChatRoom.chatRoom.id)
@@ -406,7 +415,8 @@ object FrostSigningManager {
             session = session,
             kind = FrostSigningEvents.PROPOSAL,
             content = FrostSigningEvents.encodeProposal(unsignedEvents),
-            includeKey = true
+            includeKey = true,
+            extraTags = proposalTags
         )
 
         advance(database, localChatRoom, sessionId)
@@ -911,14 +921,17 @@ object FrostSigningManager {
         // The group's inbox: an announcement of a key its admins did not make together, or
         // of one since replaced, or relays a stranger could not reach, is declined before
         // anybody is asked. docs/group-inbox.md, D5.
+        // A reply from the group's inbox carries its manifest beside the seals (D11), kept so
+        // approval can read the reply again and the signed seals can be sent.
+        val inboxManifest = InboxReplyManifest.sealedIn(innerEvent.tags)
         if (InboxRefusal.involves(unsignedEvents)) {
-            InboxRefusal.of(database, localChatRoom, userPublicKey, unsignedEvents)?.let { why ->
+            InboxRefusal.of(database, localChatRoom, userPublicKey, unsignedEvents, inboxManifest)?.let { why ->
                 logger.w("Signing proposal $sessionId: $why")
                 val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
                     .copy(signDeclinedAt = Clock.System.now())
                 database.frostSigningSessionDao().upsert(declined)
                 database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
-                InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, why)
+                InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, why, inboxManifest)
                 announceStarted(database, declined)
                 return declined
             }
@@ -966,6 +979,9 @@ object FrostSigningManager {
         val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
         database.frostSigningSessionDao().upsert(session)
         database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+        if (inboxManifest != null && InboxRefusal.involves(unsignedEvents)) {
+            InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, null, inboxManifest)
+        }
         announceStarted(database, session)
 
         logger.i(
@@ -2546,6 +2562,7 @@ object FrostSigningManager {
         // proposed the announcement owes it to relays. docs/group-inbox.md, D7.
         try {
             InboxAnnouncements.onSigned(database, session, signedEvents)
+            InboxReplies.onSigned(database, session, signedEvents)
         } catch (e: Throwable) {
             logger.e("Signed session ${session.id} but could not file its inbox announcement", e)
         }
@@ -3237,7 +3254,7 @@ object FrostSigningManager {
         if (session.subject != FrostSigningSubject.EVENTS) return null
         val events = items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
         if (!InboxRefusal.involves(events)) return null
-        return InboxRefusal.of(database, localChatRoom, session.userPublicKey, events)
+        return InboxRefusal.of(database, localChatRoom, session.userPublicKey, events, database.groupInboxDao().getSigning(session.id)?.manifest)
     }
 
     /**
@@ -3633,7 +3650,12 @@ object FrostSigningManager {
                     )
                     return false
                 }
-                Triple(FrostSigningEvents.PROPOSAL, FrostSigningEvents.encodeProposal(unsigned), emptyArray<Array<String>>())
+                Triple(
+                    FrostSigningEvents.PROPOSAL,
+                    FrostSigningEvents.encodeProposal(unsigned),
+                    // A reply's manifest goes again with it (docs/group-inbox.md, D11).
+                    InboxRefusal.carriedTagsFor(database, sessionId)
+                )
             }
 
             // Byte for byte the PSBT that was proposed -- it is what every item's
