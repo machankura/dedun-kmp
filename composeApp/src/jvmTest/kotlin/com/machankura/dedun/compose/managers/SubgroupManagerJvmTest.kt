@@ -501,7 +501,7 @@ class SubgroupManagerJvmTest {
             // A quorum is being asked to sign a name, and `MarmotGroupCreation`
             // will name the room by the same rule from the same subject. If only
             // one of the two applied it, the parent would certify "Translation
-            // team" and the room would be called "#Translation team".
+            // team" and the room would be called "&Translation team".
             assertEquals(
                 MarmotGroupName.of("Translation team"),
                 SubgroupBirthCertificateEvent.parseName(proposed.tags)

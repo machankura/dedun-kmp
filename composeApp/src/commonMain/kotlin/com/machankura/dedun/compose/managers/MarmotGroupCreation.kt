@@ -98,7 +98,7 @@ object MarmotGroupCreation {
      * proposal.
      *
      * [name] is put under [MarmotGroupName] here rather than trusted from the
-     * caller. Every Marmot room on a device is a `#name`, and this is the funnel
+     * caller. Every Marmot room on a device is an `&name`, and this is the funnel
      * both flows that make one already go through, so it is the one place the
      * convention cannot be forgotten.
      */

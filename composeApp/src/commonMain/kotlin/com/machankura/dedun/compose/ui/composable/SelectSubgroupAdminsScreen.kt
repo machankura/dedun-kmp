@@ -181,7 +181,7 @@ fun SelectSubgroupAdminsScreen(
                             onValueChange = viewModel::setName,
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            // Every Marmot room is a `#name`, and a subgroup is
+                            // Every Marmot room is an `&name`, and a subgroup is
                             // one. Shown in the field rather than added on
                             // confirm alone, so the name the coordinator reads
                             // here is the name the parent's admins will be asked

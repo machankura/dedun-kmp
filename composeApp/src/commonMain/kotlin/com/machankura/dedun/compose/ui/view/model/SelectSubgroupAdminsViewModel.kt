@@ -79,7 +79,7 @@ class SelectSubgroupAdminsViewModel(
     /**
      * What the coordinator typed, bare.
      *
-     * The `#` is drawn beside the field rather than pushed into this state:
+     * The `&` is drawn beside the field rather than pushed into this state:
      * normalising on every keystroke would move the caret out from under somebody
      * halfway through a word. It is added by `MarmotGroupName.of` where the
      * subgroup's name is actually used -- in the certificate the parent signs and
@@ -359,7 +359,7 @@ class SelectSubgroupAdminsViewModel(
                 return@launch
             }
 
-            // The bare name goes on the ceremony, and the `#` is added where the
+            // The bare name goes on the ceremony, and the `&` is added where the
             // name is used: `proposeBirthCertificate` normalises the name the
             // parent signs and `MarmotGroupCreation` normalises the name the room
             // carries, both reading it back off this session.

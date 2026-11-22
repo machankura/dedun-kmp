@@ -157,8 +157,8 @@ class MarmotGroupCreationJvmTest {
 
         // Both, and the same string in each: the row is what this device draws in
         // its room list, and the group data is what every other member reads.
-        assertEquals("#Ekklesia", room.chatRoom.subject)
-        assertEquals("#Ekklesia", data.name)
+        assertEquals("&Ekklesia", room.chatRoom.subject)
+        assertEquals("&Ekklesia", data.name)
     }
 
     /**
@@ -269,7 +269,7 @@ class MarmotGroupCreationJvmTest {
                 )
                 val created = assertIs<MarmotGroupCreation.Outcome.Created>(outcome)
                 assertEquals(groupId, created.room.chatRoom.id, "the room is not the one the key derives")
-                assertEquals("#Ekklesia", created.room.chatRoom.subject)
+                assertEquals("&Ekklesia", created.room.chatRoom.subject)
 
                 val group = assertNotNull(created.room.chatRoom.toMlsGroup())
                 assertEquals(founders, group.currentAdminIdentities(), "${owner.pubKey.toHexKey().take(8)}'s room")
