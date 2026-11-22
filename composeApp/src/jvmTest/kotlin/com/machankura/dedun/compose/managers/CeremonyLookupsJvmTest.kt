@@ -46,8 +46,6 @@ class CeremonyLookupsJvmTest {
 
         assertEquals(
             mapOf(
-                // The fold that keeps a second group from being made.
-                "ChillDkgRitualManager: dkgSessionDao().getLatestSessionFor(" to 1,
                 // The one admin room a NIP-17 room's details link to.
                 "DatabaseChatRepository: dkgSessionDao().getLatestSessionFor(" to 1,
                 // The repository's pass-throughs.

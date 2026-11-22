@@ -172,8 +172,12 @@ object ChillDkgRitualManager {
         session.participantPublicKeySet() ?: memberPublicKeys(localChatRoom)
 
     /**
-     * Opens a ritual, making this device the coordinator. A room already running
-     * one for the same purpose gets that one back rather than a second.
+     * Opens a ritual, making this device the coordinator. An ask repeated while the
+     * ceremony it opened is still running gets that one back rather than a second:
+     * for a group's own, a running one under the same name; for a subgroup's, one
+     * over the same admins. A finished ceremony never stands in the way of another
+     * -- the same people may make as many groups as they like, and each one is a
+     * ceremony of the room rather than the room (docs/nip17-multiple-ceremonies.md).
      *
      * [participantPublicKeys] is who the ceremony is with, and defaults to the
      * room's members -- which is the whole story for a group's own ceremony,
@@ -234,25 +238,35 @@ object ChillDkgRitualManager {
         // even if the room's own rows have drifted.
         val members = (participantPublicKeys ?: memberPublicKeys(localChatRoom)) + userPublicKey
 
-        // A room runs one ceremony at a time *for one purpose*, and this is
-        // reachable twice now that a robust group opens one as it is created: the
-        // room id is derived from its members, so making the same group again
-        // lands back in the same room and asks again. A second proposal for the
-        // same purpose is a second participant set for every member to reconcile,
-        // and the key the first one produced would be left with nothing pointing
-        // at it. A failed ritual is not running, and is there to be replaced.
+        // The room's own name, which names a group's own ceremony only when it is
+        // the room's first: a second group made by the same people lands in the
+        // same room, and naming it after the room would make two rooms called
+        // `#Ekklesia`. docs/nip17-multiple-ceremonies.md, D2.
+        val roomSubject = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
+        val requestedSubject = subject?.takeIf { it.isNotBlank() }
+
+        // An ask repeated is folded into the ceremony it already opened -- a double
+        // tap, a retried call, a user back on the creation screen while the first
+        // proposal is still out. A second proposal for the same thing is a second
+        // participant set for every member to reconcile.
         //
-        // What "the same purpose" means differs by which kind of ceremony this
-        // is, because a parent's room hosts every subgroup ceremony the group
-        // ever runs. Scoping a subgroup's on the room would refuse the parent's
-        // *second* subgroup on the strength of its first.
+        // What counts as "the same thing" differs by which kind of ceremony this
+        // is, because a parent's room hosts every subgroup ceremony the group ever
+        // runs, and a NIP-17 room every group its members ever make. A *finished*
+        // ceremony is never a reason to refuse either: it is a group that exists,
+        // and the same people are entitled to another. A failed one is not running,
+        // and is there to be replaced.
         //
         // Checked before the threshold is, because a running ritual makes the
         // requested threshold moot -- it settled that question when it opened.
         val running = if (parentChatRoomId == null) {
+            // Still running, under the name asked for. A different name is a
+            // different group (D1). A row from before `subject` existed is named
+            // by its room, which is what it was named by when it opened.
+            val asked = (requestedSubject ?: roomSubject)?.let(::sameName)
             database.dkgSessionDao()
-                .getLatestSessionFor(localChatRoom.chatRoom.id, null)
-                ?.takeIf { it.stage != DkgRitualStage.FAILED }
+                .getRunningOwnSessionsFor(localChatRoom.chatRoom.id)
+                .firstOrNull { (it.subject ?: roomSubject)?.let(::sameName) == asked }
         } else {
             // Same parent, same admins -- and still running. A *completed* one is
             // deliberately not a reason to refuse: it means that subgroup was
@@ -308,8 +322,22 @@ object ChillDkgRitualManager {
         // A subgroup is named by whoever is making it. Falling back to the room
         // there would name a child after its parent, which is the one name it
         // must not have -- the certificate the parent signs is over this string.
-        val ceremonySubject = subject?.takeIf { it.isNotBlank() }
-            ?: localChatRoom.chatRoom.subject?.takeIf { parentChatRoomId == null }
+        //
+        // A group's own ceremony falls back to the room's name only when the room
+        // holds no other group: the room keeps its first group's name (D3), so a
+        // second group named by it would be the first one's namesake, and the room
+        // its key makes would be another `#Ekklesia`. The screens that open one
+        // always name it; reaching this without a name is a bug in the caller.
+        val holdsAnotherGroup = parentChatRoomId == null && database.dkgSessionDao()
+            .getOwnSessionsForChatRoom(localChatRoom.chatRoom.id)
+            .any { it.stage != DkgRitualStage.FAILED }
+
+        require(parentChatRoomId != null || requestedSubject != null || !holdsAnotherGroup) {
+            "${localChatRoom.chatRoom.id} already holds a group of its own; another needs a name of its own"
+        }
+
+        val ceremonySubject = requestedSubject
+            ?: roomSubject?.takeIf { parentChatRoomId == null && !holdsAnotherGroup }
 
         val sessionId = RandomInstance.bytes(32).toHex()
 
@@ -376,6 +404,13 @@ object ChillDkgRitualManager {
 
         return session
     }
+
+    /**
+     * Whether two group names are the same name, as far as folding a repeated ask
+     * goes: trimmed, and without regard to case. Names are not identities, so this
+     * decides nothing but whether an ask is a repeat.
+     */
+    private fun sameName(name: String): String = name.trim().lowercase()
 
     /**
      * Feeds one inbound ritual message in and advances the ritual as far as it
