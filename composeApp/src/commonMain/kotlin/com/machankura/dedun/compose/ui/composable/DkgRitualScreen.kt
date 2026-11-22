@@ -115,6 +115,7 @@ import dedun.composeapp.generated.resources.each_member_s_device_checks_the_comb
 import dedun.composeapp.generated.resources.shared_key
 import dedun.composeapp.generated.resources.the_ceremony_was_abandoned
 import dedun.composeapp.generated.resources.the_group_has_a_shared_key
+import dedun.composeapp.generated.resources.s_has_a_shared_key
 import dedun.composeapp.generated.resources.the_group_has_agreed_what_the_admin_room
 import dedun.composeapp.generated.resources.the_group_could_not_agree_what_the_admin
 import dedun.composeapp.generated.resources.the_group_is_agreeing_what_the_admin_room
@@ -473,7 +474,7 @@ private fun StalledCeremonyCard(
 }
 
 @Composable
-private fun RitualProgress(
+internal fun RitualProgress(
     session: DkgSession,
     participantCount: Int,
     activeUserPublicKey: HexKey,
@@ -599,7 +600,14 @@ private fun RitualProgress(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.CheckCircle, contentDescription = Decorative)
-                    Text(stringResource(Res.string.the_group_has_a_shared_key), style = MaterialTheme.typography.titleSmall)
+                    // Named, as the transcript's line is: the same people may have made
+                    // more than one group in this room (docs/nip17-multiple-ceremonies.md).
+                    Text(
+                        text = session.subject
+                            ?.let { stringResource(Res.string.s_has_a_shared_key, it) }
+                            ?: stringResource(Res.string.the_group_has_a_shared_key),
+                        style = MaterialTheme.typography.titleSmall
+                    )
                 }
 
                 session.thresholdPublicKey?.let { thresholdPublicKey ->
