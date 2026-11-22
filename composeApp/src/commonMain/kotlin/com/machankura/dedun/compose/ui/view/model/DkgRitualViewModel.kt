@@ -189,6 +189,17 @@ class DkgRitualViewModel(
                     ?: return@mapLatest DkgRitualUIState.Error("Couldn't find this key ceremony")
                 val ceremony = snapshot.ceremony
 
+                // The other groups held in this room, for a group's own ceremony:
+                // the same people may have made more than one here. A subgroup's
+                // runs in its parent's room, whose own groups are not its business.
+                val otherGroups = if (session.parentChatRoomId == null) {
+                    dkgRepository.observeOwnSessionsForChatRoom(chatRoomId).first()
+                        .filter { it.id != session.id }
+                        .mapNotNull { it.subject ?: localChatRoom.chatRoom.subject }
+                } else {
+                    emptyList()
+                }
+
                 DkgRitualUIState.Loaded(
                     localChatRoom = localChatRoom,
                     session = session,
@@ -208,6 +219,7 @@ class DkgRitualViewModel(
                     isRoomCreated = session.thresholdPublicKey
                         ?.let { runCatching { SharedKeyDerivation.marmotGroupId(it) }.getOrNull() }
                         ?.let { it in snapshot.roomIds } == true,
+                    otherGroups = otherGroups,
                 )
             }
     }

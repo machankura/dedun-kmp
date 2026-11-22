@@ -998,8 +998,8 @@ object ChillDkgRitualManager {
                 database = database,
                 session = session,
                 messageType = ChatMessage.TYPE_DKG_COMPLETE,
-                content = "The group has a shared key. It takes ${session.threshold} of " +
-                    "${session.participantCount} members to sign with it.",
+                content = "${session.subject ?: "The group"} has a shared key. It takes " +
+                    "${session.threshold} of ${session.participantCount} members to sign with it.",
                 actor = session.coordinatorPublicKey
             )
 
@@ -1219,7 +1219,7 @@ object ChillDkgRitualManager {
             // screen this line taps through to. "a participant is faulty
             // (participant 2)" is worth having, but not in the middle of a
             // sentence about who walked away.
-            content = "abandoned the shared key ceremony. No key was created, " +
+            content = "abandoned ${ceremonyPhrase(current)}. No key was created, " +
                 "and it is safe to run it again.",
             actor = culprit
         )
@@ -1243,6 +1243,15 @@ object ChillDkgRitualManager {
                 "this group. It will take ${session.threshold} of " +
                 "${session.participantCount} of its admins to sign with the subgroup's key, " +
                 "and it finishes once all of them have taken part."
+        } else if (session.subject != null) {
+            // Named, because the same people may make more than one group in one
+            // room (docs/nip17-multiple-ceremonies.md), and a line read days later
+            // cannot ask which ceremony it was about. Every named one says so, not
+            // only a second: the room may have one at the time and two by the time
+            // somebody reads this.
+            "started a key ceremony for ${session.subject}. It will take ${session.threshold} of " +
+                "${session.participantCount} members to sign with its key, and it finishes " +
+                "once everyone has taken part."
         } else {
             "started a shared key ceremony. It will take ${session.threshold} of " +
                 "${session.participantCount} members to sign with the key, and it finishes " +
@@ -1384,7 +1393,7 @@ object ChillDkgRitualManager {
 
         val (messageType, content) = when (step) {
             DkgApprovalStep.HOST_KEY -> ChatMessage.TYPE_DKG_APPROVAL_NEEDED_HOST_KEY to
-                "Your approval is needed to join the shared key ceremony. Nothing has been " +
+                "Your approval is needed to join ${ceremonyPhrase(session)}. Nothing has been " +
                     "published from this device yet."
 
             // Never reached: rounds 1 and 2 are no longer asked for. Kept because the
@@ -1435,7 +1444,7 @@ object ChillDkgRitualManager {
     ) {
         val (messageType, content) = when (kind) {
             DkgRitualEvents.HOST_KEY -> ChatMessage.TYPE_DKG_HOST_KEY to
-                "joined the shared key ceremony, publishing the key their device is " +
+                "joined ${ceremonyPhrase(session)}, publishing the key their device is " +
                     "identified by for the rest of it."
 
             DkgRitualEvents.ROUND_1 -> ChatMessage.TYPE_DKG_ROUND_1 to
@@ -1466,6 +1475,16 @@ object ChillDkgRitualManager {
             actor = actor
         )
     }
+
+    /**
+     * How a transcript line names its ceremony: by the group it makes when it has a
+     * name, which every ceremony Dedun opens now does. The same people may run more
+     * than one in a room (docs/nip17-multiple-ceremonies.md), and "the shared key
+     * ceremony" said beside a second one names neither. A ceremony from before names
+     * were carried keeps the words it always had.
+     */
+    private fun ceremonyPhrase(session: DkgSession): String =
+        session.subject?.let { "the key ceremony for $it" } ?: "the shared key ceremony"
 
     /** The stored session, for reading a column back before overwriting it. */
     private suspend fun current(database: DedunDatabase, session: DkgSession): DkgSession =

@@ -291,6 +291,46 @@ class RobustRoomKeyCeremonyTest {
     }
 
     /**
+     * A line is written once and read later, perhaps after the same people have
+     * started a second group in the room, so it names the group it is about.
+     * docs/nip17-multiple-ceremonies.md, Phase 4.
+     */
+    @Test
+    fun `a ceremony's lines name the group it makes`() = runBlocking {
+        val room = robustRoom()
+        val first = openCeremony(room)
+        db.dkgSessionDao().upsert(first.copy(stage = DkgRitualStage.COMPLETE))
+        val agora = openCeremony(room, subject = "Agora")
+
+        val started = chatMessages(room).filter { it.messageType == ChatMessage.TYPE_DKG_STARTED }
+        assertTrue(
+            started.single { it.dkgSessionId == first.id }.content.startsWith("started a key ceremony for Robust Group."),
+            "the room's first group is named for the room",
+        )
+        assertTrue(
+            started.single { it.dkgSessionId == agora.id }.content.startsWith("started a key ceremony for Agora."),
+        )
+
+        ChillDkgRitualManager.abandon(db, room, agora.id)
+        val abandoned = chatMessages(room).single { it.messageType == ChatMessage.TYPE_DKG_FAILED }
+        assertTrue(abandoned.content.startsWith("abandoned the key ceremony for Agora."), abandoned.content)
+    }
+
+    /** A room with no name opens a ceremony with none, and its lines read as they did. */
+    @Test
+    fun `an unnamed ceremony keeps the words it always had`() = runBlocking {
+        listOf(user, alice, bob).forEach { seedProfile(it) }
+        val room = assertNotNull(
+            db.nostrNip17Dao().createNip17ChatRoom(userPublicKey = user, participantPublicKeys = listOf(alice, bob))
+        )
+        val session = openCeremony(room)
+
+        assertNull(session.subject)
+        val started = chatMessages(room).single { it.messageType == ChatMessage.TYPE_DKG_STARTED }
+        assertTrue(started.content.startsWith("started a shared key ceremony."), started.content)
+    }
+
+    /**
      * A collapsed ceremony leaves the group with no key and a room they can still
      * talk in, which is exactly the group that should be able to try again. Failed
      * is the one state that does not hold the room's ceremony slot.

@@ -480,6 +480,8 @@
     <string name="ask_the_parent_group_to_certify">Ask the parent group to certify this subgroup</string>
     <string name="create_the_subgroup">Create the subgroup</string>
     <string name="the_key_ceremony_needs_you">The key ceremony needs you</string>
+    <string name="you_already_share_with_these_people_this_makes_a_separate_group">You already share %1$s with these people. This makes a separate group, with a key of its own.</string>
+    <string name="the_key_ceremony_for_needs_you">The key ceremony for %1$s needs you</string>
     <string name="the_subgroups_key_ceremony_needs_you">The subgroup's key ceremony needs you</string>
     <string name="ceremonies_need_you">%1$s key ceremonies need you</string>
     <string name="join_the_ceremony_by_publishing_your_key">Join it by publishing your device's key</string>

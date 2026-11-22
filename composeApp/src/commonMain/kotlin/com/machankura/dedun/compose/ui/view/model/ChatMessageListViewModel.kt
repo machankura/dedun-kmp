@@ -129,6 +129,14 @@ class ChatMessageListViewModel(
 
         /** Whether this ceremony is making a subgroup, for what the notice says. */
         val isSubgroup: Boolean,
+
+        /**
+         * The group it makes, or null for a ceremony from before names were carried.
+         * The same people may run more than one in a room, and "the key ceremony
+         * needs you" beside a second one names neither
+         * (docs/nip17-multiple-ceremonies.md).
+         */
+        val subject: String? = null,
     )
 
     /** What a ceremony wants of this member. */
@@ -323,6 +331,7 @@ class ChatMessageListViewModel(
                             sessionId = session.id,
                             ask = ask,
                             isSubgroup = session.parentChatRoomId != null,
+                            subject = session.subject,
                         )
                     }
 

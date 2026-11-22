@@ -17,6 +17,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.runBlocking
@@ -124,6 +125,9 @@ class DkgRitualViewModelJvmTest {
     private val messages = MutableStateFlow<List<DkgParticipantMessage>>(emptyList())
     private val signingSessions = MutableStateFlow<List<LocalFrostSigningSession>>(emptyList())
 
+    /** The room's own groups, as the repository reports them. */
+    private var roomGroups: List<DkgSession> = emptyList()
+
     /** How many times the screen started watching its ceremony. */
     private var sessionSubscriptions = 0
 
@@ -136,6 +140,9 @@ class DkgRitualViewModelJvmTest {
             sessionRow.onStart { sessionSubscriptions++ }
 
         override fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>> = messages
+
+        override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
+            flowOf(roomGroups)
 
         override fun observeSigningSessions(chatRoomId: String): Flow<List<LocalFrostSigningSession>> =
             signingSessions
@@ -199,6 +206,38 @@ class DkgRitualViewModelJvmTest {
         }
         @Suppress("UNREACHABLE_CODE")
         error("unreachable")
+    }
+
+    /**
+     * Joining is the one decision a member makes, so the join screen says when the
+     * same people already have another group in this room: this is not that one.
+     * docs/nip17-multiple-ceremonies.md, Phase 4.
+     */
+    @Test
+    fun `the other groups held in the room are named, and the ceremony itself is not`(): Unit = runBlocking {
+        roomGroups = listOf(
+            session().copy(subject = "Agora"),
+            session().copy(id = "e0".repeat(32), subject = "Ekklesia"),
+            session().copy(id = "e1".repeat(32), subject = null),
+        )
+        val viewModel = viewModel()
+        viewModel.initiate()
+
+        assertEquals(
+            listOf("Ekklesia", "Checkers"),
+            viewModel.awaitLoaded().otherGroups,
+            "an unnamed one is named by the room, and this ceremony is left out",
+        )
+    }
+
+    @Test
+    fun `a subgroup's ceremony is told nothing of its parent room's groups`(): Unit = runBlocking {
+        roomGroups = listOf(session().copy(id = "e0".repeat(32), subject = "Ekklesia"))
+        sessionRow.value = session().copy(parentChatRoomId = "9a7e".repeat(16))
+        val viewModel = viewModel()
+        viewModel.initiate()
+
+        assertEquals(emptyList(), viewModel.awaitLoaded().otherGroups)
     }
 
     @Test

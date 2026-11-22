@@ -105,6 +105,7 @@ import com.machankura.dedun.compose.ui.view.state.ChatMessageListUIState
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.the_key_ceremony_for_needs_you
 import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.currently_no_messages_have_been_shared
 import dedun.composeapp.generated.resources.loading
@@ -703,7 +704,7 @@ fun ChatTranscript(
  * room exists.
  */
 @Composable
-private fun CeremoniesAwaitingYouNotice(
+internal fun CeremoniesAwaitingYouNotice(
     ceremonies: List<ChatMessageListViewModel.AwaitingCeremony>,
     onClick: (ChatMessageListViewModel.AwaitingCeremony) -> Unit,
 ) {
@@ -716,6 +717,9 @@ private fun CeremoniesAwaitingYouNotice(
         single.ask == ChatMessageListViewModel.Ask.LightningWalletOpening ->
             stringResource(Res.string.the_lightning_wallet_s_key_is_ready)
         isLightning -> stringResource(Res.string.the_lightning_wallet_s_key_ceremony_needs_you)
+        // Named by the group it makes: the same people may run more than one ceremony
+        // in a room (docs/nip17-multiple-ceremonies.md).
+        single.subject != null -> stringResource(Res.string.the_key_ceremony_for_needs_you, single.subject)
         single.isSubgroup -> stringResource(Res.string.the_subgroups_key_ceremony_needs_you)
         else -> stringResource(Res.string.the_key_ceremony_needs_you)
     }
@@ -727,7 +731,10 @@ private fun CeremoniesAwaitingYouNotice(
     //
     // Joining is the only gate a ceremony has (docs/automatic-key-ceremony.md).
     // The two rounds after it are never asked for, so they say nothing here.
-    val detail = single?.let {
+    val detail = if (single == null) {
+        // Several: which ones, so a member knows what the count is of.
+        ceremonies.mapNotNull { it.subject }.takeIf { it.isNotEmpty() }?.joinToString(", ")
+    } else single.let {
         when (val ask = it.ask) {
             is ChatMessageListViewModel.Ask.SharedKeyStep -> when (ask.step) {
                 DkgApprovalStep.HOST_KEY -> stringResource(Res.string.join_the_ceremony_by_publishing_your_key)
