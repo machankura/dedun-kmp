@@ -204,6 +204,8 @@ sealed interface ChatRoomDetailUIState {
         val adminLeave: AdminLeave? = null,
         /** Where a keyed room stands on needing the group's signature; null for any other room. */
         val governance: GovernanceStatus? = null,
+        /** The group's inbox, for its row; null where this device has nothing of it to show. */
+        val inbox: InboxRowSummary? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

@@ -1,6 +1,12 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
 import com.machankura.dedun.compose.ui.composable.ContactScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxConversationRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxSettingsRoute
+import com.machankura.dedun.compose.ui.composable.GroupInboxScreen
+import com.machankura.dedun.compose.ui.composable.GroupInboxConversationScreen
+import com.machankura.dedun.compose.ui.composable.GroupInboxSettingsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
 import com.machankura.dedun.compose.repository.GroupWalletPrefs
 import com.machankura.dedun.compose.ui.composable.GroupPayoutsScreen
@@ -281,6 +287,7 @@ fun DedunNavHost(
 
     val databaseNostrRepository = runtime.nostrRepository
     val databaseChatRepository = runtime.chatRepository
+    val databaseGroupInboxRepository = runtime.groupInboxRepository
     val databaseDkgRepository = runtime.dkgRepository
     val databaseFrostSigningRepository = runtime.frostSigningRepository
     val databaseMarmotRepository = runtime.marmotRepository
@@ -1808,6 +1815,44 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            // The group's inbox (docs/group-inbox.md, Phase 7).
+            composable<GroupInboxRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupInboxRoute>()
+                GroupInboxScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    inboxRepository = databaseGroupInboxRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<GroupInboxConversationRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupInboxConversationRoute>()
+                GroupInboxConversationScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    conversationId = route.conversationId,
+                    chatRepository = databaseChatRepository,
+                    inboxRepository = databaseGroupInboxRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<GroupInboxSettingsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupInboxSettingsRoute>()
+                GroupInboxSettingsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    inboxRepository = databaseGroupInboxRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<GroupPayoutsRoute> { backStackEntry ->

@@ -1,6 +1,17 @@
 package com.machankura.dedun.compose.ui.composable
 
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
+import dedun.composeapp.generated.resources.inbox
+import dedun.composeapp.generated.resources.set_up_an_inbox
+import dedun.composeapp.generated.resources.no_new_messages
+import dedun.composeapp.generated.resources.one_new_message
+import dedun.composeapp.generated.resources.n_new_messages
+import dedun.composeapp.generated.resources.the_admins_are_making_the_inbox_key
+import dedun.composeapp.generated.resources.let_anyone_on_nostr_write_to_the_group_privately
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxSettingsRoute
+import com.machankura.dedun.compose.ui.view.state.InboxRowSummary
+import androidx.compose.material.icons.filled.Mail
 import dedun.composeapp.generated.resources.members_balances_and_payouts
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
@@ -872,6 +883,26 @@ fun ChatRoomDetailScreen(
                                             )
                                         }
                                     )
+                                }
+
+                                // The group's inbox (docs/group-inbox.md, D9): on a device that
+                                // holds its key, or whose identity could set one up. A member
+                                // who is not an admin sees no row at all.
+                                chatRoomDetailUIState.inbox?.let { inbox ->
+                                    item {
+                                        GroupInboxRow(
+                                            inbox = inbox,
+                                            onClick = {
+                                                onNavigateToRoute.invoke(
+                                                    if (inbox.holdsKey) {
+                                                        GroupInboxRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = relayHint)
+                                                    } else {
+                                                        GroupInboxSettingsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = relayHint)
+                                                    }
+                                                )
+                                            }
+                                        )
+                                    }
                                 }
 
                                 // The group's Wavelength wallet, a row per network. Its coins leave to the
@@ -2734,3 +2765,43 @@ private fun FoundingMembersCard(
 /** The founders [publicKeys] names, as the screen calls them, in a stable order. */
 private fun ChatRoomDetailUIState.Loaded.founderNamesFor(publicKeys: Set<HexKey>): String =
     publicKeys.map { founderNames[it] ?: it }.sorted().joinToString(", ")
+
+/**
+ * The row that opens the group's inbox, with how much is unread; or, where this device holds no
+ * key yet, the way to set one up or the ceremony making it. docs/group-inbox.md.
+ */
+@Composable
+private fun GroupInboxRow(
+    inbox: InboxRowSummary,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            leadingContent = {
+                Icon(Icons.Default.Mail, contentDescription = Decorative)
+            },
+            trailingContent = {
+                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+            },
+            headlineContent = {
+                Text(text = stringResource(if (inbox.holdsKey || inbox.ceremonyRunning) Res.string.inbox else Res.string.set_up_an_inbox))
+            },
+            supportingContent = {
+                Text(
+                    text = when {
+                        inbox.holdsKey -> when (inbox.unread) {
+                            0 -> stringResource(Res.string.no_new_messages)
+                            1 -> stringResource(Res.string.one_new_message)
+                            else -> stringResource(Res.string.n_new_messages, inbox.unread)
+                        }
+                        inbox.ceremonyRunning -> stringResource(Res.string.the_admins_are_making_the_inbox_key)
+                        else -> stringResource(Res.string.let_anyone_on_nostr_write_to_the_group_privately)
+                    }
+                )
+            }
+        )
+    }
+}

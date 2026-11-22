@@ -98,7 +98,7 @@ class DedunRuntime(
     }
 
     val groupInboxRepository: DatabaseGroupInboxRepository by lazy {
-        DatabaseGroupInboxRepository(database = auxDatabaseManager.auxDatabase, ioScope)
+        DatabaseGroupInboxRepository(database = auxDatabaseManager.auxDatabase, ioScope, activeIdentity = activeIdentity)
     }
 
     val marmotRepository: DatabaseMarmotRepository by lazy {

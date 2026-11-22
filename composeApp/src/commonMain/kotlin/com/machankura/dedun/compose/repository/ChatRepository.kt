@@ -111,6 +111,12 @@ interface ChatRepository {
     suspend fun groupPosts(chatRoomId: String): List<GroupPost>
 
     /**
+     * The group's inbox as its row on the group's screen shows it, or null where this device
+     * has nothing of it to show (docs/group-inbox.md, D9).
+     */
+    suspend fun inboxSummary(localChatRoom: LocalChatRoom): com.machankura.dedun.compose.ui.view.state.InboxRowSummary? = null
+
+    /**
      * One event the group signed, as the group signed it, or null when this
      * device does not hold it or it was signed in some other room.
      *

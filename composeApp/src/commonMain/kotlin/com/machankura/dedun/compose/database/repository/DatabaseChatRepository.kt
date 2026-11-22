@@ -239,6 +239,19 @@ class DatabaseChatRepository(
         null
     }
 
+    override suspend fun inboxSummary(localChatRoom: LocalChatRoom): com.machankura.dedun.compose.ui.view.state.InboxRowSummary? {
+        if (!com.machankura.dedun.compose.ExperimentalFeatures.groupInbox || localChatRoom.chatRoom.mlsGroupState == null) return null
+        val roomId = localChatRoom.chatRoom.id
+        val user = localChatRoom.chatRoom.userPublicKey
+        val holds = database.inboxKeyDao().getKeys(roomId, user).any { it.secretKey != null }
+        val running = database.inboxKeyDao().getRunningCeremoniesIn(roomId).any { it.userPublicKey == user && it.isParticipant() }
+        val canSetUp = !holds && !running &&
+            com.machankura.dedun.compose.managers.InboxKeyRitualManager.refusal(database, localChatRoom, user) == null
+        if (!holds && !running && !canSetUp) return null
+        val unread = if (holds) database.groupInboxDao().getMessages(roomId).count { !it.outgoing && it.readAt == null } else 0
+        return com.machankura.dedun.compose.ui.view.state.InboxRowSummary(holdsKey = holds, unread = unread, ceremonyRunning = running, canSetUp = canSetUp)
+    }
+
     override suspend fun groupPosts(chatRoomId: String): List<GroupPost> = try {
         GroupPost.newestFirstAmong(
             signedEvents = database.groupSignedEventDao()
