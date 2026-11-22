@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
+import com.machankura.dedun.compose.ui.composable.DisappearingMessagesScreen
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import com.machankura.dedun.compose.ui.composable.ContactScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxConversationRoute
@@ -1588,6 +1591,15 @@ fun DedunNavHost(
                 NotificationSettingsScreen(
                     activeUserPublicKey = route.activeUserPublicKey,
                     store = remember(runtime) { NotificationSettingsStore(runtime.auxDatabaseManager.auxDatabase) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<DisappearingMessagesRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<DisappearingMessagesRoute>()
+                DisappearingMessagesScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    store = remember(runtime) { DisappearingSettingsStore(runtime.auxDatabaseManager.auxDatabase) },
                     onNavigateBack = { navController.popBackStack() },
                 )
             }

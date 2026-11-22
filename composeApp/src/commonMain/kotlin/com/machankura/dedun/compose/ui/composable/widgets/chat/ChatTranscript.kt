@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable.widgets.chat
 
+import com.machankura.dedun.compose.ui.composable.DisappearsIcon
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material.icons.filled.CallMade
@@ -583,6 +584,7 @@ fun ChatTranscript(
                                                         text = localChatMessage.chatMessage.createdAt.toFormattedTimeAndDateString(),
                                                         style = MaterialTheme.typography.labelSmall
                                                     )
+                                                    localChatMessage.chatMessage.expiresAt?.let { DisappearsIcon(it) }
                                                     if (localChatMessage.chatMessage.isUserMessage) {
                                                         if (localChatMessage.chatMessageBroadcastNostrEventReceiptRelation != null) {
                                                             Icon(

@@ -603,6 +603,33 @@ Every point in CLAUDE.md applies: strings in `strings.xml` written in sentence c
 Tests: view-model JVM tests for the picker's validation and for override versus default, plus a
 string-catalogue entry for every format string this adds.
 
+**Built.**
+
+- `DisappearingMessagesScreen` sits behind `DisappearingMessagesRoute(activeUserPublicKey,
+  chatRoomId?)`. It is reached from the profile screen, next to Notifications, for the default,
+  and from a NIP-17 room's detail screen for that room's override. It shows D3's presets as radio
+  rows, a custom dialog with a number field and a minutes/hours/days segmented row checked against
+  the bounds, and D7's and D11's paragraphs.
+- The conversation shows `DisappearingTimerAction`, an hourglass in the app bar that opens the
+  room's setting, and `DisappearingNotice`, D9's one-time card. The transcript shows
+  `DisappearsIcon` beside an expiring line's time, with the time it goes as its description.
+- `ChatRoomMessagingScreen` gets the store through a defaulted parameter that reads the running
+  `GizaRuntime`, so neither caller changed. A preview has no runtime and shows none of it.
+- Lengths read in the largest whole unit ("1 week", "90 minutes"). `DisappearingLengthJvmTest`
+  covers that and the custom dialog's bounds. The m3, brand and wallet audits pass at their
+  budgets.
+
+It differs from the plan in three ways:
+
+- The room detail row shows a fixed description, not the current length. That screen reads the
+  room once, so a length shown there would go stale after a change.
+- Nothing yet reports a message that expired before it could be sent. The sweeper counts these
+  (`Swept.unsent`), but there is no path from the runtime's sweeper to a screen's snackbar.
+- The transcript lines a ceremony writes ("abandoned the shared key ceremony" and the like) are
+  local summaries. They have no `giftWrapPayloadId` and no expiry. So they show no hourglass, as
+  D12 says, but they are also not deleted with their rounds, which is less than D6 says. They hold
+  text the app wrote, not anybody's words.
+
 ### Phase 7: when a group sends (D10)
 
 - `GroupDmSender` and `InboxReplies`: put the rumor expiration in at proposal time, show it on

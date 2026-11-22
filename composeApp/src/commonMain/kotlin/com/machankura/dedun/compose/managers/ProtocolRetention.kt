@@ -6,7 +6,6 @@ import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
 import com.machankura.dedun.compose.nostr.DisappearingMessages
-import com.machankura.dedun.compose.nostr.confederation.ConfederationRitualEvents
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 
@@ -14,8 +13,8 @@ import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
  * When an expired NIP-17 payload may leave this device. docs/disappearing-messages.md, D6 and
  * Phase 5.
  *
- * Three managers rebuild an open session from the payloads stored for it -- `ChillDkgRitualManager`,
- * `FrostSigningManager` and `ConfederationRitualManager` -- so a round is kept, past its expiry,
+ * Two managers rebuild an open session from the payloads stored for it -- `ChillDkgRitualManager`
+ * and `FrostSigningManager` -- so a round is kept, past its expiry,
  * until the session it names has completed or failed. What the session produced (the shares, the
  * signature, the key) lives on the session's own row and never expires; only the messages that
  * carried it do.
@@ -37,10 +36,6 @@ object ProtocolRetention : PayloadRetention {
         payload.kind in FrostSigningEvents.ALL -> {
             val session = FrostSigningEvents.parseSessionId(payload.tags)?.let { database.frostSigningSessionDao().getSessionById(it) }
             session == null || session.stage == FrostSigningStage.COMPLETE || session.stage == FrostSigningStage.FAILED
-        }
-        payload.kind in ConfederationRitualEvents.ALL -> {
-            val ceremony = ConfederationRitualEvents.parseSessionId(payload.tags)?.let { database.confederationCeremonyDao().getCeremony(it) }
-            ceremony == null || !ceremony.isRunning
         }
         else -> true
     }

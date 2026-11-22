@@ -46,6 +46,9 @@ abstract class DisappearingDao {
     @Query("SELECT disappearingNoticeShownAt FROM ChatRoom WHERE id = :chatRoomId")
     abstract suspend fun noticeShownAt(chatRoomId: String): Instant?
 
+    @Query("SELECT disappearingNoticeShownAt IS NOT NULL FROM ChatRoom WHERE id = :chatRoomId")
+    abstract fun observeNoticeShown(chatRoomId: String): Flow<Boolean?>
+
     @Query("UPDATE ChatRoom SET disappearingNoticeShownAt = :at WHERE id = :chatRoomId AND disappearingNoticeShownAt IS NULL")
     abstract suspend fun markNoticeShown(chatRoomId: String, at: Instant): Int
 

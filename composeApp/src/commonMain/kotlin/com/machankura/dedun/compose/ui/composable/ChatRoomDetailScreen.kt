@@ -1,5 +1,11 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
+import dedun.composeapp.generated.resources.disappearing_messages
+import dedun.composeapp.generated.resources.disappearing_messages_room_supporting
+import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.minimumInteractiveComponentSize
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
 import dedun.composeapp.generated.resources.inbox
 import dedun.composeapp.generated.resources.set_up_an_inbox
@@ -693,6 +699,24 @@ fun ChatRoomDetailScreen(
                                         )
                                     }
                                 }
+                            }
+
+                            // How long what the user writes here lasts. Local, like muting, and only in
+                            // a NIP-17 room: an MLS room follows the group's own retention.
+                            // docs/disappearing-messages.md, D4.
+                            if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) item(key = "disappearing") {
+                                val room = chatRoomDetailUIState.localChatRoom.chatRoom
+                                ListItem(
+                                    modifier = Modifier.minimumInteractiveComponentSize().clickable {
+                                        onNavigateToRoute.invoke(DisappearingMessagesRoute(activeUserPublicKey, room.id))
+                                    },
+                                    leadingContent = { Icon(Icons.Default.HourglassBottom, contentDescription = Decorative) },
+                                    headlineContent = { Text(stringResource(Res.string.disappearing_messages)) },
+                                    // The fixed description, not the current length: this screen reads the
+                                    // room once, so a length shown here would be stale after a change.
+                                    supportingContent = { Text(stringResource(Res.string.disappearing_messages_room_supporting)) },
+                                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = Decorative) },
+                                )
                             }
 
                             // Directly under the signing key, because between them

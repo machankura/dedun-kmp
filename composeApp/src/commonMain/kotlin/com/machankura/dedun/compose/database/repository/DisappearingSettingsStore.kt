@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.database.repository
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -34,6 +35,14 @@ class DisappearingSettingsStore(private val database: DedunDatabase) {
     suspend fun saveOverride(chatRoomId: String, seconds: Long?) {
         require(seconds == null || DisappearingMessages.isValidPolicy(seconds)) { "Not a policy: $seconds seconds" }
         database.disappearingDao().setRoomOverride(chatRoomId, seconds)
+    }
+
+    /** Whether the one-time notice has been shown in [chatRoomId] (D9); a room not found reads as shown. */
+    fun observeNoticeShown(chatRoomId: String): Flow<Boolean> =
+        database.disappearingDao().observeNoticeShown(chatRoomId).map { it ?: true }
+
+    suspend fun markNoticeShown(chatRoomId: String, at: Instant) {
+        database.disappearingDao().markNoticeShown(chatRoomId, at)
     }
 
     /** The policy a message queued now in [chatRoomId] by [userPublicKey] is stamped with. */

@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
+import dedun.composeapp.generated.resources.disappearing_messages
+import androidx.compose.material.icons.filled.HourglassBottom
 import com.machankura.dedun.compose.repository.MemberWalletRepository
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.machankura.dedun.compose.ui.view.model.MemberWalletsViewModel
@@ -435,6 +438,29 @@ fun ActiveProfileScreen(
                                     )
 
                                     Text(stringResource(Res.string.notifications))
+                                }
+                            }
+
+                            // How long what this profile writes in NIP-17 conversations lasts.
+                            // docs/disappearing-messages.md, Phase 6.
+                            if (canSign) item {
+                                TextButton(
+                                    onClick = {
+                                        onNavigateToRoute.invoke(
+                                            DisappearingMessagesRoute(activeUserPublicKey = activeUserPublicKey)
+                                        )
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.HourglassBottom,
+                                        contentDescription = Decorative
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.width(MaterialTheme.spacing.space125)
+                                    )
+
+                                    Text(stringResource(Res.string.disappearing_messages))
                                 }
                             }
 
