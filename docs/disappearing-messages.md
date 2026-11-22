@@ -9,8 +9,12 @@ on a clock that is never shorter than the protocol needs (D2). A person can chan
 for what they write, or turn it off. They can do this for everything they send, or for one
 conversation.
 
-Written against `3b0b3c9a` on 2026-11-22. **Plan, not built.** Revised the same day: protocol
-messages were first left out, and now expire too.
+Written against `3b0b3c9a` on 2026-11-22. **Built, Phases 0 to 7**, on
+`claude/disappearing-messages`, one commit per phase. The device run (Phase 8) has not been done.
+It is **not behind a flag**: a build with this in it stamps a one-day expiry on what everyone
+writes in NIP-17 from the first message after the upgrade. Revised the same day as it was written:
+protocol messages were first left out, and now expire too. Each phase says what was built and
+where it differs from the plan.
 
 Read [marmot-direct-messages.md](./marmot-direct-messages.md) before changing anything on the
 send path. It explains why a `GiftWrapPayload` row with a null seal id leaves the device, and
@@ -700,6 +704,16 @@ Then update the status line at the top of this document, note under each phase w
 where it differs from the plan, and add a short CLAUDE.md rule: *every NIP-17 payload goes
 through `DisappearingMessages.stamp`, and a new kind gets a class in `classOf` with the reason for
 its floor.*
+
+**Partly done.** The record is done: the status line, the notes under each phase, the CLAUDE.md
+rule ("Everything sent in a NIP-17 wrap expires") and a row in the docs index. **The device run
+has not been done**, so none of its eight steps has been seen working on a phone. Two points from
+the earlier phases bear on it:
+
+- The DM relay describes itself as `nak serve`, "a local relay for testing" (Phase 0). Step 4
+  shows what that relay does, which may not be what a production relay does.
+- Steps 6 and 7 cover what the JVM tests cannot: a person told that their message expired before
+  it could be sent (not built, Phase 6), and ceremonies finishing across a real expiry.
 
 ## What this does not do
 
