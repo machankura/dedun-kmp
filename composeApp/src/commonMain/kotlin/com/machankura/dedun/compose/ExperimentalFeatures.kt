@@ -41,6 +41,18 @@ object ExperimentalFeatures {
      */
     val groupInbox: Boolean
         get() = groupInboxOverride ?: isDevelopmentBuild()
+
+    /** Set by a test that has to see the build a release would be. */
+    var groupDirectMessagesOverride: Boolean? = null
+
+    /**
+     * A group sending and receiving NIP-17 at its own npub, through its admins' shares
+     * (docs/group-threshold-ecdh.md, D15). Off in a release until the device run has passed:
+     * off, nothing subscribes for the group's mail and no round is answered. The refusals --
+     * a kind 13 or 10050 a device cannot check -- run whatever this says.
+     */
+    val groupDirectMessages: Boolean
+        get() = groupDirectMessagesOverride ?: isDevelopmentBuild()
 }
 
 /** Whether this is a debug or development build of the app, rather than a release. */

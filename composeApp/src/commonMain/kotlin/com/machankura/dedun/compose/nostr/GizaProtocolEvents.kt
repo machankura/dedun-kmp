@@ -7,14 +7,13 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
  * yet. Reserved: no Dedun family may take them. docs/giza-into-dedun.md and
  * docs/giza-second-batch.md, and the register in docs/kinds.md. (The share refresh's
  * 30340-30349 were here until Phase 7 brought `ShareRefreshEvents` and `ShareRepairEvents`,
- * governed rooms' 30370-30377 until Phase 8 brought `GovernanceEvents`, and the inbox key
- * ceremony's 30410-30416 until the second batch's Phase 6 brought `InboxKeyRitualEvents`.)
+ * governed rooms' 30370-30377 until Phase 8 brought `GovernanceEvents`, and a group's direct
+ * messages' 30400-30401 and its inbox key ceremony's 30410-30416 until the second batch's Phase 6
+ * brought `GroupEcdhEvents` and `InboxKeyRitualEvents`.)
  *
  * - 30379-30388, a confederation's key ceremony, and 30390-30399, a confederation's signing.
  *   Each group's admins carry both between the group's room and its inbox. Dedun takes no
  *   confederations (docs/giza-second-batch.md, D12), so these stay here for good.
- * - 30400-30401, a group's direct messages by threshold ECDH, run among a group's admins in
- *   its room. docs/giza-second-batch.md, Phase 6, brings them here.
  *
  * 30390-30412 were briefly Dedun's own new numbers, before Giza took them and Dedun moved to
  * 30420-30442 (docs/giza-second-batch.md, Phase 4). No release wrote them, so nothing Dedun
@@ -37,8 +36,5 @@ object GizaProtocolEvents {
     /** A confederation's signing: proposal, availability, session, nonces, confirmations, partials, voucher, carried, failure. 30397 is unused. */
     val CONFEDERATION_SIGNING: IntRange = 30390..30399
 
-    /** A group's direct messages by threshold ECDH: partials and failure. */
-    val GROUP_DM: IntRange = 30400..30401
-
-    val ALL: Set<Kind> = (CONFEDERATION_CEREMONY + CONFEDERATION_SIGNING + GROUP_DM).toSet()
+    val ALL: Set<Kind> = (CONFEDERATION_CEREMONY + CONFEDERATION_SIGNING).toSet()
 }

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
@@ -23,6 +24,7 @@ import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.managers.ChronicleManager
 import com.machankura.dedun.compose.managers.FrostSigningManager
+import com.machankura.dedun.compose.managers.GroupEcdhManager
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.managers.SubgroupManager
@@ -97,6 +99,10 @@ import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.managers.ShareGenerations
 import com.machankura.dedun.compose.managers.ShareRepairManager
 import com.machankura.dedun.compose.ExperimentalFeatures
+
+
+/** How often the group's direct-message rounds are swept while the app runs (docs/group-threshold-ecdh.md, Phase 5). */
+private val GROUP_DM_SWEEP_INTERVAL = kotlin.time.Duration.parse("20s")
 
 /**
  * @param activeIdentity the identity the app runs as. Read by the one write here that
@@ -175,6 +181,24 @@ class DatabaseChatRepository(
         // without a demoted member, a promotion's next steps.
         // docs/member-admin-promotion.md, Phases 8 and 9.
         launch { GovernanceFollowThrough.observe(database = database, keyPair = keyPair) }
+        // The rounds that open and write a group's direct messages: restarted where a
+        // refresh overtook them, owed partials sent, ready ones combined. Messages move
+        // them as they arrive; this catches what a dead app or a missed message left.
+        // docs/group-threshold-ecdh.md, Phase 5.
+        if (ExperimentalFeatures.groupDirectMessages) {
+            keyPair.privKey?.let { secret ->
+                launch {
+                    while (true) {
+                        runCatching { GroupEcdhManager.sweep(database, keyPair.pubKey.toHexKey(), secret) }
+                            .onFailure {
+                                if (it is kotlinx.coroutines.CancellationException) throw it
+                                logger.e("Could not sweep the group's direct messages", it)
+                            }
+                        kotlinx.coroutines.delay(GROUP_DM_SWEEP_INTERVAL)
+                    }
+                }
+            }
+        }
         Unit
     }
 

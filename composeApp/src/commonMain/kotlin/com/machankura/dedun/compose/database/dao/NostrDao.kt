@@ -103,6 +103,8 @@ import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.managers.InboxKeyRitualManager
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
+import com.machankura.dedun.compose.nostr.groupdm.GroupEcdhEvents
+import com.machankura.dedun.compose.managers.GroupEcdhManager
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
@@ -1699,6 +1701,18 @@ abstract class NostrDao(
                         // encrypted to each participant inside the room.
                         innerEvent.kind == GroupLightningEvents.NODE_SEED ->
                             GroupLightningWalletManager.receiveSeed(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // The admins opening the group's direct messages together, in the
+                        // room the key derives (docs/group-threshold-ecdh.md, Phase 5).
+                        // Answered unasked, and only while the feature is on.
+                        innerEvent.kind in GroupEcdhEvents.ALL && ExperimentalFeatures.groupDirectMessages ->
+                            GroupEcdhManager.process(
                                 database = database,
                                 localChatRoom = localChatRoom,
                                 innerEvent = innerEvent,

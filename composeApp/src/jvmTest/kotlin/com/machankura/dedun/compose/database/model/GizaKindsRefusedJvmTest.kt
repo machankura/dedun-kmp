@@ -8,6 +8,7 @@ import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.nostr.GizaProtocolEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
+import com.machankura.dedun.compose.nostr.groupdm.GroupEcdhEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
@@ -217,12 +218,13 @@ class GizaKindsRefusedJvmTest {
         val dedun = setOf(
             DepositAttributionEvent.KIND, CoinAssignmentEvent.KIND, TransferRequestEvent.KIND, MemberTransferEvent.KIND,
         ) + GroupWavelengthEvents.ALL + (30424..30429)
-        val giza = GizaProtocolEvents.CONFEDERATION_CEREMONY + GizaProtocolEvents.CONFEDERATION_SIGNING +
-            GizaProtocolEvents.GROUP_DM
+        val giza = GizaProtocolEvents.CONFEDERATION_CEREMONY + GizaProtocolEvents.CONFEDERATION_SIGNING
         assertEquals((30420..30442).toSet(), dedun, "Dedun's block after the second move")
-        // The inbox key ceremony is Dedun's too now (docs/giza-second-batch.md, Phase 6), at Giza's numbers.
+        // A group's direct messages and its inbox key ceremony are Dedun's too now
+        // (docs/giza-second-batch.md, Phase 6), at Giza's numbers.
+        assertEquals((30400..30401).toSet(), GroupEcdhEvents.ALL)
         assertEquals((30410..30416).toSet(), InboxKeyRitualEvents.ALL)
-        assertTrue(InboxKeyRitualEvents.ALL.none { it in dedun || it in GizaProtocolEvents.ALL || MovedKinds.current(it) != it })
+        assertTrue((GroupEcdhEvents.ALL + InboxKeyRitualEvents.ALL).none { it in dedun || it in GizaProtocolEvents.ALL || MovedKinds.current(it) != it })
         // 30379-30382 are still the legacy numbers of four Wavelength kinds until K3; every other
         // number Giza took reaches no Dedun reader at all.
         val stillLegacy = setOf(30379, 30380, 30381, 30382)
@@ -254,7 +256,7 @@ class GizaKindsRefusedJvmTest {
         for (kind in GizaProtocolEvents.CONFEDERATION_CEREMONY + GizaProtocolEvents.CONFEDERATION_SIGNING) {
             assertNull(arrive(carried(kind)), "confederation kind $kind reached the transcript")
         }
-        for (kind in GizaProtocolEvents.GROUP_DM + InboxKeyRitualEvents.ALL) {
+        for (kind in GroupEcdhEvents.ALL + InboxKeyRitualEvents.ALL) {
             assertNull(arrive(round(kind)), "kind $kind reached the transcript")
         }
     }

@@ -84,6 +84,7 @@ import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
+import com.machankura.dedun.compose.nostr.groupdm.GroupEcdhEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -1306,6 +1307,7 @@ data class ChatMessage(
                             MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL ||
                             ShareRefreshEvents.isShareRefresh(event) ||
                             event.kind in ShareRepairEvents.ALL ||
+                            event.kind in GroupEcdhEvents.ALL ||
                             GovernanceEvents.isGovernance(event)
                     )
 
@@ -1746,6 +1748,10 @@ data class ChatMessage(
                 in ShareRefreshEvents.ALL -> null
                 // Re-enrolling a stale member: 30346-30349, which Dedun never used.
                 in ShareRepairEvents.ALL -> null
+
+                // The admins' partials for the group's mail: one message per pass, and
+                // a line each would bury the room (docs/group-threshold-ecdh.md, D11).
+                in GroupEcdhEvents.ALL -> null
 
                 // The inbox key ceremony's messages (docs/group-inbox.md).
                 // `InboxKeyRitualManager` files them and writes its own lines.
