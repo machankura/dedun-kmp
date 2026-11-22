@@ -22,6 +22,7 @@ import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.machankura.dedun.compose.managers.GovernanceGate
 import com.machankura.dedun.compose.managers.GovernanceSupport
 import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
+import com.machankura.dedun.compose.managers.MarmotGroupName
 import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.PromotionEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
@@ -877,7 +878,12 @@ abstract class NostrDao(
                                         ChatRoom(
                                             id = nostrGroupId,
                                             userPublicKey = userPublicKey,
-                                            subject = group.roomName(),
+                                            // Under the same rule as a room this device
+                                            // makes, whoever made this one: an older Dedun or
+                                            // a Dedun peer wrote `#name`, another client a
+                                            // bare name. The group's own state keeps what its
+                                            // creator wrote. docs/group-name-prefix.md, D4.
+                                            subject = group.roomName()?.let(MarmotGroupName::of),
                                             description = group.roomDescription(),
                                             initialGiftWrapPayloadId = decryptedGiftWrapPayload.id,
                                             createdAt = decryptedGiftWrapPayload.createdAt,
