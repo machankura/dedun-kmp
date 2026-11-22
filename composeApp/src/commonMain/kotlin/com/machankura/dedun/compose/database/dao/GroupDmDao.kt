@@ -80,6 +80,10 @@ abstract class GroupDmDao {
     @Query("SELECT * FROM GroupDmWrap WHERE chatRoomId = :chatRoomId AND state IN ('WAITING', 'QUEUED') ORDER BY createdAt DESC")
     abstract fun observePendingWraps(chatRoomId: HexKey): Flow<List<GroupDmWrap>>
 
+    /** Emits as the ledger grows, so the subscription's catch-up window moves with it. */
+    @Query("SELECT MAX(createdAt) FROM GroupDmWrap")
+    abstract fun observeNewestWrapTimes(): Flow<Instant?>
+
     @Query("SELECT MAX(createdAt) FROM GroupDmWrap WHERE chatRoomId = :chatRoomId")
     abstract suspend fun newestWrapCreatedAt(chatRoomId: HexKey): Instant?
 

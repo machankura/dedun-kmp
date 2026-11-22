@@ -146,6 +146,20 @@ object GroupEcdhManager {
         ref: HexKey? = null,
         evidence: Event? = null,
     ): GroupEcdhRound {
+        val round = ensureRound(database, context, point, purpose, ref, evidence)
+        advance(database, context)
+        return database.groupDmDao().getRound(round.id)!!
+    }
+
+    /** [open] without the advance: the round's row, made or found. For a caller already inside a pass. */
+    suspend fun ensureRound(
+        database: DedunDatabase,
+        context: RoomContext,
+        point: HexKey,
+        purpose: EcdhPurpose,
+        ref: HexKey? = null,
+        evidence: Event? = null,
+    ): GroupEcdhRound {
         val id = GroupEcdhPayload.roundId(context.roomId, context.generation, point)
         database.groupDmDao().insertRound(
             GroupEcdhRound(
@@ -154,8 +168,9 @@ object GroupEcdhManager {
             )
         )
         val round = database.groupDmDao().getRound(id)!!
-        if (round.evidenceJson == null && evidence != null) database.groupDmDao().upsertRound(round.copy(evidenceJson = evidence.toJson()))
-        advance(database, context)
+        if (round.evidenceJson == null && evidence != null) {
+            database.groupDmDao().upsertRound(round.copy(evidenceJson = evidence.toJson()))
+        }
         return database.groupDmDao().getRound(id)!!
     }
 
@@ -193,10 +208,15 @@ object GroupEcdhManager {
         if (payload.generation != context.generation) return
         val publicShare = context.publicShares.getOrNull(senderId) ?: return
 
-        payload.items.forEach { item -> receive(database, context, sender, senderId, publicShare, item) }
+        val owedAgain = payload.items.mapNotNull { item -> receive(database, context, sender, senderId, publicShare, item) }
+        if (owedAgain.isNotEmpty()) send(database, context, owedAgain.mapNotNull { round -> evidenceFor(database, context, round)?.let { round to it } })
         advance(database, context)
     }
 
+    /**
+     * Files one item. Returns the round when this device has already answered it and the sender
+     * does not hold that answer ([GroupEcdhPayload.Item.have]): the partial goes out again.
+     */
     private suspend fun receive(
         database: DedunDatabase,
         context: RoomContext,
@@ -204,7 +224,7 @@ object GroupEcdhManager {
         senderId: Int,
         publicShare: PublicKey,
         item: GroupEcdhPayload.Item,
-    ) {
+    ): GroupEcdhRound? {
         val dao = database.groupDmDao()
         val roundId = GroupEcdhPayload.roundId(context.roomId, context.generation, item.point)
         dao.insertRound(
@@ -213,10 +233,10 @@ object GroupEcdhManager {
                 purpose = item.purpose, ref = item.ref, evidenceJson = item.evidence?.toJson(),
             )
         )
-        val round = dao.getRound(roundId) ?: return
+        val round = dao.getRound(roundId) ?: return null
         if (round.evidenceJson == null && item.evidence != null) dao.upsertRound(round.copy(evidenceJson = item.evidence.toJson()))
 
-        val point = ThresholdEcdh.pointOf(item.point) ?: return
+        val point = ThresholdEcdh.pointOf(item.point) ?: return null
         val verified = Dleq.verify(publicShare, point, item.partial, Dleq.context(context.roomId, context.generation, senderId), item.proof)
         val inserted = dao.insertPartial(
             GroupEcdhPartial(
@@ -225,6 +245,8 @@ object GroupEcdhManager {
             )
         )
         if (!verified && inserted > 0) blame(database, context, roundId, senderId)
+        val answered = dao.getPartials(roundId).any { it.participantId == context.myId }
+        return round.takeIf { verified && inserted > 0 && answered && context.myId !in item.have }
     }
 
     /** A partial that did not prove: dropped, its sender named once per round (D3). */
@@ -244,8 +266,15 @@ object GroupEcdhManager {
      */
     suspend fun advance(database: DedunDatabase, context: RoomContext) {
         restartOverTaken(database, context)
-        flush(database, context)
-        combine(database, context)
+        // What a combined round makes possible -- a wrap's seal, a seal's message -- can open
+        // another round, which this device can answer at once. A few turns settle it; each
+        // only moves rows forward, so the bound is a guard, not a budget.
+        repeat(4) {
+            val stepped = GroupDmReceiver.step(database, context)
+            val sent = flush(database, context)
+            val combined = combine(database, context)
+            if (!stepped && sent == 0 && combined.isEmpty()) return
+        }
     }
 
     /** [advance], for every keyed room this profile is an admin of. */
@@ -295,15 +324,27 @@ object GroupEcdhManager {
             .mapNotNull { round -> evidenceFor(database, context, round)?.let { round to it } }
         if (owed.isEmpty()) return 0
 
-        val items = owed.mapNotNull { (round, evidence) ->
+        return send(database, context, owed)
+    }
+
+    /**
+     * This device's partial for each of [rounds], batched into as few partials messages as fit
+     * [MAX_PAYLOAD_BYTES], sealed to the other current admins, and recorded. Each item says
+     * which partials this device already holds for its round. Returns how many it sent.
+     */
+    private suspend fun send(database: DedunDatabase, context: RoomContext, rounds: List<Pair<GroupEcdhRound, Event>>): Int {
+        if (rounds.isEmpty()) return 0
+        val dao = database.groupDmDao()
+        val items = rounds.mapNotNull { (round, evidence) ->
             val point = ThresholdEcdh.pointOf(round.point) ?: return@mapNotNull null
             val partial = context.partial(point)
             val proof = context.proof(point, partial)
+            val have = (dao.getPartials(round.id).filter { it.verified }.map { it.participantId } + context.myId).distinct().sorted()
             round to GroupEcdhPayload.Item(
                 point = round.point, purpose = round.purpose,
                 ref = round.ref.takeIf { round.purpose != EcdhPurpose.RECIPIENT },
                 evidence = evidence.takeIf { round.purpose == EcdhPurpose.RECIPIENT },
-                partial = partial, proof = proof,
+                partial = partial, proof = proof, have = have,
             )
         }
 

@@ -22,8 +22,13 @@ import com.machankura.dedun.compose.extensions.toHex
  * docs/group-threshold-ecdh.md):
  *
  * ```
- * {"v":1,"generation":g,"from":id,"items":[{"point","purpose","ref"?,"evidence"?,"partial","proof"}, …]}
+ * {"v":1,"generation":g,"from":id,"items":[{"point","purpose","ref"?,"evidence"?,"partial","proof","have"}, …]}
  * ```
+ *
+ * [Item.have] is the participant ids whose partials the sender already holds for that round.
+ * A device that has answered and is not among them sends its partial again: that is how an
+ * admin promoted after a round combined, or one that missed a message, is caught up, without
+ * any device re-sending to someone who already has it.
  *
  * [Item.point] is the x-only key multiplied, lifted to even y by everyone; [Item.partial] is
  * `sᵢ·P`, compressed. A wrap or a seal is named by the wrap's id in [Item.ref], since every
@@ -44,6 +49,7 @@ class GroupEcdhPayload(
         val evidence: Event? = null,
         val partial: PublicKey,
         val proof: Dleq.Proof,
+        val have: List<Int> = emptyList(),
     )
 
     fun encode(): String = json.encodeToString(JsonElement.serializer(), toJson())
@@ -61,6 +67,7 @@ class GroupEcdhPayload(
                     item.evidence?.let { put("evidence", json.parseToJsonElement(it.toJson())) }
                     put("partial", item.partial.value.toHex())
                     put("proof", item.proof.toHex())
+                    put("have", buildJsonArray { item.have.distinct().sorted().forEach { add(JsonPrimitive(it)) } })
                 })
             }
         })
@@ -92,12 +99,13 @@ class GroupEcdhPayload(
                 val partial = string("partial")?.takeIf { isHex(it, 66) }?.let { PublicKey(it.hexToByteArray()) }
                     ?.takeIf { it.isValid() } ?: return null
                 val proof = string("proof")?.let(Dleq.Proof::fromHex) ?: return null
+                val have = (o["have"] as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.int ?: return null } ?: return null
                 // What each purpose names its evidence by, and nothing else.
                 when (purpose) {
                     EcdhPurpose.WRAP, EcdhPurpose.SEAL -> if (ref == null || evidence != null) return null
                     EcdhPurpose.RECIPIENT -> if (ref != null || evidence == null) return null
                 }
-                Item(point, purpose, ref, evidence, partial, proof)
+                Item(point, purpose, ref, evidence, partial, proof, have)
             } ?: return null
             if (items.isEmpty()) return null
             GroupEcdhPayload(generation, from, items).takeIf { it.encode() == text }

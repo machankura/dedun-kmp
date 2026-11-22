@@ -25,6 +25,15 @@ interface GroupDmRepository {
     /** Whether [userPublicKey] is a current admin of [chatRoomId] holding a share: who sees the group's mail (D4, D12). */
     suspend fun isCurrentAdmin(chatRoomId: HexKey, userPublicKey: HexKey): Boolean
 
+    /**
+     * The rooms whose mail [userPublicKey] reads, with the relays to ask on and how far back,
+     * as they change: what `live-group-dm` subscribes to (D9).
+     */
+    fun observeReadableRooms(userPublicKey: HexKey): Flow<List<com.machankura.dedun.compose.managers.GroupDmInbox>>
+
+    /** A wrap a relay sent: into the group's own pipeline if it is one of its, else nothing. Whether it was. */
+    suspend fun receiveWrap(wrap: com.vitorpamplona.quartz.nip01Core.core.Event, userPublicKey: HexKey, nostrPrivateKey: ByteArray): Boolean
+
     /** Asks the group to sign [relays] as where it receives messages (D8). */
     suspend fun proposeRelays(localChatRoom: LocalChatRoom, userPublicKey: HexKey, relays: List<String>): FrostSigningSession
 }

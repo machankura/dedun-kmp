@@ -93,6 +93,7 @@ class SynchronizationViewModel(
         chatRepository = chatRepository,
         holdConnections = AppLifecycle.holdConnections,
         groupInboxRepository = groupInboxRepository,
+        groupDmRepository = groupDmRepository,
     )
 
     /** Sends the group's signed 10050s and message wraps (docs/group-threshold-ecdh.md, D8 and D10). */

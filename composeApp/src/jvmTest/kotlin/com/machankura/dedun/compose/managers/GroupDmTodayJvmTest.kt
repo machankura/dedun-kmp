@@ -105,11 +105,9 @@ class GroupDmTodayJvmTest {
         assertEquals("Where the group receives messages", ProposedEvent.summarize(Event.fromJson(items.single().unsignedEventJson)).label)
     }
 
-    /** Phase 7 flips this. */
+    /** Flipped by Phase 7: the group's mail has its own subscription. */
     @Test
-    fun `there is no subscription for a group's mail`() {
-        val source = File("src").takeIf { it.resolve("commonMain").isDirectory } ?: File("composeApp/src")
-        val live = source.resolve("commonMain/kotlin/com/machankura/dedun/compose/managers/LiveSubscriptionManager.kt").readText()
-        assertFalse("live-group-dm" in live)
+    fun `there is a subscription for a group's mail`() {
+        assertEquals("live-group-dm", LiveSubscriptionManager.GROUP_DM_SUB_ID)
     }
 }

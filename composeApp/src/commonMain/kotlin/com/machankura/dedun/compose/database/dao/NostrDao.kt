@@ -105,6 +105,7 @@ import com.machankura.dedun.compose.managers.InboxKeyRitualManager
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
 import com.machankura.dedun.compose.nostr.groupdm.GroupEcdhEvents
 import com.machankura.dedun.compose.managers.GroupEcdhManager
+import com.machankura.dedun.compose.managers.GroupDmReceiver
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
@@ -249,6 +250,14 @@ abstract class NostrDao(
         level: Int,
         activeKeyPair: KeyPair
     ) {
+        // A wrap to a group whose mail this device reads goes to the group's own pipeline,
+        // and leaves no NostrEvent or GiftWrapMessage row: the personal inbox is built around
+        // one identity (docs/group-threshold-ecdh.md, D9).
+        if (nostrEvent.kind == GiftWrapEvent.KIND && ExperimentalFeatures.groupDirectMessages) {
+            val secret = activeKeyPair.privKey
+            if (secret != null && GroupDmReceiver.receive(database, nostrEvent.toEvent(), activeKeyPair.pubKey.toHex(), secret)) return
+        }
+
         val storedNostrEvent = database.nostrEventDao().getNostrEventById(nostrEvent.id)
 
         if (storedNostrEvent == null) {

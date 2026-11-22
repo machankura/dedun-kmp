@@ -79,6 +79,11 @@ class LiveSubscriptionManager(
      * Null, or the feature off, and nothing is asked for.
      */
     private val groupInboxRepository: GroupInboxRepository? = null,
+    /**
+     * Where a group's mail goes, rather than the `NostrEvent` table (docs/group-threshold-ecdh.md,
+     * Phase 7). Null, or the feature off, and nothing is asked for.
+     */
+    private val groupDmRepository: com.machankura.dedun.compose.repository.GroupDmRepository? = null,
 ) {
     private val logger = Logger.withTag(TAG)
 
@@ -93,6 +98,34 @@ class LiveSubscriptionManager(
         const val GIFT_WRAP_SUB_ID = "live-giftwrap"
 
         const val GROUP_SUB_ID_PREFIX = "live-groups-"
+
+        /** Gift wraps to the groups this device reads for, on their 10050 relays (docs/group-threshold-ecdh.md, D9). */
+        const val GROUP_DM_SUB_ID = "live-group-dm"
+
+        /** NIP-59 back-dates a wrap by up to two days, so catch-up asks that far before the newest one seen. */
+        private const val WRAP_BACKDATE_SECONDS = 2L * 24 * 60 * 60
+
+        /**
+         * What `live-group-dm` asks each relay for: kind 1059 p-tagged to the groups that list
+         * that relay, or every group on the app's own DM relays. Keyed by relay.
+         */
+        internal fun groupDmFilters(inboxes: List<com.machankura.dedun.compose.managers.GroupDmInbox>): Map<String, List<Filter>> {
+            if (inboxes.isEmpty()) return emptyMap()
+            val byRelay = mutableMapOf<String, MutableList<com.machankura.dedun.compose.managers.GroupDmInbox>>()
+            inboxes.forEach { inbox ->
+                (inbox.relays + Relays.DefaultDMRelayList.map { it.url }).distinct().forEach { relay ->
+                    byRelay.getOrPut(relay) { mutableListOf() } += inbox
+                }
+            }
+            return byRelay.mapValues { (_, rooms) ->
+                val newest = rooms.mapNotNull { it.newestWrapAt }.minOrNull()
+                // The oldest of the rooms' watermarks, so no room on this relay misses a wrap.
+                val since = if (rooms.any { it.newestWrapAt == null }) null else newest?.let { it - WRAP_BACKDATE_SECONDS }
+                rooms.map { it.roomId }.sorted().chunked(MAX_INBOX_RECIPIENTS).map { chunk ->
+                    Filter(kinds = listOf(GiftWrapEvent.KIND), tags = mapOf("p" to chunk), since = since, limit = INITIAL_HISTORY_LIMIT)
+                }
+            }
+        }
 
         /** Gift wraps to the groups whose inbox key this identity holds (docs/group-inbox.md, D8). */
         const val GROUP_INBOX_SUB_ID = "live-group-inbox"
@@ -273,9 +306,46 @@ class LiveSubscriptionManager(
 
         launch { followGroupMembership(publicKey = publicKey, keyPair = keyPair) }
 
+        groupDmRepository?.takeIf { ExperimentalFeatures.groupDirectMessages }?.let { repository ->
+            launch { followGroupDirectMessages(publicKey = publicKey, keyPair = keyPair, repository = repository) }
+        }
+
         groupInboxRepository?.takeIf { ExperimentalFeatures.groupInbox }?.let { repository ->
             launch { followGroupInboxes(publicKey = publicKey, keyPair = keyPair, repository = repository) }
         }
+    }
+
+    /**
+     * Keeps `live-group-dm` open on every relay a readable group names, re-sent as rooms gain or
+     * lose a 10050 or this device's member gains or loses admin. Wraps go to the group's own
+     * pipeline, never to the `NostrEvent` table (docs/group-threshold-ecdh.md, D9).
+     */
+    @OptIn(FlowPreview::class)
+    private suspend fun followGroupDirectMessages(publicKey: HexKey, keyPair: KeyPair, repository: com.machankura.dedun.compose.repository.GroupDmRepository) {
+        val secret = keyPair.privKey ?: return
+        repository.observeReadableRooms(publicKey)
+            .map { groupDmFilters(it) }
+            .distinctUntilChanged()
+            .debounce(GROUP_CHANGE_DEBOUNCE)
+            .collectLatest { byRelay ->
+                if (byRelay.isEmpty()) return@collectLatest
+                coroutineScope {
+                    byRelay.forEach { (relay, filters) ->
+                        launch {
+                            runLiveSubscription(
+                                subId = GROUP_DM_SUB_ID,
+                                relayUrl = relay,
+                                filters = { filters },
+                                keyPair = keyPair,
+                                onEvent = { nostrEvent, _ ->
+                                    runCatching { repository.receiveWrap(nostrEvent.toEvent(), publicKey, secret) }
+                                        .onFailure { logger.w(throwable = it) { "Could not take wrap ${nostrEvent.id} for a group" } }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
     }
 
     /**

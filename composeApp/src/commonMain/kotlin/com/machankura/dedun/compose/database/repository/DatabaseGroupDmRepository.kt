@@ -33,6 +33,30 @@ class DatabaseGroupDmRepository(private val database: DedunDatabase) : GroupDmRe
             }
             .distinctUntilChanged()
 
+    override fun observeReadableRooms(userPublicKey: HexKey): Flow<List<com.machankura.dedun.compose.managers.GroupDmInbox>> =
+        kotlinx.coroutines.flow.combine(
+            database.chatRoomDao().observeChatRoomListByUserPublicKey(userPublicKey),
+            database.groupSignedEventDao().observeByKind(GroupDmRelays.KIND),
+            database.groupDmDao().observeNewestWrapTimes(),
+        ) { rooms, _, _ -> rooms }
+            .map { rooms ->
+                rooms.filter { it.chatRoom.mlsGroupState != null && it.chatRoom.leftGroupAt == null && it.chatRoom.deletedAt == null }
+                    .mapNotNull { room ->
+                        val id = room.chatRoom.id
+                        if (!com.machankura.dedun.compose.managers.GroupDmReceiver.readsFor(database, id, userPublicKey)) return@mapNotNull null
+                        com.machankura.dedun.compose.managers.GroupDmInbox(
+                            roomId = id,
+                            relays = GroupDmRelays.relaysOf(database, id).orEmpty(),
+                            newestWrapAt = database.groupDmDao().newestWrapCreatedAt(id)?.epochSeconds,
+                        )
+                    }
+                    .sortedBy { it.roomId }
+            }
+            .distinctUntilChanged()
+
+    override suspend fun receiveWrap(wrap: com.vitorpamplona.quartz.nip01Core.core.Event, userPublicKey: HexKey, nostrPrivateKey: ByteArray): Boolean =
+        com.machankura.dedun.compose.managers.GroupDmReceiver.receive(database, wrap, userPublicKey, nostrPrivateKey)
+
     override suspend fun isCurrentAdmin(chatRoomId: HexKey, userPublicKey: HexKey): Boolean {
         val admins = RoomAdmins.of(database, chatRoomId)?.admins ?: return false
         if (userPublicKey !in admins) return false

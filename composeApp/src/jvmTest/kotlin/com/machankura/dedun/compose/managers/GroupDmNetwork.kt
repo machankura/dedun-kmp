@@ -158,6 +158,23 @@ class GroupDmNetwork(n: Int = 4, val t: Int = 2, secret: String = "6d0000".padEn
         return GiftWrapEvent.create(seal, roomId)
     }
 
+    /**
+     * The group signs where it receives messages, through the real signing session: [proposer]
+     * proposes, [approver] approves, and the network carries the rest. Every device then holds
+     * the signed 10050.
+     */
+    suspend fun openMessages(proposer: Device = devices[0], approver: Device = devices[1], relays: List<String> = listOf("wss://dm.example.com")) {
+        val session = GroupDmRelays.propose(proposer.db, proposer.room, proposer.publicKey, relays)
+        pump()
+        FrostSigningManager.approve(approver.db, approver.room, session.id)
+        pump()
+        check(devices.all { GroupDmRelays.relaysOf(it.db, roomId) != null }) { "the 10050 did not reach every device" }
+    }
+
+    /** [wrap] reaching [to] on the group's subscription. */
+    suspend fun receive(wrap: Event, vararg to: Device) =
+        to.forEach { GroupDmReceiver.receive(it.db, wrap, it.publicKey, it.privateKey) }
+
     /** The wrap as the group's subscription would put it in [device]'s ledger. */
     suspend fun ledger(device: Device, wrap: Event) {
         device.db.groupDmDao().insertWrap(
