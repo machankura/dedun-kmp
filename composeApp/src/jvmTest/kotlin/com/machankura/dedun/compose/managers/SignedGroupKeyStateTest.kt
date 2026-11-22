@@ -1286,24 +1286,19 @@ class SignedGroupKeyStateTest {
     }
 
     /**
-     * The premise of docs/group-inbox.md's replies (Phase 0, check 4): a NIP-17 seal is
-     * signed by its author's identity, and a group's identity is its room. A batch of kind
-     * 13 events the quorum signs has to verify as the room, or no recipient's app would
-     * accept a reply from the group's inbox, whatever was sealed inside it.
+     * docs/group-inbox.md's replies (Phase 0, check 4, as Phase 8 left it). The premise -- that
+     * a batch of kind 13 seals the quorum signs verifies as the room -- held when Phase 0 checked
+     * it here, and `InboxReplyJvmTest` now checks it end to end with real seals. What this
+     * harness can still say is what changed since: a seal no signer can read, with no manifest
+     * and no inbox key behind it, is declined rather than signed, which is D12's rule.
      */
     @Test
-    fun `a batch of seals the group signs verifies as the room's own`() = runBlocking {
+    fun `a batch of seals nobody can read is declined, not signed`() = runBlocking {
         val creator = device(members[0], signerIndex = 0)
         val other = device(members[1], signerIndex = 1)
 
-        val inboxKey = "a".repeat(64)
         val seals = listOf("first", "second").map { ciphertext ->
-            EventTemplate<Event>(
-                createdAt = 1_700_000_000L,
-                kind = 13,
-                tags = arrayOf(arrayOf("n", inboxKey)),
-                content = ciphertext,
-            )
+            EventTemplate<Event>(createdAt = 1_700_000_000L, kind = 13, tags = arrayOf(arrayOf("n", "a".repeat(64))), content = ciphertext)
         }
         val session = FrostSigningManager.proposeSigningBatch(
             database = creator.db,
@@ -1312,19 +1307,10 @@ class SignedGroupKeyStateTest {
             events = seals,
         )
         pump(creator, other)
-        FrostSigningManager.approve(other.db, other.room, session.id)
-        pump(creator, other)
 
+        assertNotNull(other.session(session.id)?.signDeclinedAt, "the second signer declines what it cannot read")
         listOf(creator, other).forEach { device ->
-            val signed = device.items(session.id).map {
-                assertNotNull(device.db.groupSignedEventDao().getById(it.eventId))
-            }
-            assertEquals(2, signed.size)
-            signed.forEach { seal ->
-                assertEquals(13, seal.kind)
-                assertEquals(adminRoomId, seal.publicKey)
-                assertTrue(seal.verifies(), "a seal the group signed must verify as the room")
-            }
+            assertTrue(device.items(session.id).all { it.signature == null }, "nothing was signed")
         }
     }
 
