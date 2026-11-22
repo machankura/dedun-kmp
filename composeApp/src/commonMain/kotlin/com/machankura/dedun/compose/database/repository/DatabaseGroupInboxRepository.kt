@@ -22,6 +22,7 @@ import com.machankura.dedun.compose.managers.GroupInboxManager
 import com.machankura.dedun.compose.managers.InboxAnnouncements
 import com.machankura.dedun.compose.managers.InboxKeyRitualManager
 import com.machankura.dedun.compose.managers.InboxReplies
+import com.machankura.dedun.compose.managers.InboxRotation
 import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
 import com.machankura.dedun.compose.repository.GroupInboxRepository
 
@@ -83,6 +84,7 @@ class DatabaseGroupInboxRepository(
                 relays = InboxAnnouncements.relaysOf(database, roomId),
                 setUpRefusal = InboxKeyRitualManager.refusal(database, localChatRoom, userPublicKey),
                 waitingOn = ceremony?.takeIf { it.isRunning }?.let { waitingOn(it) }.orEmpty(),
+                rotationOwed = InboxRotation.isOwed(database, localChatRoom, userPublicKey),
             )
         }
     }

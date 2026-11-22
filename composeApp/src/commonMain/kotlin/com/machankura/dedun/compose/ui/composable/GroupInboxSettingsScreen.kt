@@ -65,6 +65,7 @@ import dedun.composeapp.generated.resources.rotate_the_inbox_key
 import dedun.composeapp.generated.resources.set_up_an_inbox
 import dedun.composeapp.generated.resources.the_admins_are_making_the_inbox_key
 import dedun.composeapp.generated.resources.the_ceremony_ended
+import dedun.composeapp.generated.resources.the_admins_have_changed_since_this_key_was_made
 import dedun.composeapp.generated.resources.the_inbox_key_ceremony_started
 import dedun.composeapp.generated.resources.try_again
 import dedun.composeapp.generated.resources.waiting_for_the_group_to_sign_its_announcement
@@ -222,6 +223,13 @@ fun GroupInboxSettingsScreen(
 
                     if (visibleKeys.isNotEmpty() && !running) {
                         Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)) {
+                            if (status.rotationOwed) {
+                                Text(
+                                    stringResource(Res.string.the_admins_have_changed_since_this_key_was_made),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                             Text(stringResource(Res.string.rotate_explainer), style = MaterialTheme.typography.bodyMedium)
                             status.setUpRefusal?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

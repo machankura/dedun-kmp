@@ -63,6 +63,12 @@ object GovernanceFollowThrough {
     /** One pass over everything owed. */
     suspend fun pass(database: DedunDatabase, keyPair: KeyPair) = mutex.withLock {
         rotationsOwed(database).forEach { proposal -> rotateAway(database, keyPair, proposal) }
+        // The group's inbox key, made over admins the room no longer has (docs/group-inbox.md,
+        // D14). After the share rotation above, which its refusal waits on.
+        keyPair.privKey?.let { secret ->
+            runCatching { InboxRotation.pass(database, keyPair.pubKey.toHexKey(), secret) }
+                .onFailure { if (it is CancellationException) throw it; logger.w("An inbox rotation pass failed: ${it.message}") }
+        }
         val me = keyPair.pubKey.toHexKey()
         // A keyed room's rule, switched on once every member can follow it, by the one
         // device whose it is to switch. docs/remove-convenient-groups.md, "After the build".

@@ -1884,4 +1884,5 @@
     <string name="could_not_ask_the_group_to_sign_this_reply">Couldn't ask the group to sign this reply.</string>
     <string name="not_yet_on_a_relay">Not yet on a relay</string>
     <string name="send_reply_again">Send again</string>
+    <string name="the_admins_have_changed_since_this_key_was_made">The group's admins have changed since this key was made. It changes on its own once an admin's device starts a new ceremony, or you can rotate it now.</string>
 </resources>

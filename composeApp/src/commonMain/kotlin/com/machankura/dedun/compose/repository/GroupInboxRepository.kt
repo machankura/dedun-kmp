@@ -56,6 +56,8 @@ interface GroupInboxRepository {
         val setUpRefusal: String?,
         /** The admins a running ceremony waits on, by name. */
         val waitingOn: List<String>,
+        /** The key was made over admins the room no longer has (D14). */
+        val rotationOwed: Boolean = false,
     ) {
         val heldKey: InboxKey? get() = keys.firstOrNull { it.secretKey != null }
     }

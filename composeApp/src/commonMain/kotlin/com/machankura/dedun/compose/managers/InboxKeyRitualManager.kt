@@ -67,6 +67,9 @@ object InboxKeyRitualManager {
 
     const val ABANDONED = "Abandoned by an admin"
 
+    /** Why one of two crossing ceremonies ends: the other went on. */
+    const val CROSSED = "Another admin started the same ceremony at the same time, and that one went on"
+
     fun deriveHostSecretKey(nostrPrivateKey: ByteArray, chatRoomId: String): PrivateKey =
         PrivateKey(Crypto.sha256(HOST_KEY_TAG.encodeToByteArray() + nostrPrivateKey + chatRoomId.hexToByteArray()))
 
@@ -225,6 +228,13 @@ object InboxKeyRitualManager {
         }
         val participants = (named + innerEvent.pubKey).distinct().sorted()
 
+        // A generation this device already finished is not made twice: a late or replayed
+        // proposal for it opens nothing.
+        if (database.inboxKeyDao().getCompletedCeremonies(roomId, userPublicKey).any { it.generation >= generation }) {
+            logger.w("Inbox key proposal ${sessionId.take(8)} is for generation $generation, which this device has; dropping")
+            return null
+        }
+
         val base = InboxKeyCeremony(
             id = sessionId,
             chatRoomId = roomId,
@@ -263,6 +273,19 @@ object InboxKeyRitualManager {
             broadcast(database, localChatRoom, mine, InboxKeyRitualEvents.FAILURE, mismatch)
             return database.inboxKeyDao().getCeremony(sessionId)
         }
+
+        // Two admins who each started a rotation before hearing the other's: every device keeps
+        // the one whose session id sorts first and ends the other out loud, so all of them end
+        // up in the same ceremony and nobody holds a key the others do not.
+        val crossing = database.inboxKeyDao().getRunningCeremoniesIn(roomId)
+            .filter { it.userPublicKey == userPublicKey && it.id != sessionId }
+        crossing.forEach { other ->
+            val loser = if (other.id < sessionId) mine else other
+            val reason = CROSSED
+            fail(database, loser, reason, loser.coordinatorPublicKey)
+            if (loser.isParticipant()) broadcast(database, localChatRoom, loser, InboxKeyRitualEvents.FAILURE, reason)
+        }
+        if (database.inboxKeyDao().getCeremony(sessionId)?.isRunning != true) return database.inboxKeyDao().getCeremony(sessionId)
 
         replayStored(database, localChatRoom, mine)
         return database.inboxKeyDao().getCeremony(sessionId)
