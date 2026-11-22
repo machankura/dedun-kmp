@@ -155,26 +155,30 @@ that has already been sent. It cannot, because the tag is part of the rumor's id
 
 - **Rumor**: `["expiration", expiry]`, worked out from the rumor's real `created_at` (D2). Giza
   obeys this value, on both sides. A rumor that already carries an `expiration` keeps it and gets
-  no second one. Today that is only a confederation statement. Two `expiration` tags have no
-  defined meaning, and `ConfederationStatements` reads the first one.
-- **Wrap**: `["expiration", rumorExpiration + jitter]`, where `jitter` is uniform in
-  `[0, 2 days]`. The wrap's `created_at` is already pushed up to two days into the past so that a
-  relay cannot see when a message was really sent. A wrap expiry of exactly `created_at + 86400`
-  would give that time away again. The jitter only ever moves the expiry *later*, so a relay never
-  drops a wrap before the sender meant it to. The cost is that the ciphertext can sit on the relay
-  for up to two extra days. NIP-59's advice to use independent random timestamps per layer points
-  the same way. When the rumor has no expiration (a person's message with the policy Off), the
-  wrap has none either.
-- **Seal**: no tag. NIP-59's MUST outranks NIP-17's SHOULD, and a client that enforces empty seal
-  tags would reject the whole message. Phase 0 checks what quartz's own NIP-17 builder does. If
-  quartz puts the tag on the seal, Giza does the same, because matching the library its peers use
-  matters more here than following the stricter wording.
+  no second one. Today that is only a confederation statement. A second tag would get the
+  statement refused: `ConfederationStatements` reads its tags with `singleOrNull`, and two
+  `expiration` tags read as none.
+- **Wrap**: `["expiration", wrap.created_at + (rumorExpiration - rumor.created_at) + 2 days]`.
+  This is quartz's own formula (`GiftWrapEvent.build`'s `expirationDelta`). The wrap's
+  `created_at` is already pushed up to two days into the past so that a relay cannot see when a
+  message was really sent, and the formula carries that same random offset into the expiry. The
+  result is the rumor's expiry plus a random `[0, 2 days]`. A wrap expiry of exactly
+  `created_at + 86400` would give the send time away again. The offset only ever moves the expiry
+  *later*, so a relay never drops a wrap before the sender meant it to. The cost is that the
+  ciphertext can sit on the relay for up to two extra days. When the rumor has no expiration (a
+  person's message with the policy Off), the wrap has none either.
+- **Seal**: no tag. Phase 0 found that quartz does tag the seal. Giza still does not, for three
+  reasons. NIP-59 says seal tags MUST be empty. Giza's own `GroupDmRefusal` refuses a group's seal
+  with any tag, and `InboxRefusal` refuses an inbox seal with more than one. And quartz's
+  `Rumor.mergeWith`, which Giza's receive path uses, appends the seal's tags to the rumor's. So a
+  tagged seal would put a second `expiration` on every rumor Giza receives.
 - **The sender's own copy** is kept and given the same rumor expiry. A second device of the
   sender's can then read the sender's half of the conversation for as long as the recipient can.
   It also lets that device join a ceremony that a first device started. NIP-17's other option,
   sending no self-copy, would silently break both.
 
-`Random` is passed in as a parameter so tests can control the jitter.
+The randomness comes from the wrap's own `created_at`, so tests control it by passing that value
+in.
 
 ### D6. Deleting locally is the feature, and protocol payloads wait for their session
 
@@ -196,12 +200,12 @@ the message, so:
   is NIP-40's "ignore expired events". It can happen because the wrap outlives the rumor on the
   relay (D5), and because re-syncs happen. An expired protocol round that arrives late is ignored
   the same way. Its session either had what it needed already, or a resend brings a fresh copy.
-- **A wrap or payload that has been deleted is neither decrypted nor queued again.** A small
+- **A wrap that has been deleted is not decrypted again.** A small
   `ExpiredGiftWrap(id, dropAfter)` tombstone remembers wraps that were already handled until the
   wrap's own expiration has passed. Without it, every sync would download the jittered wrap
-  again, decrypt it, find it expired, and throw it away. On the outbound side, the payload id is
-  tombstoned too, and `FrostSigningManager.isQueued` checks the tombstone. Otherwise a round
-  could be queued a second time once its row had gone.
+  again, decrypt it, find it expired, and throw it away. The outbound side needs no tombstone.
+  `FrostSigningManager.isQueued` only stops a re-published round from overwriting a row that is
+  still stored, and once a swept row has gone there is nothing for it to overwrite.
 - **Expirations from other people are obeyed whatever this device's own setting is.** A message
   that a Bennu user sent with a one-hour expiry disappears after an hour.
 - **A reply that quotes a deleted message** shows "This message has disappeared" in place of the
@@ -318,6 +322,46 @@ proposal, not a tag.
 Done when: each check's answer is written under this phase, and D2, D5 and D8 are updated if an
 answer changes them.
 
+**Done, 2026-11-22.** The checks were run against quartz 2.20.1 and marmot-kmp 2.3.0 from the
+Magpie mirror, against the relay itself, and against Bennu's `bennu-kmp` at `2db6dde5`.
+
+1. **quartz** tags all three layers. The rumor carries the expiry. `SealEvent.build` and
+   `GiftWrapEvent.build` each add `created_at + delta + 2 days`, where `delta` is the rumor's
+   expiry minus its `created_at`. `SealEvent` does not refuse a tagged seal. `Rumor.mergeWith`
+   appends the seal's tags to the rumor's when it unseals, and `GiftWrapSeal.decryptGiftWrapPayload`
+   unseals that way. D5 now uses quartz's wrap formula and keeps the seal empty, for the reasons
+   given there.
+2. **The relay.** `ephemeral.mantra.press` lists 40 in `supported_nips`, so D8 needs nothing
+   more. It also describes itself as `nak serve`, "a local relay for testing, debugging and
+   development". Phase 8's relay check should keep that in mind.
+3. **Bennu** reads rumor tags by name. It has no check on the number of tags, or on unknown tags,
+   anywhere in `composeApp`. An extra `expiration` on the rumor is safe there. Bennu has no group
+   DM or inbox refusals, so the seal question does not reach it.
+4. **The kinds.** Five producers write `GiftWrapPayload`: `sendChatMessage` (14, plus whatever
+   `messageType` a caller passes), `ChillDkgRitualManager` (its ritual kinds),
+   `FrostSigningManager` (the signing kinds, and any kind its queue is handed),
+   `ConfederationRitualManager` (the confederation DKG kinds) and `MarmotOutboundDao.deliveryWelcome`
+   (444). Every one of them hashes the rumor id from its tags itself, so each one has to stamp
+   before it hashes (Phase 3).
+5. **The floors.** No ceremony has a timeout in code. A DKG, signing or confederation ceremony stays
+   open until it completes, fails or is abandoned. The floors in D2 stand.
+6. **Readers of the payload table.** `ChillDkgRitualManager` (around line 610),
+   `ConfederationRitualManager` (around line 603) and `FrostSigningManager` (around line 869) are
+   the only readers. `ShareRefreshManager`, `InboxKeyRitualManager`, `ConfederationSigningManager`
+   and `ChronicleManager` read `MarmotInnerEvent` only, which is out of scope. Confederation
+   *statements* do not travel on this path at all. They go through the group inbox
+   (`GroupInboxManager`, `InboxReplies`), so the question of the confederation's stored status
+   moves to Phase 7.
+7. **Where words are stored.** `NotificationLedger` stores a cursor and switches, but no text.
+   There is no full-text index and no draft table. `ChatMessage` has foreign keys to
+   `GiftWrapPayload` with `ON DELETE CASCADE`, so deleting a payload deletes its chat line. The
+   debug log of the rumor JSON in `sealGiftWrapPayload` is real, and Phase 3 removes it.
+8. **Participants.** `createNip17ChatRoom` puts the local user in the room, and
+   `persistInboundChatMessage` already discards "our own message coming back". The self-copy is
+   sealed.
+9. **The Welcome.** marmot-kmp's own `WelcomeGiftWrap` sets no expiration, and its sources say
+   nothing about a Welcome's lifetime. The seven-day floor stands.
+
 ### Phase 1: pin today's behaviour, and the pure core
 
 - Tests that pin today: a payload sealed by `sealGiftWrapPayload` has no `expiration` on any
@@ -330,7 +374,7 @@ answer changes them.
   - `policyFor(roomOverride: Long?, identityDefault: Long): Long?`
   - `expiryFor(kind, createdAt, policy, existingTags): Long?`. It is null only for a `Written`
     kind with the policy Off, and it returns the existing tag's value when there is one (D5).
-  - `wrapExpiration(rumorExpiration, random): Long`
+  - `wrapExpiration(rumorExpiration, rumorCreatedAt, wrapCreatedAt): Long`
   - `expirationOf(tags): Long?`
 - `commonTest`:
   - **Every kind the app writes to the queue is classified explicitly.** The test lists the
@@ -425,11 +469,9 @@ but not released surviving a sweep. Add a case to `NotificationClassifierJvmTest
   each protocol that reads payloads back (Phase 0, check 6):
   - **`ChillDkgRitualManager`**: released when the DKG session has completed or failed.
   - **`FrostSigningManager`**: released when the signing session has a signature, a failure, or
-    has been abandoned. `isQueued` also checks the outbound tombstone (D6).
-  - **`ConfederationRitualManager`**: released when the proposal has lapsed, or the confederation
-    has formed and its status has been stored. If Phase 0 found that the status is derived from
-    the statements each time it is read, this phase first adds a stored `ConfederationStatus`
-    snapshot and moves the readers onto it. That is the largest single piece of work in the plan.
+    has been abandoned.
+  - **`ConfederationRitualManager`**: released when the confederation's key ceremony has
+    completed, failed or been abandoned. Its statements are not on this path (Phase 0, check 6).
   - **The Welcome**: released once the payload is sealed. Nothing reads a Welcome back.
   - **Any other kind**: released when its expiry passes, which is the same rule as a written
     message.
