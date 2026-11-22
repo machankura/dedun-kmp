@@ -36,7 +36,7 @@ by its own ceremony and held whole by every admin (`group-inbox.md`, written alo
 one and not merged). *Against the NIP-4E plan* below says where the two differ, and how
 they fit together if both are built.
 
-**Planned, not built.** Written against `5ac4c053`, on 2026-11-22. Paths starting `K/` are
+**Being built.** Phase 0 is done, and its findings changed D4 and D11. Written against `5ac4c053`, on 2026-11-22. Paths starting `K/` are
 under `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`, and `B/` is bitcoin-kmp's
 `src/commonMain/kotlin/fr/acinq/bitcoin/`, under
 `lightning-kmp-app/experimental/lightning-kmp/experimental/bitcoin-kmp/`.
@@ -209,7 +209,9 @@ verify:  R₁ = z·G − c·Yᵢ,   R₂ = z·P − c·Dᵢ,   and c recomputes
 `aux` is 32 fresh random bytes, so a fault in one run cannot repeat a nonce across two.
 The challenge binds the room, the generation and the id, so a proof cannot be replayed into
 another round. A hash that lands at or above `n` fails the proof rather than being reduced,
-which happens with probability about 2⁻¹²⁸. The tags are hash inputs, spelled `mantra/` as
+which happens with probability about 2⁻¹²⁸. bitcoin-kmp's `PrivateKey` constructor does not
+range-check (Phase 0, check 4), so the proof calls `isValid()` on every hash it reads as a
+scalar. The tags are hash inputs, spelled `mantra/` as
 every protocol tag is ([giza-rebrand.md](./giza-rebrand.md)).
 
 A partial whose proof fails is dropped, its sender is named in the inbox's diagnostics
@@ -223,7 +225,9 @@ do not.
 Partials travel as MLS inner events in the group's Marmot room, the room its key lives in,
 which every member receives. A member who is not an admin must not be able to combine
 them, so each partial message's payload is NIP-44-encrypted once per current admin, to that
-admin's host key from the roster (the share-repair channel).
+admin's host key from the roster (the share-repair channel). Phase 0 (check 6) changed how:
+the payload is NIP-44-encrypted **once**, under a fresh 32-byte key, and only that key is
+sealed per admin. Sealing the whole payload per admin multiplied it by the number of admins.
 
 **Current admin** means `RoomAdmins.of(room)` intersected with the holders of the active
 generation. A device sends its partials only if its own member is in that set, and seals
@@ -315,8 +319,10 @@ admin's own DM list. So the group's mail has its own path, and writes no `GiftWr
 2. **Ledger.** Every wrap goes into `GroupDmWrap`, keyed by id, with its state. Redelivery
    is a no-op.
 3. **Wrap round.** For a new wrap, the device opens a round for `W` (D11) and sends its own
-   partial at once. The first partial message for a round carries the wrap itself, so an
-   admin whose relays missed it can check the evidence and answer too.
+   partial at once. The partial names the wrap by its id rather than carrying it (Phase 0,
+   check 6): every admin's device subscribes to the same wraps, and one wrap of a long
+   message is most of a relay's event on its own. A device that has not seen the wrap yet
+   holds the partial and answers when the wrap arrives.
 4. **Open the wrap.** At `t` valid partials: `d·W`, the conversation key, the seal. Verify
    the seal's signature.
 5. **Seal round.** If `conv(group, S)` is kept, use it. Otherwise open a round for `S`,
@@ -367,11 +373,13 @@ through the room, and that is where the group's sent messages are read from (D12
 
 A round is `(room, generation, P)`. Its id is a hash of those three, so two devices that
 open a round for the same wrap open the same round. A partial message carries, per item,
-the round's point, the purpose, the evidence when the sender is the first to carry it, `Dᵢ`
-and the proof. Each device:
+the round's point, the purpose, the evidence's reference, `Dᵢ` and the proof. A wrap and a
+seal are referenced by the wrap's id: every admin's device holds the wrap, and opens the
+same seal from it. Only a recipient's evidence (D10) is carried, since it is a small event
+no other device need have. Each device:
 
 - **batches**: every point it owes a partial for goes into one message per sync pass, not
-  one message per point;
+  one message per point, up to 16,000 bytes of plaintext (about thirty items) per message;
 - **answers** a round it has evidence for and has not answered, once (keyed by round and
   participant id, as `DkgParticipantMessage` absorbs redelivery);
 - **combines** as soon as it holds `t` verified partials of the same generation;
@@ -499,7 +507,20 @@ One commit per phase, in the repository's style
 `./gradlew :composeApp:jvmTest` and `:composeApp:m3Audit` green, and `check`'s brand and
 wallet audits at budget.
 
-### Phase 0: this document, and six checks
+### Phase 0: this document, and six checks (done)
+
+`ThresholdEcdhPremiseJvmTest` keeps all six. What they found:
+
+| check | result |
+|---|---|
+| 1. ids | the evaluation point is the id plus one, as BIP 445 says; every 3-subset of a 3-of-5 dealer key rebuilds `x`, and the unshifted ids do not |
+| 2. tweaks | D2's replay reaches `Derived.publicKey` for forty dealer seeds, which between them meet both parities at all three steps |
+| 3. the conversation key | **holds.** Every 3-subset, either lift of `P`, gives quartz's `computeConversationKey(d, P)`, which equals the sender's side; the wrong sign of `a` gives another key |
+| 4. scalars | `times` and `plus` reduce mod `n`; Fermat's inverse works; **the `PrivateKey` constructor does not range-check**, so D3 calls `isValid()` |
+| 5. kinds | 30400 and 30401 are free in the NIP README, quartz, Bennu's tree, this one and `RetiredKinds` (30402 and 30403 are NIP-99's) |
+| 6. size | **D4 and D11 changed.** Sealing each payload per admin with the wrap as evidence was 918 KB for 20 items and 7 admins. The payload is now encrypted once under a key sealed per admin, and wraps and seals travel by reference: 20 items for 7 admins is 10.9 KB |
+
+The original text of the checks:
 
 This document and its row in [README.md](./README.md). Then, before code, as scratch
 jvmTests against bitcoin-kmp's `Frost.trustedDealerKeygen` (`B/crypto/frost/Frost.kt:313`),
@@ -657,8 +678,7 @@ messages.
 - `DirectMessagePeerSync` fetches the 10050 and kind 0 of each correspondent, for D10's
   relays, D5's evidence, and names on the screen.
 - **Rate.** Anyone can make the group's admins do work by sending wraps. The receiver opens
-  at most a fixed number of new wrap rounds per room per hour (Phase 0 sets it from the
-  batch size). Beyond that, wraps wait in the ledger, newest first, and the inbox says some
+  at most 60 new wrap rounds per room per hour, two batches' worth at Phase 0's size. Beyond that, wraps wait in the ledger, newest first, and the inbox says some
   are queued. The group's 10050 relays are its first line here, which the setup screen says.
 - Tests (`GroupDmReceiveJvmTest`):
   - a message from an outside identity, wrapped by quartz's stock code, opens on all three
