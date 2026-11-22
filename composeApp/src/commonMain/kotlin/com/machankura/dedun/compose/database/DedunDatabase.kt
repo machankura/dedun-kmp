@@ -63,6 +63,7 @@ import com.machankura.dedun.compose.database.dao.FrostSigningSessionDao
 import com.machankura.dedun.compose.database.dao.GiftWrapMessageDao
 import com.machankura.dedun.compose.database.dao.GiftWrapPayloadDao
 import com.machankura.dedun.compose.database.dao.GiftWrapSealDao
+import com.machankura.dedun.compose.database.dao.GroupDmDao
 import com.machankura.dedun.compose.database.dao.GroupKeyStateDao
 import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
 import com.machankura.dedun.compose.database.dao.NotificationDao
@@ -110,6 +111,12 @@ import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEven
 import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEventRequestRelation
 import com.machankura.dedun.compose.database.model.ChatMessageNostrEventRelation
 import com.machankura.dedun.compose.database.model.ChatRoom
+import com.machankura.dedun.compose.database.model.GroupConversationKey
+import com.machankura.dedun.compose.database.model.GroupDmMessage
+import com.machankura.dedun.compose.database.model.GroupDmOutbound
+import com.machankura.dedun.compose.database.model.GroupDmWrap
+import com.machankura.dedun.compose.database.model.GroupEcdhPartial
+import com.machankura.dedun.compose.database.model.GroupEcdhRound
 import com.machankura.dedun.compose.database.model.Connection
 import com.machankura.dedun.compose.database.model.GiftWrapMessage
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
@@ -190,6 +197,12 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GiftWrapMessage::class,
         GiftWrapSeal::class,
         GiftWrapPayload::class,
+        GroupConversationKey::class,
+        GroupDmMessage::class,
+        GroupDmOutbound::class,
+        GroupDmWrap::class,
+        GroupEcdhPartial::class,
+        GroupEcdhRound::class,
         GroupInboxMessage::class,
         GroupInboxPublication::class,
         GroupInboxWrap::class,
@@ -272,7 +285,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 53,
+    version = 54,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -587,6 +600,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // no signing path can find a threshold-1 key, and GroupInboxWrap, GroupInboxMessage and
         // GroupInboxPublication, and InboxSigning (Phase 5). New tables only, so Room generates it.
         AutoMigration(from = 52, to = 53),
+        // v54 adds a group's direct messages (docs/group-threshold-ecdh.md, Phase 4, Giza's v45 there;
+        // docs/giza-second-batch.md, Phase 6): GroupEcdhRound, GroupEcdhPartial, GroupConversationKey,
+        // GroupDmWrap, GroupDmMessage and GroupDmOutbound. New tables only, so Room generates it.
+        AutoMigration(from = 53, to = 54),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -616,6 +633,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun dkgSessionDao(): DkgSessionDao
 
     abstract fun frostSigningSessionDao(): FrostSigningSessionDao
+
+    abstract fun groupDmDao(): GroupDmDao
 
     abstract fun groupKeyStateDao(): GroupKeyStateDao
 
