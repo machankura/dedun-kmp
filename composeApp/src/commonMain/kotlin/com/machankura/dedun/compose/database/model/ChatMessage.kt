@@ -692,6 +692,12 @@ data class ChatMessage(
         const val TYPE_MEMBER_TRANSFER_RECORDED = "memberTransferRecorded"
 
         /**
+         * This device forgot the group's direct messages on seeing its member removed as an
+         * admin. docs/group-threshold-ecdh.md, D14.
+         */
+        const val TYPE_GROUP_DM_FORGOTTEN = "groupDmForgotten"
+
+        /**
          * Every line the group signed, for the one check the transcript
          * dispatches on. A type missing from here renders as a chat bubble,
          * silently, looking exactly like somebody having said it.
@@ -727,6 +733,7 @@ data class ChatMessage(
             TYPE_GROUP_PROFILE_SIGNED,
             TYPE_LEGACY_GROUP_RELAYS_SIGNED,
             TYPE_GROUP_POST_SIGNED,
+            TYPE_GROUP_DM_FORGOTTEN,
             TYPE_LEGACY_GROUP_SCHEMA_SIGNED,
             TYPE_LEGACY_GROUP_ENTRY_CURATED,
             TYPE_GROUP_WALLET_OPENED,

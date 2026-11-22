@@ -172,6 +172,38 @@ object GroupDmReceiver {
     }
 
     /**
+     * A device whose member is no longer one of [chatRoomId]'s admins forgets the room's mail:
+     * its kept conversation keys, what it opened and the rounds in flight, and says so in the
+     * room (D14). Cooperation, not enforcement -- what was read stays read -- and it is the
+     * device's own: the group cut it off from new mail the moment the removal landed (D4).
+     * Returns whether it forgot anything.
+     */
+    suspend fun forgetIfRemoved(database: DedunDatabase, chatRoomId: HexKey, userPublicKey: HexKey): Boolean {
+        val admins = RoomAdmins.of(database, chatRoomId)?.admins ?: return false
+        if (userPublicKey in admins) return false
+        val dao = database.groupDmDao()
+        val holds = dao.getConversationKeys(chatRoomId).isNotEmpty() || dao.getMessages(chatRoomId).isNotEmpty() ||
+            dao.getAllOpenRounds().any { it.chatRoomId == chatRoomId } || dao.newestWrapCreatedAt(chatRoomId) != null
+        if (!holds) return false
+        dao.wipeRoom(chatRoomId)
+        database.scrubFreedPages()
+        database.chatMessageDao().upsert(
+            com.machankura.dedun.compose.database.model.ChatMessage(
+                senderPublicKey = userPublicKey,
+                isUserMessage = true,
+                giftWrapPayloadId = null,
+                marmotGroupEventId = null,
+                marmotInnerEventId = null,
+                chatRoomId = chatRoomId,
+                content = "You are no longer an admin, so this device forgot the group's direct messages",
+                messageType = com.machankura.dedun.compose.database.model.ChatMessage.TYPE_GROUP_DM_FORGOTTEN,
+            )
+        )
+        logger.i { "Forgot ${chatRoomId.take(8)}'s direct messages: no longer an admin" }
+        return true
+    }
+
+    /**
      * What [ledger] waits on: how many more admins have to answer its open round, and which
      * current admins have not. Read from public rows only, so a screen can show it.
      */

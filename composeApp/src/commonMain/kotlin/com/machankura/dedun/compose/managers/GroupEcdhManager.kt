@@ -200,7 +200,12 @@ object GroupEcdhManager {
             return
         }
         if (innerEvent.kind != GroupEcdhEvents.PARTIALS) return
-        val context = contextFor(database, localChatRoom, userPublicKey, nostrPrivateKey) ?: return
+        val context = contextFor(database, localChatRoom, userPublicKey, nostrPrivateKey)
+        if (context == null) {
+            // Partials still reaching a device whose member was removed: it forgets (D14).
+            GroupDmReceiver.forgetIfRemoved(database, localChatRoom.chatRoom.id, userPublicKey)
+            return
+        }
         val sender = innerEvent.pubKey
         if (sender == userPublicKey) return
         val (senderId, senderHost) = context.admins[sender] ?: return
@@ -288,7 +293,9 @@ object GroupEcdhManager {
     suspend fun sweep(database: DedunDatabase, userPublicKey: HexKey, nostrPrivateKey: ByteArray) {
         database.chatRoomDao().getChatRoomListByUserPublicKey(userPublicKey).forEach { room ->
             runCatching {
-                contextFor(database, room, userPublicKey, nostrPrivateKey)?.let { advance(database, it) }
+                val context = contextFor(database, room, userPublicKey, nostrPrivateKey)
+                if (context != null) advance(database, context)
+                else GroupDmReceiver.forgetIfRemoved(database, room.chatRoom.id, userPublicKey)
             }.onFailure { logger.e("Could not advance the rounds of ${room.chatRoom.id}", it) }
         }
     }
