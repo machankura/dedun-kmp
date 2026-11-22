@@ -171,13 +171,21 @@ object GroupDmReceiver {
         if (inserted > 0) logger.i { "Filed a message of kind ${rumor.kind} to ${roomId.take(8)}" }
     }
 
-    /** Who a waiting wrap is waiting on: the current admins with no partial in its open round. */
-    suspend fun waitingOn(database: DedunDatabase, context: GroupEcdhManager.RoomContext, ledger: GroupDmWrap): List<HexKey> {
-        val wrap = runCatching { Event.fromJson(ledger.wrapJson) }.getOrNull() ?: return emptyList()
+    /**
+     * What [ledger] waits on: how many more admins have to answer its open round, and which
+     * current admins have not. Read from public rows only, so a screen can show it.
+     */
+    suspend fun waitingOn(database: DedunDatabase, roomId: HexKey, ledger: GroupDmWrap): Pair<Int, List<HexKey>> {
+        val key = FrostSigningManager.completedKey(database, roomId) ?: return 0 to emptyList()
+        val shares = ShareGenerations.active(database, key)
+        val roomAdmins = RoomAdmins.of(database, roomId)?.admins.orEmpty()
+        val admins = shares.signerIds.filterKeys { it in roomAdmins }
+        val wrap = runCatching { Event.fromJson(ledger.wrapJson) }.getOrNull() ?: return 0 to emptyList()
         val point = ledger.sealJson?.let { runCatching { Event.fromJson(it).pubKey }.getOrNull() } ?: wrap.pubKey
-        val round = database.groupDmDao().getRound(GroupEcdhPayload.roundId(context.roomId, context.generation, point))
-            ?.takeIf { it.state == GroupEcdhRoundState.OPEN } ?: return emptyList()
-        val answered = database.groupDmDao().getPartials(round.id).filter { it.verified }.map { it.participantId }.toSet()
-        return context.admins.filter { (_, entry) -> entry.first !in answered }.keys.sorted()
+        val round = database.groupDmDao().getRound(GroupEcdhPayload.roundId(roomId, shares.generation, point))
+            ?.takeIf { it.state == GroupEcdhRoundState.OPEN }
+        val answered = round?.let { r -> database.groupDmDao().getPartials(r.id).filter { it.verified }.map { it.participantId }.toSet() }.orEmpty()
+        val needed = (key.threshold - answered.size).coerceAtLeast(0)
+        return needed to admins.filterValues { it !in answered }.keys.sorted()
     }
 }

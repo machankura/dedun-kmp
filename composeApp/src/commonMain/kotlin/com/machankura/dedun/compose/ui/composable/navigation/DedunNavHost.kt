@@ -1835,6 +1835,32 @@ fun DedunNavHost(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+            // A group's direct messages: docs/group-threshold-ecdh.md, Phase 8.
+            composable<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmListRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmListRoute>()
+
+                com.machankura.dedun.compose.ui.composable.GroupDmListScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chatRepository = databaseChatRepository,
+                    groupDmRepository = databaseGroupDmRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmConversationRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmConversationRoute>()
+
+                com.machankura.dedun.compose.ui.composable.GroupDmConversationScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    conversationId = route.conversationId,
+                    recipients = route.recipients,
+                    chatRepository = databaseChatRepository,
+                    groupDmRepository = databaseGroupDmRepository,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
             // The group's inbox (docs/group-inbox.md, Phase 7).
             composable<GroupInboxRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<GroupInboxRoute>()

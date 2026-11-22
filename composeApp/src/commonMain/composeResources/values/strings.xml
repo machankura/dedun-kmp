@@ -1902,4 +1902,16 @@
     <string name="ask_the_group_to_sign">Ask the group to sign</string>
     <string name="could_not_ask_the_group_to_sign_its_message_relays">Couldn't ask the group to sign where it receives messages.</string>
     <string name="only_a_current_admin_can_open_the_groups_messages">Only a current admin holding a share can open the group's messages.</string>
+    <string name="one_message_being_opened">1 message being opened</string>
+    <string name="n_messages_being_opened">%1$d messages being opened</string>
+    <string name="waiting_for_one_more_admin_to_open_this">Waiting for 1 more admin to open this</string>
+    <string name="waiting_for_n_more_admins_to_open_this">Waiting for %1$d more admins to open this</string>
+    <string name="not_yet_answered_by">Not yet answered by %1$s</string>
+    <string name="n_more_are_queued">%1$d more are queued: the group was sent more than its admins open in an hour</string>
+    <string name="a_message_this_screen_cant_show_yet">A message this screen can't show yet</string>
+    <string name="signed_not_yet_sent">Signed, not yet sent</string>
+    <string name="message_sent">Sent</string>
+    <string name="signed_but_not_sent">Signed but not sent</string>
+    <string name="declined_by_the_group">Declined by the group</string>
+    <string name="only_current_admins_see_the_groups_messages">Only the group's current admins see its messages.</string>
 </resources>

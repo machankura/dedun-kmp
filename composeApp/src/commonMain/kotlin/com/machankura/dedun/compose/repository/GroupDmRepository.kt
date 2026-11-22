@@ -34,6 +34,23 @@ interface GroupDmRepository {
     /** A wrap a relay sent: into the group's own pipeline if it is one of its, else nothing. Whether it was. */
     suspend fun receiveWrap(wrap: com.vitorpamplona.quartz.nip01Core.core.Event, userPublicKey: HexKey, nostrPrivateKey: ByteArray): Boolean
 
+    /** The group's conversations, newest first (Phase 8). */
+    fun observeConversations(chatRoomId: HexKey): Flow<List<com.machankura.dedun.compose.ui.view.state.GroupDmConversationSummary>>
+
+    /** What the group was sent and has not opened yet, and on whom it waits. */
+    fun observePending(chatRoomId: HexKey): Flow<com.machankura.dedun.compose.ui.view.state.GroupDmPending>
+
+    /** One conversation's messages, oldest first, in and out. */
+    fun observeConversation(chatRoomId: HexKey, conversationId: HexKey): Flow<List<com.machankura.dedun.compose.ui.view.state.GroupDmLine>>
+
+    /** The participants of [conversationId], from the messages this device holds. */
+    suspend fun participantsOf(chatRoomId: HexKey, conversationId: HexKey): List<HexKey>
+
+    suspend fun markRead(chatRoomId: HexKey, conversationId: HexKey)
+
+    /** How a screen names a person: their profile's name, or the start of their key. */
+    suspend fun nameOf(publicKey: HexKey): String
+
     /** Asks the group to sign [relays] as where it receives messages (D8). */
     suspend fun proposeRelays(localChatRoom: LocalChatRoom, userPublicKey: HexKey, relays: List<String>): FrostSigningSession
 }

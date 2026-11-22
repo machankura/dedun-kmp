@@ -923,10 +923,17 @@ fun ChatRoomDetailScreen(
                                             row = row,
                                             onClick = {
                                                 onNavigateToRoute.invoke(
-                                                    GroupDmSetupRoute(
-                                                        activeUserPublicKey = activeUserPublicKey,
-                                                        chatRoomId = chatRoomId,
-                                                    )
+                                                    if (row is GroupDmRow.Messages) {
+                                                        com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmListRoute(
+                                                            activeUserPublicKey = activeUserPublicKey,
+                                                            chatRoomId = chatRoomId,
+                                                        )
+                                                    } else {
+                                                        GroupDmSetupRoute(
+                                                            activeUserPublicKey = activeUserPublicKey,
+                                                            chatRoomId = chatRoomId,
+                                                        )
+                                                    }
                                                 )
                                             }
                                         )
