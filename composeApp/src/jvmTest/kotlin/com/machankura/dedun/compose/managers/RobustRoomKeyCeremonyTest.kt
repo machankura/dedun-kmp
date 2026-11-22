@@ -331,6 +331,22 @@ class RobustRoomKeyCeremonyTest {
     }
 
     /**
+     * A ceremony from a build before ceremonies carried names has none on its row. It
+     * was named by its room when it opened, so that is the name a repeated ask is
+     * matched against, and a device upgraded mid-ceremony folds into it rather than
+     * opening a second. docs/nip17-multiple-ceremonies.md, Phase 7.
+     */
+    @Test
+    fun `a ceremony from before names were carried is named by its room`() = runBlocking {
+        val room = robustRoom()
+        val old = openCeremony(room).let { it.copy(subject = null).also { row -> db.dkgSessionDao().upsert(row) } }
+
+        assertEquals(old.id, openCeremony(room).id, "the same ask, under the room's name")
+        assertEquals(old.id, openCeremony(room, subject = "robust group").id)
+        assertNotEquals(old.id, openCeremony(room, subject = "Agora").id, "another name is another group")
+    }
+
+    /**
      * A collapsed ceremony leaves the group with no key and a room they can still
      * talk in, which is exactly the group that should be able to try again. Failed
      * is the one state that does not hold the room's ceremony slot.

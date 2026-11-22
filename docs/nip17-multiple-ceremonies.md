@@ -11,7 +11,29 @@ Read [shared-key-ceremony.md](./shared-key-ceremony.md) first, especially
 case: a parent's Marmot room already hosts any number of subgroup ceremonies,
 and the code that made that work is the model for most of this plan.
 
-**Not built.** Written against the code as it stood at `3b0b3c9a`.
+**Built** except for the device run, one commit per phase on
+`claude/nip17-multiple-chilldkg-6903b0` (`dd812950` to the commit carrying
+this record), against the code as it stood at `3b0b3c9a`.
+`TwoGroupsFromTheSamePeopleJvmTest` runs the whole thing across three
+in-memory devices with real ChillDKG and real FROST: Ekklesia, then Agora at a
+different quorum, both made at once, and one abandoned while the other
+finishes. The phases below are kept as written, because they hold the
+reasoning. Where the build differs from the plan:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| Phase 1 requires a name before the fold is checked | after it. A nameless ask while the room's first ceremony is still running is the repeat `making the same group twice` pins, and has to fold, not throw. The name is required only when nothing folds and the room already holds a group |
+| Phase 2's card uses a `<plurals>` entry | two strings, one for a single group and one for several. The app's catalogue has no plurals, and adding the first one for one card was not worth it |
+| Phase 3's `Loaded` gains a `name` field | the view model holds `name` beside `threshold`, as the quorum already was. The field is always shown, filled with the room's name for its first group, so a user can rename even the first. The groups already made are named in a sentence, using the creation screen's wording, not drawn as a list |
+| Phase 3 deletes the DAO query behind `getLatestSessionForChatRoom` | `getLatestOwnSessionForChatRoom` and `observeLatestSessionFor` are deleted. `getLatestSessionFor`, `getLatestSessionForChatRoom` and `observeLatestSessionForChatRoom` stay, used only by the DAO's own tests. `CeremonyLookupsJvmTest` now expects no app code to call any of them |
+| Phase 3's `completedKey` answers when the room holds exactly one completed own ceremony | it counts the ones this device can sign with. A room with one finished key and a second ceremony still running answers the finished one, where the old code answered null whenever the newest ceremony was unfinished |
+| Phase 4 names the group on an own ceremony's lines | on every named ceremony's lines, subgroups included. "The group has a shared key", said in a parent's room about its subgroup, was already wrong before this |
+| Phase 5's rows open the Marmot room | they open its details, as the admin-room card they replace did. The status icon is `Decorative`, because the row's supporting text states the status |
+| Phase 6 signs in `#Ekklesia` and `#Agora` | each derived room id resolves, through `completedKey`, to its own ceremony on every device, and the NIP-17 room to neither. Creating the rooms is recorded through a stand-in `createMarmotGroup`, as `KeyStateSignsItselfJvmTest` does, so nothing is signed inside a Marmot room |
+| Phase 7's upgrade-in-place check | the rule it rests on is pinned in `RobustRoomKeyCeremonyTest`: a ceremony row with no name is matched under its room's name. The check on a real upgraded device has not been done |
+
+**Not done:** the device run in Phase 7. Nothing here has run on a phone or
+on real relays, including a device upgraded mid-ceremony.
 
 The headline: **a NIP-17 room is where a group's ceremony is held. It is not
 the group.** The room's id is derived from its members
