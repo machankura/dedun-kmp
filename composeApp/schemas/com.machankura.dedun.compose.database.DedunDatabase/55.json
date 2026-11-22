@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 55,
-    "identityHash": "14fdb01000293410d9622e9480064e36",
+    "identityHash": "28faecfa7b2b55ea37e38e6e44b7196e",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -1853,7 +1853,7 @@
       },
       {
         "tableName": "GroupDmMessage",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`rumorId` TEXT NOT NULL, `chatRoomId` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderPublicKey` TEXT NOT NULL, `rumorJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `outgoing` INTEGER NOT NULL, `wrapId` TEXT, `signingSessionId` TEXT, `readAt` INTEGER, `filedAt` INTEGER NOT NULL, PRIMARY KEY(`rumorId`), FOREIGN KEY(`chatRoomId`) REFERENCES `ChatRoom`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`rumorId` TEXT NOT NULL, `chatRoomId` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderPublicKey` TEXT NOT NULL, `rumorJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `outgoing` INTEGER NOT NULL, `wrapId` TEXT, `signingSessionId` TEXT, `readAt` INTEGER, `filedAt` INTEGER NOT NULL, `expiresAt` INTEGER, PRIMARY KEY(`rumorId`), FOREIGN KEY(`chatRoomId`) REFERENCES `ChatRoom`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "rumorId",
@@ -1917,6 +1917,11 @@
             "columnName": "filedAt",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "expiresAt",
+            "columnName": "expiresAt",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -1943,6 +1948,15 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_GroupDmMessage_conversationId` ON `${TABLE_NAME}` (`conversationId`)"
+          },
+          {
+            "name": "index_GroupDmMessage_expiresAt",
+            "unique": false,
+            "columnNames": [
+              "expiresAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_GroupDmMessage_expiresAt` ON `${TABLE_NAME}` (`expiresAt`)"
           }
         ],
         "foreignKeys": [
@@ -2315,7 +2329,7 @@
       },
       {
         "tableName": "GroupInboxMessage",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`chatRoomId` TEXT NOT NULL, `rumorId` TEXT NOT NULL, `wrapId` TEXT, `conversationId` TEXT NOT NULL, `participants` TEXT NOT NULL, `senderPublicKey` TEXT NOT NULL, `kind` INTEGER NOT NULL, `rumorJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `generation` INTEGER NOT NULL, `outgoing` INTEGER NOT NULL, `signingSessionId` TEXT, `readAt` INTEGER, `receivedAt` INTEGER NOT NULL, PRIMARY KEY(`chatRoomId`, `rumorId`), FOREIGN KEY(`chatRoomId`) REFERENCES `ChatRoom`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`chatRoomId` TEXT NOT NULL, `rumorId` TEXT NOT NULL, `wrapId` TEXT, `conversationId` TEXT NOT NULL, `participants` TEXT NOT NULL, `senderPublicKey` TEXT NOT NULL, `kind` INTEGER NOT NULL, `rumorJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `generation` INTEGER NOT NULL, `outgoing` INTEGER NOT NULL, `signingSessionId` TEXT, `readAt` INTEGER, `receivedAt` INTEGER NOT NULL, `expiresAt` INTEGER, PRIMARY KEY(`chatRoomId`, `rumorId`), FOREIGN KEY(`chatRoomId`) REFERENCES `ChatRoom`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "chatRoomId",
@@ -2397,6 +2411,11 @@
             "columnName": "receivedAt",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "expiresAt",
+            "columnName": "expiresAt",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -2424,6 +2443,15 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_GroupInboxMessage_conversationId` ON `${TABLE_NAME}` (`conversationId`)"
+          },
+          {
+            "name": "index_GroupInboxMessage_expiresAt",
+            "unique": false,
+            "columnNames": [
+              "expiresAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_GroupInboxMessage_expiresAt` ON `${TABLE_NAME}` (`expiresAt`)"
           }
         ],
         "foreignKeys": [
@@ -8762,7 +8790,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '14fdb01000293410d9622e9480064e36')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '28faecfa7b2b55ea37e38e6e44b7196e')"
     ]
   }
 }

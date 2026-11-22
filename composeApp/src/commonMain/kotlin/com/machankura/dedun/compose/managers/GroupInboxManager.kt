@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -85,6 +86,13 @@ object GroupInboxManager {
             return null
         }
         val rumor = opened.rumor
+        // NIP-40: a message already past its expiry is not filed; the ledger keeps the wrap's id
+        // but not its words (docs/disappearing-messages.md, D6).
+        if (DisappearingMessages.expirationOf(rumor.tags, rumor.createdAt)?.let { DisappearingMessages.isExpired(it, Clock.System.now().epochSeconds) } == true) {
+            database.groupInboxDao().markOpened(wrap.id, key.generation)
+            database.disappearingDao().blankInboxWrap(wrap.id)
+            return null
+        }
         val participants = InboxConversation.participantsOf(rumor, roomId)
         val message = GroupInboxMessage(
             chatRoomId = roomId,

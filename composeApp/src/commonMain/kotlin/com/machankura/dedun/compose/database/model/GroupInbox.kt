@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
@@ -49,7 +50,7 @@ data class GroupInboxWrap(
     foreignKeys = [
         ForeignKey(entity = ChatRoom::class, parentColumns = ["id"], childColumns = ["chatRoomId"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [Index("chatRoomId"), Index("conversationId")],
+    indices = [Index("chatRoomId"), Index("conversationId"), Index("expiresAt")],
 )
 data class GroupInboxMessage(
     val chatRoomId: String,
@@ -75,6 +76,8 @@ data class GroupInboxMessage(
     val signingSessionId: String? = null,
     val readAt: Instant? = null,
     val receivedAt: Instant = Clock.System.now(),
+    /** The rumor's NIP-40 expiry, read off [rumorJson]; the sweeper deletes a reply from then on. */
+    val expiresAt: Instant? = DisappearingMessages.expirationOfRumorJson(rumorJson)?.let { Instant.fromEpochSeconds(it) },
 ) {
     fun participantList(): List<HexKey> = participants.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 }

@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.crypto.random.RandomInstance
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -108,8 +110,11 @@ object GroupDmSender {
             if (still.isNotEmpty()) return Outcome.Preparing(still)
         }
 
-        val tags = to.map { arrayOf("p", it) } + listOfNotNull(replyTo?.let { arrayOf("e", it, "", "reply") })
-        val rumor = GroupDmSeal.rumor(roomId, now, 14, tags.toTypedArray(), text)
+        val baseTags = to.map { arrayOf("p", it) } + listOfNotNull(replyTo?.let { arrayOf("e", it, "", "reply") })
+        // The expiry is in the rumor, so every signer reads and approves it with the words
+        // (docs/disappearing-messages.md, D10): the proposer's policy for this room.
+        val tags = DisappearingSettingsStore(database).stamp(localChatRoom.chatRoom.id, userPublicKey, 14, now, baseTags.toTypedArray())
+        val rumor = GroupDmSeal.rumor(roomId, now, 14, tags, text)
         val seals = to.map { r ->
             val key = database.groupDmDao().getConversationKey(roomId, r)!!.conversationKey.hexToByteArray()
             GroupDmSeal.build(rumor, key, createdAt = now - randomBackdate())
@@ -198,10 +203,16 @@ object GroupDmSender {
     private suspend fun wrapOwed(database: DedunDatabase, signingSessionId: String, signedEvents: List<Event>): Int {
         val dao = database.groupDmDao()
         var wrapped = 0
+        // The rumor's lifetime, which quartz turns into the wrap's own expiry (D5).
+        val lifetime = database.disappearingDao().groupDmRumorOf(signingSessionId)?.let { json ->
+            val createdAt = runCatching { com.vitorpamplona.quartz.nip59Giftwrap.rumors.Rumor.fromJson(json).createdAt }.getOrNull()
+            val expiry = DisappearingMessages.expirationOfRumorJson(json)
+            if (createdAt != null && expiry != null) expiry - createdAt else null
+        }
         dao.getOutbound(signingSessionId).filter { it.wrapJson == null }.forEach { row ->
             val signed = signedEvents.firstOrNull { it.id == row.sealId }?.takeIf { it.verify() } ?: return@forEach
             // Ordinary NIP-59: a fresh key of this device's, no group secret involved.
-            val wrap = GiftWrapEvent.create(event = signed, recipientPubKey = row.recipient)
+            val wrap = GiftWrapEvent.create(event = signed, recipientPubKey = row.recipient, expirationDelta = lifetime)
             dao.upsertOutbound(row.copy(wrapJson = wrap.toJson()))
             wrapped += 1
         }

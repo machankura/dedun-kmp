@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -45,6 +46,7 @@ object InboxRefusal {
     const val REPLY_WRONG_KEY = "Dedun doesn't sign a reply sealed to a key its recipient didn't announce"
     const val REPLY_BLANK = "Dedun doesn't sign a reply with nothing in it"
     const val REPLY_TIME = "Dedun doesn't sign a reply dated outside the last two days"
+    const val REPLY_EXPIRY = "Dedun doesn't sign a reply that would disappear sooner or later than any setting allows"
 
     private const val TWO_DAYS = 2 * 24 * 60 * 60L
     private const val CLOCK_SLACK = 10 * 60L
@@ -126,6 +128,8 @@ object InboxRefusal {
             is Read.Ok -> result.reply
         }
         if (read.rumor.content.isBlank()) return REPLY_BLANK
+        // docs/disappearing-messages.md, D10: how long it lasts is signed with what it says.
+        if (!DisappearingMessages.isAcceptableExpiry(read.rumor.tags, read.rumor.createdAt)) return REPLY_EXPIRY
         if (events.any { it.createdAt < now - TWO_DAYS - CLOCK_SLACK || it.createdAt > now + CLOCK_SLACK }) return REPLY_TIME
         return null
     }

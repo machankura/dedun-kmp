@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -156,6 +157,10 @@ object GroupDmReceiver {
             val rumor = GroupDmSeal.open(seal, kept.conversationKey.hexToByteArray())
             if (rumor == null) {
                 dao.upsertWrap(ledger.copy(state = GroupDmWrapState.UNREADABLE))
+            } else if (DisappearingMessages.expirationOf(rumor.tags, rumor.createdAt)?.let { DisappearingMessages.isExpired(it, Clock.System.now().epochSeconds) } == true) {
+                // NIP-40: already gone. Not filed, and the ledger keeps the wrap's id but not its
+                // words, so a re-sync does not open it again (docs/disappearing-messages.md, D6).
+                dao.upsertWrap(ledger.copy(state = GroupDmWrapState.OPENED, wrapJson = "", sealJson = null))
             } else {
                 file(database, context.roomId, rumor, wrapId = ledger.id)
                 dao.upsertWrap(ledger.copy(state = GroupDmWrapState.OPENED))

@@ -60,8 +60,9 @@ object DisappearingMessageSweeper {
             // Never sealed, so never sent: sealGiftWrapPayload refused it as too late.
             if (payload.giftWrapSealId == null && DisappearingMessages.classOf(payload.kind) == DisappearingMessages.ExpiryClass.Written) unsent += 1
         }
+        val groupMessages = dao.sweepGroupMessages(now)
         val swept = Swept(
-            payloads = payloads,
+            payloads = payloads + groupMessages,
             wraps = dao.deleteDueUnlinkedWraps(now),
             tombstones = dao.pruneTombstones(now),
             messageIds = messageIds,

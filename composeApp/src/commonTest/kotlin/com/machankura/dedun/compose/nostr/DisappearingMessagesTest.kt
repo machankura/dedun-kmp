@@ -139,6 +139,22 @@ class DisappearingMessagesTest {
     }
 
     @Test
+    fun `a signer accepts no expiry or a choosable one, and nothing else`() {
+        assertTrue(DisappearingMessages.isAcceptableExpiry(emptyArray(), createdAt))
+        assertTrue(DisappearingMessages.isAcceptableExpiry(arrayOf(arrayOf("expiration", (createdAt + DAY).toString())), createdAt))
+        assertFalse(DisappearingMessages.isAcceptableExpiry(arrayOf(arrayOf("expiration", (createdAt + 1).toString())), createdAt))
+        assertFalse(DisappearingMessages.isAcceptableExpiry(arrayOf(arrayOf("expiration", (createdAt + 400 * DAY).toString())), createdAt))
+        assertFalse(DisappearingMessages.isAcceptableExpiry(arrayOf(arrayOf("expiration", "soon")), createdAt))
+    }
+
+    @Test
+    fun `an expiry is read off a rumor kept as JSON`() {
+        val json = """{"id":"","pubkey":"${"a".repeat(64)}","created_at":$createdAt,"kind":14,"tags":[["expiration","${createdAt + HOUR}"]],"content":"hi"}"""
+        assertEquals(createdAt + HOUR, DisappearingMessages.expirationOfRumorJson(json))
+        assertNull(DisappearingMessages.expirationOfRumorJson("not json"))
+    }
+
+    @Test
     fun `expired from its expiry on`() {
         assertFalse(DisappearingMessages.isExpired(createdAt, createdAt - 1))
         assertTrue(DisappearingMessages.isExpired(createdAt, createdAt))

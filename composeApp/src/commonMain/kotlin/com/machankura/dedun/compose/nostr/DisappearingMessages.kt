@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr
 
+import com.vitorpamplona.quartz.nip59Giftwrap.rumors.Rumor
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip09Deletions.DeletionRequestEvent
@@ -154,6 +155,23 @@ object DisappearingMessages {
         val value = tags.firstOrNull { it.size >= 2 && it[0] == TAG }?.get(1)?.toLongOrNull() ?: return null
         if (createdAt != null && value <= createdAt) return null
         return value
+    }
+
+    /** [expirationOf] for a rumor kept as JSON, as a group's conversations keep theirs. */
+    fun expirationOfRumorJson(json: String): Long? {
+        val rumor = runCatching { Rumor.fromJson(json) }.getOrNull() ?: return null
+        return expirationOf(rumor.tags ?: return null, rumor.createdAt)
+    }
+
+    /**
+     * Whether a rumor a signer is asked to sign may carry the expiry it does: none, or a lifetime a
+     * person could have chosen. A group signs its messages by quorum, so a proposal that would
+     * vanish in a second or never is refused out loud rather than signed (D10).
+     */
+    fun isAcceptableExpiry(tags: Array<Array<String>>, createdAt: Long): Boolean {
+        val tag = tags.firstOrNull { it.size >= 2 && it[0] == TAG } ?: return true
+        val value = tag[1].toLongOrNull() ?: return false
+        return value - createdAt in MIN_SECONDS..MAX_SECONDS
     }
 
     /** NIP-40: an event is expired from its expiry on. */

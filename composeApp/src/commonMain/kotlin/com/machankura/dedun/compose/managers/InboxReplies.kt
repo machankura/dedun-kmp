@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -55,6 +57,8 @@ object InboxReplies {
         generation: Int,
         now: Long = TimeUtils.now(),
         sealTime: () -> Long = { TimeUtils.randomWithTwoDays() },
+        /** How long the reply lasts: the proposer's policy, signed with the words (docs/disappearing-messages.md, D10). */
+        disappearAfter: Long = DisappearingMessages.OFF,
     ): Built {
         require(text.isNotBlank()) { "A reply needs something to say" }
         require(recipients.isNotEmpty()) { "A reply needs someone to go to" }
@@ -63,7 +67,8 @@ object InboxReplies {
             ordered.forEach { add(arrayOf("p", it.publicKey)) }
             replyTo?.let { add(arrayOf("e", it, "", "reply")) }
         }.toTypedArray()
-        val rumor = RumorAssembler.assembleRumor<Event>(pubKey = roomId, ev = EventTemplate(now, 14, tags, text))
+        val stamped = DisappearingMessages.stamp(14, now, disappearAfter, tags)
+        val rumor = RumorAssembler.assembleRumor<Event>(pubKey = roomId, ev = EventTemplate(now, 14, stamped, text))
 
         val inboxKey = InboxWire.publicKeyOf(inboxSecret)
         val entries = ordered.map { InboxReplyManifest.Entry(it.publicKey, it.encryptionKey, it.announcement?.toJson()) } +
@@ -111,6 +116,7 @@ object InboxReplies {
             replyTo = conversation.lastOrNull { !it.outgoing }?.rumorId,
             inboxSecret = key.secretKey!!.hexToByteArray(),
             generation = key.generation,
+            disappearAfter = DisappearingSettingsStore(database).policyFor(roomId, userPublicKey),
         )
         val sealed = built.manifest.seal(key.secretKey.hexToByteArray())
         val session = FrostSigningManager.proposeSigningBatch(
@@ -172,14 +178,21 @@ object InboxReplies {
         val ordered = database.frostSigningSessionDao().getItems(session.id).sortedBy { it.itemIndex }.map { signedById[it.eventId] }
         if (ordered.size != manifest.seals.size) return
 
+        // The rumor's lifetime, read from the group's own copy: each wrap asks relays to drop it a
+        // random up-to-two-days after the rumor goes, by quartz's formula (docs/disappearing-messages.md, D5).
+        val selfKey = InboxReplyManifest.selfConversationKey(key.secretKey!!.hexToByteArray())
+        val written = ordered[manifest.groupCopy]?.let { InboxSeal.rumorInside(it.content, selfKey, roomId) }
+        val rumorExpiry = written?.let { DisappearingMessages.expirationOf(it.tags, it.createdAt) }
         manifest.seals.forEachIndexed { index, entry ->
             val seal = ordered[index] ?: return@forEachIndexed
+            val wrapCreatedAt = TimeUtils.randomWithTwoDays()
+            val wrapExpiry = written?.let { DisappearingMessages.wrapExpiration(rumorExpiry, it.createdAt, wrapCreatedAt) }
             val relays = if (index == manifest.groupCopy) {
                 InboxAnnouncements.relaysOf(database, roomId)
             } else {
                 relaysOf(database, entry.recipient)
             }
-            val wrap = InboxWrap.wrap(seal, entry.recipient, entry.key, relays.firstOrNull())
+            val wrap = InboxWrap.wrap(seal, entry.recipient, entry.key, relays.firstOrNull(), createdAt = wrapCreatedAt, expiration = wrapExpiry)
             database.groupInboxDao().upsertPublication(
                 GroupInboxPublication(
                     eventId = wrap.id,

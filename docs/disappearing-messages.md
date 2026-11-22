@@ -642,6 +642,42 @@ It differs from the plan in three ways:
 
 All of this stays behind `groupDirectMessages` and `groupInbox`.
 
+**Built.**
+
+- **Sending.** `GroupDmSender.send` stamps the rumor with the proposer's policy before the seals
+  are built. `InboxReplies.build` takes a `disappearAfter`, and `propose` passes the policy. So the
+  expiry is inside what the quorum signs.
+- **Wraps.** `GroupDmSender.wrapOwed` hands quartz the rumor's lifetime as its `expirationDelta`.
+  `InboxReplies.wrapAndOwe` reads the lifetime from the group's own copy and gives each wrap
+  `InboxWrap.wrap`'s new `expiration`. Both follow D5's formula.
+- **Signer checks.** `GroupDmRefusal` and `InboxRefusal` refuse a rumor whose expiry is not a
+  length a person could choose (`DisappearingMessages.isAcceptableExpiry`), and say so.
+- **Receiving.** `GroupDmReceiver` and `GroupInboxManager` do not file a message that is already
+  expired. They keep the wrap's ledger row with its words emptied, so a re-sync does not open the
+  message again.
+- **Storage.** `GroupDmMessage` and `GroupInboxMessage` gain an `expiresAt`, read off their
+  `rumorJson`. They went into v50, which has not shipped, so `50.json` was regenerated rather than
+  adding a v51.
+- **Sweeping.** `DisappearingDao.sweepGroupMessages` runs inside every sweep. It deletes the
+  expired messages, empties the words of the wraps that carried them, and drops whatever was
+  still owed to a relay: `GroupDmOutbound`, and `GroupInboxPublication` by signing session.
+  Inbox messages are swept only for written kinds. A confederation's statements are filed by
+  `ConfederationManager.recordStatement`, not as inbox messages, and they keep their own
+  `expiration` (D5). Phase 0's question about the confederation's stored status therefore does not
+  arise.
+
+It differs from the plan in two ways:
+
+- The signer cannot refuse a message that has no expiry, because it cannot know the proposer's
+  policy. Only an expiry outside the bounds is refused.
+- The group's signed seals (`GroupSignedEvent`) are the signing session's record and are not
+  swept. A seal is ciphertext, but the group's admins can open it.
+
+Tests: `DisappearingGroupMessagesJvmTest` covers both conversation kinds, the emptied ledger row,
+the dropped outbound row, and a statement surviving. `DisappearingMessagesTest` covers the signer
+check and reading an expiry from JSON. The existing group DM and inbox tests pass with the
+stamping in place.
+
 ### Phase 8: the record, and devices
 
 A device run, written up under this phase:

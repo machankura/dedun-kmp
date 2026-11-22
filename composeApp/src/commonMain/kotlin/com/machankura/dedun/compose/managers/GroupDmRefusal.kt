@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.DisappearingMessages
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
@@ -133,6 +134,11 @@ object GroupDmRefusal {
         val tagged = rumor.tags.filter { it.size >= 2 && it[0] == "p" }.map { it[1].lowercase() }
         if (tagged.toSet() != recipients.toSet() || tagged.size != recipients.size) {
             return Verdict.Declined(REASON, "the message names other recipients than the manifest")
+        }
+        // Its expiry, when it has one, is a length a person could have chosen: the quorum signs
+        // how long the message lasts along with what it says (docs/disappearing-messages.md, D10).
+        if (!DisappearingMessages.isAcceptableExpiry(rumor.tags, rumor.createdAt)) {
+            return Verdict.Declined(REASON, "the message would disappear sooner or later than any setting allows")
         }
 
         // 6. Back-dated as NIP-59 does, and not from the future.

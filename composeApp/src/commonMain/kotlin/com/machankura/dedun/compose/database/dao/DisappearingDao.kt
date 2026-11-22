@@ -136,6 +136,66 @@ abstract class DisappearingDao {
         tombstone(ExpiredGiftWrap(wrapId, tombstoneUntil))
     }
 
+    // -- a group's conversations (Phase 7) ----------------------------------------------------
+    //
+    // A wrap the group opened is kept as an empty row rather than deleted: it is the ledger that
+    // stops a re-sync from opening and filing the same message again.
+
+    @Query("SELECT rumorJson FROM GroupDmMessage WHERE signingSessionId = :signingSessionId LIMIT 1")
+    abstract suspend fun groupDmRumorOf(signingSessionId: String): String?
+
+    @Query(
+        "UPDATE GroupDmWrap SET wrapJson = '', sealJson = NULL WHERE id IN (SELECT wrapId FROM GroupDmMessage " +
+            "WHERE expiresAt IS NOT NULL AND expiresAt <= :now AND wrapId IS NOT NULL)"
+    )
+    abstract suspend fun blankExpiredGroupDmWraps(now: Instant): Int
+
+    @Query(
+        "DELETE FROM GroupDmOutbound WHERE signingSessionId IN (SELECT signingSessionId FROM GroupDmMessage " +
+            "WHERE expiresAt IS NOT NULL AND expiresAt <= :now AND signingSessionId IS NOT NULL)"
+    )
+    abstract suspend fun deleteExpiredGroupDmOutbound(now: Instant): Int
+
+    @Query("DELETE FROM GroupDmMessage WHERE expiresAt IS NOT NULL AND expiresAt <= :now")
+    abstract suspend fun deleteExpiredGroupDmMessages(now: Instant): Int
+
+    @Query("UPDATE GroupDmWrap SET wrapJson = '', sealJson = NULL WHERE id = :wrapId")
+    abstract suspend fun blankGroupDmWrap(wrapId: HexKey): Int
+
+    @Query(
+        "UPDATE GroupInboxWrap SET wrapJson = '' WHERE id IN (SELECT wrapId FROM GroupInboxMessage " +
+            "WHERE expiresAt IS NOT NULL AND expiresAt <= :now AND wrapId IS NOT NULL AND kind IN (:kinds))"
+    )
+    abstract suspend fun blankExpiredInboxWraps(now: Instant, kinds: List<Int>): Int
+
+    @Query(
+        "DELETE FROM GroupInboxPublication WHERE signingSessionId IN (SELECT signingSessionId FROM GroupInboxMessage " +
+            "WHERE expiresAt IS NOT NULL AND expiresAt <= :now AND signingSessionId IS NOT NULL AND kind IN (:kinds))"
+    )
+    abstract suspend fun deleteExpiredInboxPublications(now: Instant, kinds: List<Int>): Int
+
+    @Query("DELETE FROM GroupInboxMessage WHERE expiresAt IS NOT NULL AND expiresAt <= :now AND kind IN (:kinds)")
+    abstract suspend fun deleteExpiredInboxMessages(now: Instant, kinds: List<Int>): Int
+
+    @Query("UPDATE GroupInboxWrap SET wrapJson = '' WHERE id = :wrapId")
+    abstract suspend fun blankInboxWrap(wrapId: HexKey): Int
+
+    /**
+     * A group's expired messages, in both of its conversation kinds: what the group was sent and
+     * what it sent, the wraps' words, and anything still owed to a relay. Only the kinds a person
+     * writes: a confederation's statements are filed elsewhere and are the confederation's record.
+     */
+    @Transaction
+    open suspend fun sweepGroupMessages(now: Instant): Int {
+        val kinds = com.machankura.dedun.compose.nostr.DisappearingMessages.WRITTEN_KINDS.toList()
+        blankExpiredGroupDmWraps(now)
+        deleteExpiredGroupDmOutbound(now)
+        val dms = deleteExpiredGroupDmMessages(now)
+        blankExpiredInboxWraps(now, kinds)
+        deleteExpiredInboxPublications(now, kinds)
+        return dms + deleteExpiredInboxMessages(now, kinds)
+    }
+
     /**
      * Deletes [payload] and everything holding its words: its wraps, their seals, its chat lines.
      * Returns the ids of the chat lines that went, so a notification showing one can be withdrawn.

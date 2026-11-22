@@ -37,6 +37,8 @@ object InboxWrap {
         recipientEncryptionKey: HexKey,
         relayHint: NormalizedRelayUrl? = null,
         createdAt: Long = TimeUtils.randomWithTwoDays(),
+        /** The NIP-40 expiry relays are asked to drop it at, or null for none (docs/disappearing-messages.md, D5). */
+        expiration: Long? = null,
     ): Event {
         val signer = NostrSignerSync(KeyPair())
         val throwaway = requireNotNull(signer.keyPair.privKey)
@@ -44,7 +46,7 @@ object InboxWrap {
         return signer.sign<GiftWrapEvent>(
             createdAt = createdAt,
             kind = KIND,
-            tags = arrayOf(PTag.assemble(recipientIdentity, relayHint)),
+            tags = listOfNotNull(PTag.assemble(recipientIdentity, relayHint), expiration?.let { arrayOf("expiration", it.toString()) }).toTypedArray(),
             content = content,
         )
     }
