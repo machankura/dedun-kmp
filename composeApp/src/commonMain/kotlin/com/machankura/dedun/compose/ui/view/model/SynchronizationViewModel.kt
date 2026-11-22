@@ -72,6 +72,7 @@ class SynchronizationViewModel(
     val relayRepository: RelayRepository,
     val scope: CoroutineScope,
     val groupInboxRepository: GroupInboxRepository? = null,
+    val groupDmRepository: com.machankura.dedun.compose.repository.GroupDmRepository? = null,
 ): ViewModel() {
 
     val relaysSocketManager = RelaysSocketManager(
@@ -93,6 +94,11 @@ class SynchronizationViewModel(
         holdConnections = AppLifecycle.holdConnections,
         groupInboxRepository = groupInboxRepository,
     )
+
+    /** Sends the group's signed 10050s and message wraps (docs/group-threshold-ecdh.md, D8 and D10). */
+    private val groupDmPublisher = groupDmRepository?.let {
+        com.machankura.dedun.compose.managers.GroupDmPublisher(repository = it, transport = relaysSocketManager)
+    }
 
     /** Sends what this device owes relays for its groups' inboxes (docs/group-inbox.md, D7). */
     private val groupInboxPublisher = groupInboxRepository?.let {
@@ -150,6 +156,7 @@ class SynchronizationViewModel(
             relayRepository: RelayRepository,
             scope: CoroutineScope,
             groupInboxRepository: GroupInboxRepository? = null,
+            groupDmRepository: com.machankura.dedun.compose.repository.GroupDmRepository? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SynchronizationViewModel(
@@ -159,6 +166,7 @@ class SynchronizationViewModel(
                     relayRepository = relayRepository,
                     scope = scope,
                     groupInboxRepository = groupInboxRepository,
+                    groupDmRepository = groupDmRepository,
                 )
             }
         }
@@ -278,6 +286,17 @@ class SynchronizationViewModel(
                             // belongs here for the same reason the pumps do: it needs the
                             // active wallet's key pair, and a wallet switch must tear it down.
                             launch(Dispatchers.IO) { liveSubscriptionManager.observe(keyPair) }
+                            // What the group's direct messages owe relays.
+                            // docs/group-threshold-ecdh.md, D8 and D10.
+                            groupDmPublisher?.takeIf { ExperimentalFeatures.groupDirectMessages }?.let { publisher ->
+                                launch(Dispatchers.IO) {
+                                    runCatching { publisher.run() }
+                                        .onFailure {
+                                            if (it is CancellationException) throw it
+                                            logger.e("Publishing the group's direct messages stopped", it)
+                                        }
+                                }
+                            }
                             // The group inbox's announcements and replies this device
                             // owes relays. docs/group-inbox.md, D7 and D10.
                             groupInboxPublisher?.takeIf { ExperimentalFeatures.groupInbox }?.let { publisher ->

@@ -116,6 +116,9 @@ interface ChatRepository {
      */
     suspend fun inboxSummary(localChatRoom: LocalChatRoom): com.machankura.dedun.compose.ui.view.state.InboxRowSummary? = null
 
+    /** What [chatRoomId]'s screen says about its direct messages, to [userPublicKey]. docs/group-threshold-ecdh.md. */
+    suspend fun groupDmRow(chatRoomId: String, userPublicKey: HexKey): com.machankura.dedun.compose.ui.view.state.GroupDmRow? = null
+
     /**
      * One event the group signed, as the group signed it, or null when this
      * device does not hold it or it was signed in some other room.

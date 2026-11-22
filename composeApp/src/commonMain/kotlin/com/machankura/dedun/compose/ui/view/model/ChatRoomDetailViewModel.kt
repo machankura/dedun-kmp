@@ -198,6 +198,9 @@ class ChatRoomDetailViewModel(
                         .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't read $chatRoomId's member actions" } }
                         .getOrElse { emptyMap() },
                     adminLeave = group?.takeIf { roomIsOpen }?.let { AdminGovernance.adminLeave(it, me) },
+                    groupDmRow = runCatching { chatRepository.groupDmRow(chatRoomId, localChatRoom.chatRoom.userPublicKey) }
+                        .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't read $chatRoomId's messages row" } }
+                        .getOrNull(),
                     inbox = runCatching { chatRepository.inboxSummary(localChatRoom) }
                         .onFailure { if (it is CancellationException) throw it }
                         .getOrNull(),

@@ -288,6 +288,7 @@ fun DedunNavHost(
     val databaseNostrRepository = runtime.nostrRepository
     val databaseChatRepository = runtime.chatRepository
     val databaseGroupInboxRepository = runtime.groupInboxRepository
+    val databaseGroupDmRepository = runtime.groupDmRepository
     val databaseDkgRepository = runtime.dkgRepository
     val databaseFrostSigningRepository = runtime.frostSigningRepository
     val databaseMarmotRepository = runtime.marmotRepository
@@ -1815,6 +1816,23 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            // Where a group receives direct messages: docs/group-threshold-ecdh.md, D8.
+            composable<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmSetupRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmSetupRoute>()
+
+                com.machankura.dedun.compose.ui.composable.GroupDmSetupScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chatRepository = databaseChatRepository,
+                    groupDmRepository = databaseGroupDmRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        navController.navigate(route = signingRoute) {
+                            popUpTo(route) { inclusive = true }
+                        }
+                    },
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             // The group's inbox (docs/group-inbox.md, Phase 7).

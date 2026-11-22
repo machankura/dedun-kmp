@@ -206,6 +206,8 @@ sealed interface ChatRoomDetailUIState {
         val governance: GovernanceStatus? = null,
         /** The group's inbox, for its row; null where this device has nothing of it to show. */
         val inbox: InboxRowSummary? = null,
+        /** What the group's direct messages show here, or nothing. docs/group-threshold-ecdh.md. */
+        val groupDmRow: GroupDmRow? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

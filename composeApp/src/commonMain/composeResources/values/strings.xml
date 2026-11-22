@@ -1885,4 +1885,21 @@
     <string name="not_yet_on_a_relay">Not yet on a relay</string>
     <string name="send_reply_again">Send again</string>
     <string name="the_admins_have_changed_since_this_key_was_made">The group's admins have changed since this key was made. It changes on its own once an admin's device starts a new ceremony, or you can rotate it now.</string>
+    <!-- A group's direct messages: docs/group-threshold-ecdh.md -->
+    <string name="open_the_groups_messages">Open the group's messages</string>
+    <string name="nobody_can_write_to_the_group_yet">Nobody can write to the group yet</string>
+    <string name="group_messages">Messages</string>
+    <string name="nothing_unread">Nothing unread</string>
+    <string name="n_unread">%1$d unread</string>
+    <string name="this_group_receives_direct_messages">This group receives direct messages</string>
+    <string name="only_its_admins_read_them">Only its admins read them</string>
+    <string name="anyone_on_nostr_will_be_able_to_write_to_the_group">Anyone on nostr will be able to write to the group, and every admin will be able to read what it is sent.</string>
+    <string name="the_group_signs_where_it_receives_messages">The group signs where it receives messages, so it takes a quorum. Nothing is opened until it has.</string>
+    <string name="message_relays">Message relays</string>
+    <string name="one_wss_address_per_line">One wss:// address per line</string>
+    <string name="every_relay_has_to_be_a_public_wss_address">Every relay has to be a public wss:// address</string>
+    <string name="senders_apps_deliver_to_these_relays">Senders' apps deliver to these relays. Choose ones that turn away spam: they are the group's first line against being flooded.</string>
+    <string name="ask_the_group_to_sign">Ask the group to sign</string>
+    <string name="could_not_ask_the_group_to_sign_its_message_relays">Couldn't ask the group to sign where it receives messages.</string>
+    <string name="only_a_current_admin_can_open_the_groups_messages">Only a current admin holding a share can open the group's messages.</string>
 </resources>

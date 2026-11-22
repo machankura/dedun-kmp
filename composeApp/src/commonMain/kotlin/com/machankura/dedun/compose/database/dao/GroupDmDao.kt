@@ -106,6 +106,9 @@ abstract class GroupDmDao {
     @Query("SELECT COUNT(*) FROM GroupDmMessage WHERE chatRoomId = :chatRoomId AND outgoing = 0 AND readAt IS NULL")
     abstract fun observeUnreadCount(chatRoomId: HexKey): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM GroupDmMessage WHERE chatRoomId = :chatRoomId AND outgoing = 0 AND readAt IS NULL")
+    abstract suspend fun countUnread(chatRoomId: HexKey): Int
+
     @Query("UPDATE GroupDmMessage SET readAt = :at WHERE chatRoomId = :chatRoomId AND conversationId = :conversationId AND readAt IS NULL")
     abstract suspend fun markRead(chatRoomId: HexKey, conversationId: HexKey, at: Instant)
 
@@ -117,6 +120,16 @@ abstract class GroupDmDao {
 
     @Query("SELECT * FROM GroupDmOutbound WHERE publishedAt IS NULL")
     abstract suspend fun getOwed(): List<GroupDmOutbound>
+
+    /** What this device owes relays and has the event for: what [com.machankura.dedun.compose.managers.GroupDmPublisher] sends. */
+    @Query("SELECT * FROM GroupDmOutbound WHERE publishedAt IS NULL AND wrapJson IS NOT NULL")
+    abstract fun observeOwed(): Flow<List<GroupDmOutbound>>
+
+    @Query("UPDATE GroupDmOutbound SET publishedAt = :at WHERE signingSessionId = :signingSessionId AND sealId = :sealId")
+    abstract suspend fun markPublished(signingSessionId: String, sealId: HexKey, at: Instant)
+
+    @Query("UPDATE GroupDmOutbound SET attempts = attempts + 1, nextAttemptAt = :next WHERE signingSessionId = :signingSessionId AND sealId = :sealId")
+    abstract suspend fun markAttempt(signingSessionId: String, sealId: HexKey, next: Instant)
 
     @Query("SELECT * FROM GroupDmOutbound WHERE signingSessionId = :signingSessionId")
     abstract suspend fun getOutbound(signingSessionId: String): List<GroupDmOutbound>

@@ -263,6 +263,22 @@ class DatabaseChatRepository(
         null
     }
 
+    override suspend fun groupDmRow(chatRoomId: String, userPublicKey: HexKey): com.machankura.dedun.compose.ui.view.state.GroupDmRow? {
+        if (!ExperimentalFeatures.groupDirectMessages) return null
+        val key = FrostSigningManager.completedKey(database, chatRoomId) ?: return null
+        val receives = com.machankura.dedun.compose.managers.GroupDmRelays.relaysOf(database, chatRoomId) != null
+        val admin = RoomAdmins.of(database, chatRoomId)?.admins?.contains(userPublicKey) == true &&
+            ShareGenerations.active(database, key).signerIds.containsKey(userPublicKey)
+        return when {
+            admin && receives -> com.machankura.dedun.compose.ui.view.state.GroupDmRow.Messages(
+                unread = database.groupDmDao().countUnread(chatRoomId)
+            )
+            admin -> com.machankura.dedun.compose.ui.view.state.GroupDmRow.OpenMessages
+            receives -> com.machankura.dedun.compose.ui.view.state.GroupDmRow.ReceivesMessages
+            else -> null
+        }
+    }
+
     override suspend fun inboxSummary(localChatRoom: LocalChatRoom): com.machankura.dedun.compose.ui.view.state.InboxRowSummary? {
         if (!com.machankura.dedun.compose.ExperimentalFeatures.groupInbox || localChatRoom.chatRoom.mlsGroupState == null) return null
         val roomId = localChatRoom.chatRoom.id

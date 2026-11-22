@@ -97,6 +97,10 @@ class DedunRuntime(
         DatabaseFrostSigningRepository(database = auxDatabaseManager.auxDatabase, ioScope)
     }
 
+    val groupDmRepository: com.machankura.dedun.compose.database.repository.DatabaseGroupDmRepository by lazy {
+        com.machankura.dedun.compose.database.repository.DatabaseGroupDmRepository(database = auxDatabaseManager.auxDatabase)
+    }
+
     val groupInboxRepository: DatabaseGroupInboxRepository by lazy {
         DatabaseGroupInboxRepository(database = auxDatabaseManager.auxDatabase, ioScope, activeIdentity = activeIdentity)
     }
@@ -129,6 +133,7 @@ class DedunRuntime(
             relayRepository = nostrRepository,
             scope = ioScope,
             groupInboxRepository = groupInboxRepository,
+            groupDmRepository = groupDmRepository,
         )
     }
 

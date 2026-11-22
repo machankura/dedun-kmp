@@ -12,6 +12,15 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxRo
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxSettingsRoute
 import com.machankura.dedun.compose.ui.view.state.InboxRowSummary
 import androidx.compose.material.icons.filled.Mail
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmSetupRoute
+import com.machankura.dedun.compose.ui.view.state.GroupDmRow
+import dedun.composeapp.generated.resources.open_the_groups_messages
+import dedun.composeapp.generated.resources.group_messages
+import dedun.composeapp.generated.resources.this_group_receives_direct_messages
+import dedun.composeapp.generated.resources.nobody_can_write_to_the_group_yet
+import dedun.composeapp.generated.resources.nothing_unread
+import dedun.composeapp.generated.resources.n_unread
+import dedun.composeapp.generated.resources.only_its_admins_read_them
 import dedun.composeapp.generated.resources.members_balances_and_payouts
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
@@ -899,6 +908,25 @@ fun ChatRoomDetailScreen(
                                                     } else {
                                                         GroupInboxSettingsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = relayHint)
                                                     }
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+
+                                // The group's direct messages: the way to open them for an
+                                // admin, the way in once open, and for anyone else only that
+                                // the group receives them. docs/group-threshold-ecdh.md.
+                                chatRoomDetailUIState.groupDmRow?.let { row ->
+                                    item {
+                                        GroupDmRowCard(
+                                            row = row,
+                                            onClick = {
+                                                onNavigateToRoute.invoke(
+                                                    GroupDmSetupRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = chatRoomId,
+                                                    )
                                                 )
                                             }
                                         )
@@ -2803,5 +2831,39 @@ private fun GroupInboxRow(
                 )
             }
         )
+    }
+}
+
+/** A group's direct messages, on its screen (docs/group-threshold-ecdh.md, Phases 6 and 8). */
+@Composable
+private fun GroupDmRowCard(
+    row: GroupDmRow,
+    onClick: () -> Unit,
+) {
+    val headline = when (row) {
+        GroupDmRow.OpenMessages -> stringResource(Res.string.open_the_groups_messages)
+        is GroupDmRow.Messages -> stringResource(Res.string.group_messages)
+        GroupDmRow.ReceivesMessages -> stringResource(Res.string.this_group_receives_direct_messages)
+    }
+    val supporting = when (row) {
+        GroupDmRow.OpenMessages -> stringResource(Res.string.nobody_can_write_to_the_group_yet)
+        is GroupDmRow.Messages ->
+            if (row.unread == 0) stringResource(Res.string.nothing_unread) else stringResource(Res.string.n_unread, row.unread)
+        GroupDmRow.ReceivesMessages -> stringResource(Res.string.only_its_admins_read_them)
+    }
+    val content: @Composable () -> Unit = {
+        ListItem(
+            leadingContent = { Icon(Icons.Default.Mail, contentDescription = Decorative) },
+            trailingContent = if (row == GroupDmRow.ReceivesMessages) null else {
+                { Icon(Icons.Default.ChevronRight, contentDescription = Decorative) }
+            },
+            headlineContent = { Text(text = headline) },
+            supportingContent = { Text(text = supporting) },
+        )
+    }
+    if (row == GroupDmRow.ReceivesMessages) {
+        Card(modifier = Modifier.fillMaxWidth()) { content() }
+    } else {
+        Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) { content() }
     }
 }

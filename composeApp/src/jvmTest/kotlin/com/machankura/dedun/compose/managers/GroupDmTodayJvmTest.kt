@@ -96,13 +96,13 @@ class GroupDmTodayJvmTest {
         assertAskedBlind(proposeKind(SealEvent.KIND, "AqH1ciphertext"), SealEvent.KIND)
     }
 
-    /** Phase 6 flips this: a 10050 is named, and declined unless its relays are public. */
+    /** Flipped by Phase 6: a 10050 is named for what it is, and declined unless its relays are public (GroupDmRelaysJvmTest). */
     @Test
-    fun `a peer's kind 10050 is asked as a raw kind`() {
-        assertAskedBlind(
-            proposeKind(10050, "", arrayOf(arrayOf("relay", "wss://relay.example"))),
-            10050,
-        )
+    fun `a peer's kind 10050 is no longer asked as a raw kind`() = runBlocking {
+        val sent = proposeKind(10050, "", arrayOf(arrayOf("relay", "wss://relay.example")))
+        harness.deliver(sent, bob)
+        val items = harness.db.frostSigningSessionDao().getItems(sent.session.id)
+        assertEquals("Where the group receives messages", ProposedEvent.summarize(Event.fromJson(items.single().unsignedEventJson)).label)
     }
 
     /** Phase 7 flips this. */
