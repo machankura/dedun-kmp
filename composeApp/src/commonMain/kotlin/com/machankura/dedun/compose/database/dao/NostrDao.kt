@@ -1116,7 +1116,8 @@ abstract class NostrDao(
                                             content = decryptedGiftWrapPayload.content,
                                             sig = ""
                                         ),
-                                        userPublicKey = activeKeyPair.pubKey.toHex()
+                                        userPublicKey = activeKeyPair.pubKey.toHex(),
+                                        nostrPrivateKey = activeKeyPair.privKey,
                                     )
                                 }
                             } else {
@@ -1684,7 +1685,8 @@ abstract class NostrDao(
                                 database = database,
                                 localChatRoom = localChatRoom,
                                 innerEvent = innerEvent,
-                                userPublicKey = activeKeyPair.pubKey.toHex()
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey,
                             )
 
                         DkgRitualEvents.isDkgRitualKind(innerEvent.kind) ->

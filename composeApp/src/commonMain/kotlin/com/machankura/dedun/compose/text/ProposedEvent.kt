@@ -150,10 +150,16 @@ object ProposedEvent {
         // A reply from the group's inbox: sealed, so said for what it is. The signing screen
         // reads it out for a device that holds the inbox key (docs/group-inbox.md, D12), and a
         // member without one sees only that it exists (D11).
-        InboxSeal.KIND -> Summary(
-            label = "A private reply from the group's inbox",
-            detail = "Sealed: only the group's inbox key opens it",
-        )
+        // A seal with no `n` tag is the group writing by threshold ECDH instead
+        // (docs/group-threshold-ecdh.md, D12): ciphertext to its recipient's own key.
+        InboxSeal.KIND -> if (InboxSeal.encryptionKeyOf(event.tags) != null) {
+            Summary(
+                label = "A private reply from the group's inbox",
+                detail = "Sealed: only the group's inbox key opens it",
+            )
+        } else {
+            Summary(label = "A private message from the group", detail = "Sealed to its recipient")
+        }
         InboxAnnouncement.RELAYS_KIND -> Summary(
             label = "Where the group receives private messages",
             detail = InboxAnnouncement.announcedRelaysOf(event).joinToString(", ") { it.url.removePrefix("wss://").trimEnd('/') }

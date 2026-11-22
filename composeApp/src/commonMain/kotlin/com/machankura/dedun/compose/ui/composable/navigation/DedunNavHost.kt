@@ -1858,7 +1858,8 @@ fun DedunNavHost(
                     recipients = route.recipients,
                     chatRepository = databaseChatRepository,
                     groupDmRepository = databaseGroupDmRepository,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                 )
             }
             // The group's inbox (docs/group-inbox.md, Phase 7).

@@ -40,7 +40,31 @@ class DatabaseFrostSigningRepository(
         runCatching {
             val user = database.frostSigningSessionDao().getSessionById(sessionId)?.userPublicKey ?: return@runCatching emptyList()
             com.machankura.dedun.compose.managers.InboxRefusal.notes(database, chatRoomId, user, sessionId, events)
-        }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList()) +
+            runCatching { groupDmNotes(sessionId, events) }.getOrDefault(emptyList())
+
+    /**
+     * A message from the group, as an admin's device read it from the manifest: its words,
+     * who it goes to and what it answers (docs/group-threshold-ecdh.md, D13). A device that
+     * could not read it says only what the seals are.
+     */
+    private suspend fun groupDmNotes(sessionId: String, events: List<Event>): List<String> {
+        if (events.none { it.kind == com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent.KIND }) return emptyList()
+        val message = database.groupDmDao().getMessageBySigningSession(sessionId) ?: return emptyList()
+        val rumor = Event.fromJsonOrNull(message.rumorJson) ?: return emptyList()
+        val names = rumor.tags.filter { it.size >= 2 && it[0] == "p" }.map { tag ->
+            database.profileDao().getProfileByPublicKey(tag[1])?.let { it.displayName?.takeIf { n -> n.isNotBlank() } ?: it.userName }
+                ?: tag[1].take(8)
+        }
+        val answering = rumor.tags.firstOrNull { it.size >= 2 && it[0] == "e" }?.get(1)
+            ?.let { database.groupDmDao().getMessage(it) }
+            ?.let { Event.fromJsonOrNull(it.rumorJson)?.content }
+        return listOfNotNull(
+            "A message from the group: ${rumor.content}",
+            "To ${names.joinToString(", ")}",
+            answering?.let { "Answering: $it" },
+        )
+    }
 
     override fun observeSessionById(sessionId: String): Flow<FrostSigningSession?> =
         database.frostSigningSessionDao().observeSessionById(sessionId)

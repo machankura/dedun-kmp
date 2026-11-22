@@ -98,7 +98,7 @@ class DedunRuntime(
     }
 
     val groupDmRepository: com.machankura.dedun.compose.database.repository.DatabaseGroupDmRepository by lazy {
-        com.machankura.dedun.compose.database.repository.DatabaseGroupDmRepository(database = auxDatabaseManager.auxDatabase)
+        com.machankura.dedun.compose.database.repository.DatabaseGroupDmRepository(database = auxDatabaseManager.auxDatabase, activeIdentity = activeIdentity)
     }
 
     val groupInboxRepository: DatabaseGroupInboxRepository by lazy {

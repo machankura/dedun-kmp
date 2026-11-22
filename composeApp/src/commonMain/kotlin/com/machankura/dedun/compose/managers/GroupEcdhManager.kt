@@ -69,6 +69,8 @@ object GroupEcdhManager {
         val tweak: NpubTweak,
         private val hostSecret: PrivateKey,
         val myHostKey: HexKey,
+        /** For the one caller that hands a held proposal back to the signing manager ([GroupDmSender.retryHeld]). */
+        internal val nostrPrivateKey: ByteArray,
         /** Current admins holding a share of [generation], this device's member included: member to (id, host key). */
         val admins: Map<HexKey, Pair<Int, HexKey>>,
     ) {
@@ -81,6 +83,9 @@ object GroupEcdhManager {
 
         internal fun seal(plaintext: String): AdminSeal.Sealed =
             AdminSeal.seal(plaintext, hostSecret, admins.filterKeys { it != userPublicKey }.values.map { it.second })
+
+        /** [plaintext] for the other current admins: a message's manifest (D12). */
+        internal fun sealToAdmins(plaintext: String): AdminSeal.Sealed = seal(plaintext)
 
         internal fun open(sealed: AdminSeal.Sealed, senderHostKey: HexKey): String? =
             AdminSeal.open(sealed, hostSecret, myHostKey, senderHostKey)
@@ -113,7 +118,7 @@ object GroupEcdhManager {
         return RoomContext(
             room = room, userPublicKey = userPublicKey, key = key, generation = shares.generation, myId = myId,
             secretShare = secretShare, publicShares = publicShares, threshold = key.threshold, tweak = tweak,
-            hostSecret = hostSecret, myHostKey = myHostKey, admins = admins,
+            hostSecret = hostSecret, myHostKey = myHostKey, nostrPrivateKey = nostrPrivateKey, admins = admins,
         )
     }
 
@@ -273,6 +278,8 @@ object GroupEcdhManager {
             val stepped = GroupDmReceiver.step(database, context)
             val sent = flush(database, context)
             val combined = combine(database, context)
+            // A recipient's key just made: a message held back for it can be read now (D13).
+            if (combined.any { it.purpose == EcdhPurpose.RECIPIENT }) GroupDmSender.retryHeld(database, context, context.nostrPrivateKey)
             if (!stepped && sent == 0 && combined.isEmpty()) return
         }
     }

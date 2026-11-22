@@ -1760,7 +1760,8 @@ data class ChatMessage(
                 // A reply's seals, signed by the group (docs/group-inbox.md, D10). The
                 // signing session's own lines say the group signed something; a line naming
                 // the reply would reach members who are not admins, who must learn nothing of
-                // the inbox (D9).
+                // the inbox (D9). The same for a message the group writes by threshold ECDH
+                // (docs/group-threshold-ecdh.md, D12).
                 com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent.KIND -> null
 
                 ChatEvent.KIND -> {

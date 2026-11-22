@@ -51,6 +51,12 @@ interface GroupDmRepository {
     /** How a screen names a person: their profile's name, or the start of their key. */
     suspend fun nameOf(publicKey: HexKey): String
 
+    /** Asks the group to send [text] to [recipients] (D10), as the active identity. */
+    suspend fun send(localChatRoom: LocalChatRoom, recipients: List<HexKey>, text: String, replyTo: HexKey?): com.machankura.dedun.compose.managers.GroupDmSender.Outcome
+
+    /** Wraps and sends again what a signed message still owes its recipients. */
+    suspend fun sendAgain(signingSessionId: String): Boolean
+
     /** Asks the group to sign [relays] as where it receives messages (D8). */
     suspend fun proposeRelays(localChatRoom: LocalChatRoom, userPublicKey: HexKey, relays: List<String>): FrostSigningSession
 }

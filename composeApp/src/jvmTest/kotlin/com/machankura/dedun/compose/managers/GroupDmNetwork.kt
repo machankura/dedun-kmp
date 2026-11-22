@@ -145,7 +145,7 @@ class GroupDmNetwork(n: Int = 4, val t: Int = 2, secret: String = "6d0000".padEn
         if (event.kind in GroupEcdhEvents.ALL) {
             GroupEcdhManager.process(to.db, to.room, event, to.publicKey, to.privateKey)
         } else {
-            FrostSigningManager.processSigningPayload(to.db, to.room, event, to.publicKey)
+            FrostSigningManager.processSigningPayload(to.db, to.room, event, to.publicKey, to.privateKey)
         }
     }
 

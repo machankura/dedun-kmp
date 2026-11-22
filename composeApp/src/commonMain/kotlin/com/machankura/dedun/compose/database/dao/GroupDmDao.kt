@@ -98,6 +98,9 @@ abstract class GroupDmDao {
     @Query("SELECT * FROM GroupDmMessage WHERE rumorId = :rumorId")
     abstract suspend fun getMessage(rumorId: HexKey): GroupDmMessage?
 
+    @Query("SELECT * FROM GroupDmMessage WHERE signingSessionId = :signingSessionId LIMIT 1")
+    abstract suspend fun getMessageBySigningSession(signingSessionId: String): GroupDmMessage?
+
     @Query("SELECT * FROM GroupDmMessage WHERE chatRoomId = :chatRoomId ORDER BY createdAt DESC")
     abstract fun observeMessages(chatRoomId: HexKey): Flow<List<GroupDmMessage>>
 

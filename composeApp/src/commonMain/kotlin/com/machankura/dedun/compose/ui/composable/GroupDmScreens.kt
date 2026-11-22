@@ -25,6 +25,39 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.OutlinedTextField
+import com.machankura.dedun.compose.extensions.bech32ToHexOrThrow
+import dedun.composeapp.generated.resources.asked_the_group_to_sign_this_message
+import dedun.composeapp.generated.resources.cancel
+import dedun.composeapp.generated.resources.could_not_ask_the_group_to_send_this
+import dedun.composeapp.generated.resources.new_message
+import dedun.composeapp.generated.resources.nothing_signed_by_this_person_is_on_this_device_yet
+import dedun.composeapp.generated.resources.preparing_the_admins_are_working_out_how_to_write_to_them
+import dedun.composeapp.generated.resources.send
+import dedun.composeapp.generated.resources.sending_again
+import dedun.composeapp.generated.resources.that_is_not_a_nostr_key
+import dedun.composeapp.generated.resources.the_groups_quorum_has_to_sign_before_anything_is_sent
+import dedun.composeapp.generated.resources.their_npub
+import dedun.composeapp.generated.resources.write_a_message
+import dedun.composeapp.generated.resources.write_to_them
+import com.machankura.dedun.compose.ui.composable.navigation.routes.FrostSigningRoute
+import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
+import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
+import com.machankura.dedun.compose.ui.composable.widgets.rememberNotifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,11 +119,21 @@ fun GroupDmListScreen(
     groupDmRepository: GroupDmRepository,
     onNavigateToRoute: (Route) -> Unit,
     onNavigateBack: () -> Unit,
-    composer: (@Composable () -> Unit)? = null,
 ) {
     val viewModel: GroupDmListViewModel = viewModel(
         factory = GroupDmListViewModel.factory(chatRoomId, activeUserPublicKey, chatRepository, groupDmRepository)
     )
+    var writing by remember { mutableStateOf(false) }
+    val canWrite = (viewModel.uiState as? GroupDmListUIState.Loaded)?.isAdmin == true && LocalCanSign.current
+    if (writing) {
+        NewMessageDialog(
+            onDismiss = { writing = false },
+            onRecipient = { recipient ->
+                writing = false
+                onNavigateToRoute(GroupDmConversationRoute(activeUserPublicKey, chatRoomId, conversationId = null, recipients = listOf(recipient)))
+            },
+        )
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
@@ -100,7 +143,15 @@ fun GroupDmListScreen(
                 navigationIcon = { NavigateBackButton(onNavigateBack) },
             )
         },
-        floatingActionButton = { composer?.invoke() },
+        floatingActionButton = {
+            if (canWrite) {
+                ExtendedFab(
+                    label = stringResource(Res.string.new_message),
+                    icon = { Icon(Icons.Default.Edit, contentDescription = Decorative) },
+                    onClick = { writing = true },
+                )
+            }
+        },
     ) { padding ->
         ScreenStateTransition(viewModel.uiState) { uiState ->
             when (val state = uiState) {
@@ -197,9 +248,14 @@ fun GroupDmConversationScreen(
     chatRepository: ChatRepository,
     groupDmRepository: GroupDmRepository,
     onNavigateBack: () -> Unit,
-    onSendAgain: ((signingSessionId: String) -> Unit)? = null,
-    composer: (@Composable (participants: List<HexKey>, replyTo: GroupDmLine?) -> Unit)? = null,
+    onNavigateToRoute: (Route) -> Unit = {},
 ) {
+    val notify = rememberNotifier(rememberCoroutineScope())
+    val proposed = stringResource(Res.string.asked_the_group_to_sign_this_message)
+    val noEvidence = stringResource(Res.string.nothing_signed_by_this_person_is_on_this_device_yet)
+    val couldNotSend = stringResource(Res.string.could_not_ask_the_group_to_send_this)
+    val sendingAgain = stringResource(Res.string.sending_again)
+    val canSign = LocalCanSign.current
     val viewModel: GroupDmConversationViewModel = viewModel(
         key = "$chatRoomId/$conversationId/${recipients.joinToString(",")}",
         factory = GroupDmConversationViewModel.factory(chatRoomId, activeUserPublicKey, conversationId, recipients, chatRepository, groupDmRepository)
@@ -218,7 +274,24 @@ fun GroupDmConversationScreen(
                     )
                 },
                 bottomBar = {
-                    if (state.isAdmin) composer?.invoke(state.participants, state.lines.lastOrNull { !it.outgoing })
+                    if (state.isAdmin && canSign) {
+                        Composer(
+                            composing = viewModel.composing,
+                            onSend = { text, clear ->
+                                viewModel.send(
+                                    text = text,
+                                    replyTo = state.lines.lastOrNull { !it.outgoing }?.id,
+                                    onProposed = { sessionId ->
+                                        clear()
+                                        notify(proposed)
+                                        onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId))
+                                    },
+                                    onNoEvidence = { notify(noEvidence) },
+                                    onFailure = { notify(couldNotSend) },
+                                )
+                            },
+                        )
+                    }
                 },
             ) { padding ->
                 LazyColumn(
@@ -230,7 +303,9 @@ fun GroupDmConversationScreen(
                         item { EmptyState(message = stringResource(Res.string.only_current_admins_see_the_groups_messages), icon = Icons.Default.Mail) }
                         return@LazyColumn
                     }
-                    items(items = state.lines, key = { it.id }) { line -> GroupDmBubble(line, onSendAgain) }
+                    items(items = state.lines, key = { it.id }) { line ->
+                        GroupDmBubble(line, onSendAgain = { sessionId -> viewModel.sendAgain(sessionId) { notify(sendingAgain) } })
+                    }
                 }
             }
         }
@@ -269,11 +344,84 @@ private fun GroupDmBubble(line: GroupDmLine, onSendAgain: ((String) -> Unit)?) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     val sessionId = line.signingSessionId
-                    if (state == GroupDmOutgoingState.NOT_SENT && sessionId != null && onSendAgain != null) {
+                    val owes = state == GroupDmOutgoingState.NOT_SENT || state == GroupDmOutgoingState.SIGNED
+                    if (owes && sessionId != null && onSendAgain != null) {
                         TextButton(onClick = { onSendAgain(sessionId) }) { Text(stringResource(Res.string.send_again)) }
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * What an admin writes as the group, with what sending means said above the button: nothing
+ * goes until the group's quorum has signed (D10).
+ */
+@Composable
+private fun Composer(composing: GroupDmConversationViewModel.Composing, onSend: (String, clear: () -> Unit) -> Unit) {
+    val field = rememberTextFieldState()
+    Column(
+        modifier = Modifier.fillMaxWidth().imePadding().padding(MaterialTheme.spacing.containerPadding),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+    ) {
+        Text(
+            text = when (composing) {
+                GroupDmConversationViewModel.Composing.Preparing -> stringResource(Res.string.preparing_the_admins_are_working_out_how_to_write_to_them)
+                else -> stringResource(Res.string.the_groups_quorum_has_to_sign_before_anything_is_sent)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
+            OutlinedTextField(
+                state = field,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(stringResource(Res.string.write_a_message)) },
+                lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
+            )
+            FilledIconButton(
+                enabled = composing == GroupDmConversationViewModel.Composing.Idle && field.text.isNotBlank(),
+                onClick = { onSend(field.text.toString()) { field.clearText() } },
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(Res.string.send))
+            }
+        }
+    }
+}
+
+/** Starts a conversation: an npub, pasted. */
+@Composable
+internal fun NewMessageDialog(onDismiss: () -> Unit, onRecipient: (HexKey) -> Unit) {
+    val field = rememberTextFieldState()
+    val key = recipientKeyOf(field.text.toString())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.new_message)) },
+        text = {
+            OutlinedTextField(
+                state = field,
+                label = { Text(stringResource(Res.string.their_npub)) },
+                isError = field.text.isNotBlank() && key == null,
+                supportingText = if (field.text.isNotBlank() && key == null) {
+                    { Text(stringResource(Res.string.that_is_not_a_nostr_key)) }
+                } else null,
+                lineLimits = TextFieldLineLimits.SingleLine,
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = key != null, onClick = { key?.let(onRecipient) }) { Text(stringResource(Res.string.write_to_them)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+/** An npub or 64 hex characters, as a key; null for anything else. */
+internal fun recipientKeyOf(text: String): HexKey? {
+    val trimmed = text.trim().removePrefix("nostr:")
+    val hex = when {
+        trimmed.startsWith("npub1") -> runCatching { trimmed.bech32ToHexOrThrow() }.getOrNull()
+        else -> trimmed.lowercase()
+    } ?: return null
+    return hex.takeIf { it.length == 64 && it.all { c -> c in "0123456789abcdef" } && com.machankura.dedun.compose.cryptography.threshold.ThresholdEcdh.pointOf(it) != null }
 }

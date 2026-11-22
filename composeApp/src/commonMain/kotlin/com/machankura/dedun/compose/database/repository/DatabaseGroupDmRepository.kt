@@ -15,7 +15,24 @@ import com.machankura.dedun.compose.managers.RoomAdmins
 import com.machankura.dedun.compose.managers.ShareGenerations
 import com.machankura.dedun.compose.repository.GroupDmRepository
 
-class DatabaseGroupDmRepository(private val database: DedunDatabase) : GroupDmRepository {
+class DatabaseGroupDmRepository(
+    private val database: DedunDatabase,
+    private val activeIdentity: kotlinx.coroutines.flow.StateFlow<com.machankura.dedun.compose.identity.Identity?> = kotlinx.coroutines.flow.MutableStateFlow(null),
+) : GroupDmRepository {
+    override suspend fun send(
+        localChatRoom: LocalChatRoom,
+        recipients: List<HexKey>,
+        text: String,
+        replyTo: HexKey?,
+    ): com.machankura.dedun.compose.managers.GroupDmSender.Outcome {
+        val identity = activeIdentity.value ?: throw IllegalStateException("No identity is open")
+        val secret = identity.nostrPrivateKey ?: throw IllegalStateException("This identity cannot sign")
+        return com.machankura.dedun.compose.managers.GroupDmSender.send(database, localChatRoom, identity.nostrPublicKey, secret.value.toByteArray(), recipients, text, replyTo)
+    }
+
+    override suspend fun sendAgain(signingSessionId: String): Boolean =
+        com.machankura.dedun.compose.managers.GroupDmSender.sendAgain(database, signingSessionId)
+
     override fun observeOwed(): Flow<List<GroupDmOutbound>> = database.groupDmDao().observeOwed()
 
     override suspend fun markPublished(outbound: GroupDmOutbound, at: Instant) =

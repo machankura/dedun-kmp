@@ -90,10 +90,22 @@ class GroupDmTodayJvmTest {
         assertEquals("Event of kind $kind", ProposedEvent.summarize(event).label)
     }
 
-    /** Phase 9 flips this: a seal no signer can read is declined unless D13's checks pass. */
+    /** Flipped by Phase 9: a seal no signer can read is declined out loud (D13, GroupDmSendJvmTest). */
     @Test
-    fun `a peer's kind 13 is asked as a raw kind, and can be signed blind`() {
-        assertAskedBlind(proposeKind(SealEvent.KIND, "AqH1ciphertext"), SealEvent.KIND)
+    fun `a peer's kind 13 is no longer signed blind`() = runBlocking {
+        val sent = proposeKind(SealEvent.KIND, "AqH1ciphertext")
+        harness.deliver(sent, bob)
+        val session = assertNotNull(harness.db.frostSigningSessionDao().getSessionById(sent.session.id))
+        assertNotNull(session.signDeclinedAt)
+        val reason = harness.queued(FrostSigningEvents.DECLINE).single().content
+        assertTrue(
+            reason in setOf(
+                com.machankura.dedun.compose.managers.GroupDmRefusal.REASON,
+                com.machankura.dedun.compose.managers.GroupDmRefusal.CANNOT_READ,
+                com.machankura.dedun.compose.managers.GroupDmRefusal.FEATURE_OFF,
+            ),
+            reason,
+        )
     }
 
     /** Flipped by Phase 6: a 10050 is named for what it is, and declined unless its relays are public (GroupDmRelaysJvmTest). */

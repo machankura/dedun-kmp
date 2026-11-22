@@ -433,7 +433,13 @@ object FrostSigningManager {
         database: DedunDatabase,
         localChatRoom: LocalChatRoom,
         innerEvent: Event,
-        userPublicKey: HexKey
+        userPublicKey: HexKey,
+        /**
+         * This device's nostr key, for the one check that needs it: opening a message's
+         * manifest with the host key it derives (docs/group-threshold-ecdh.md, D13). Without
+         * it a batch of seals is held rather than asked about.
+         */
+        nostrPrivateKey: ByteArray? = null,
     ) {
         val sessionId = FrostSigningEvents.parseSessionId(innerEvent.tags)
         if (sessionId == null) {
@@ -447,7 +453,8 @@ object FrostSigningManager {
                 localChatRoom = localChatRoom,
                 innerEvent = innerEvent,
                 sessionId = sessionId,
-                userPublicKey = userPublicKey
+                userPublicKey = userPublicKey,
+                nostrPrivateKey = nostrPrivateKey,
             )
         } else if (innerEvent.kind == FrostSigningEvents.TRANSACTION_PROPOSAL && FrostSigningEvents.parseSweep(innerEvent.tags) != null) {
             acceptSweepProposal(
@@ -653,7 +660,8 @@ object FrostSigningManager {
         localChatRoom: LocalChatRoom,
         innerEvent: Event,
         sessionId: String,
-        userPublicKey: HexKey
+        userPublicKey: HexKey,
+        nostrPrivateKey: ByteArray? = null,
     ): FrostSigningSession? {
         database.frostSigningSessionDao().getSessionById(sessionId)?.let { existing ->
             // The events a session signs are fixed at creation. A second proposal
@@ -900,6 +908,30 @@ object FrostSigningManager {
             }
         }
 
+        // A message the group would send: every signer reads it first, and declines one
+        // it cannot read or that says different things to different people. One still
+        // waiting on a recipient's key is held, stored, and asked once the key is made.
+        // docs/group-threshold-ecdh.md, D13.
+        var groupDm: GroupDmRefusal.Verdict.Readable? = null
+        if (GroupDmRefusal.involves(unsignedEvents)) {
+            when (val verdict = GroupDmRefusal.check(database, localChatRoom, innerEvent.pubKey, unsignedEvents, innerEvent.tags, userPublicKey, nostrPrivateKey)) {
+                is GroupDmRefusal.Verdict.Declined -> {
+                    logger.w("Signing proposal $sessionId: a message from the group ${verdict.why}; declining")
+                    val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
+                        .copy(signDeclinedAt = Clock.System.now())
+                    database.frostSigningSessionDao().upsert(declined)
+                    database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+                    announceStarted(database, declined)
+                    return declined
+                }
+                GroupDmRefusal.Verdict.Waiting -> {
+                    logger.i("Signing proposal $sessionId: waiting on a recipient's key before asking")
+                    return null
+                }
+                is GroupDmRefusal.Verdict.Readable -> groupDm = verdict
+            }
+        }
+
         // A change to a governed room whose commit does not say what its statement
         // says -- or that the group's door would refuse anyway -- is declined before
         // anybody is asked, for the wallet's reason: a device that signs what it
@@ -979,6 +1011,8 @@ object FrostSigningManager {
         val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
         database.frostSigningSessionDao().upsert(session)
         database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+        // Read, so filed: every admin's device sees what the group is sending (D12).
+        groupDm?.let { GroupDmSender.record(database, session, localChatRoom.chatRoom.id, it.rumor, it.manifest) }
         if (inboxManifest != null && InboxRefusal.involves(unsignedEvents)) {
             InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, null, inboxManifest)
         }
@@ -2567,6 +2601,14 @@ object FrostSigningManager {
             logger.e("Signed session ${session.id} but could not file its inbox announcement", e)
         }
 
+        // A message from the group: wrapped for each recipient by the device that
+        // proposed it, and owed to their relays. docs/group-threshold-ecdh.md, D10.
+        try {
+            GroupDmSender.onSigned(database, session, signedEvents)
+        } catch (e: Throwable) {
+            logger.e("Signed session ${session.id} but could not wrap its message", e)
+        }
+
         announce(
             database = database,
             session = session,
@@ -3426,6 +3468,18 @@ object FrostSigningManager {
             return
         }
 
+        // A message from the group this device did not read on arrival -- filed by an
+        // older build, or reached here some other way -- is declined, never signed blind.
+        // Read means filed: GroupDmSender.record wrote it as outgoing. D13.
+        if (session.subject == FrostSigningSubject.EVENTS && GroupDmRefusal.involvesItems(items) &&
+            database.groupDmDao().getMessageBySigningSession(sessionId) == null
+        ) {
+            logger.w("Session $sessionId signs a message from the group this device has not read; declining")
+            update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
+            advance(database, localChatRoom, sessionId)
+            return
+        }
+
         // And the inbox's, checked again: a newer key can be made, or the admins change,
         // while a member decides. docs/group-inbox.md, D5.
         inboxRefusalNow(database, localChatRoom, session, items)?.let { why ->
@@ -3947,6 +4001,8 @@ object FrostSigningManager {
         val reason = when {
             inboxReason != null -> inboxReason
             isUnshowableSession(session, items) -> GroupStatementRefusal.REASON
+            session.subject == FrostSigningSubject.EVENTS && GroupDmRefusal.involvesItems(items) ->
+                GroupDmRefusal.reasonFor(database, session.chatRoomId, session.userPublicKey)
             !holdsShareFor(database, session) -> GENERATION_REFUSAL
             else -> "Declined to sign"
         }
