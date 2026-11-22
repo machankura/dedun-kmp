@@ -1218,7 +1218,8 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     dkgRepository = databaseDkgRepository,
                     // Replaces this screen with the ceremony, whether it was just
-                    // opened or was already there, so back from the ceremony goes
+                    // opened or one running under the same name was handed back, so
+                    // back from the ceremony goes
                     // wherever the member came from rather than to a second offer.
                     onCeremonyOpened = { dkgSessionId ->
                         navController.navigate(
@@ -1231,7 +1232,8 @@ fun DedunNavHost(
                             popUpTo<CreateSharedKeyRoute> { inclusive = true }
                         }
                     },
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    retrying = route.retrying,
                 )
             }
             composable<DkgRitualRoute> { backStackEntry ->

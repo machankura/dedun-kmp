@@ -8,9 +8,9 @@ import kotlin.test.assertEquals
  * Every place that asks a room for "its ceremony" and takes the newest one.
  *
  * In a NIP-17 room that question has no single answer once the same people have made
- * a second group there (docs/nip17-multiple-ceremonies.md). Each of these reads was
- * written while it did, and each one either has to stop asking or has to be right
- * because the room it asks is never a NIP-17 room.
+ * a second group there (docs/nip17-multiple-ceremonies.md). Phase 0 found six such
+ * reads in the app; Phase 3 took every one of them out. What is left of the queries
+ * serves tests of the DAO itself.
  *
  * Like `CeremonyEntryPointsJvmTest`, this counts rather than proves: it fails the day
  * a new caller appears, so that adding one is a decision somebody makes here.
@@ -32,7 +32,7 @@ class CeremonyLookupsJvmTest {
     )
 
     @Test
-    fun `the reads that take a room's newest ceremony are these and no others`() {
+    fun `nothing in the app takes a room's newest ceremony`() {
         val found = source.resolve("commonMain/kotlin").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file ->
@@ -44,19 +44,8 @@ class CeremonyLookupsJvmTest {
             }
             .toMap()
 
-        assertEquals(
-            mapOf(
-                // The one admin room a NIP-17 room's details link to.
-                "DatabaseChatRepository: dkgSessionDao().getLatestSessionFor(" to 1,
-                // The repository's pass-throughs.
-                "DatabaseDkgRepository: dkgSessionDao().observeLatestSessionFor(" to 1,
-                "DatabaseDkgRepository: dkgSessionDao().getLatestSessionForChatRoom(" to 1,
-                // The key a room signs with, last fallback.
-                "FrostSigningManager: dkgSessionDao().getLatestOwnSessionForChatRoom(" to 1,
-                // The shared-key screen handing over to the room's ceremony.
-                "CreateSharedKeyViewModel: dkgRepository.observeLatestSessionForChatRoom(" to 1,
-            ),
-            found,
-        )
+        // None, since docs/nip17-multiple-ceremonies.md, Phase 3. Every screen and
+        // manager names the ceremony it means, or asks for all of a room's.
+        assertEquals(emptyMap(), found)
     }
 }

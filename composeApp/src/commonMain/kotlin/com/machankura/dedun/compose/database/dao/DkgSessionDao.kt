@@ -28,31 +28,6 @@ interface DkgSessionDao {
     suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession?
 
     /**
-     * The room's newest ceremony **of its own**, newest first -- never one it is
-     * only hosting on a subgroup's behalf.
-     *
-     * The distinction did not exist while every ceremony ran in a NIP-17 room of
-     * its own. It does now: a subgroup's ChillDKG runs in the parent's Marmot
-     * room, so that room holds a completed ceremony whose key is the *child's*,
-     * and a caller asking "what key does this room sign with" must not be handed
-     * it. That is `FrostSigningManager.completedKey`'s last fallback, which is
-     * reached by every parent member who holds no key-state row -- which is
-     * every member welcomed after the parent's own ceremony.
-     *
-     * A ceremony run to make a subgroup is never the room's own key, and
-     * `parentChatRoomId` is the only thing that has to be read to know it. It is
-     * an unverified claim, but not a dangerous one here: the direction it can be
-     * abused in is a member *excluding* a ceremony from this answer, and a
-     * ceremony they can exclude is one they proposed, whose key they would
-     * simply not have proposed at all.
-     */
-    @Query(
-        "SELECT * FROM DkgSession WHERE chatRoomId = :chatRoomId AND parentChatRoomId IS NULL " +
-            "ORDER BY createdAt DESC LIMIT 1"
-    )
-    suspend fun getLatestOwnSessionForChatRoom(chatRoomId: String): DkgSession?
-
-    /**
      * Every ceremony the room holds **of its own**, newest first -- never one it is
      * only hosting on a subgroup's behalf.
      *
@@ -108,14 +83,6 @@ interface DkgSessionDao {
             "ORDER BY createdAt DESC LIMIT 1"
     )
     suspend fun getLatestSessionFor(chatRoomId: String, parentChatRoomId: String?): DkgSession?
-
-    @Query(
-        "SELECT * FROM DkgSession WHERE chatRoomId = :chatRoomId AND " +
-            "(parentChatRoomId = :parentChatRoomId OR " +
-            "(:parentChatRoomId IS NULL AND parentChatRoomId IS NULL)) " +
-            "ORDER BY createdAt DESC LIMIT 1"
-    )
-    fun observeLatestSessionFor(chatRoomId: String, parentChatRoomId: String?): Flow<DkgSession?>
 
     /**
      * The newest ceremony making a subgroup of [parentChatRoomId] over exactly

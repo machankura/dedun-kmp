@@ -21,19 +21,6 @@ import kotlinx.coroutines.flow.flowOf
  * not publish on their behalf until they say so.
  */
 interface DkgRepository {
-    /**
-     * The room's current ritual for one purpose — the group's own when
-     * [parentChatRoomId] is null, or that parent's subgroup when it is not.
-     * Abandoned attempts are superseded by the newest.
-     *
-     * A room routinely holds several: a parent's room hosts the ceremony of every
-     * subgroup the group makes. See `DkgSessionDao.getLatestSessionFor`.
-     */
-    fun observeLatestSessionForChatRoom(
-        chatRoomId: String,
-        parentChatRoomId: String? = null,
-    ): Flow<DkgSession?>
-
     fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>>
 
     /**
@@ -63,8 +50,6 @@ interface DkgRepository {
      * how this knows without keeping a flag that could be wrong.
      */
     suspend fun roomAwaitingCreation(session: DkgSession): String?
-
-    suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession?
 
     /**
      * Every group of its own [chatRoomId] holds, newest first, failed ones left
@@ -226,11 +211,6 @@ interface DkgRepository {
 
     companion object {
         val NO_OP_DKG_REPOSITORY: DkgRepository = object : DkgRepository {
-            override fun observeLatestSessionForChatRoom(
-                chatRoomId: String,
-                parentChatRoomId: String?,
-            ): Flow<DkgSession?> = flowOf(null)
-
             override fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>> = flowOf(emptyList())
 
             override fun observeSessionById(sessionId: String): Flow<DkgSession?> = flowOf(null)
@@ -239,8 +219,6 @@ interface DkgRepository {
                 flowOf(emptyList())
 
             override suspend fun roomAwaitingCreation(session: DkgSession): String? = null
-
-            override suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession? = null
 
             override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
                 flowOf(emptyList())

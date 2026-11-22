@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.repository.AdminRoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -46,12 +47,15 @@ class MemberActionUnavailableScreenJvmTest {
     private val nomvula = "b".repeat(64)
     private val thabo = "c".repeat(64)
 
-    private fun blocked(vararg blockers: MemberActionBlocker, adminRoomId: String? = null) = MemberActionUnavailableUIState.Blocked(
+    private fun blocked(vararg blockers: MemberActionBlocker, adminRoomId: String? = null) =
+        blocked(*blockers, adminRooms = listOfNotNull(adminRoomId?.let { AdminRoom(name = "#Checkers", chatRoomId = it) }))
+
+    private fun blocked(vararg blockers: MemberActionBlocker, adminRooms: List<AdminRoom>) = MemberActionUnavailableUIState.Blocked(
         memberName = "Nomvula",
         action = MemberAction.MAKE_ADMIN,
         blockers = blockers.toList(),
         names = mapOf(thabo to "Thabo"),
-        adminRoomId = adminRoomId,
+        adminRooms = adminRooms,
     )
 
     @Test
@@ -117,6 +121,26 @@ class MemberActionUnavailableScreenJvmTest {
         render(blocked(MemberActionBlocker.Disbanded, adminRoomId = "9".repeat(64))) {
             onNodeWithText("Open the admin room").assertDoesNotExist()
         }
+    }
+
+    /**
+     * The same people may run several groups from one NIP-17 room, each from an admin
+     * room of its own; which one the member meant is theirs to say.
+     * docs/nip17-multiple-ceremonies.md, Phase 3.
+     */
+    @Test
+    fun `a room whose members run several groups offers each admin room by name`() {
+        val rooms = listOf(
+            AdminRoom(name = "#Checkers", chatRoomId = "8".repeat(64)),
+            AdminRoom(name = "#Chess", chatRoomId = "9".repeat(64)),
+        )
+        var opened: Route? = null
+        render(blocked(MemberActionBlocker.NoAdminsInThisRoom, adminRooms = rooms), onNavigateToRoute = { opened = it }) {
+            onNodeWithText("Open the admin room").assertDoesNotExist()
+            onNodeWithText("Open #Checkers").assertExists()
+            onNodeWithText("Open #Chess").performClick()
+        }
+        assertEquals(ChatRoomDetailRoute(activeUserPublicKey, "9".repeat(64), null), opened)
     }
 
     @Test

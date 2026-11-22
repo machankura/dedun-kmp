@@ -47,17 +47,9 @@ class DatabaseDkgRepository(
         return roomId.takeIf { database.chatRoomDao().findChatRoomById(it) == null }
     }
 
-    override fun observeLatestSessionForChatRoom(
-        chatRoomId: String,
-        parentChatRoomId: String?,
-    ): Flow<DkgSession?> =
-        database.dkgSessionDao().observeLatestSessionFor(chatRoomId, parentChatRoomId)
 
     override fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>> =
         database.dkgSessionDao().observeMessages(sessionId)
-
-    override suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession? =
-        database.dkgSessionDao().getLatestSessionForChatRoom(chatRoomId)
 
     override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
         database.dkgSessionDao().observeOwnSessionsForChatRoom(chatRoomId)

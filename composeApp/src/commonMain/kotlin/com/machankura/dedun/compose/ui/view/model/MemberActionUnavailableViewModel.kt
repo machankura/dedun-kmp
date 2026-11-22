@@ -87,7 +87,7 @@ class MemberActionUnavailableViewModel(
             action = action,
             blockers = option.blockers,
             names = named.associateWith { nameOf(it) },
-            adminRoomId = if (MemberActionBlocker.NoAdminsInThisRoom in option.blockers) chatRepository.adminRoomOf(chatRoomId) else null,
+            adminRooms = if (MemberActionBlocker.NoAdminsInThisRoom in option.blockers) chatRepository.adminRoomsOf(chatRoomId) else emptyList(),
         )
     }
 

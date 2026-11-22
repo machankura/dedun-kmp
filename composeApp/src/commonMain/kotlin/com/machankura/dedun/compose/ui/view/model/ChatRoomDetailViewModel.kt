@@ -219,7 +219,7 @@ class ChatRoomDetailViewModel(
                         nostrRepository.getProfileWithPublicKey(publicKey)?.humanReadableNameOrPubkey()
                             ?: publicKey.take(SHORTENED_PUBLIC_KEY_LENGTH)
                     },
-                    adminRoomId = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.adminRoomOf(chatRoomId) else null,
+                    adminRooms = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.adminRoomsOf(chatRoomId) else emptyList(),
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }

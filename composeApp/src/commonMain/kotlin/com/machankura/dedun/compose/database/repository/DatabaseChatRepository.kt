@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.repository.AdminRoom
 import com.machankura.dedun.compose.nostr.DisappearingMessages
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.wallet.GroupLightningRollout
@@ -159,17 +160,24 @@ class DatabaseChatRepository(
         emptySet()
     }
 
-    override suspend fun adminRoomOf(chatRoomId: String): String? = try {
-        // The room's own ceremony, not a subgroup's it hosted: a subgroup's key
-        // makes the subgroup's room, which is not this group's admin room.
-        database.dkgSessionDao().getLatestSessionFor(chatRoomId, parentChatRoomId = null)
-            ?.takeIf { it.stage == DkgRitualStage.COMPLETE }
-            ?.thresholdPublicKey
-            ?.let { SharedKeyDerivation.marmotGroupId(it) }
-            ?.takeIf { it != chatRoomId && database.chatRoomDao().findChatRoomById(it) != null }
+    override suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom> = try {
+        // The room's own ceremonies, not a subgroup's it hosted: a subgroup's key
+        // makes the subgroup's room, which is not one of this room's groups. Every
+        // one that finished, since the same people may have made several groups here.
+        database.dkgSessionDao().getOwnSessionsForChatRoom(chatRoomId)
+            .filter { it.stage == DkgRitualStage.COMPLETE }
+            .mapNotNull { ceremony ->
+                val roomId = ceremony.thresholdPublicKey
+                    ?.let { SharedKeyDerivation.marmotGroupId(it) }
+                    ?.takeIf { it != chatRoomId }
+                    ?: return@mapNotNull null
+                val room = database.chatRoomDao().findChatRoomById(roomId) ?: return@mapNotNull null
+                AdminRoom(name = room.chatRoom.subject ?: ceremony.subject, chatRoomId = roomId)
+            }
+            .distinctBy { it.chatRoomId }
     } catch (e: Throwable) {
-        logger.e("Error finding the admin room of $chatRoomId", e)
-        null
+        logger.e("Error finding the admin rooms of $chatRoomId", e)
+        emptyList()
     }
 
     override suspend fun reconcileAdminFlags(): Int = AdminFlags.reconcileAll(database)

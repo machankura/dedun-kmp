@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.open_room_named
 import dedun.composeapp.generated.resources.also_in_the_way
 import dedun.composeapp.generated.resources.back_to_the_group
 import dedun.composeapp.generated.resources.make_admin
@@ -182,18 +183,33 @@ fun MemberActionUnavailableScreen(
                     )
 
                     when {
-                        lead == MemberActionBlocker.NoAdminsInThisRoom && state.adminRoomId != null -> Button(
-                            onClick = {
-                                onNavigateToRoute(
-                                    ChatRoomDetailRoute(
-                                        activeUserPublicKey = activeUserPublicKey,
-                                        chatRoomId = state.adminRoomId,
-                                        relayHint = null,
-                                    )
-                                )
-                            },
+                        // The same people may run several groups from this room, each from a
+                        // room of its own, and which one the member meant is theirs to say, so
+                        // each is offered by name (docs/nip17-multiple-ceremonies.md).
+                        lead == MemberActionBlocker.NoAdminsInThisRoom && state.adminRooms.isNotEmpty() -> Column(
+                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
                         ) {
-                            Text(stringResource(Res.string.open_the_admin_room))
+                            state.adminRooms.forEach { adminRoom ->
+                                Button(
+                                    onClick = {
+                                        onNavigateToRoute(
+                                            ChatRoomDetailRoute(
+                                                activeUserPublicKey = activeUserPublicKey,
+                                                chatRoomId = adminRoom.chatRoomId,
+                                                relayHint = null,
+                                            )
+                                        )
+                                    },
+                                ) {
+                                    Text(
+                                        if (state.adminRooms.size == 1 || adminRoom.name == null) {
+                                            stringResource(Res.string.open_the_admin_room)
+                                        } else {
+                                            stringResource(Res.string.open_room_named, adminRoom.name)
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         // The switch is on the group's page, under its members.

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.repository.AdminRoom
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 
 /**
@@ -25,8 +26,11 @@ sealed interface MemberActionUnavailableUIState {
         val blockers: List<MemberActionBlocker>,
         /** What to call everyone a blocker names: admins to ask, devices waited on. */
         val names: Map<HexKey, String> = emptyMap(),
-        /** The admin room a NIP-17 room's members run the group from, when known. */
-        val adminRoomId: String? = null,
+        /**
+         * The admin rooms a NIP-17 room's members run their groups from, when known:
+         * one per group the same people have made there.
+         */
+        val adminRooms: List<AdminRoom> = emptyList(),
     ) : MemberActionUnavailableUIState
 
     /** Nothing stands in the way any more: the blocker cleared while the screen was open. */

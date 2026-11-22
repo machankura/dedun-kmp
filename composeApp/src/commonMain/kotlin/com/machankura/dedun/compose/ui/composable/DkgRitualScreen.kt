@@ -387,7 +387,9 @@ fun DkgRitualScreen(
 /**
  * Where a failed ceremony is tried again: the screen that starts that kind.
  *
- * A group's own goes back to `CreateSharedKeyScreen`. A subgroup's goes back to
+ * A group's own goes back to `CreateSharedKeyScreen`, filled in from the one that
+ * failed -- its name above all, since the room may hold other groups and its own
+ * name is the first one's (docs/nip17-multiple-ceremonies.md). A subgroup's goes back to
  * the picker, filled in from the ceremony that failed, because trying again is a
  * new ceremony over choices the member may want to change -- an admin who never
  * showed up, say.
@@ -401,7 +403,7 @@ internal fun retryRoute(activeUserPublicKey: HexKey, chatRoomId: String, session
                 retrying = session.id,
             )
         }
-        ?: CreateSharedKeyRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
+        ?: CreateSharedKeyRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, retrying = session.id)
 
 /** The ladder, and the members it is climbing. */
 /**

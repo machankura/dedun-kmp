@@ -291,7 +291,12 @@ class DkgRitualViewModelJvmTest {
         val parent = "9a7e".repeat(16)
 
         val group = retryRoute(ada, chatRoomId, session(DkgRitualStage.FAILED))
-        assertEquals(CreateSharedKeyRoute(activeUserPublicKey = ada, chatRoomId = chatRoomId), group)
+        assertEquals(
+            CreateSharedKeyRoute(activeUserPublicKey = ada, chatRoomId = chatRoomId, retrying = sessionId),
+            group,
+            "a group's own goes back to the creation screen, filled in from the one that failed: " +
+                "the room may hold other groups, and its name is the first one's",
+        )
 
         val subgroup = retryRoute(
             ada,

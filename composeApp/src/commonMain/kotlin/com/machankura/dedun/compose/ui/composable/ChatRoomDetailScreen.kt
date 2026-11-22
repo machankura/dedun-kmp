@@ -827,9 +827,11 @@ fun ChatRoomDetailScreen(
                             }
 
                             // A robust group's NIP-17 room has no admins of its own;
-                            // its members are admins of the room its key made.
-                            chatRoomDetailUIState.adminRoomId?.let { adminRoomId ->
-                                item {
+                            // its members are admins of the rooms its keys made, one
+                            // per group they have made here.
+                            chatRoomDetailUIState.adminRooms.forEach { adminRoom ->
+                                val adminRoomId = adminRoom.chatRoomId
+                                item(key = "admin-room-$adminRoomId") {
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
                                         onClick = {
@@ -850,7 +852,7 @@ fun ChatRoomDetailScreen(
                                                 Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
                                             },
                                             headlineContent = {
-                                                Text(text = stringResource(Res.string.admin_room))
+                                                Text(text = adminRoom.name ?: stringResource(Res.string.admin_room))
                                             },
                                             supportingContent = {
                                                 Text(text = stringResource(Res.string.every_member_of_this_group_administers_it_there))

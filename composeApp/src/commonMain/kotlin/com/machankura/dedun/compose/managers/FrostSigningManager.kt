@@ -3009,6 +3009,14 @@ object FrostSigningManager {
      * naming a parent is never the room's own key, and that is all it takes to
      * tell them apart.
      *
+     * And it answers only when there is one answer. A NIP-17 room holds a ceremony
+     * for every group its members have made there -- the same people always share
+     * one, since its id is derived from them -- so with two finished keys "the key
+     * this room signs with" has none, and guessing the newest would sign as a group
+     * the proposer never meant. Nothing that runs today asks it of a NIP-17 room:
+     * the one signing there is the key state, which names its key
+     * (docs/nip17-multiple-ceremonies.md, P5). Anything that comes to must do the same.
+     *
      * They are not only for rooms that predate the table. A room's key state is
      * signed before the room exists and filed as the room is created, so a
      * device that missed that session -- a member invited later, a reinstall --
@@ -3035,9 +3043,13 @@ object FrostSigningManager {
                 ShareGenerations.canSign(database, session)
         }?.let { return it }
 
-        return database.dkgSessionDao()
-            .getLatestOwnSessionForChatRoom(chatRoomId)
-            ?.takeIf { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
+        val own = database.dkgSessionDao()
+            .getOwnSessionsForChatRoom(chatRoomId)
+            .filter { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
+        if (own.size > 1) {
+            logger.w("$chatRoomId holds ${own.size} keys of its own; a signature there has to name one")
+        }
+        return own.singleOrNull()
     }
 
     /** Whether this group can sign at all, read by the UI so it offers nothing that would fail. */

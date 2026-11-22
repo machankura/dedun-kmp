@@ -2036,4 +2036,7 @@
     <string name="you_already_have_groups_with_these_people">You already have groups with these people: %1$s.</string>
     <string name="this_will_be_a_separate_group_with_the_same_name">This will be a separate group with the same name, with a key and room of its own.</string>
     <string name="an_unnamed_group">an unnamed group</string>
+    <string name="open_room_named">Open %1$s</string>
+    <string name="new_group_with_these_members">New group with these members</string>
+    <string name="the_new_group_and_its_room_are_called_this">The new group and its room are called this.</string>
 </resources>

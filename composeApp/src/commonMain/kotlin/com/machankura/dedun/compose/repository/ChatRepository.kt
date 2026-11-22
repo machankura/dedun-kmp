@@ -365,12 +365,15 @@ interface ChatRepository {
     suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey>
 
     /**
-     * The admin room [chatRoomId]'s own key ceremony made, if this device holds
-     * it: where the members of a robust group's NIP-17 room are admins. Null for
-     * a room with no finished ceremony of its own, and for one whose admin room
-     * this device does not hold.
+     * The admin rooms [chatRoomId]'s own key ceremonies made that this device holds,
+     * newest first: where the members of a NIP-17 room are admins, one room per group
+     * they have made there. Empty for a room with no finished ceremony of its own.
+     *
+     * A list because the same people share one NIP-17 room however many groups they
+     * make; picking the newest used to hide every group but the last
+     * (docs/nip17-multiple-ceremonies.md).
      */
-    suspend fun adminRoomOf(chatRoomId: String): String?
+    suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom>
 
     /**
      * Brings every Marmot room's admin flags in line with its group's policy, for
@@ -748,7 +751,7 @@ interface ChatRepository {
 
             override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = emptySet()
 
-            override suspend fun adminRoomOf(chatRoomId: String): String? = null
+            override suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom> = emptyList()
 
             override suspend fun reconcileAdminFlags(): Int = 0
 
