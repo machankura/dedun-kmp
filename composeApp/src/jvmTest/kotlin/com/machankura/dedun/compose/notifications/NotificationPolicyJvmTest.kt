@@ -114,4 +114,11 @@ class NotificationPolicyJvmTest {
         assertEquals(Drop(Reason.TooOld), decide(line(at = now - NotificationPolicy.HORIZON - 1.hours)))
         assertEquals(Post(NotificationCategory.Messages), decide(line(at = now - NotificationPolicy.HORIZON + 1.hours)))
     }
+
+    /** docs/disappearing-messages.md, D6: a notification would be a disappeared message's last copy. */
+    @Test
+    fun `a line past its expiry has disappeared, and is not posted`() {
+        assertEquals(Drop(Reason.Expired), decide(line().copy(expiresAt = now)))
+        assertEquals(Post(NotificationCategory.Messages), decide(line().copy(expiresAt = now + 1.hours)))
+    }
 }

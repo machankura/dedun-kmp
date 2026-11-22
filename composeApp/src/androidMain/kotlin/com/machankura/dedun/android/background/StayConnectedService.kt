@@ -60,6 +60,7 @@ class StayConnectedService : Service() {
             runtime.synchronization
             runtime.notary
             runtime.notifications
+            runtime.disappearing
             if (runtime.activeIdentity.value == null) {
                 DefaultIdentity.load(runtime.phoenixGlobal)?.let { identity ->
                     activatedHere = identity

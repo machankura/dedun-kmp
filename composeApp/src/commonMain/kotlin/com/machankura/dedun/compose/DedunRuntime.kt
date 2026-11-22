@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose
 
+import com.machankura.dedun.compose.managers.DisappearingMessageSweeper
+import com.machankura.dedun.compose.managers.WrittenOnlyRetention
 import co.touchlab.kermit.Logger
 import fr.acinq.phoenix.PhoenixGlobal
 import kotlin.concurrent.atomics.AtomicReference
@@ -170,6 +172,19 @@ class DedunRuntime(
     }
 
     /**
+     * Deletes what has disappeared, whenever something falls due, for as long as the process
+     * lives, and takes down any notification still showing it. docs/disappearing-messages.md,
+     * Phase 4. Started on first read, beside [notifications].
+     */
+    val disappearing: Job by lazy {
+        ioScope.launch {
+            DisappearingMessageSweeper.run(auxDatabaseManager.auxDatabase, WrittenOnlyRetention) { swept ->
+                notificationDispatcher.withdraw(swept.messageIds)
+            }
+        }
+    }
+
+    /**
      * One bounded sync while off screen, run by the platform's scheduler: WorkManager, a
      * BGTaskScheduler task. docs/notifications-and-background-sync.md, Phase 9.
      */
@@ -181,6 +196,7 @@ class DedunRuntime(
                 synchronization
                 notary
                 notifications
+                disappearing
             },
             syncPending = { publicKey ->
                 nostrRepository.observePendingNegentropySynchronizeRequests(publicKey).map { it != null }

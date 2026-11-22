@@ -145,6 +145,20 @@ class NotificationDispatcher(
         }
     }
 
+    /**
+     * Takes away every notification showing one of [messageIds]: lines the disappearing-message
+     * sweeper has deleted. A notification left up would be the message's last copy on the device
+     * (docs/disappearing-messages.md, D6).
+     */
+    suspend fun withdraw(messageIds: Set<Long>) {
+        if (messageIds.isEmpty()) return
+        val gone = showingMutex.withLock {
+            showing.values.filter { notification -> notification.lines.any { it.messageId in messageIds } }
+                .onEach { showing.remove(it.key) }
+        }
+        gone.forEach { notifier.cancel(it.key) }
+    }
+
     /** Takes a room's notifications away once the room has been read past them. D8. */
     private suspend fun cancelWhatWasRead(userPublicKey: HexKey) {
         database.chatRoomDao().observeChatRoomListByUserPublicKey(userPublicKey).collect { rooms ->

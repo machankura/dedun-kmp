@@ -538,6 +538,7 @@ fun DedunNavHost(
     val notaryViewModel: NotaryViewModel = runtime.notary
     val synchronizationViewModel: SynchronizationViewModel = runtime.synchronization
     remember(runtime) { runtime.notifications }
+    remember(runtime) { runtime.disappearing }
 
     // TODO: Produce a synchronization UI element...
 

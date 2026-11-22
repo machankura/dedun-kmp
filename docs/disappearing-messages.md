@@ -461,6 +461,27 @@ confederation statement keeping its single tag; the payload id equal to the rumo
 rumor expirations as D5 describes; the self-copy carrying the same rumor expiry; an expired
 queued payload never reaching `BroadcastNostrEventRequest`.
 
+**Built.** One store, `DisappearingSettingsStore.stamp`, does the stamping. `sendChatMessage`,
+`ChillDkgRitualManager.broadcast`, `ConfederationRitualManager.broadcast`,
+`FrostSigningManager.broadcast` and `MarmotOutboundDao.deliveryWelcome` each call it before they
+hash. The DKG and FROST producers stamp only on their NIP-17 branch. A Marmot room's rounds follow
+the group's retention, as before. `FrostSigningManager` stamps again on each step of its
+same-second id search, because the expiry is worked out from `created_at`. The wrap's tag uses
+quartz's formula, and the seal stays empty. `persistAndBroadcastGiftWrap` records each wrap's
+payload and expiry on its `GiftWrapMessage`.
+
+It differs from the plan in three ways:
+
+- `NostrEvent` has no `expiresAt` column. The predicate the plan relied on is on
+  `MarmotGroupEvent`. The wrap's row goes when the sweeper deletes its payload.
+- An expired, unsent payload is left unsealed rather than reported to its manager. The sweeper
+  deletes it: a person's message at once, a round once its session lets it go. The count of
+  unsent messages comes back from each sweep (`Swept.unsent`). The snackbar for it is left to
+  Phase 6.
+- The planned test that every producer stamps is covered for `sendChatMessage` in
+  `DisappearingSendJvmTest`. For the protocol producers it is covered by the full suite (1,866
+  tests) passing with them stamping. There is no per-producer assertion yet.
+
 ### Phase 4: receiving, and the sweeper
 
 - `GiftWrapSeal.decryptGiftWrapPayload` carries the rumor's tags through, as it already does. It
@@ -486,6 +507,35 @@ Tests: a JVM test of the sweeper for each row type; inbound drop and tombstone; 
 tombstoned wrap not decrypting it; another sender's one-hour expiry being obeyed while this
 device's setting is Off; the notification not being raised; a protocol payload past its expiry
 but not released surviving a sweep. Add a case to `NotificationClassifierJvmTest`.
+
+**Built.** `DisappearingMessageSweeper.sweep` asks a `PayloadRetention` about each due payload.
+Phase 4 ships `WrittenOnlyRetention`, which releases only what a person wrote. `sweepPayload`, a
+transaction in `DisappearingDao`, does the deleting in this order:
+
+1. It clears any `ChatRoom.initialGiftWrapPayloadId` that points at the payload.
+2. It deletes every wrap linked to the payload, plus the wrap around its seal for rows filed
+   before the link existed. The cascade takes each wrap's seal with it.
+3. It deletes the payload, which takes its chat lines with it.
+
+Wraps that have no payload here go at their own expiry. `GizaRuntime.disappearing` runs the
+sweeper. It watches the soonest `GiftWrapPayload.expiresAt`, wakes when that time comes and every
+hour besides, and withdraws any notification that showed a deleted line
+(`NotificationDispatcher.withdraw`). It starts beside `notifications`: in `DedunNavHost`, in
+`StayConnectedService` and in the background pass's engines. `NotificationPolicy` drops an expired
+line as `Reason.Expired`.
+
+It differs from the plan in one way. A message that arrives already expired is not deleted on
+arrival. The sync that delivered it writes a request row against the event's id straight
+afterwards, under a foreign key. So the arrival path deletes the seal, which is the part this
+device could decrypt. It empties the wrap's content and keeps the empty row until the wrap's own
+expiry, and the unlinked-wrap rule deletes it then. While the row is there, a re-sync finds the
+event already stored and opens nothing. The tombstone lasts two days longer still, for a relay
+that serves the wrap after it should have dropped it.
+
+Not needed: the "This message has disappeared" placeholder for a quoted line. In NIP-17 rooms
+nothing sets or reads `ChatMessage.replyToMessageId` or `quotedMessageId` outside the model, so
+no NIP-17 line quotes another. A group's direct messages do have replies, and Phase 7 deals with
+those.
 
 ### Phase 5: protocol payloads, released when their session is done
 

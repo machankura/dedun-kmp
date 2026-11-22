@@ -12,6 +12,7 @@ import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.managers.IcebergRitualManager
+import com.machankura.dedun.compose.managers.DisappearingMessageSweeper
 import androidx.room3.Dao
 import androidx.room3.Transaction
 import co.touchlab.kermit.Logger
@@ -257,6 +258,11 @@ abstract class NostrDao(
             val secret = activeKeyPair.privKey
             if (secret != null && GroupDmReceiver.receive(database, nostrEvent.toEvent(), activeKeyPair.pubKey.toHex(), secret)) return
         }
+
+        // A wrap this device already opened, found expired and deleted: the relay may serve it for
+        // up to two days more, and opening it again would only find it expired again
+        // (docs/disappearing-messages.md, D6).
+        if (nostrEvent.kind == GiftWrapEvent.KIND && database.disappearingDao().isTombstoned(nostrEvent.id)) return
 
         val storedNostrEvent = database.nostrEventDao().getNostrEventById(nostrEvent.id)
 
@@ -611,9 +617,23 @@ abstract class NostrDao(
                                 throw giftWrapImpersonation // Once this is thrown the database transaction fails and nothing gets saved to the DB...
                             }
 
+                            // NIP-40: a message already past its expiry is ignored -- not filed,
+                            // not notified, not handed to a ceremony. It can arrive because its
+                            // wrap outlives it on the relay by design, and because re-syncs happen
+                            // (docs/disappearing-messages.md, D6).
+                            val rumorExpiry = decryptedGiftWrapPayload.expiresAt
+                            if (rumorExpiry != null && rumorExpiry <= Clock.System.now()) {
+                                DisappearingMessageSweeper.dropOnArrival(
+                                    database, nostrEvent.id, nostrEvent.tags, nostrEvent.createdAt.epochSeconds, rumorExpiry,
+                                )
+                                return@let
+                            }
+
                             database.giftWrapPayloadDao().upsert(
                                 decryptedGiftWrapPayload
                             )
+                            // The wrap is deleted with what it carried, and not before (Phase 4).
+                            database.disappearingDao().linkWrap(giftWrapMessage.id, decryptedGiftWrapPayload.id, rumorExpiry)
 
                             if (decryptedGiftWrapPayload.kind == ChatMessageEvent.KIND) {
                                 logger.d("chatMessageEvent: $decryptedGiftWrapPayload")
@@ -2132,7 +2152,8 @@ abstract class NostrDao(
                 // The rumor's own timestamp, not the wrap's -- NIP-17 fuzzes the
                 // wrap and the seal by up to two days to frustrate correlation, and
                 // ordering the feed by that would shuffle the conversation.
-                createdAt = decryptedGiftWrapPayload.createdAt
+                createdAt = decryptedGiftWrapPayload.createdAt,
+                expiresAt = decryptedGiftWrapPayload.expiresAt,
             )
         )
     }

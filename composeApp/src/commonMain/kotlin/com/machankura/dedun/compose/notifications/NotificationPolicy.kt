@@ -42,6 +42,8 @@ sealed interface NotificationDecision {
         AlreadyRead,
         /** Written long ago, however recently it was filed: backfill, not news. */
         TooOld,
+        /** Past its NIP-40 expiry: it has disappeared, and a notification would be its last copy. */
+        Expired,
     }
 }
 
@@ -73,6 +75,7 @@ object NotificationPolicy {
             ?: return drop(NotificationDecision.Reason.NotNotifiable)
 
         return when {
+            line.expiresAt != null && line.expiresAt <= now -> drop(NotificationDecision.Reason.Expired)
             !settings.enabled -> drop(NotificationDecision.Reason.NotificationsOff)
             !settings.allows(category) -> drop(NotificationDecision.Reason.CategoryOff)
             room == null || room.deletedAt != null || room.leftGroupAt != null ->
