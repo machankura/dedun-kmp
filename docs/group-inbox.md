@@ -31,8 +31,40 @@ change already runs, which D14 adds to; and
 [marmot-direct-messages.md](./marmot-direct-messages.md), for the last time this app built
 a gift wrap by hand.
 
-**Planned, not built.** Written against `5ac4c053`, on 2026-11-22. Paths starting `K/` are
-under `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`.
+**Built** on `claude/nip4e-group-profiles-38d2ac`, against `5ac4c053`, on 2026-11-22, one commit
+per phase (`ccc439b2` to the commit that adds this header), plus one test commit in Phase 8.
+Behind `ExperimentalFeatures.groupInbox`, on in development builds and off in release.
+jvmTest 1,706, all passing; `m3Audit`, `brandAudit` and `walletAudit` at their budgets;
+`compileDebugKotlinAndroid` builds. The phases are kept as written, because they are the
+reasoning. Where the build chose differently:
+
+| what the plan said | what it turned out to be |
+|---|---|
+| D3: candidate kinds 30390–30396 | **30410–30416**. quartz 2.20.1 has 30392–30395 (experimental trusted lists); Phase 0 found the collision |
+| Phase 3: a `GroupInboxOutbound` table for wraps | `GroupInboxPublication`, one table for everything owed to relays: the 10044 and 10050 (D7) and the reply wraps (D10). Phase 5 folded `InboxSigning` (a reply's manifest and a refusal's reason, kept past arrival) and `InboxKeyCeremony.announceRelays` into schema 45, which has not shipped |
+| Phase 4: `InboxKeyRitualScreen` | the settings screen's ceremony card (Phase 7): who it waits on, and Abandon |
+| Phase 4: transcript lines that say what each step does | three lines a ceremony (started, made, ended). Nobody is asked anything in it, so a ladder per step names nobody whose door to knock on; the ceremony card names them when it stalls |
+| (not in the plan) | **an announcement that arrives before this device has finished the same ceremony waits** instead of being declined as a key nobody made. The coordinator asks for the signature the moment its own copy is made, which is routinely before anyone else's; `FrostSigningManager.resumeInboxAnnouncements` looks again when the ceremony finishes here |
+| (not in the plan) | **a member who only watches the ceremony learns the key**, by running the coordinator's two aggregations over the public messages, which need no secret. That is what lets a share-holder who is not an admin check a 10044 before signing it |
+| Phase 6: catch-up from the newest wrap less two days | no `since`, as the personal inbox has none, and no negentropy pass: the live subscription's `limit` covers reconnection. A device away longer than that window misses mail; the same is true of the personal inbox today |
+| Phase 6: the subscription asks for `#p` = the group's npub | and for `#p` = each inbox key this device holds, routing a wrap by its key when it is not tagged with the group. An app that knows only the announcement, and builds its wrap with quartz's `GiftWrapEvent.create`, tags the key it encrypts to |
+| Phase 6: `indexNostrEvent` skips a wrap tagged with a group | not needed: the personal subscription asks only for `#p` = the identity, so a group's mail never reaches `storeNostrEvent` |
+| Phase 6: the wipe | in `MarmotInboundManager.processGroupMembershipChanges`, and it deletes the inbox's messages and ledger too, with a transcript line said once |
+| D10: any admin can **Send again** | offered on the proposer's device, the only one that knows a relay never took the wrap. `InboxReplies.sendAgain` works on any device holding the session's manifest; nothing else offers it yet |
+| Phase 8: `FrostSigningScreen` shows the decrypted reply | through the notes the confederation already used, renamed `proposalNotes` (`FrostSigningRepository`, `FrostSigningUIState.notes`). `ProposedEvent` says only "A private reply from the group's inbox", since it has no key to read with |
+| Phase 9: `GovernanceFollowThrough` owes an inbox rotation after each change | a rule every device reads off what it holds, `InboxRotation.isOwed`: the newest key was made over admins the room no longer has. The admin whose key sorts first starts it. Run from the governance follow-through and the sweep |
+| (not in the plan) | **crossing ceremonies**: two admins who start one at once end in the one whose session id sorts first, on every device, the other ended out loud. A proposal for a generation a device already has is dropped |
+| Phase 9: a test that no inbox ceremony starts during a share rotation | the refusal reads `RotationHold` as planned, but the inbox harness runs no share refresh, so it is not tested |
+| Phase 0, check 4 in `SignedGroupKeyStateTest` | moved: Phase 8 made a seal nobody can read a decline, so that test now pins the decline, and `InboxReplyJvmTest` checks the premise end to end |
+| (not in the plan) | the worktree's build needed `lightning-kmp-app` and its nested submodules initialised from the main checkout's copies, with their `local.properties` and the prebuilt native secp256k1 |
+
+**Not done:** Phase 10's device run. Nothing here has run on a device or a desktop client: no
+inbox has been set up across real devices, no stranger's NIP-17 client has written to one, and no
+reply has been opened by a client that follows nostr-protocol/nips#2361 -- or by one that does
+not, which is the case D13 warns about and nobody has watched happen.
+
+Written against `5ac4c053`, on 2026-11-22. Paths starting `K/` are under
+`composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`.
 
 ---
 
