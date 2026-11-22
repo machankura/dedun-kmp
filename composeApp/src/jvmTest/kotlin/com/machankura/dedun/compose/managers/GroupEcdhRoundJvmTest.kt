@@ -101,7 +101,8 @@ class GroupEcdhRoundJvmTest {
         assertNull(d.context(), "no part to take")
         assertEquals(emptyList(), d.db.groupDmDao().getAllOpenRounds())
         assertNull(d.db.groupDmDao().getRound(GroupEcdhPayload.roundId(net.roomId, 0, wrap.pubKey)))
-        assertNull(d.db.groupDmDao().getWrap(wrap.id)!!.sealJson)
+        // Partials reaching a device that is not an admin make it forget what it held (D14).
+        assertNull(d.db.groupDmDao().getWrap(wrap.id)?.sealJson)
         assertEquals(emptyList(), net.outbox(d), "and sends nothing")
         // The slots on every partials message name only the three admins' host keys.
         val adminHosts = net.hostKeys.take(3).toSet()
@@ -120,7 +121,7 @@ class GroupEcdhRoundJvmTest {
 
         assertNotNull(b.db.groupDmDao().getWrap(wrap.id)!!.sealJson, "the two remaining admins read it")
         assertNull(c.context())
-        assertNull(c.db.groupDmDao().getWrap(wrap.id)!!.sealJson, "the removed admin does not")
+        assertNull(c.db.groupDmDao().getWrap(wrap.id)?.sealJson, "the removed admin does not, and forgets the wrap")
         assertEquals(emptyList(), c.db.groupDmDao().getAllOpenRounds())
         net.outbox(a).filter { it.kind == GroupEcdhEvents.PARTIALS }.forEach {
             assertFalse(net.hostKeys[2] in AdminSeal.parseSlots(it.tags).keys)
