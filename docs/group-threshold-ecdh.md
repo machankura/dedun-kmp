@@ -36,7 +36,9 @@ by its own ceremony and held whole by every admin (`group-inbox.md`, written alo
 one and not merged). *Against the NIP-4E plan* below says where the two differ, and how
 they fit together if both are built.
 
-**Being built.** Phase 0 is done, and its findings changed D4 and D11. Written against `5ac4c053`, on 2026-11-22. Paths starting `K/` are
+**Built, Phases 0 to 10**, behind `ExperimentalFeatures.groupDirectMessages`; the device run
+(Phase 11) has not been done. *What the plan said, and what it turned out to be* is below the
+phases. Written against `5ac4c053`, on 2026-11-22. Paths starting `K/` are
 under `composeApp/src/commonMain/kotlin/com/machankura/dedun/compose/`, and `B/` is bitcoin-kmp's
 `src/commonMain/kotlin/fr/acinq/bitcoin/`, under
 `lightning-kmp-app/experimental/lightning-kmp/experimental/bitcoin-kmp/`.
@@ -770,6 +772,42 @@ Routes and screens, each with a back button, `readableContent()`, the four state
   5. Remove C as admin: the next message does not open on C's device; C's kept keys are gone.
   6. Promote D: D's device opens the conversation's history.
   7. The group writes first to a new npub; the outside client receives it.
+
+---
+
+## What the plan said, and what it turned out to be
+
+Built in eleven commits on top of `5ac4c053`, one or two per phase. The tests named in each
+phase exist and pass; `ThresholdEcdhPremiseJvmTest` keeps Phase 0's six checks.
+
+| the plan said | what was built | why |
+|---|---|---|
+| `K/crypto/threshold/` | `K/cryptography/threshold/` | the app already had a `cryptography` package |
+| D3: the `PrivateKey` constructor rejects a hash at or above `n` | it does not; `Dleq` calls `isValid()` on every hash it reads as a scalar | Phase 0, check 4 |
+| D4: each partial message's payload sealed once per admin | the payload is encrypted once under a fresh key, and only that key is sealed per admin (`AdminSeal`) | Phase 0, check 6: 918 KB for twenty items and seven admins |
+| D9, D11: the first partial carries the wrap as evidence | wraps and seals are named by the wrap's id; only a recipient's evidence travels | Phase 0, check 6: one wrap of a long message is most of a relay's event |
+| D11: a device answers a round once | a device answers once, and sends its partial *again* to an admin whose message shows it lacks it (each item lists the partials its sender holds, `have`) | Phase 7: an admin promoted after a round combined was never answered, because nobody answers a combined round |
+| D12: one `dm_manifest` tag per admin | one `dm_manifest` ciphertext and a `dm_slot` per admin, the same shape as the partials | `AdminSeal`, for the size reason above |
+| D13, check 4: the approval waits, and the signing screen says it is waiting for a key | the proposal is held unfiled and handed to the signing manager again when the recipient's round combines (`GroupDmSender.retryHeld`); nothing shows on the signer's device while it is held | the arrival check needs this device's nostr key to open the manifest, and a session filed as asked could be approved before it was read |
+| D13: a decline says which check failed | three reasons: `REASON` for any of D13's checks, `CANNOT_READ` for a device that is not a current admin or a batch with no manifest, `FEATURE_OFF` with the flag off. A decline published later, without the key to hand, gives the general one for an admin | `publishDecline` has no nostr key; the specific reason is in the log |
+| Phase 4: `GroupDmOutbound` for a message's wraps | it also carries the group's signed 10050, owed by the proposer (`recipient` is the group) | one publisher, `GroupDmPublisher`, for everything the group's mail owes relays |
+| Phase 6: the setup screen shows the relays to edit | one field, one `wss://` address per line, refused until every line is a public relay | |
+| Phase 7: `DirectMessagePeerSync` fetches each correspondent's 10050 and kind 0 | not built. Evidence and relays come from what the device already holds: a seal the person sent the group, or their kind 0, 10050, 10002 or 1 in the `NostrEvent` table. The composer says when there is none | the profile sync the app already runs fills the table for anyone the device has looked at |
+| Phase 7: the rate cap set from the batch size | 60 new wrap rounds per room per hour, two batches' worth | |
+| Phase 8: outgoing states and Send again | built in Phase 9, with the data they read: being signed, signed and not yet sent, sent, signed but not sent, declined. Send again is offered on any admin's device for the two unsent states | only the proposer's device wraps on its own, so another admin's cannot tell sent from not |
+| Phase 9: the signing screen shows the text, what it answers and the recipients | as notes under the seals, beside the confederation's (`DatabaseFrostSigningRepository.confederationNotes`) | the screen already had the slot |
+| Phase 10: the wipe on seeing oneself removed | on every sweep, and whenever partials still reach the device: keys, messages, wraps and rounds, the freed pages scrubbed, and one line in the room | |
+
+### Known gaps
+
+- **No device run.** Phase 11's seven steps have not been done; the flag stays off in a release
+  until they have.
+- **A held proposal is invisible.** A signer whose device is still computing a recipient's key
+  sees nothing until it has; in practice the partials arrive before the proposal does.
+- **A device that is not the proposer cannot tell whether the message reached its recipients**,
+  only that the group signed it. Send again is how it makes sure.
+- **The rounds move only in the foreground**, as every ritual here does.
+- **A promoted admin reads the past** (D14), and narrowing that is out of scope.
 
 ---
 
