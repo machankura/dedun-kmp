@@ -559,6 +559,30 @@ those.
   have been swept. In `ChillDkg…JvmTest`, `CeremonyFollowThroughJvmTest`,
   `ConfederationCeremonyJvmTest` and `ConfederationStatusTest`.
 
+**Built.** It is one `ProtocolRetention` object, not a hook on each manager. All three answers are
+a lookup of the session that a round's session tag names. `GizaRuntime.disappearing` now runs the
+sweeper with it in place of Phase 4's `WrittenOnlyRetention`.
+
+- A DKG round is released when its `DkgSession` is `COMPLETE` or `FAILED`. A signing round is
+  released when its `FrostSigningSession` is. A confederation-ceremony round is released when its
+  `ConfederationCeremony` is no longer `isRunning`. Abandoning a ceremony ends it as `FAILED`, so
+  that case is covered too.
+- A round whose session this device does not have is released at its expiry. Nothing here will
+  read it back, and by the time its floor has passed, any session that was going to be made from
+  it has been.
+- A Welcome is released at its expiry. An inbound Welcome is processed the moment it arrives, and
+  the only thing that refers back to one is the room's `initialGiftWrapPayloadId`, which the sweep
+  clears first.
+
+`ProtocolRetentionJvmTest` covers an open ceremony keeping its expired round, a completed one
+losing it while the session's own record stays, a failed signing releasing its nonce, a round with
+no session, a Welcome, and a written message.
+
+Not built, and left for the device run (Phase 8): the end-to-end tests that a DKG survives an admin
+being offline for six days, and that a signing completes through a resend after its proposal has
+expired off the relay. Both need two devices and a real relay, which the JVM tests do not model.
+The confederation-status test is moot here, because statements do not travel on this path.
+
 ### Phase 6: the screens
 
 Every point in CLAUDE.md applies: strings in `strings.xml` written in sentence case, spacing from

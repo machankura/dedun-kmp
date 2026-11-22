@@ -1,7 +1,7 @@
 package com.machankura.dedun.compose
 
 import com.machankura.dedun.compose.managers.DisappearingMessageSweeper
-import com.machankura.dedun.compose.managers.WrittenOnlyRetention
+import com.machankura.dedun.compose.managers.ProtocolRetention
 import co.touchlab.kermit.Logger
 import fr.acinq.phoenix.PhoenixGlobal
 import kotlin.concurrent.atomics.AtomicReference
@@ -178,7 +178,7 @@ class DedunRuntime(
      */
     val disappearing: Job by lazy {
         ioScope.launch {
-            DisappearingMessageSweeper.run(auxDatabaseManager.auxDatabase, WrittenOnlyRetention) { swept ->
+            DisappearingMessageSweeper.run(auxDatabaseManager.auxDatabase, ProtocolRetention) { swept ->
                 notificationDispatcher.withdraw(swept.messageIds)
             }
         }
