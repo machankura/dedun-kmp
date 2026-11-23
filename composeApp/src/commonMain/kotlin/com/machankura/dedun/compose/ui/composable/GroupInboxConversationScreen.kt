@@ -264,7 +264,7 @@ private fun GroupInboxConversationScreenPreview() {
                 conversationId = "c1",
                 initialUIState = GroupInboxConversationUIState.Loaded(
                     localChatRoom = LocalChatRoom(
-                        chatRoom = ChatRoom(id = chatRoomId, userPublicKey = "a".repeat(64), subject = "#Ekklesia", description = null, mlsGroupState = "state")
+                        chatRoom = ChatRoom(id = chatRoomId, userPublicKey = "a".repeat(64), subject = "&Ekklesia", description = null, mlsGroupState = "state")
                     ),
                     names = listOf("Zola"),
                     lines = listOf(

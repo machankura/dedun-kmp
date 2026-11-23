@@ -292,7 +292,7 @@ private fun GroupInboxSettingsScreenPreview() {
                 relayHint = null,
                 initialUIState = GroupInboxSettingsUIState.Loaded(
                     localChatRoom = LocalChatRoom(
-                        chatRoom = ChatRoom(id = chatRoomId, userPublicKey = "a".repeat(64), subject = "#Ekklesia", description = null, mlsGroupState = "state")
+                        chatRoom = ChatRoom(id = chatRoomId, userPublicKey = "a".repeat(64), subject = "&Ekklesia", description = null, mlsGroupState = "state")
                     ),
                     status = GroupInboxRepository.Status(
                         keys = emptyList(), ceremony = null, announcedKey = null, relays = emptyList(), setUpRefusal = null, waitingOn = emptyList(),

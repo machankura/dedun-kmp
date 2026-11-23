@@ -39,7 +39,7 @@ import com.machankura.dedun.compose.ui.view.state.GroupInboxUIState
 class GroupInboxScreenJvmTest {
     private val chatRoomId = "d".repeat(64)
     private val me = "a".repeat(64)
-    private val room = LocalChatRoom(ChatRoom(id = chatRoomId, userPublicKey = me, subject = "#Ekklesia", description = null, mlsGroupState = "state"))
+    private val room = LocalChatRoom(ChatRoom(id = chatRoomId, userPublicKey = me, subject = "&Ekklesia", description = null, mlsGroupState = "state"))
 
     private fun key(generation: Int, state: InboxKeyState = InboxKeyState.ANNOUNCED) = InboxKey(
         chatRoomId = chatRoomId, userPublicKey = me, generation = generation, publicKey = "e".repeat(64),

@@ -283,7 +283,7 @@ class RobustGroupAdminsJvmTest {
         val created = MarmotGroupFactory.create(
             creator = creator.keyPair,
             roomId = roomId,
-            name = "#Ekklesia",
+            name = "&Ekklesia",
             description = SharedKeyDerivation.describe("Admins of Ekklesia."),
             adminPublicKeys = phones.map { it.publicKey },
             relays = Relays.DefaultDMRelayList.map { it.url },
@@ -294,7 +294,7 @@ class RobustGroupAdminsJvmTest {
                 chatRoomId = roomId,
                 activeUserPublicKey = creator.publicKey,
                 relayHint = null,
-                defaultSubject = "#Ekklesia",
+                defaultSubject = "&Ekklesia",
                 description = null,
                 mlsGroupState = created.group.saveState().encodeTls().toHex(),
             )

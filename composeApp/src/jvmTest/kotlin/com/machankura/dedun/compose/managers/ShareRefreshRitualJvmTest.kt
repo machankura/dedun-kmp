@@ -104,7 +104,7 @@ class ShareRefreshRitualJvmTest {
             db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
         }
         val publicKey = group.members[index]
-        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "&Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
         db.chatRoomDao().upsert(chatRoom)
         val id = group.idOf[index]
         db.dkgSessionDao().upsert(
@@ -1351,7 +1351,7 @@ class ShareRefreshRitualJvmTest {
             db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
             db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
         }
-        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "&Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
         db.chatRoomDao().upsert(chatRoom)
         val key = from.key()
         db.dkgSessionDao().upsert(key.copy(userPublicKey = publicKey, secretShare = null, round1Random = "", round2AuxRandom = "", hostPublicKey = ChillDkgRitualManager.deriveHostPublicKey(keyPair.privKey!!).value.toHex()))
@@ -1385,7 +1385,7 @@ class ShareRefreshRitualJvmTest {
             db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
             db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
         }
-        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "&Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
         db.chatRoomDao().upsert(chatRoom)
         return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
     }

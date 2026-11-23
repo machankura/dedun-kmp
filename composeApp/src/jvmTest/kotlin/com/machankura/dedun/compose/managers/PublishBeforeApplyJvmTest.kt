@@ -72,7 +72,7 @@ class PublishBeforeApplyJvmTest {
     private suspend fun establishedRoom(): String {
         seedProfile(user)
         val outcome = MarmotGroupCreation.create(
-            database = db, chatRepository = chatRepository, groupId = roomId, name = "#room",
+            database = db, chatRepository = chatRepository, groupId = roomId, name = "&room",
             purpose = "Admins.", adminPublicKeys = setOf(user), userPublicKey = user, keyPair = keyPair,
             profile = MarmotProfile.CURRENT,
         )

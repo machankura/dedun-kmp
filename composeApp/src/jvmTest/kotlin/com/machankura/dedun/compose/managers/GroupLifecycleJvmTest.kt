@@ -83,7 +83,7 @@ class GroupLifecycleJvmTest {
         seedProfile(member.hex)
         assertIs<MarmotGroupCreation.Outcome.Created>(
             MarmotGroupCreation.create(
-                database = db, chatRepository = chatRepository, groupId = roomId, name = "#room",
+                database = db, chatRepository = chatRepository, groupId = roomId, name = "&room",
                 purpose = "Admins.", adminPublicKeys = setOf(user), userPublicKey = user, keyPair = keyPair,
                 profile = MarmotProfile.CURRENT,
             )

@@ -272,7 +272,7 @@ class RobustRoomKeyCeremonyTest {
 
     /**
      * A second group named by the room would be the first group's namesake, and the
-     * room its key makes another `#Robust Group`. The screens always name it, so a
+     * room its key makes another `&Robust Group`. The screens always name it, so a
      * caller that does not is a bug, said as one. docs/nip17-multiple-ceremonies.md, D2.
      */
     @Test

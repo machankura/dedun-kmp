@@ -232,7 +232,7 @@ private fun GroupInboxScreenPreview() {
                 relayHint = null,
                 initialUIState = GroupInboxUIState.Loaded(
                     localChatRoom = LocalChatRoom(
-                        chatRoom = ChatRoom(id = chatRoomId, userPublicKey = "a".repeat(64), subject = "#Ekklesia", description = null, mlsGroupState = "state")
+                        chatRoom = ChatRoom(id = chatRoomId, userPublicKey = "a".repeat(64), subject = "&Ekklesia", description = null, mlsGroupState = "state")
                     ),
                     conversations = listOf(
                         GroupInboxRepository.ConversationSummary(

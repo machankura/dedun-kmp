@@ -62,13 +62,13 @@ class GroupsInOneRoomJvmTest {
             val ekklesia = completed(network, subject = null)
             assertEquals(emptyList(), repository.adminRoomsOf(network.roomId), "no room made yet, none to offer")
 
-            val ekklesiaRoom = standUpRoom(network, ekklesia, "#Ekklesia")
-            assertEquals(listOf(AdminRoom("#Ekklesia", ekklesiaRoom)), repository.adminRoomsOf(network.roomId))
+            val ekklesiaRoom = standUpRoom(network, ekklesia, "&Ekklesia")
+            assertEquals(listOf(AdminRoom("&Ekklesia", ekklesiaRoom)), repository.adminRoomsOf(network.roomId))
 
             // A second group, by the same people, in the same room. While its ceremony
             // runs it has no room to offer; the first group's is still there.
             val agora = network.propose(threshold = 3, subject = "Agora")
-            assertEquals(listOf(AdminRoom("#Ekklesia", ekklesiaRoom)), repository.adminRoomsOf(network.roomId))
+            assertEquals(listOf(AdminRoom("&Ekklesia", ekklesiaRoom)), repository.adminRoomsOf(network.roomId))
 
             network.deliverUntilQuiet()
             network.devices.forEach { device ->
@@ -80,9 +80,9 @@ class GroupsInOneRoomJvmTest {
             val agoraDone = assertNotNull(network.session(network.coordinator, agora.id))
             assertEquals(DkgRitualStage.COMPLETE, agoraDone.stage, agoraDone.failureReason)
 
-            val agoraRoom = standUpRoom(network, agoraDone, "#Agora")
+            val agoraRoom = standUpRoom(network, agoraDone, "&Agora")
             assertEquals(
-                setOf(AdminRoom("#Ekklesia", ekklesiaRoom), AdminRoom("#Agora", agoraRoom)),
+                setOf(AdminRoom("&Ekklesia", ekklesiaRoom), AdminRoom("&Agora", agoraRoom)),
                 repository.adminRoomsOf(network.roomId).toSet(),
                 "both groups, not the newest alone",
             )
@@ -106,7 +106,7 @@ class GroupsInOneRoomJvmTest {
                 repository.groupsMadeIn(network.roomId).toSet(),
             )
 
-            val ekklesiaRoom = standUpRoom(network, ekklesia, "#Ekklesia")
+            val ekklesiaRoom = standUpRoom(network, ekklesia, "&Ekklesia")
             assertEquals(
                 GroupMadeHere.Status.Ready(ekklesiaRoom),
                 repository.groupsMadeIn(network.roomId).single { it.dkgSessionId == ekklesia.id }.status,

@@ -48,7 +48,7 @@ class MemberActionUnavailableScreenJvmTest {
     private val thabo = "c".repeat(64)
 
     private fun blocked(vararg blockers: MemberActionBlocker, adminRoomId: String? = null) =
-        blocked(*blockers, adminRooms = listOfNotNull(adminRoomId?.let { AdminRoom(name = "#Checkers", chatRoomId = it) }))
+        blocked(*blockers, adminRooms = listOfNotNull(adminRoomId?.let { AdminRoom(name = "&Checkers", chatRoomId = it) }))
 
     private fun blocked(vararg blockers: MemberActionBlocker, adminRooms: List<AdminRoom>) = MemberActionUnavailableUIState.Blocked(
         memberName = "Nomvula",
@@ -131,14 +131,14 @@ class MemberActionUnavailableScreenJvmTest {
     @Test
     fun `a room whose members run several groups offers each admin room by name`() {
         val rooms = listOf(
-            AdminRoom(name = "#Checkers", chatRoomId = "8".repeat(64)),
-            AdminRoom(name = "#Chess", chatRoomId = "9".repeat(64)),
+            AdminRoom(name = "&Checkers", chatRoomId = "8".repeat(64)),
+            AdminRoom(name = "&Chess", chatRoomId = "9".repeat(64)),
         )
         var opened: Route? = null
         render(blocked(MemberActionBlocker.NoAdminsInThisRoom, adminRooms = rooms), onNavigateToRoute = { opened = it }) {
             onNodeWithText("Open the admin room").assertDoesNotExist()
-            onNodeWithText("Open #Checkers").assertExists()
-            onNodeWithText("Open #Chess").performClick()
+            onNodeWithText("Open &Checkers").assertExists()
+            onNodeWithText("Open &Chess").performClick()
         }
         assertEquals(ChatRoomDetailRoute(activeUserPublicKey, "9".repeat(64), null), opened)
     }

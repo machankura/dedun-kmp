@@ -98,7 +98,7 @@ object MarmotGroupFactory {
                     signer = NostrSignerInternal(creator),
                     nostrGroupId = routingId,
                     relays = relays,
-                    // Byte-capped by the component (256 and 4096); a name is a `#name`
+                    // Byte-capped by the component (256 and 4096); a name is an `&name`
                     // and a description is a sentence, a path and a room id, so the
                     // caps only ever bind on input nobody meant, and cutting the
                     // front of the description beats refusing the room over it. The

@@ -42,7 +42,7 @@ class InboxStorageJvmTest {
         val profileEvent = "9".repeat(64)
         db.nostrEventDao().upsert(NostrEvent(id = profileEvent, pubKey = admin, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
         db.profileDao().upsert(Profile(publicKey = admin, nostrEventId = profileEvent))
-        db.chatRoomDao().upsert(ChatRoom(id = room, userPublicKey = admin, subject = "#Ekklesia", description = "", mlsGroupState = null))
+        db.chatRoomDao().upsert(ChatRoom(id = room, userPublicKey = admin, subject = "&Ekklesia", description = "", mlsGroupState = null))
     }
 
     private fun completedCeremonyAndKey() = runBlocking {

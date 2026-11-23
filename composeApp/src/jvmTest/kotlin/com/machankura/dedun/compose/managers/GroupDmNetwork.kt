@@ -82,7 +82,7 @@ class GroupDmNetwork(n: Int = 4, val t: Int = 2, secret: String = "6d0000".padEn
             db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
             db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
         }
-        val chatRoom = ChatRoom(id = roomId, userPublicKey = members[index], subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        val chatRoom = ChatRoom(id = roomId, userPublicKey = members[index], subject = "&Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
         db.chatRoomDao().upsert(chatRoom)
         db.dkgSessionDao().upsert(
             DkgSession(

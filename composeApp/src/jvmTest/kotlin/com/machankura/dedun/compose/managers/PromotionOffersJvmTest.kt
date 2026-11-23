@@ -37,7 +37,7 @@ class PromotionOffersJvmTest {
     private suspend fun room() {
         MarmotStandIn.seedProfile(db, alice, "Alice")
         MarmotStandIn.seedProfile(db, erin, "Erin")
-        db.chatRoomDao().upsert(ChatRoom(id = roomId, userPublicKey = erin, subject = "#keyed", description = null, mlsGroupState = null))
+        db.chatRoomDao().upsert(ChatRoom(id = roomId, userPublicKey = erin, subject = "&keyed", description = null, mlsGroupState = null))
     }
 
     private suspend fun said(id: Char, by: String, kind: Int, tags: Array<Array<String>>, at: Long) =

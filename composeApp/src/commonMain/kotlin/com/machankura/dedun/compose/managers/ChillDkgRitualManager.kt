@@ -241,7 +241,7 @@ object ChillDkgRitualManager {
         // The room's own name, which names a group's own ceremony only when it is
         // the room's first: a second group made by the same people lands in the
         // same room, and naming it after the room would make two rooms called
-        // `#Ekklesia`. docs/nip17-multiple-ceremonies.md, D2.
+        // `&Ekklesia`. docs/nip17-multiple-ceremonies.md, D2.
         val roomSubject = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
         val requestedSubject = subject?.takeIf { it.isNotBlank() }
 
@@ -326,7 +326,7 @@ object ChillDkgRitualManager {
         // A group's own ceremony falls back to the room's name only when the room
         // holds no other group: the room keeps its first group's name (D3), so a
         // second group named by it would be the first one's namesake, and the room
-        // its key makes would be another `#Ekklesia`. The screens that open one
+        // its key makes would be another `&Ekklesia`. The screens that open one
         // always name it; reaching this without a name is a bug in the caller.
         val holdsAnotherGroup = parentChatRoomId == null && database.dkgSessionDao()
             .getOwnSessionsForChatRoom(localChatRoom.chatRoom.id)
