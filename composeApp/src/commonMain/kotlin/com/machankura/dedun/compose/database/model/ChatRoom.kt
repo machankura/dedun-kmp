@@ -59,6 +59,9 @@ data class ChatRoom(
      *  Any member can change the topic by simply submitting a new subject to an existing pubkey + p tags room.
      *
      *  There is no need to send subject in every message. The newest subject in the chat room is the subject of the conversation.
+     *
+     * For a Marmot room, the group's bare name. Draw a room's name through [title], which
+     * puts a group's in braces; never off this (docs/group-name-braces.md).
      */
     val subject: String?,
 

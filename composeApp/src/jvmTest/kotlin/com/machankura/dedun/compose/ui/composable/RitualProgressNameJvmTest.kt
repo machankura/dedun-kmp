@@ -67,7 +67,7 @@ class RitualProgressNameJvmTest {
         }
 
     @Test
-    fun `a finished group is named`() = render(finished("Agora"), "Agora has a shared key.")
+    fun `a finished group is named`() = render(finished("Agora"), "{Agora} has a shared key.")
 
     @Test
     fun `a ceremony from before names keeps its words`() = render(finished(null), "The group has a shared key.")

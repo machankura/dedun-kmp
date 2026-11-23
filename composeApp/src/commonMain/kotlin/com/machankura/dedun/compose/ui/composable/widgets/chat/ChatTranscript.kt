@@ -119,6 +119,7 @@ import dedun.composeapp.generated.resources.proposals_are_waiting_for_your_signa
 import dedun.composeapp.generated.resources.reply_privately_to
 import dedun.composeapp.generated.resources.sent_a_private_message_to
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * A chat room's transcript: its messages, the notices between them, and the standing ask
@@ -719,7 +720,7 @@ internal fun CeremoniesAwaitingYouNotice(
         isLightning -> stringResource(Res.string.the_lightning_wallet_s_key_ceremony_needs_you)
         // Named by the group it makes: the same people may run more than one ceremony
         // in a room (docs/nip17-multiple-ceremonies.md).
-        single.subject != null -> stringResource(Res.string.the_key_ceremony_for_needs_you, single.subject)
+        single.subject != null -> stringResource(Res.string.the_key_ceremony_for_needs_you, MarmotGroupName.display(single.subject))
         single.isSubgroup -> stringResource(Res.string.the_subgroups_key_ceremony_needs_you)
         else -> stringResource(Res.string.the_key_ceremony_needs_you)
     }
@@ -733,7 +734,7 @@ internal fun CeremoniesAwaitingYouNotice(
     // The two rounds after it are never asked for, so they say nothing here.
     val detail = if (single == null) {
         // Several: which ones, so a member knows what the count is of.
-        ceremonies.mapNotNull { it.subject }.takeIf { it.isNotEmpty() }?.joinToString(", ")
+        ceremonies.mapNotNull { it.subject?.let(MarmotGroupName::display) }.takeIf { it.isNotEmpty() }?.joinToString(", ")
     } else single.let {
         when (val ask = it.ask) {
             is ChatMessageListViewModel.Ask.SharedKeyStep -> when (ask.step) {

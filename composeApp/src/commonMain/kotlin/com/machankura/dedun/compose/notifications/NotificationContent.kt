@@ -3,6 +3,7 @@ package com.machankura.dedun.compose.notifications
 import kotlin.time.Instant
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.title
 
 /**
  * The words a notification is built from that are not anybody's message: read from the string
@@ -61,7 +62,7 @@ object NotificationContent {
      * one member's own as a note to self.
      */
     fun roomTitle(room: LocalChatRoom, strings: NotificationStrings): String {
-        room.chatRoom.subject?.takeIf { it.isNotBlank() }?.let { return it }
+        room.chatRoom.title?.takeIf { it.isNotBlank() }?.let { return it }
         val others = room.localParticipants.filter { it.participant.participantPublicKey != room.chatRoom.userPublicKey }
         if (others.isEmpty()) return strings.noteToSelf
         return others.joinToString(", ") { participant ->

@@ -51,6 +51,9 @@ import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
 import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.database.model.title
+import dedun.composeapp.generated.resources.invite_new_member_to
+import dedun.composeapp.generated.resources.invite_new_member_to_chat
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -96,11 +99,9 @@ fun SearchMemberToAddToChatRoomScreen(
                     topBar = {
                         TopAppBar(
                             title = {
-                                val title = if (searchMemberToAddToChatRoomUIState.localChatRoom.chatRoom.subject != null) {
-                                    "Invite new member to ${searchMemberToAddToChatRoomUIState.localChatRoom.chatRoom.subject}"
-                                } else {
-                                    "Invite new member to chat"
-                                }
+                                val title = searchMemberToAddToChatRoomUIState.localChatRoom.chatRoom.title
+                                    ?.let { stringResource(Res.string.invite_new_member_to, it) }
+                                    ?: stringResource(Res.string.invite_new_member_to_chat)
                                 Text(
                                     text = title,
                                 )

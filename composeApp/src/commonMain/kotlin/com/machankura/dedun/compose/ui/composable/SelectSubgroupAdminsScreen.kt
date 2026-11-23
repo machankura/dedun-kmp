@@ -181,12 +181,13 @@ fun SelectSubgroupAdminsScreen(
                             onValueChange = viewModel::setName,
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            // Every Marmot room is an `&name`, and a subgroup is
-                            // one. Shown in the field rather than added on
-                            // confirm alone, so the name the coordinator reads
-                            // here is the name the parent's admins will be asked
-                            // to approve.
+                            // Every Marmot room is drawn `{name}`, and a subgroup
+                            // is one. The braces frame the field and are never
+                            // stored: what is typed between them is the name the
+                            // parent's admins will be asked to approve
+                            // (docs/group-name-braces.md, D7).
                             prefix = { Text(MarmotGroupName.PREFIX) },
+                            suffix = { Text(MarmotGroupName.SUFFIX) },
                             label = { Text(stringResource(Res.string.what_is_the_subgroup_called)) }
                         )
                     }

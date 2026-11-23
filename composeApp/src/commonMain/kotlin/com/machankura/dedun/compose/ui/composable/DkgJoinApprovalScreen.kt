@@ -35,6 +35,7 @@ import dedun.composeapp.generated.resources.you
 import dedun.composeapp.generated.resources.your_device_publishes_the_key_it_will_be
 import dedun.composeapp.generated.resources.your_share_of_the_key_never_leaves_this
 import com.machankura.dedun.compose.ui.theme.spacing
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * Asks whether to join a shared key ceremony somebody else opened.
@@ -80,8 +81,8 @@ fun DkgJoinApprovalScreen(
         // The group the ceremony makes, not the room it is held in: the same people
         // share one NIP-17 room however many groups they make, and the room keeps
         // the first one's name (docs/nip17-multiple-ceremonies.md).
-        val group = session.subject
-            ?: state.localChatRoom.chatRoom.subject
+        val group = (session.subject ?: state.localChatRoom.chatRoom.subject)
+            ?.let(MarmotGroupName::display)
             ?: stringResource(Res.string.this_group)
 
         Text(
@@ -100,7 +101,7 @@ fun DkgJoinApprovalScreen(
             Text(
                 text = stringResource(
                     Res.string.you_already_share_with_these_people_this_makes_a_separate_group,
-                    state.otherGroups.joinToString(", ")
+                    state.otherGroups.joinToString(", ", transform = MarmotGroupName::display)
                 ),
                 style = MaterialTheme.typography.bodyLarge
             )

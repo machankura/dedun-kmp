@@ -385,6 +385,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 import kotlin.time.Instant
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -2368,8 +2369,8 @@ private fun SubgroupCard(
             },
             headlineContent = {
                 Text(
-                    text = subgroup.room?.chatRoom?.subject
-                        ?: subgroup.name
+                    text = (subgroup.room?.chatRoom?.subject ?: subgroup.name)
+                        ?.let(MarmotGroupName::display)
                         ?: stringResource(Res.string.a_subgroup)
                 )
             },
@@ -3141,7 +3142,7 @@ internal fun GroupsMadeHere(
                         Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
                     },
                     headlineContent = {
-                        Text(text = group.name?.takeIf { it.isNotBlank() } ?: unnamed)
+                        Text(text = group.name?.takeIf { it.isNotBlank() }?.let(MarmotGroupName::display) ?: unnamed)
                     },
                     supportingContent = {
                         Text(

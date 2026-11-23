@@ -133,6 +133,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * One shared-key ceremony: a ChillDKG ritual, shown as a ladder of rounds so
@@ -199,12 +200,12 @@ fun DkgRitualScreen(
                                 Text(
                                     // The ceremony's name, not the room's: a subgroup's
                                     // runs in its parent's room, and "Shared key for
-                                    // #Checkers" over Tapscript's ceremony names the
+                                    // {Checkers}" over Tapscript's ceremony names the
                                     // one group it is not for.
                                     text = stringResource(
                                         Res.string.shared_key_for,
-                                        session.subject
-                                            ?: dkgRitualUIState.localChatRoom.chatRoom.subject
+                                        (session.subject ?: dkgRitualUIState.localChatRoom.chatRoom.subject)
+                                            ?.let(MarmotGroupName::display)
                                             ?: "this group"
                                     ),
                                     maxLines = 1,
@@ -604,7 +605,7 @@ internal fun RitualProgress(
                     // more than one group in this room (docs/nip17-multiple-ceremonies.md).
                     Text(
                         text = session.subject
-                            ?.let { stringResource(Res.string.s_has_a_shared_key, it) }
+                            ?.let { stringResource(Res.string.s_has_a_shared_key, MarmotGroupName.display(it)) }
                             ?: stringResource(Res.string.the_group_has_a_shared_key),
                         style = MaterialTheme.typography.titleSmall
                     )

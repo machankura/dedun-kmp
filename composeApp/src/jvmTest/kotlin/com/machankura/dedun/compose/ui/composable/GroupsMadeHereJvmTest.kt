@@ -33,11 +33,11 @@ class GroupsMadeHereJvmTest {
 
     @Test
     fun `every group is listed, with where it stands`() = render(listOf(agora, forum, ekklesia)) {
-        onNodeWithText("Agora").assertExists()
+        onNodeWithText("{Agora}").assertExists()
         onNodeWithText("Key ceremony in progress").assertExists()
-        onNodeWithText("Forum").assertExists()
+        onNodeWithText("{Forum}").assertExists()
         onNodeWithText("Has its key, and is waiting for its room").assertExists()
-        onNodeWithText("Ekklesia").assertExists()
+        onNodeWithText("{Ekklesia}").assertExists()
         onNodeWithText("Every member of this group is an admin there.").assertExists()
     }
 
@@ -45,7 +45,7 @@ class GroupsMadeHereJvmTest {
     fun `a group is opened by the one tapped`() {
         var opened: GroupMadeHere? = null
         render(listOf(agora, ekklesia), onOpen = { opened = it }) {
-            onNodeWithText("Ekklesia").performClick()
+            onNodeWithText("{Ekklesia}").performClick()
         }
         assertEquals(ekklesia, opened)
     }

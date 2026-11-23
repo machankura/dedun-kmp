@@ -137,8 +137,8 @@ class MemberActionUnavailableScreenJvmTest {
         var opened: Route? = null
         render(blocked(MemberActionBlocker.NoAdminsInThisRoom, adminRooms = rooms), onNavigateToRoute = { opened = it }) {
             onNodeWithText("Open the admin room").assertDoesNotExist()
-            onNodeWithText("Open &Checkers").assertExists()
-            onNodeWithText("Open &Chess").performClick()
+            onNodeWithText("Open {Checkers}").assertExists()
+            onNodeWithText("Open {Chess}").performClick()
         }
         assertEquals(ChatRoomDetailRoute(activeUserPublicKey, "9".repeat(64), null), opened)
     }

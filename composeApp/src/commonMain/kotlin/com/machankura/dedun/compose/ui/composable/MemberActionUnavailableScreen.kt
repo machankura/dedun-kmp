@@ -99,6 +99,7 @@ import com.machankura.dedun.compose.ui.view.state.MemberActionBlocker
 import com.machankura.dedun.compose.ui.view.state.MemberActionUnavailableUIState
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * Why a member row's action cannot be taken now, and what would change that.
@@ -205,7 +206,7 @@ fun MemberActionUnavailableScreen(
                                         if (state.adminRooms.size == 1 || adminRoom.name == null) {
                                             stringResource(Res.string.open_the_admin_room)
                                         } else {
-                                            stringResource(Res.string.open_room_named, adminRoom.name)
+                                            stringResource(Res.string.open_room_named, MarmotGroupName.display(adminRoom.name))
                                         }
                                     )
                                 }

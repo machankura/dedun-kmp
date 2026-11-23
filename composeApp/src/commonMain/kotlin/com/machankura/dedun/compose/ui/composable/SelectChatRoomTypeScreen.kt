@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.managers.MarmotGroupName
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -541,7 +542,7 @@ private fun ExistingGroupsCard(
     sharesName: Boolean,
 ) {
     val unnamed = stringResource(Res.string.an_unnamed_group)
-    val names = existingGroups.joinToString(", ") { it.name?.takeIf(String::isNotBlank) ?: unnamed }
+    val names = existingGroups.joinToString(", ") { it.name?.takeIf(String::isNotBlank)?.let(MarmotGroupName::display) ?: unnamed }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

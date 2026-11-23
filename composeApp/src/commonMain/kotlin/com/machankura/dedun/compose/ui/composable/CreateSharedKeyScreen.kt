@@ -75,6 +75,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.CreateSharedKeyViewModel
 import com.machankura.dedun.compose.ui.view.state.CreateSharedKeyUIState
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * Starts a group's key ceremony in a NIP-17 room: its name, the quorum, and one
@@ -135,7 +136,7 @@ fun CreateSharedKeyScreen(
                     // room that already has a group is making another, and its name
                     // is the first group's, not this one's.
                     val loaded = state as? CreateSharedKeyUIState.Loaded
-                    val subject = loaded?.takeIf { !it.needsName }?.localChatRoom?.chatRoom?.subject
+                    val subject = loaded?.takeIf { !it.needsName }?.localChatRoom?.chatRoom?.subject?.let(MarmotGroupName::display)
                     Text(
                         text = when {
                             loaded?.needsName == true -> stringResource(Res.string.new_group_with_these_members)
@@ -199,7 +200,7 @@ fun CreateSharedKeyScreen(
                             val unnamed = stringResource(Res.string.an_unnamed_group)
                             val roomSubject = uiState.localChatRoom.chatRoom.subject
                             val names = uiState.groups.joinToString(", ") {
-                                it.subject ?: roomSubject ?: unnamed
+                                (it.subject ?: roomSubject)?.let(MarmotGroupName::display) ?: unnamed
                             }
                             Text(
                                 text = if (uiState.groups.size == 1) {

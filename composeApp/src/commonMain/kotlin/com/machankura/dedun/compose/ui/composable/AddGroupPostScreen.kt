@@ -68,6 +68,7 @@ import dedun.composeapp.generated.resources.the_group_signs_a_post_so_it_takes_a
 import dedun.composeapp.generated.resources.this_group_has_no_shared_key_to_sign_a_post
 import dedun.composeapp.generated.resources.what_should_the_group_say
 import org.jetbrains.compose.resources.stringResource
+import com.machankura.dedun.compose.database.model.title
 
 /**
  * The draft of something the group would say, in its own name.
@@ -201,7 +202,7 @@ fun AddGroupPostScreen(
 
                             Text(
                                 text = addGroupPostUIState.groupNostrProfile?.name()
-                                    ?: addGroupPostUIState.localChatRoom.chatRoom.subject
+                                    ?: addGroupPostUIState.localChatRoom.chatRoom.title
                                     ?: chatRoomId.take(16),
                                 style = MaterialTheme.typography.titleSmall,
                                 maxLines = 1,

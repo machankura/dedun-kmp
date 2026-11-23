@@ -84,6 +84,7 @@ import dedun.composeapp.generated.resources.this_group_has_no_shared_key_to_sign
 import dedun.composeapp.generated.resources.unsigned_event
 import dedun.composeapp.generated.resources.what_the_group_would_sign
 import org.jetbrains.compose.resources.stringResource
+import com.machankura.dedun.compose.database.model.title
 
 /**
  * An unsigned event, pasted, for the group to sign.
@@ -225,7 +226,7 @@ fun ProposeGroupEventScreen(
 
                             Text(
                                 text = proposeGroupEventUIState.groupNostrProfile?.name()
-                                    ?: proposeGroupEventUIState.localChatRoom.chatRoom.subject
+                                    ?: proposeGroupEventUIState.localChatRoom.chatRoom.title
                                     ?: chatRoomId.take(16),
                                 style = MaterialTheme.typography.titleSmall,
                                 maxLines = 1,

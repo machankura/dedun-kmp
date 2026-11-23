@@ -99,6 +99,8 @@
     <string name="invite">Invite</string>
     <string name="invite_a_friend">Invite a friend</string>
     <string name="invite_new_member">Invite new member</string>
+    <string name="invite_new_member_to">Invite new member to %1$s</string>
+    <string name="invite_new_member_to_chat">Invite new member to chat</string>
     <string name="it_is_cryptographical_secure_and">It is cryptographical secure, and decentralized, putting you in total control of your digital profile</string>
     <string name="just_you_for_now">Just you for now</string>
     <string name="keep_the_feed_alive">Keep the feed alive.</string>

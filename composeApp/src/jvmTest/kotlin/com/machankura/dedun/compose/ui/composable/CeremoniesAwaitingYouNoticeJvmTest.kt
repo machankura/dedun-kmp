@@ -33,14 +33,14 @@ class CeremoniesAwaitingYouNoticeJvmTest {
 
     @Test
     fun `one ceremony is named by the group it makes`() = render(listOf(waiting("a", "Agora"))) {
-        onNodeWithText("The key ceremony for Agora needs you").assertExists()
+        onNodeWithText("The key ceremony for {Agora} needs you").assertExists()
     }
 
     @Test
     fun `several are counted, and named under the count`() =
         render(listOf(waiting("a", "Agora"), waiting("b", "Ekklesia"))) {
             onNodeWithText("2 key ceremonies need you").assertExists()
-            onNodeWithText("Agora, Ekklesia").assertExists()
+            onNodeWithText("{Agora}, {Ekklesia}").assertExists()
         }
 
     @Test
