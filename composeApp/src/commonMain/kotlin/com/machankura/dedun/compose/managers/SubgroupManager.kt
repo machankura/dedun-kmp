@@ -630,7 +630,11 @@ object SubgroupManager {
                     chatRoomId = chatRoomId,
                     parentChatRoomId = parentChatRoomId,
                     certificate = signed,
-                    name = SubgroupBirthCertificateEvent.parseName(event.tags),
+                    // Under today's mark: a certificate signed before
+                    // docs/group-name-prefix.md says `#name`, and the room it
+                    // names is `&name` on this device. What was agreed is the
+                    // name, not the punctuation.
+                    name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::of),
                     adminPublicKeys = SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags),
                     room = database.chatRoomDao().findChatRoomById(chatRoomId),
                     keyState = database.groupKeyStateDao().getByChatRoomId(chatRoomId),

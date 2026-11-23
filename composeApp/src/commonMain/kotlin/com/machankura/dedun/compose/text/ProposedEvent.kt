@@ -92,6 +92,11 @@ object ProposedEvent {
         SubgroupBirthCertificateEvent.KIND -> Summary(
             label = "A new subgroup of this group",
             detail = listOfNotNull(
+                // Verbatim, not through `MarmotGroupName.of`: this is what the
+                // signer is about to approve, and a certificate proposed before
+                // docs/group-name-prefix.md says `#name`. The summary of a
+                // signature shows the bytes being signed, even where the rest
+                // of the app would show the name under today's mark (D5).
                 SubgroupBirthCertificateEvent.parseName(event.tags),
                 SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags)
                     .size

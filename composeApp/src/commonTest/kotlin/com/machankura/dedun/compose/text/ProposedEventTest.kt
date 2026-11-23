@@ -33,6 +33,11 @@ class ProposedEventTest {
         assertEquals("An article", summary.detail)
     }
 
+    /**
+     * `#Translation` on purpose: a certificate proposed before docs/group-name-prefix.md. The
+     * summary is of what the signer approves, so it shows the name as signed, `#` and all,
+     * where the rest of the app would show `&Translation` (D5).
+     */
     @Test
     fun `a birth certificate says what it decides about the child's wallet, either way`() {
         val parent = "1".repeat(64)

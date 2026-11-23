@@ -77,6 +77,7 @@ import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
 import com.machankura.dedun.compose.managers.SubgroupManager
+import com.machankura.dedun.compose.managers.MarmotGroupName
 import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleRequestEvent
@@ -1835,7 +1836,9 @@ data class ChatMessage(
                 // The name is the one the parent certified, which is the only one
                 // that was ever put to this room -- the child may since have been
                 // renamed, and this line is a record of what was agreed rather
-                // than a view of what is.
+                // than a view of what is. It is written under today's mark,
+                // though: a certificate signed as `#name` before
+                // docs/group-name-prefix.md certified the name, not the `#`.
                 SubgroupBirthCertificateEvent.KIND -> {
                     SubgroupManager.record(
                         database = database,
@@ -1843,7 +1846,7 @@ data class ChatMessage(
                         innerEvent = event
                     ) ?: return null
 
-                    val name = SubgroupBirthCertificateEvent.parseName(event.tags)
+                    val name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::of)
                     val admins = SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags).size
 
                     ChatMessage(
