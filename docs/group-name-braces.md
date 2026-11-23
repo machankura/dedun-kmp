@@ -7,12 +7,47 @@ A confederation, which has had no mark until now, is drawn with doubled braces:
 [group-name-prefix.md](./group-name-prefix.md) set up, where the mark was part of the name
 and was written into `ChatRoom.subject`, the MLS group state and signed certificates.
 
-**Status: proposed, every decision made.** Nothing is built. The owner decided:
+**Built**, phases 0-6, one commit each on `claude/group-name-prefix-suffix-a3a11a`. The
+device run (Phase 7) has not been done. The owner decided:
 
 - D2: the bare name goes on the wire.
 - D6: a stored sentence is written with the braces in it.
 - D7: the subgroup field is framed in braces.
 - D10: a confederation is drawn `{{name}}`.
+
+The build followed the plan, with these notes:
+
+- **Phase 1** drew braces in three places the table missed, all ceremony names:
+  `GroupsMadeHere`'s rows (`GroupMadeHere.name`), `DkgRitualScreen`'s "{X} has a shared key"
+  line, and `DkgJoinApprovalScreen`'s list of other groups. `SearchMemberToAddToChatRoomScreen`'s
+  title moved into `strings.xml` as `invite_new_member_to` and `invite_new_member_to_chat`.
+  `MarmotGroupName` and `ConfederationName` share their brace-stripping in an internal
+  `NameMarks.strip`. `ChatRoom.subject`'s KDoc points at `title`.
+- **Phase 1 did not add** the test that a charter named `{X}` still matches a record named
+  `{X}`. The comparisons in `ConfederationSigningManager` and `ConfederationChangeRefusal`
+  are unchanged, and `bare` runs only in `ProposeConfederationViewModel`. The test is still
+  worth writing.
+- **Phase 2** also took Phase 4's `TYPE_SUBGROUP_CERTIFIED` line, because that line was
+  `of`'s last caller and `of` could not be deleted while it remained. It repointed v53's spec
+  at `bare` in this phase too. D8 was built by comparing names through `bare` in
+  `SelectQuorumUIState.sharesNameWith` and `ChillDkgRitualManager.sameName`, so a room still
+  stored as `&Ekklesia` counts as taken before v55 runs, not only after. This is tested in
+  `SelectQuorumNameTest`. One Welcome test name said "Bennu" and failed the brand audit; it
+  was renamed in Phase 6.
+- **Phase 3**'s `renameMarmotRooms` takes no rule parameter: both specs apply `bare`.
+  `55.json` matches `54.json` apart from the version.
+- **Phase 4** tests the proposal, acceptance and profile-change lines and `nameOf`'s
+  room-name branch (`ConfederationStorageJvmTest`). The formation and charter-signed lines
+  were changed the same way, but no test checks their text.
+- **Phase 5** changed 76 lines in 48 files. `ConfederationPeople` and
+  `ConfederationTestGroups` now pass the name itself and no longer use a template.
+- **The worktree** needed its nested submodules initialised and its `local.properties` files
+  copied from the main checkout before Gradle would configure. Neither is part of any commit.
+
+`:composeApp:compileDebugKotlinAndroid` and `:composeApp:jvmTest` passed after each phase,
+with 2057 tests after Phase 5. `m3-audit.sh`, `brand-audit.sh` and `wallet-audit.sh` pass
+with `--check`. **Not run:** `./gradlew check` as a whole, and the checks under "Checking the
+work" on a device.
 
 Written against `dc4ed388` on `giza`. Read group-name-prefix.md first for the history of the
 mark and for why existing rooms are renamed on each device instead of by a commit.

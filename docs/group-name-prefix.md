@@ -5,6 +5,10 @@ A phased plan to change the mark in front of every Marmot room's name from `#` t
 device, rooms a Bennu peer or another Marmot client makes, and the names the groups have
 already signed into subgroup birth certificates.
 
+**Superseded** by [group-name-braces.md](./group-name-braces.md): the mark is now drawn as
+`{name}` and not stored, and `&name` rooms are stored bare from schema v55. This document is
+the record of the `&` change.
+
 **Built**, phases 0-6, one commit each on `claude/group-prefix-replacement-plan-80c110`.
 The build followed the plan, with these notes:
 

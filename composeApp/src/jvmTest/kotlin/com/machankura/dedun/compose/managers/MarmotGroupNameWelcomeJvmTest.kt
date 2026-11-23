@@ -50,7 +50,7 @@ class MarmotGroupNameWelcomeJvmTest {
     }
 
     @Test
-    fun `a room Dedun named under the oldest mark is joined bare`() = runBlocking {
+    fun `a room named under the oldest mark is joined bare`() = runBlocking {
         // `#` on purpose: what a Dedun peer still mints.
         assertEquals("Ekklesia", joinedAs("#Ekklesia"))
     }

@@ -64,7 +64,7 @@ Even without the fold in step 2, a second ceremony would still be named after
 the room. `proposeRitual` falls back to `localChatRoom.chatRoom.subject` when
 no subject is passed, and `SelectQuorumViewModel` never passes one, because
 until now the room's name and the group's name were the same thing. The result
-would be two admin rooms both called `&Ekklesia`.
+would be two admin rooms both called `Ekklesia`.
 
 The test that pins this is
 `RobustRoomKeyCeremonyTest.making the same group twice does not open a second ceremony`.
@@ -523,18 +523,18 @@ One test that runs the whole thing, with real ChillDKG and real FROST, in the
 style of `KeyStateSignsItselfJvmTest` and `CeremonyFollowThroughJvmTest`:
 
 1. Three devices. Alice makes Ekklesia at 2-of-3. Bob and Carol join. It
-   completes, its key state is signed in the NIP-17 room, and `&Ekklesia` is
+   completes, its key state is signed in the NIP-17 room, and `{Ekklesia}` is
    created with all three as admins.
 2. Alice makes Agora at 3-of-3 over the same people. A second proposal goes
    out. Bob and Carol each get a join request that names Agora. They join, it
    completes, its key state is signed in the **same** NIP-17 room, and
-   `&Agora` is created.
+   `{Agora}` is created.
 3. On every device: two `COMPLETE` own ceremonies in the NIP-17 room with
    different keys; two Marmot rooms with different ids and names; each room's
    `GroupKeyState.dkgSessionId` names its own ceremony; the NIP-17 room is
    still called "Ekklesia".
-4. A signature in `&Ekklesia` is made with Ekklesia's shares and verifies
-   against Ekklesia's key, and the same holds for `&Agora`. Neither room's
+4. A signature in `{Ekklesia}` is made with Ekklesia's shares and verifies
+   against Ekklesia's key, and the same holds for `{Agora}`. Neither room's
    `completedKey` returns the other's ceremony.
 
 Two variants:
