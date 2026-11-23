@@ -68,11 +68,12 @@ class ShippedProfileUpgradeJvmTest {
      * Phase 3), 51 for governance proposals and 52 for what a demotion rotates away
      * (docs/member-admin-promotion.md, Phases 5, 8 and 9), 53 for the group's inbox
      * (docs/group-inbox.md, Phase 3), 54 for its direct messages (docs/group-threshold-ecdh.md,
-     * Phase 4) and 55 for disappearing messages (docs/disappearing-messages.md, Phase 2), so the
-     * upgrade crosses ten
+     * Phase 4), 55 for disappearing messages (docs/disappearing-messages.md, Phase 2) and 56 for
+     * groups stored under their bare names (docs/group-name-braces.md, Phase 3), so the upgrade
+     * crosses eleven
      * generated migrations and the file has to come out at the last.
      */
-    private val current = 55
+    private val current = 56
 
     private val directory: File = Files.createTempDirectory("dedun-shipped-profile").toFile()
     private val file: File = File(directory, "aux.db")

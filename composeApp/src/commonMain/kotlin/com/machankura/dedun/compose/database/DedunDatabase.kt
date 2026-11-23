@@ -179,6 +179,7 @@ import com.machankura.dedun.compose.database.model.SynchronizeNostrEventResult
 import com.machankura.dedun.compose.database.model.UnsignedNostrEvent
 import com.machankura.dedun.compose.database.model.Zap
 import kotlin.time.Instant
+import com.machankura.dedun.compose.database.migrations.MarmotGroupBareNameMigrationSpec
 
 val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
 
@@ -290,7 +291,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 55,
+    version = 56,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -617,6 +618,12 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // DisappearingSetting row reads as Off, Dedun's default (D11), so nothing anyone writes starts
         // disappearing on upgrade.
         AutoMigration(from = 54, to = 55),
+        // v56 changes no shape. MarmotGroupBareNameMigrationSpec stores every Marmot room already
+        // on the device under its bare name, `#name` becoming `name`, which the app draws as
+        // `{name}` (docs/group-name-braces.md, Phase 3; docs/giza-second-batch.md, Phase 8). Giza
+        // went `#` to `&` (its v52 or v53) and `&` to bare (its v55); Dedun never stored `&`, so it
+        // goes once, straight to bare, with the same body.
+        AutoMigration(from = 55, to = 56, spec = MarmotGroupBareNameMigrationSpec::class),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
