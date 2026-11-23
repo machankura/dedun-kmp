@@ -29,7 +29,7 @@ reasoning. Where the build differs from the plan:
 | Phase 3's `completedKey` answers when the room holds exactly one completed own ceremony | it counts the ones this device can sign with. A room with one finished key and a second ceremony still running answers the finished one, where the old code answered null whenever the newest ceremony was unfinished |
 | Phase 4 names the group on an own ceremony's lines | on every named ceremony's lines, subgroups included. "The group has a shared key", said in a parent's room about its subgroup, was already wrong before this |
 | Phase 5's rows open the Marmot room | they open its details, as the admin-room card they replace did. The status icon is `Decorative`, because the row's supporting text states the status |
-| Phase 6 signs in `#Ekklesia` and `#Agora` | each derived room id resolves, through `completedKey`, to its own ceremony on every device, and the NIP-17 room to neither. Creating the rooms is recorded through a stand-in `createMarmotGroup`, as `KeyStateSignsItselfJvmTest` does, so nothing is signed inside a Marmot room |
+| Phase 6 signs in `&Ekklesia` and `&Agora` | each derived room id resolves, through `completedKey`, to its own ceremony on every device, and the NIP-17 room to neither. Creating the rooms is recorded through a stand-in `createMarmotGroup`, as `KeyStateSignsItselfJvmTest` does, so nothing is signed inside a Marmot room |
 | Phase 7's upgrade-in-place check | the rule it rests on is pinned in `RobustRoomKeyCeremonyTest`: a ceremony row with no name is matched under its room's name. The check on a real upgraded device has not been done |
 
 **Not done:** the device run in Phase 7. Nothing here has run on a phone or
@@ -64,7 +64,7 @@ Even without the fold in step 2, a second ceremony would still be named after
 the room. `proposeRitual` falls back to `localChatRoom.chatRoom.subject` when
 no subject is passed, and `SelectQuorumViewModel` never passes one, because
 until now the room's name and the group's name were the same thing. The result
-would be two admin rooms both called `#Ekklesia`.
+would be two admin rooms both called `&Ekklesia`.
 
 The test that pins this is
 `RobustRoomKeyCeremonyTest.making the same group twice does not open a second ceremony`.
@@ -523,18 +523,18 @@ One test that runs the whole thing, with real ChillDKG and real FROST, in the
 style of `KeyStateSignsItselfJvmTest` and `CeremonyFollowThroughJvmTest`:
 
 1. Three devices. Alice makes Ekklesia at 2-of-3. Bob and Carol join. It
-   completes, its key state is signed in the NIP-17 room, and `#Ekklesia` is
+   completes, its key state is signed in the NIP-17 room, and `&Ekklesia` is
    created with all three as admins.
 2. Alice makes Agora at 3-of-3 over the same people. A second proposal goes
    out. Bob and Carol each get a join request that names Agora. They join, it
    completes, its key state is signed in the **same** NIP-17 room, and
-   `#Agora` is created.
+   `&Agora` is created.
 3. On every device: two `COMPLETE` own ceremonies in the NIP-17 room with
    different keys; two Marmot rooms with different ids and names; each room's
    `GroupKeyState.dkgSessionId` names its own ceremony; the NIP-17 room is
    still called "Ekklesia".
-4. A signature in `#Ekklesia` is made with Ekklesia's shares and verifies
-   against Ekklesia's key, and the same holds for `#Agora`. Neither room's
+4. A signature in `&Ekklesia` is made with Ekklesia's shares and verifies
+   against Ekklesia's key, and the same holds for `&Agora`. Neither room's
    `completedKey` returns the other's ceremony.
 
 Two variants:

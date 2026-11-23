@@ -199,15 +199,18 @@ room is a Marmot group whose id is derived from the shared key. See
 [shared-key-derivation.md](./shared-key-derivation.md) for how, and
 [marmot-membership.md](./marmot-membership.md) for how members are added to it.
 
-It is named `#` and then the group's name — `#Ekklesia` for a group called
+It is named `&` and then the group's name — `&Ekklesia` for a group called
 Ekklesia. Every Marmot room on a device carries that mark and no NIP-17 room does,
 which is the only thing on a room list that says which of the two a row is. The
 rule is one function, `MarmotGroupName.of`, applied where a room is minted rather
 than where it is drawn: the name is baked into the epoch-0 `MarmotGroupData` every
 member is welcomed with, so a name added at display time would be a name this
-device alone could see. It replaces `Ekklesia (#admins)`, which marked only the
-admin room, left every subgroup unmarked, and sorted nowhere near the group it
-belonged to.
+device alone could see. It is applied again where a Welcome is joined, so a room
+another client named is called the same way. It replaces `Ekklesia (#admins)`, which
+marked only the admin room, left every subgroup unmarked, and sorted nowhere near the
+group it belonged to. The mark was `#` until `#` turned out to read as a hashtag;
+[group-name-prefix.md](./group-name-prefix.md) has that change and the rooms it
+renamed.
 
 ## Known gaps
 

@@ -756,7 +756,8 @@ naming them all after the parent names none of them. The name is required, trave
 on the route to Phase 6's `MarmotGroupData`, and is copied into the birth
 certificate so the parent's admins approve something legible.
 
-`MarmotGroupName.of` puts the `#` on it. The field shows the prefix beside what is
+`MarmotGroupName.of` puts the `&` on it (a `#` before
+[group-name-prefix.md](./group-name-prefix.md)). The field shows the prefix beside what is
 typed rather than in it, so the caret does not move under somebody mid-word, and
 the bare name is what goes down — since Phase 10 onto `DkgSession.subject`, which
 is where a ceremony held in somebody else's room has to keep it. The subgroup's

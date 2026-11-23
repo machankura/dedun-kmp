@@ -5,10 +5,25 @@ A phased plan to change the mark in front of every Marmot room's name from `#` t
 device, rooms a Bennu peer or another Marmot client makes, and the names the groups have
 already signed into subgroup birth certificates.
 
-**Being built**, one commit per phase on `claude/group-prefix-replacement-plan-80c110`. Written against `9db986c1` on `giza`. Read
-[subgroups.md](./subgroups.md) ("A name field at the top") first. It explains why the mark is
-part of the name the group is welcomed with and not added when the name is drawn, and why
-the rule has to be idempotent.
+**Built**, phases 0-6, one commit each on `claude/group-prefix-replacement-plan-80c110`.
+The build followed the plan, with these notes:
+
+- Phase 2 also changed `CurrentProfileKeyPackageJvmTest`. A room from another client that
+  had no mark is now joined as `&made elsewhere`, which is D4.
+- Phase 3's `AutoMigration(51, 52)` with a spec worked. Room generated it although the
+  schema did not change, and `52.json` matches `51.json` apart from the version.
+- Phase 4's line test writes the `TYPE_SUBGROUP_CERTIFIED` line through
+  `ChatMessage.fromGroupEventResult`, in `SubgroupManagerJvmTest`.
+
+`:composeApp:jvmTest` passed after each phase, with 1997 tests after Phase 5.
+`ProposeConfederationViewModelJvmTest`'s "the button waits on a name" failed once in the
+Phase 2 run and passed on its own. It asserts "still looking" before the lookup can finish,
+so it is flaky, and this change did not cause it. **Not run:** the checks under "Checking the
+work" on a device.
+
+Written against `9db986c1` on `giza`. Read [subgroups.md](./subgroups.md) ("A name field at
+the top") first. It explains why the mark is part of the name the group is welcomed with and
+not added when the name is drawn, and why the rule has to be idempotent.
 
 ---
 
