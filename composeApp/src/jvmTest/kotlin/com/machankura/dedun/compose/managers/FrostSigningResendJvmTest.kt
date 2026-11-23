@@ -126,7 +126,7 @@ class FrostSigningResendJvmTest {
         val chatRoom = ChatRoom(
             id = roomId,
             userPublicKey = owner,
-            subject = "&Ekklesia",
+            subject = "Ekklesia",
             description = SharedKeyDerivation.describe("Admins of the group."),
             // No MLS state is what marks a room NIP-17, and it is the only thing
             // `broadcast` reads to choose a transport. A dummy blob is what every

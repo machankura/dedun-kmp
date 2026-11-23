@@ -80,14 +80,14 @@ class AdminChangesJvmTest {
         seedProfile(user, "us")
         seedProfile(member.hex, "Dana")
         val created = MarmotGroupFactory.create(
-            creator = keyPair, roomId = roomId, name = "&room", description = null,
+            creator = keyPair, roomId = roomId, name = "room", description = null,
             adminPublicKeys = listOf(user), relays = Relays.DefaultDMRelayList.map { it.url },
             profile = MarmotProfile.CURRENT,
         )
         routingId = created.routingId
         assertNotNull(
             chatRepository.getOrCreateChatRoom(
-                chatRoomId = roomId, activeUserPublicKey = user, relayHint = null, defaultSubject = "&room",
+                chatRoomId = roomId, activeUserPublicKey = user, relayHint = null, defaultSubject = "room",
                 description = null, mlsGroupState = created.group.saveState().encodeTls().toHex(),
             )
         )
@@ -354,7 +354,7 @@ class AdminChangesJvmTest {
         val keyedRoomId = SharedKeyDerivation.marmotGroupId("02" + KeyPair().pubKey.toHexKey())
         assertIs<MarmotGroupCreation.Outcome.Created>(
             MarmotGroupCreation.create(
-                database = db, chatRepository = chatRepository, groupId = keyedRoomId, name = "&keyed",
+                database = db, chatRepository = chatRepository, groupId = keyedRoomId, name = "keyed",
                 purpose = "Admins.", adminPublicKeys = setOf(user), userPublicKey = user, keyPair = keyPair,
                 profile = MarmotProfile.CURRENT,
             )

@@ -119,7 +119,7 @@ class FrostSigningDeclineJvmTest {
         val chatRoom = ChatRoom(
             id = roomId,
             userPublicKey = owner,
-            subject = "&Ekklesia",
+            subject = "Ekklesia",
             description = SharedKeyDerivation.describe("Admins of the group."),
             mlsGroupState = null
         )

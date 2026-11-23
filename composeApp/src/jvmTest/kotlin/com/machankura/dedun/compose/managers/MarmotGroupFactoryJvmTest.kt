@@ -35,7 +35,7 @@ class MarmotGroupFactoryJvmTest {
     @Test
     fun `a legacy group is addressed by the room id and names its admins in 0xF2EE`() = runBlocking {
         val created = MarmotGroupFactory.create(
-            creator = creator, roomId = roomId, name = "&room", description = "d",
+            creator = creator, roomId = roomId, name = "room", description = "d",
             adminPublicKeys = listOf(admin), relays = relays, profile = MarmotProfile.LEGACY,
         )
 
@@ -45,13 +45,13 @@ class MarmotGroupFactoryJvmTest {
         assertEquals(roomId, created.group.routingId())
         assertFalse(created.group.currentGroupState().isCurrentProfile)
         assertEquals(setOf(creatorHex, admin), created.group.currentAdminIdentities())
-        assertEquals("&room", created.group.roomName())
+        assertEquals("room", created.group.roomName())
     }
 
     @Test
     fun `a current-profile group mints an address apart from the room id and names the room`() = runBlocking {
         val created = MarmotGroupFactory.create(
-            creator = creator, roomId = roomId, name = "&room", description = "Admins of room.",
+            creator = creator, roomId = roomId, name = "room", description = "Admins of room.",
             adminPublicKeys = listOf(admin), relays = relays, profile = MarmotProfile.CURRENT,
         )
 
@@ -64,15 +64,15 @@ class MarmotGroupFactoryJvmTest {
         assertEquals(created.routingId, created.group.routingId())
         assertEquals(roomId, created.group.roomId(), "the room id does not ride in the group's description")
         assertEquals(setOf(creatorHex, admin), created.group.currentAdminIdentities())
-        assertEquals("&room", created.group.roomName())
+        assertEquals("room", created.group.roomName())
         assertTrue(created.group.roomDescription()!!.startsWith("Admins of room."))
         assertEquals(relays.sorted(), created.group.roomRelays().sorted())
     }
 
     @Test
     fun `two current-profile groups never share an address`() = runBlocking {
-        val first = MarmotGroupFactory.create(creator, roomId, "&a", null, emptyList(), relays, MarmotProfile.CURRENT)
-        val second = MarmotGroupFactory.create(creator, roomId, "&a", null, emptyList(), relays, MarmotProfile.CURRENT)
+        val first = MarmotGroupFactory.create(creator, roomId, "a", null, emptyList(), relays, MarmotProfile.CURRENT)
+        val second = MarmotGroupFactory.create(creator, roomId, "a", null, emptyList(), relays, MarmotProfile.CURRENT)
 
         assertNotEquals(first.routingId, second.routingId)
     }
@@ -82,16 +82,16 @@ class MarmotGroupFactoryJvmTest {
         val readOnly = KeyPair(privKey = null, pubKey = creator.pubKey)
 
         assertFailsWith<IllegalArgumentException> {
-            MarmotGroupFactory.create(readOnly, roomId, "&a", null, emptyList(), relays, MarmotProfile.CURRENT)
+            MarmotGroupFactory.create(readOnly, roomId, "a", null, emptyList(), relays, MarmotProfile.CURRENT)
         }
         // And a legacy one does not.
-        MarmotGroupFactory.create(readOnly, roomId, "&a", null, emptyList(), relays, MarmotProfile.LEGACY)
+        MarmotGroupFactory.create(readOnly, roomId, "a", null, emptyList(), relays, MarmotProfile.LEGACY)
     }
 
     @Test
     fun `a current-profile leaf fits either group and a legacy leaf fits only a legacy one`() = runBlocking {
-        val legacyGroup = MarmotGroupFactory.create(creator, roomId, "&a", null, emptyList(), relays, MarmotProfile.LEGACY).group
-        val currentGroup = MarmotGroupFactory.create(creator, roomId, "&a", null, emptyList(), relays, MarmotProfile.CURRENT).group
+        val legacyGroup = MarmotGroupFactory.create(creator, roomId, "a", null, emptyList(), relays, MarmotProfile.LEGACY).group
+        val currentGroup = MarmotGroupFactory.create(creator, roomId, "a", null, emptyList(), relays, MarmotProfile.CURRENT).group
         val legacyLeaf = KeyPackageUtils.decodeKeyPackage(marmotKeyPackageFor(admin).tlsEncodedMarmotKeyPackage)
         val currentLeaf = CurrentProfileGroupFactory.createKeyPackage(NostrSignerInternal(KeyPair())).keyPackage
 

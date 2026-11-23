@@ -123,7 +123,7 @@ class ShareGenerationsJvmTest {
         val chatRoom = ChatRoom(
             id = adminRoomId,
             userPublicKey = publicKey,
-            subject = "&Ekklesia",
+            subject = "Ekklesia",
             description = SharedKeyDerivation.describe("Admins of the group."),
             mlsGroupState = "00"
         )

@@ -239,7 +239,7 @@ class SignedGroupKeyStateTest {
         val chatRoom = ChatRoom(
             id = roomId,
             userPublicKey = publicKey,
-            subject = "&Ekklesia",
+            subject = "Ekklesia",
             description = description,
             mlsGroupState = mlsGroupState
         )
@@ -622,7 +622,7 @@ class SignedGroupKeyStateTest {
             ChatRoom(
                 id = adminRoomId,
                 userPublicKey = device.publicKey,
-                subject = "&Ekklesia",
+                subject = "Ekklesia",
                 description = adminRoomDescription,
                 mlsGroupState = "00"
             )

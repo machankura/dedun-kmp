@@ -171,7 +171,7 @@ internal object GroupFixtures {
         db: DedunDatabase,
         material: KeyMaterial,
         members: List<HexKey>,
-        subject: String = "&Ekklesia",
+        subject: String = "Ekklesia",
         holdsShare: Boolean = true,
     ): LocalChatRoom {
         val roomId = roomOf(material)

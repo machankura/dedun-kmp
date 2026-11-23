@@ -140,7 +140,7 @@ class ProposalAskAgainTest {
             chatRoom = com.machankura.dedun.compose.database.model.ChatRoom(
                 id = roomId,
                 userPublicKey = me,
-                subject = "&Ekklesia",
+                subject = "Ekklesia",
                 description = null,
                 mlsGroupState = null,
             )

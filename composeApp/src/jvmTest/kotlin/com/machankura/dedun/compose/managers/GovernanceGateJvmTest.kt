@@ -68,7 +68,7 @@ class GovernanceGateJvmTest {
         MarmotStandIn.seedProfile(db, userHex, "us")
         MarmotStandIn.seedProfile(db, dana.hex, "Dana")
         val keyed = MarmotRoomIdentity.describe(SharedKeyDerivation.describe("Admins."), roomId)
-        routingId = dana.createGroup("&keyed", if (governed) GovernanceMarker.describe(keyed, minimumAdmins = 1) else keyed)
+        routingId = dana.createGroup("keyed", if (governed) GovernanceMarker.describe(keyed, minimumAdmins = 1) else keyed)
         dana.inviteApp(db, marmotRepository, user, routingId, roomId = roomId)
         assertEquals(governed, GovernanceGate.isGoverned(appGroup()))
     }

@@ -199,7 +199,7 @@ class ChronicleApplyJvmTest {
             ChatRoom(
                 id = chatRoomId,
                 userPublicKey = user,
-                subject = "&Ekklesia",
+                subject = "Ekklesia",
                 description = null,
                 mlsGroupState = null,
             )

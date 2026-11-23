@@ -71,7 +71,7 @@ class SelectSubgroupAdminsViewModelJvmTest {
         chatRoom = ChatRoom(
             id = parentChatRoomId,
             userPublicKey = ada,
-            subject = "&Checkers",
+            subject = "Checkers",
             description = null,
             mlsGroupState = "state",
         ),
