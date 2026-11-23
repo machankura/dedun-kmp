@@ -132,7 +132,7 @@ class SubgroupManagerJvmTest {
 
         assertEquals(childRoomId, subgroup.chatRoomId)
         assertEquals(parentRoomId, subgroup.parentChatRoomId)
-        assertEquals("&Translation team", subgroup.name)
+        assertEquals("Translation team", subgroup.name)
         assertEquals(listOf(user, alice, bob), subgroup.adminPublicKeys)
 
         // The whole point of reading certificates rather than rooms: this device
@@ -154,7 +154,7 @@ class SubgroupManagerJvmTest {
         val signed = certificate(name = "#Translation team")
         record(signed)
 
-        assertEquals("&Translation team", SubgroupManager.subgroupsOf(db, parentRoomId).single().name)
+        assertEquals("Translation team", SubgroupManager.subgroupsOf(db, parentRoomId).single().name)
 
         // The kind:445 it arrived in, stored as sync stores one, so the inner event the line
         // is written from has a group event to hang off.
@@ -204,7 +204,7 @@ class SubgroupManagerJvmTest {
             )
         )
         assertEquals(ChatMessage.TYPE_SUBGROUP_CERTIFIED, line.messageType)
-        assertEquals("The group made &Translation team a subgroup, run by 3 of its members", line.content)
+        assertEquals("The group made {Translation team} a subgroup, run by 3 of its members", line.content)
     }
 
     @Test
@@ -298,7 +298,7 @@ class SubgroupManagerJvmTest {
         val subgroups = SubgroupManager.subgroupsOf(db, parentRoomId)
 
         assertEquals(1, subgroups.size)
-        assertEquals("&Second name", subgroups.single().name)
+        assertEquals("Second name", subgroups.single().name)
         assertEquals(
             "Second name",
             SubgroupBirthCertificateEvent.parseName(
@@ -568,10 +568,10 @@ class SubgroupManagerJvmTest {
 
             // A quorum is being asked to sign a name, and `MarmotGroupCreation`
             // will name the room by the same rule from the same subject. If only
-            // one of the two applied it, the parent would certify "Translation
-            // team" and the room would be called "&Translation team".
+            // one of the two applied it, the parent could certify "{Translation
+            // team}" and the room be called "Translation team".
             assertEquals(
-                MarmotGroupName.of("Translation team"),
+                MarmotGroupName.bare("Translation team"),
                 SubgroupBirthCertificateEvent.parseName(proposed.tags)
             )
         }

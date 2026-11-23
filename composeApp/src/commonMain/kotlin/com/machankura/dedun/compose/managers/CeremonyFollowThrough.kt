@@ -91,8 +91,8 @@ object CeremonyFollowThrough {
 
     /**
      * What a ceremony's room is called: the name the coordinator gave a subgroup,
-     * or the name of the group an admin room administers. The bare name; the
-     * room puts it under `MarmotGroupName`.
+     * or the name of the group an admin room administers. The bare name, as the
+     * room stores it; the braces are drawn (docs/group-name-braces.md).
      */
     fun roomName(session: DkgSession): String =
         session.subject ?: if (session.parentChatRoomId != null) "Subgroup" else "Group"

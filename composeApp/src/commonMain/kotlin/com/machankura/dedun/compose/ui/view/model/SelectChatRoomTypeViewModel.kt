@@ -241,11 +241,12 @@ class SelectChatRoomTypeViewModel(
     ) {
         val gid = RandomInstance.bytes(32).toHexKey() // TODO: Generate GID through frost...
 
-        // Every Marmot room is a `#name`. This one does not go through
+        // Every Marmot room is stored and sent under its bare name and drawn in
+        // braces (docs/group-name-braces.md, D13). This one does not go through
         // `MarmotGroupCreation` -- its id is random rather than derived, so it has
         // no key state to adopt and no admin set to bake in -- which is why the
-        // convention is applied here as well as there.
-        val groupName = MarmotGroupName.of(name)
+        // name is made bare here as well as there.
+        val groupName = MarmotGroupName.bare(name)
 
         viewModelScope.launch(Dispatchers.IO) {
             // The group's initial state is baked into the epoch-0 GroupContext so later

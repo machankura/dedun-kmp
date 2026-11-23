@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.ui.view.state
 
 import com.machankura.dedun.compose.database.model.Profile
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 sealed interface SelectChatRoomTypeUIState {
     data class Loaded(
@@ -16,9 +17,13 @@ sealed interface SelectChatRoomTypeUIState {
          */
         val existingGroups: List<ExistingGroup> = emptyList(),
     ): SelectChatRoomTypeUIState {
-        /** Whether the group being made would share its name with one of [existingGroups]. */
+        /**
+         * Whether the group being made would share its name with one of [existingGroups]:
+         * compared bare, so a room still stored under an old mark (`&Ekklesia`) is the same
+         * name as a typed `Ekklesia` (docs/group-name-braces.md, D8).
+         */
         fun sharesNameWith(name: String): Boolean =
-            existingGroups.any { it.name?.trim()?.equals(name.trim(), ignoreCase = true) == true }
+            existingGroups.any { it.name?.let(MarmotGroupName::bare)?.equals(MarmotGroupName.bare(name), ignoreCase = true) == true }
     }
 
     /** A group already made by the same people: its name, or null if it has none. */

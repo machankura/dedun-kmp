@@ -14,7 +14,7 @@ import com.machankura.dedun.compose.managers.MarmotGroupName
  * the only thing the app ever shows, becomes `&name`. A room joined after this has the rule
  * applied as its Welcome is processed, so nothing has to run twice.
  *
- * The rule runs here in Kotlin, through [MarmotGroupName.of], rather than as an `ltrim` in
+ * The rule runs here in Kotlin, through [MarmotGroupName.bare], rather than as an `ltrim` in
  * SQL, so this is the same function the rest of the app names rooms with and not a copy of
  * it that can drift. A room with a bare name, from a client that marks nothing, gets the
  * mark here for the same reason a Welcome gives it one.
@@ -32,7 +32,7 @@ class MarmotGroupNameMigrationSpec : AutoMigrationSpec {
             buildList {
                 while (statement.step()) {
                     val subject = statement.getText(1)
-                    val named = MarmotGroupName.of(subject)
+                    val named = MarmotGroupName.bare(subject)
                     if (named != subject) add(statement.getText(0) to named)
                 }
             }

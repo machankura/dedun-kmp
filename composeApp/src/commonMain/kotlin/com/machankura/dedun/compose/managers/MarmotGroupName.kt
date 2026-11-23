@@ -34,12 +34,6 @@ object MarmotGroupName {
     const val SUFFIX = "}"
 
     /**
-     * The mark stored in front of a Marmot room's name before docs/group-name-braces.md.
-     * Still written by [of] until the writers store the bare name.
-     */
-    private const val LEGACY_PREFIX = "&"
-
-    /**
      * Every mark a Marmot room's name has been stored with: the `&` of
      * docs/group-name-prefix.md and the `#` before it. Rooms minted under them still
      * carry them in their MLS state, and certificates signed under them in their tags.
@@ -52,6 +46,11 @@ object MarmotGroupName {
      * Idempotent, and `bare` of any old spelling -- `#X`, `&X`, `{X}` -- is `X`, which is
      * what lets one function name the rooms a Welcome brings in, the rooms already on a
      * device, and the names old certificates carry.
+     *
+     * Idempotence matters for one more reason. A subgroup's name is made bare twice from
+     * the same subject by two unrelated callers -- once into the birth certificate the
+     * parent's quorum signs, once onto the room itself -- and those two have to be the
+     * same string, or the room is not called what its parent certified.
      *
      * Only a *leading* mark is a mark: `Arts & crafts` keeps its `&`. A blank name, or one
      * that is only marks, is handed back trimmed rather than made up.
@@ -66,19 +65,5 @@ object MarmotGroupName {
     fun display(name: String): String {
         val bare = NameMarks.strip(name, LEGACY_MARKS)
         return if (bare.isEmpty()) name.trim() else PREFIX + bare + SUFFIX
-    }
-
-    /**
-     * [name] under the stored `&` of docs/group-name-prefix.md: what the writers still
-     * store until docs/group-name-braces.md's Phase 2 has them store [bare].
-     *
-     * Idempotent on purpose. A subgroup's name is normalised twice from the same bare
-     * subject and by two unrelated callers -- once into the birth certificate the
-     * parent's quorum signs, once onto the room itself -- and those two have to be the
-     * same string, or the room is not called what its parent certified.
-     */
-    fun of(name: String): String {
-        val bare = NameMarks.strip(name, LEGACY_MARKS)
-        return if (bare.isEmpty()) name.trim() else LEGACY_PREFIX + bare
     }
 }

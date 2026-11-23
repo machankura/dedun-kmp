@@ -79,11 +79,11 @@ class SelectSubgroupAdminsViewModel(
     /**
      * What the coordinator typed, bare.
      *
-     * The `&` is drawn beside the field rather than pushed into this state:
-     * normalising on every keystroke would move the caret out from under somebody
-     * halfway through a word. It is added by `MarmotGroupName.of` where the
-     * subgroup's name is actually used -- in the certificate the parent signs and
-     * on the room itself -- which is idempotent, so the two agree.
+     * The braces are drawn around the field, never pushed into this state, and
+     * never stored: what is typed is the name. Any mark somebody types anyway is
+     * taken off by `MarmotGroupName.bare` where the subgroup's name is used -- in
+     * the certificate the parent signs and on the room itself -- which is
+     * idempotent, so the two agree (docs/group-name-braces.md).
      */
     val name: MutableState<String> = mutableStateOf("")
 
@@ -359,11 +359,11 @@ class SelectSubgroupAdminsViewModel(
                 return@launch
             }
 
-            // The bare name goes on the ceremony, and the `&` is added where the
-            // name is used: `proposeBirthCertificate` normalises the name the
-            // parent signs and `MarmotGroupCreation` normalises the name the room
-            // carries, both reading it back off this session.
-            // `MarmotGroupName.of` is idempotent, so those are the same string --
+            // The bare name goes on the ceremony, and on everything after it:
+            // `proposeBirthCertificate` makes bare the name the parent signs and
+            // `MarmotGroupCreation` the name the room carries, both reading it
+            // back off this session.
+            // `MarmotGroupName.bare` is idempotent, so those are the same string --
             // which they have to be, or the room is not called what its parent
             // certified.
             //

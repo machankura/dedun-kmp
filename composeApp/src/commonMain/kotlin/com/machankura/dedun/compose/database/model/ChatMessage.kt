@@ -1836,9 +1836,11 @@ data class ChatMessage(
                 // The name is the one the parent certified, which is the only one
                 // that was ever put to this room -- the child may since have been
                 // renamed, and this line is a record of what was agreed rather
-                // than a view of what is. It is written under today's mark,
-                // though: a certificate signed as `#name` before
-                // docs/group-name-prefix.md certified the name, not the `#`.
+                // than a view of what is. The name is drawn into the sentence
+                // in braces as it is written, whatever mark the certificate was
+                // signed under: it certified the name, not the punctuation. The
+                // one place braces reach the disk, inside a sentence and never in
+                // a name column (docs/group-name-braces.md, D6).
                 SubgroupBirthCertificateEvent.KIND -> {
                     SubgroupManager.record(
                         database = database,
@@ -1846,7 +1848,7 @@ data class ChatMessage(
                         innerEvent = event
                     ) ?: return null
 
-                    val name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::of)
+                    val name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::display)
                     val admins = SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags).size
 
                     ChatMessage(

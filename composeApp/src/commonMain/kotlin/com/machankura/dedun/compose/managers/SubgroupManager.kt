@@ -233,10 +233,10 @@ object SubgroupManager {
         require(name.isNotBlank()) { "A subgroup has to be called something" }
 
         // The certificate is a signature over the name, so it has to be the name
-        // the room ends up with. `MarmotGroupCreation` normalises again on the
-        // way in and `MarmotGroupName.of` is idempotent, so the two agree by
+        // the room ends up with. `MarmotGroupCreation` makes it bare again on the
+        // way in and `MarmotGroupName.bare` is idempotent, so the two agree by
         // construction rather than by both callers remembering.
-        val subgroupName = MarmotGroupName.of(name)
+        val subgroupName = MarmotGroupName.bare(name)
 
         // One certificate per child. A second is a `d`-tag replacement of the
         // first rather than a second subgroup, and spending a quorum's attention
@@ -630,11 +630,11 @@ object SubgroupManager {
                     chatRoomId = chatRoomId,
                     parentChatRoomId = parentChatRoomId,
                     certificate = signed,
-                    // Under today's mark: a certificate signed before
-                    // docs/group-name-prefix.md says `#name`, and the room it
-                    // names is `&name` on this device. What was agreed is the
-                    // name, not the punctuation.
-                    name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::of),
+                    // Bare, as every stored name is: a certificate signed before
+                    // docs/group-name-braces.md says `&name`, or `#name` before
+                    // that. What was agreed is the name, not the punctuation, and
+                    // the screen that lists it draws the braces.
+                    name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::bare),
                     adminPublicKeys = SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags),
                     room = database.chatRoomDao().findChatRoomById(chatRoomId),
                     keyState = database.groupKeyStateDao().getByChatRoomId(chatRoomId),

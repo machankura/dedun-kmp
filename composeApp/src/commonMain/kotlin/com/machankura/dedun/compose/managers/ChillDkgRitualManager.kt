@@ -407,10 +407,12 @@ object ChillDkgRitualManager {
 
     /**
      * Whether two group names are the same name, as far as folding a repeated ask
-     * goes: trimmed, and without regard to case. Names are not identities, so this
-     * decides nothing but whether an ask is a repeat.
+     * goes: bare, and without regard to case. Bare, so a room still stored under an old
+     * mark (`&Ekklesia`) is the same name as an ask for `Ekklesia`
+     * (docs/group-name-braces.md, D8). Names are not identities, so this decides
+     * nothing but whether an ask is a repeat.
      */
-    private fun sameName(name: String): String = name.trim().lowercase()
+    private fun sameName(name: String): String = MarmotGroupName.bare(name).lowercase()
 
     /**
      * Feeds one inbound ritual message in and advances the ritual as far as it

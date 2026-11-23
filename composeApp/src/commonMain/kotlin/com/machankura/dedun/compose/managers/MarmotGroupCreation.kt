@@ -97,10 +97,11 @@ object MarmotGroupCreation {
      * the verified value off the child's own key state -- never a claim off a
      * proposal.
      *
-     * [name] is put under [MarmotGroupName] here rather than trusted from the
-     * caller. Every Marmot room on a device is an `&name`, and this is the funnel
-     * both flows that make one already go through, so it is the one place the
-     * convention cannot be forgotten.
+     * [name] is made [MarmotGroupName.bare] here rather than trusted from the
+     * caller: the room is stored and sent under its bare name, and drawn in
+     * braces (docs/group-name-braces.md). This is the funnel both flows that make
+     * one already go through, so it is the one place a stray mark -- one typed, or
+     * one carried over from a name minted under `&` -- cannot get in.
      */
     suspend fun create(
         database: DedunDatabase,
@@ -118,7 +119,7 @@ object MarmotGroupCreation {
     ): Outcome {
         chatRepository.getChatRoomByIdentifier(groupId)?.let { return Outcome.Existing(it) }
 
-        val groupName = MarmotGroupName.of(name)
+        val groupName = MarmotGroupName.bare(name)
 
         val peers = adminPublicKeys.filterNot { it == userPublicKey }
         val keyPackages = keyPackagesFor(chatRepository, peers, keyPackageLookupTimeout, profile)

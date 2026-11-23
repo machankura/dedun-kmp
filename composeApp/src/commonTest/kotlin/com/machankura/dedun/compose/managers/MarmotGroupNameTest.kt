@@ -70,13 +70,4 @@ class MarmotGroupNameTest {
             assertEquals(expected, MarmotGroupName.display(input), "display($input)")
         }
     }
-
-    @Test
-    fun `the stored mark is still the old one until the writers store bare`() {
-        assertEquals("&Ekklesia", MarmotGroupName.of("Ekklesia"))
-        assertEquals("&Ekklesia", MarmotGroupName.of("#Ekklesia"))
-        assertEquals("&Ekklesia", MarmotGroupName.of("&Ekklesia"))
-        assertEquals(MarmotGroupName.of("Translators"), MarmotGroupName.of(MarmotGroupName.of("Translators")))
-        assertEquals("&", MarmotGroupName.of("&"))
-    }
 }

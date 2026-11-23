@@ -15,12 +15,13 @@ import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 
 /**
- * A room joined from a Welcome is called by the same rule as a room this device made.
+ * A room joined from a Welcome is stored by the same rule as a room this device made: bare.
  *
- * The name a Welcome carries is whatever its creator wrote: `#name` from an older Dedun or a
- * Dedun peer, a bare name from a client that marks nothing, `&name` from a Dedun on the
- * current rule. Each of them is a Marmot room, and each lands as `&name`, so the mark on a
- * row says the same thing whoever made the room. docs/group-name-prefix.md, Phase 2.
+ * The name a Welcome carries is whatever its creator wrote: `#name` from a Dedun peer,
+ * `&name` from an older Dedun, a bare name from a client that marks nothing or from a Dedun
+ * on the current rule. Each of them is a Marmot room, and each is stored as `name` and drawn
+ * as `{name}`, so the mark on a row says the same thing whoever made the room.
+ * docs/group-name-braces.md, Phase 2.
  *
  * The group is made and the invite sent by the library's own client, so the name reaches the
  * app through the same Welcome path a real peer's would.
@@ -49,19 +50,25 @@ class MarmotGroupNameWelcomeJvmTest {
     }
 
     @Test
-    fun `a room named under the old mark is joined under the new one`() = runBlocking {
-        // `#` on purpose: what an older Dedun or a Dedun peer still mints.
-        assertEquals("&Ekklesia", joinedAs("#Ekklesia"))
+    fun `a room Dedun named under the oldest mark is joined bare`() = runBlocking {
+        // `#` on purpose: what a Dedun peer still mints.
+        assertEquals("Ekklesia", joinedAs("#Ekklesia"))
     }
 
     @Test
-    fun `a room another client named without a mark is joined with one`() = runBlocking {
-        assertEquals("&Ekklesia", joinedAs("Ekklesia"))
+    fun `a room an older Dedun named under its mark is joined bare`() = runBlocking {
+        // `&` on purpose: what a Dedun from before docs/group-name-braces.md mints.
+        assertEquals("Ekklesia", joinedAs("&Ekklesia"))
     }
 
     @Test
-    fun `a room already under the mark is joined as it is`() = runBlocking {
-        assertEquals("&Ekklesia", joinedAs("&Ekklesia"))
+    fun `a room named without a mark is joined as it is`() = runBlocking {
+        assertEquals("Ekklesia", joinedAs("Ekklesia"))
+    }
+
+    @Test
+    fun `braces in a room's name are drawn, not stored`() = runBlocking {
+        assertEquals("Ekklesia", joinedAs("{Ekklesia}"))
     }
 
     @Test

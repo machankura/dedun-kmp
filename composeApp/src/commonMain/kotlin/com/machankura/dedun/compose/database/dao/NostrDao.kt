@@ -878,12 +878,13 @@ abstract class NostrDao(
                                         ChatRoom(
                                             id = nostrGroupId,
                                             userPublicKey = userPublicKey,
-                                            // Under the same rule as a room this device
-                                            // makes, whoever made this one: an older Dedun or
-                                            // a Dedun peer wrote `#name`, another client a
-                                            // bare name. The group's own state keeps what its
-                                            // creator wrote. docs/group-name-prefix.md, D4.
-                                            subject = group.roomName()?.let(MarmotGroupName::of),
+                                            // Bare, as a room this device makes is, whoever
+                                            // made this one: an older Dedun wrote `&name`, a
+                                            // Dedun peer `#name`, another client a bare name.
+                                            // The braces are drawn, never stored, and the
+                                            // group's own state keeps what its creator wrote.
+                                            // docs/group-name-braces.md, D4.
+                                            subject = group.roomName()?.let(MarmotGroupName::bare),
                                             description = group.roomDescription(),
                                             initialGiftWrapPayloadId = decryptedGiftWrapPayload.id,
                                             createdAt = decryptedGiftWrapPayload.createdAt,
