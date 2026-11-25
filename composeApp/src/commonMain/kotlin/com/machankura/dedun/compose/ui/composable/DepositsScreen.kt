@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.foundation.clickable
 import dedun.composeapp.generated.resources.this_was_someone_else_s_money
 import dedun.composeapp.generated.resources.someone_outside_the_group_ellipsis
 import dedun.composeapp.generated.resources.put_s_request_to_the_group
@@ -160,7 +165,11 @@ fun DepositsScreen(
                         }
                         item { HorizontalDivider() }
                     }
-                    item { Tallies(state.tallies, state.names, state.contacts) }
+                    item {
+                        Tallies(state.tallies, state.names, state.contacts) { contactId ->
+                            onNavigateToRoute(ContactRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, contactId = contactId, chain = GroupWalletStatementEvent.chainName(chain)))
+                        }
+                    }
                     item { HorizontalDivider() }
                     if (state.deposits.isEmpty()) {
                         item { EmptyState(message = stringResource(Res.string.nothing_has_been_deposited_yet), icon = Icons.Default.Savings) }
@@ -302,7 +311,13 @@ private fun AttributeDialog(
  * (`docs/non-member-deposits.md`) -- then the unattributed, then the total they add up to.
  */
 @Composable
-internal fun Tallies(tallies: DepositLedger.Tallies, names: Map<HexKey, String>, contacts: Map<HexKey, Contacts.Contact> = emptyMap()) {
+internal fun Tallies(
+    tallies: DepositLedger.Tallies,
+    names: Map<HexKey, String>,
+    contacts: Map<HexKey, Contacts.Contact> = emptyMap(),
+    /** Opens a contact's page: `docs/non-member-deposits.md`, Phase 4. */
+    onContact: ((HexKey) -> Unit)? = null,
+) {
     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
         tallies.members.values.sortedByDescending { it.depositedMsat }.forEach { tally ->
             val name = "@" + (names[tally.member] ?: tally.member.take(8))
@@ -320,6 +335,9 @@ internal fun Tallies(tallies: DepositLedger.Tallies, names: Map<HexKey, String>,
             Text(
                 stringResource(Res.string.s_put_in_s_sats, contact?.name ?: stringResource(Res.string.a_contact), sats(tally.depositedMsat)),
                 style = MaterialTheme.typography.bodyLarge,
+                modifier = if (onContact != null && contact != null) {
+                    Modifier.clickable(role = Role.Button) { onContact(contact.id) }.minimumInteractiveComponentSize()
+                } else Modifier,
             )
             Text(
                 contact?.let { stringResource(Res.string.outside_the_group_s, it.identifier.formatted) } ?: stringResource(Res.string.outside_the_group),

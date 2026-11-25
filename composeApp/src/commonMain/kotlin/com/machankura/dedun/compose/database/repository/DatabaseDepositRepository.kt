@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.machankura.dedun.compose.nostr.wallet.ContactRecordEvent
 import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
@@ -98,6 +99,16 @@ class DatabaseDepositRepository(
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
         return DepositLedger.proposeAttribution(database, localChatRoom, me, chain, assignments)
     }
+
+    override suspend fun depositsOf(chatRoomId: String, chain: Chain, contactId: HexKey): List<DepositRow> = try {
+        DepositLedger.depositsIn(database, chatRoomId, chain, resolveClaims = false).filter { it.member.equals(contactId, ignoreCase = true) }
+    } catch (e: Throwable) {
+        logger.e("Error reading a contact's deposits in $chatRoomId", e)
+        emptyList()
+    }
+
+    override suspend fun contactDestination(chatRoomId: String, chain: Chain, contactId: HexKey): PayoutDestination? =
+        runCatching { Contacts.destinationsIn(database, chatRoomId, chain)[contactId.lowercase()] }.getOrNull()
 
     override suspend fun contactsWaitingFor(chatRoomId: String): List<HexKey> = try {
         activeIdentity.value?.nostrPublicKey?.let { Contacts.announceIfNeeded(database, chatRoomId, it) }

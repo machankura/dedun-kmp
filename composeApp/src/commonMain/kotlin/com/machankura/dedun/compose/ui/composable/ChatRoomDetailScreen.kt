@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
 import dedun.composeapp.generated.resources.members_balances_and_payouts
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
@@ -1089,6 +1090,9 @@ fun ChatRoomDetailScreen(
                                                 (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
                                         },
                                         contacts = chatRoomDetailUIState.contacts,
+                                        onContact = { contactId ->
+                                            onNavigateToRoute.invoke(ContactRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, contactId = contactId))
+                                        },
                                     )
                                 }
                                 item {

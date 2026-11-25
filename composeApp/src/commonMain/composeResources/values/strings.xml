@@ -1002,6 +1002,14 @@
     <string name="asked_a_member_with_a_share">Asked a member who holds a share to put this to the group.</string>
     <string name="this_was_someone_else_s_money">This was someone else's money</string>
     <string name="requests">Requests</string>
+    <string name="added_by_s">Added by %1$s</string>
+    <string name="nothing_has_been_deposited_for_them_yet">Nothing has been deposited for them yet.</string>
+    <string name="onchain_lightning_wavelength_s_s_s">Onchain %1$s · Lightning %2$s · Wavelength %3$s sats</string>
+    <string name="rename">Rename</string>
+    <string name="stop_counting_deposits_for_them">Stop counting deposits for them</string>
+    <string name="stop_counting_deposits_for_them_question">Stop counting deposits for them?</string>
+    <string name="the_group_no_longer_counts_new_deposits_for_them">The group no longer counts new deposits for them.</string>
+    <string name="their_deposits_so_far_stay_theirs">Their deposits so far stay theirs, and the group can still pay them out.</string>
     <string name="moves_deposits_made_by_s">This gives away deposits made by %1$s. The group can do this without them.</string>
     <string name="put_s_request_to_the_group">Put %1$s's request to the group</string>
     <string name="altogether_s_sats">Altogether: %1$s sats</string>

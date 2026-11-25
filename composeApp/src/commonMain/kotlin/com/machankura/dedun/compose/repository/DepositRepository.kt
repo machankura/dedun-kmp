@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
 import com.machankura.dedun.compose.contacts.ContactIdentifier
 import com.machankura.dedun.compose.contacts.Party
@@ -66,6 +67,12 @@ interface DepositRepository {
 
     /** Proposes that the group sign whose each deposit in [assignments] is -- a member, or null for the group's own (Phase 9). */
     suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, Party?>): FrostSigningSession
+
+    /** Every deposit the group counts to [contactId], as it was given: before any claim resolves it (`docs/non-member-deposits.md`, Phase 4). */
+    suspend fun depositsOf(chatRoomId: String, chain: Chain, contactId: HexKey): List<DepositRow> = emptyList()
+
+    /** Where the group pays [contactId] on [chain], or null while it has said nowhere or the contact is claimed (D9). */
+    suspend fun contactDestination(chatRoomId: String, chain: Chain, contactId: HexKey): PayoutDestination? = null
 
     /** The current members whose devices haven't said they read contacts: who adding one waits for (`docs/non-member-deposits.md`, D5). */
     suspend fun contactsWaitingFor(chatRoomId: String): List<HexKey> = emptyList()

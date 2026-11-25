@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.ContactScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
 import com.machankura.dedun.compose.repository.GroupWalletPrefs
 import com.machankura.dedun.compose.ui.composable.GroupPayoutsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
@@ -1861,6 +1863,22 @@ fun DedunNavHost(
                 DepositsScreen(
                     activeUserPublicKey = route.activeUserPublicKey,
                     chatRoomId = route.chatRoomId,
+                    chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
+                    chatRepository = databaseChatRepository,
+                    depositRepository = databaseDepositRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<ContactRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<ContactRoute>()
+
+                ContactScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    contactId = route.contactId,
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
                     chatRepository = databaseChatRepository,
                     depositRepository = databaseDepositRepository,
