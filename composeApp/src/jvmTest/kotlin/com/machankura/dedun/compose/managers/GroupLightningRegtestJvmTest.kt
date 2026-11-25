@@ -314,7 +314,7 @@ class GroupLightningRegtestJvmTest {
             DepositLedger.depositsIn(all[0].db, fixture.roomId, fixture.chain).singleOrNull { it.source == com.machankura.dedun.compose.database.model.DepositRow.LIGHTNING }
         }
         assertEquals(null, offerPaid.member, "an offer's payment is nobody's")
-        signed(all, all[0], DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(offerPaid.depositKey to all[3].publicKey)).id)
+        signed(all, all[0], DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(offerPaid.depositKey to com.machankura.dedun.compose.contacts.Party.Member(all[3].publicKey))).id)
         all.forEach { d ->
             assertEquals(offerPaid.amountMsat, DepositLedger.tallies(d.db, fixture.roomId, fixture.chain).members[all[3].publicKey]?.lightningMsat, "device ${d.index}'s tally")
         }

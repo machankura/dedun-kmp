@@ -107,6 +107,9 @@ class FrostSigningViewModel(
                         checkedSweep = frostSigningRepository.checkedSweep(session.id)
                     }
 
+                    // Contacts by name, and whose deposits an attribution moves: docs/non-member-deposits.md, D7.
+                    val contactNames = frostSigningRepository.contactNames(chatRoomId)
+                    val losing = frostSigningRepository.membersLosingDeposits(chatRoomId, proposedEvents(items))
                     frostSigningUIState = FrostSigningUIState.Loaded(
                         localChatRoom = localChatRoom,
                         session = session,
@@ -129,6 +132,8 @@ class FrostSigningViewModel(
                         sweep = checkedSweep,
                         payees = payees,
                         payout = payout,
+                        contactNames = contactNames,
+                        membersLosingDeposits = losing,
                         names = localChatRoom.localParticipants.associate { participant ->
                             participant.participant.participantPublicKey.lowercase() to
                                 (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.moves_deposits_made_by_s
 import dedun.composeapp.generated.resources.s_sats_nobody_s_yet
 import dedun.composeapp.generated.resources.s_sats_shared_by_s
 import dedun.composeapp.generated.resources.s_sats_s_s
@@ -245,8 +246,8 @@ fun FrostSigningScreen(
                     when {
                         isSpend -> WhatIsBeingSpent(state.spend, state.payees, state.payout, state.names)
                         isSweep -> WhatIsBeingSwept(state.sweep)
-                        else -> WhatIsBeingSigned(proposed, state.items.size) { member ->
-                            state.localChatRoom.localParticipants
+                        else -> WhatIsBeingSigned(proposed, state.items.size, state.membersLosingDeposits) { member ->
+                            state.contactNames[member.lowercase()] ?: state.localChatRoom.localParticipants
                                 .firstOrNull { it.participant.participantPublicKey.equals(member, ignoreCase = true) }
                                 ?.profile?.humanReadableNameOrPubkey()
                         }
@@ -507,7 +508,13 @@ private fun Loading(padding: androidx.compose.foundation.layout.PaddingValues) {
  * sign something they cannot check.
  */
 @Composable
-private fun WhatIsBeingSigned(events: List<Event>, expected: Int, nameOf: (HexKey) -> String? = { null }) {
+private fun WhatIsBeingSigned(
+    events: List<Event>,
+    expected: Int,
+    /** By event id, the members an attribution takes deposits from (`docs/non-member-deposits.md`, D7). */
+    losing: Map<String, Set<HexKey>> = emptyMap(),
+    nameOf: (HexKey) -> String? = { null },
+) {
     if (expected == 0 || events.size != expected) {
         Text(
             text = if (expected <= 1) {
@@ -534,6 +541,13 @@ private fun WhatIsBeingSigned(events: List<Event>, expected: Int, nameOf: (HexKe
             if (index > 0) HorizontalDivider()
 
             OneThingBeingSigned(event, nameOf)
+            losing[event.id]?.let { members ->
+                Text(
+                    text = stringResource(Res.string.moves_deposits_made_by_s, members.joinToString { "@" + (nameOf(it) ?: it.take(8)) }),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
 
         Text(

@@ -40,6 +40,9 @@ and the phases are kept as written.
 | D6, Phase 2 | a transcript line renders the contact's name at display time | the line's text is written when the event arrives, as every other group-signed line's is. A rename after that doesn't rewrite older lines. The contact's page and the tallies always show the current name |
 | D9, Phase 2 | `payoutDestinationsIn` returns `Map<Party, PayoutDestination>` | it stays keyed by the 64-hex id. A contact's id never coincides with a member's key, and every caller already keys by id. `PayoutDestination` is an interface that a member's 30338 and a contact's 30399 both implement |
 | D8, Phase 2 | claims resolve where a party is read | also in `DepositLedger.signedPayouts` and `GroupWavelengthPayouts.balancesIn`, so a payout made to a contact before the claim counts against the member after it |
+| D7, Phase 3 | the member whose deposit is moved is notified | the app has no notifications of its own. The signing screen says, in the error colour, whose deposits an attribution gives away and that the group can do it without them. Every member who opens the proposal sees it |
+| Phase 3 | `ProposedEvent.summarize` takes a separate `contactNameOf` | the one `nameOf` answers for a contact's id too. A second function parameter after it would have caught every caller's trailing lambda. The signing screen passes contacts' names. The proposal list and the transcript preview don't, and say "a contact" |
+| Phase 3 | a request is put to the group from wherever a share-holder sees it | from a *Requests* section at the top of the Deposits screen, which shows each request summarised as the signing screen would summarise it |
 
 **Decided by the owner, 2026-11-25:**
 1. The contact is signed whole and not encrypted, and every member sees it in full.

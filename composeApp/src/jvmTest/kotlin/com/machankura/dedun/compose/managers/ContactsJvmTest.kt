@@ -222,17 +222,6 @@ class ContactsJvmTest {
     }
 
     @Test
-    fun `this build reads contacts and signs none`(): Unit = runBlocking {
-        recorded()
-        val key = deposit(1, 20_000)
-        val record = signedAsRoom(group, ContactRecordEvent.KIND, ContactRecordEvent.template(room, alice, "Gogo", ContactIdentifier.Phone("+27821234568")).tags, "", 1)
-        assertEquals(Contacts.NOT_YET, Contacts.refuse(db, room, record))
-        val attribution = DepositAttributionEvent.template(chain, listOf(Attribution(key, mumId, 20_000, contact = true)))
-        val event = signedAsRoom(group, attribution.kind, attribution.tags, "", 1)
-        assertEquals(Contacts.NOT_YET, DepositLedger.refuseAttribution(db, room, event))
-    }
-
-    @Test
     fun `a late joiner's chronicle carries every contact kind, ahead of what names a contact`() {
         val order = ChronicleEvent.KINDS.inApplyOrder(
             listOf(

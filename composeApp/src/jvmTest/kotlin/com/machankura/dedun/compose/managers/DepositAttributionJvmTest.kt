@@ -64,7 +64,7 @@ open class DepositAttributionJvmTest {
         legacyDeposit(all)
         all.forEach { assertEquals(50_000_000, DepositLedger.tallies(it.db, fixture.roomId, fixture.chain).unattributedMsat) }
 
-        val first = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to all[1].publicKey))
+        val first = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to com.machankura.dedun.compose.contacts.Party.Member(all[1].publicKey)))
         fixture.signSession(all, all[0], first.id)
         all.forEach { d ->
             val tallies = DepositLedger.tallies(d.db, fixture.roomId, fixture.chain)
@@ -75,7 +75,7 @@ open class DepositAttributionJvmTest {
 
         // A second, a moment later by the group's clock, corrects the first.
         kotlinx.coroutines.delay(1_100)
-        val correction = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to all[2].publicKey))
+        val correction = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to com.machankura.dedun.compose.contacts.Party.Member(all[2].publicKey)))
         fixture.signSession(all, all[0], correction.id)
         all.forEach { d ->
             val tallies = DepositLedger.tallies(d.db, fixture.roomId, fixture.chain)
@@ -98,7 +98,7 @@ open class DepositAttributionJvmTest {
         legacyDeposit(all)
         fixture.refreshOnchainKey(all)
 
-        val session = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to all[1].publicKey))
+        val session = DepositLedger.proposeAttribution(all[0].db, all[0].room, all[0].publicKey, fixture.chain, mapOf(legacy.text to com.machankura.dedun.compose.contacts.Party.Member(all[1].publicKey)))
         assertEquals(1, session.generation, "proposed after the refresh, it signs at the new generation")
         fixture.signSession(all, all[0], session.id)
         all.forEach { d ->

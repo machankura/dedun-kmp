@@ -23,5 +23,11 @@ sealed interface DepositsUIState {
         val depositors: List<HexKey> = emptyList(),
         /** The people outside the group it has agreed to count, by id: `docs/non-member-deposits.md`. */
         val contacts: Map<HexKey, Contacts.Contact> = emptyMap(),
+        /** The active profile, whose own deposits it may say were someone else's money. */
+        val self: HexKey? = null,
+        /** The current members whose devices haven't said they read contacts (D5). */
+        val waitingFor: List<HexKey> = emptyList(),
+        /** Members' requests a device that holds a share can put to the group (T10). */
+        val requests: List<Contacts.PendingRequest> = emptyList(),
     ) : DepositsUIState
 }

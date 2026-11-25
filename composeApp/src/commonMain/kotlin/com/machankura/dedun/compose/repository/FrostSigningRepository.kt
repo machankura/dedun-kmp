@@ -198,6 +198,16 @@ interface FrostSigningRepository {
      */
     suspend fun membersOwing(session: FrostSigningSession): Set<HexKey>
 
+    /** What the group calls each contact it counts in [chatRoomId], by id: `docs/non-member-deposits.md`. */
+    suspend fun contactNames(chatRoomId: String): Map<HexKey, String> = emptyMap()
+
+    /**
+     * For each attribution among [events], by event id, the members whose deposits it would give to
+     * somebody else: what the signing screen names, since the quorum may do that without them
+     * (`docs/non-member-deposits.md`, D7).
+     */
+    suspend fun membersLosingDeposits(chatRoomId: String, events: List<Event>): Map<String, Set<HexKey>> = emptyMap()
+
     /**
      * Takes every session in a room whose owner has answered as far as its
      * stored messages allow, for the steps no arriving message will drive.

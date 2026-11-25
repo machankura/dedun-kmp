@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.network.serialization.CommonJson
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -289,14 +290,16 @@ object DepositLedger {
      */
     suspend fun refuseAttribution(database: DedunDatabase, chatRoomId: String, proposed: com.vitorpamplona.quartz.nip01Core.core.Event): String? {
         val signed = DepositAttributionEvent.read(proposed) ?: return "does not read as an attribution"
-        if (signed.attributions.any { it.contact }) return Contacts.NOT_YET
         val depositors = Depositors.statementsIn(database, chatRoomId, signed.chain)
         signed.attributions.forEach { attribution ->
             val row = database.depositDao().get(chatRoomId, attribution.key.text) ?: return "names a deposit this device has not seen"
             if (row.chain != GroupWalletStatementEvent.chainName(signed.chain)) return "names a deposit on another network"
             val amount = if (row.source == DepositRow.ONCHAIN) row.amountMsat / 1000 else row.amountMsat
             if (amount != attribution.amount) return "names a deposit for another amount than this device has"
-            if (attribution.member != null && attribution.member !in depositors) return "gives a deposit to somebody the group has not opened deposits for"
+            // A contact the group signed may be given any deposit, a member's included: the quorum is supreme
+            // (docs/non-member-deposits.md, D7).
+            if (attribution.contact) Contacts.refuseAsPayee(database, chatRoomId, attribution.member!!)?.let { return it }
+            else if (attribution.member != null && attribution.member !in depositors) return "gives a deposit to somebody the group has not opened deposits for"
         }
         return null
     }
@@ -311,15 +314,32 @@ object DepositLedger {
         localChatRoom: com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom,
         proposerPublicKey: HexKey,
         chain: Chain,
-        assignments: Map<String, HexKey?>,
+        assignments: Map<String, Party?>,
     ): com.machankura.dedun.compose.database.model.FrostSigningSession {
-        val chatRoomId = localChatRoom.chatRoom.id
-        val attributions = assignments.map { (depositKey, member) ->
+        val template = attributionTemplate(database, localChatRoom.chatRoom.id, chain, assignments)
+        return FrostSigningManager.proposeSigning(database, localChatRoom, proposerPublicKey, template.kind, template.tags, template.content)
+    }
+
+    /**
+     * The 30390 saying whose each of [assignments]' deposits is -- a member's, a contact's, or the
+     * group's own when null -- with each amount as on record: sats onchain, msat over Lightning.
+     */
+    suspend fun attributionTemplate(
+        database: DedunDatabase,
+        chatRoomId: String,
+        chain: Chain,
+        assignments: Map<String, Party?>,
+    ): com.vitorpamplona.quartz.nip01Core.signers.EventTemplate<*> {
+        val attributions = assignments.map { (depositKey, party) ->
             val row = database.depositDao().get(chatRoomId, depositKey) ?: throw IllegalStateException("No deposit $depositKey on record")
             val key = DepositAttributionEvent.DepositKey.parse(depositKey) ?: throw IllegalStateException("Not a deposit: $depositKey")
-            DepositAttributionEvent.Attribution(key, member?.lowercase(), if (row.source == DepositRow.ONCHAIN) row.amountMsat / 1000 else row.amountMsat)
+            DepositAttributionEvent.Attribution(
+                key,
+                party?.id,
+                if (row.source == DepositRow.ONCHAIN) row.amountMsat / 1000 else row.amountMsat,
+                contact = party is Party.Contact,
+            )
         }
-        val template = DepositAttributionEvent.template(chain, attributions)
-        return FrostSigningManager.proposeSigning(database, localChatRoom, proposerPublicKey, template.kind, template.tags, template.content)
+        return DepositAttributionEvent.template(chain, attributions)
     }
 }

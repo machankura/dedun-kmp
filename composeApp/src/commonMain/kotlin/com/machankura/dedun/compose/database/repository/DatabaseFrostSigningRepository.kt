@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.managers.DepositLedger
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.database.model.GroupTransaction
 import com.machankura.dedun.compose.wallet.GroupSpend
 import com.machankura.dedun.compose.wallet.lightning.GroupSweep
@@ -235,6 +238,21 @@ class DatabaseFrostSigningRepository(
         logger.e("Error asking again about ${sessionIds.size} signing session(s)", e)
         0
     }
+
+    override suspend fun contactNames(chatRoomId: String): Map<HexKey, String> =
+        runCatching { Contacts.contactsIn(database, chatRoomId).mapValues { it.value.name } }.getOrDefault(emptyMap())
+
+    override suspend fun membersLosingDeposits(chatRoomId: String, events: List<Event>): Map<String, Set<HexKey>> = runCatching {
+        val members = database.participantDao().findParticipantsByChatRoomId(chatRoomId).map { it.participantPublicKey.lowercase() }.toSet()
+        events.mapNotNull { event ->
+            val signed = DepositAttributionEvent.read(event) ?: return@mapNotNull null
+            val owners = DepositLedger.depositsIn(database, chatRoomId, signed.chain).associate { it.depositKey to it.member?.lowercase() }
+            val losing = signed.attributions.mapNotNull { attribution ->
+                owners[attribution.key.text]?.takeIf { it in members && it != attribution.member?.lowercase() }
+            }.toSet()
+            losing.takeIf { it.isNotEmpty() }?.let { event.id to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
 
     override suspend fun membersOwing(session: FrostSigningSession): Set<HexKey> = try {
         FrostSigningManager.membersOwing(database = database, session = session)

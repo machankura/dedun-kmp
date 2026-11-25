@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
+import com.machankura.dedun.compose.nostr.wallet.ContactRecordEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.contacts.ContactIdentifier
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.managers.Contacts
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -89,9 +94,66 @@ class DatabaseDepositRepository(
         emptyList()
     }
 
-    override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession {
+    override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, Party?>): FrostSigningSession {
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
         return DepositLedger.proposeAttribution(database, localChatRoom, me, chain, assignments)
+    }
+
+    override suspend fun contactsWaitingFor(chatRoomId: String): List<HexKey> = try {
+        activeIdentity.value?.nostrPublicKey?.let { Contacts.announceIfNeeded(database, chatRoomId, it) }
+        Contacts.waitingFor(database, chatRoomId)
+    } catch (e: Throwable) {
+        logger.e("Error reading who $chatRoomId waits for", e)
+        emptyList()
+    }
+
+    /** [template] to the group from this device if it holds a share, or as a request for one that does. */
+    private suspend fun proposeOrAsk(localChatRoom: LocalChatRoom, template: EventTemplate<*>): DepositRepository.ContactOutcome? = try {
+        val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
+        val chatRoomId = localChatRoom.chatRoom.id
+        if (FrostSigningManager.canSign(database, chatRoomId)) {
+            DepositRepository.ContactOutcome.Proposed(Contacts.propose(database, localChatRoom, me, template))
+        } else {
+            Contacts.ask(database, chatRoomId, me, template)
+            DepositRepository.ContactOutcome.Asked
+        }
+    } catch (e: Throwable) {
+        logger.e("Couldn't propose a contact in ${localChatRoom.chatRoom.id}", e)
+        null
+    }
+
+    override suspend fun addContact(localChatRoom: LocalChatRoom, identifier: ContactIdentifier, name: String): DepositRepository.ContactOutcome? {
+        val me = activeIdentity.value?.nostrPublicKey ?: return null
+        val chatRoomId = localChatRoom.chatRoom.id
+        if (!Contacts.everyoneReads(database, chatRoomId)) return null
+        return proposeOrAsk(localChatRoom, ContactRecordEvent.template(chatRoomId, me, name, identifier))
+    }
+
+    override suspend fun amendContact(localChatRoom: LocalChatRoom, contactId: HexKey, change: ContactAmendmentEvent.Change): DepositRepository.ContactOutcome? =
+        proposeOrAsk(localChatRoom, ContactAmendmentEvent.template(contactId, change))
+
+    override suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = try {
+        val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
+        Contacts.ask(database, chatRoomId, me, DepositLedger.attributionTemplate(database, chatRoomId, chain, mapOf(depositKey to party)))
+        true
+    } catch (e: Throwable) {
+        logger.e("Couldn't ask for an attribution in $chatRoomId", e)
+        false
+    }
+
+    override suspend fun pendingRequests(chatRoomId: String): List<Contacts.PendingRequest> = try {
+        Contacts.pendingRequestsIn(database, chatRoomId)
+    } catch (e: Throwable) {
+        logger.e("Error reading $chatRoomId's contact requests", e)
+        emptyList()
+    }
+
+    override suspend fun putToGroup(localChatRoom: LocalChatRoom, request: Contacts.PendingRequest): FrostSigningSession? = try {
+        val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
+        Contacts.propose(database, localChatRoom, me, request.template)
+    } catch (e: Throwable) {
+        logger.e("Couldn't put a request to ${localChatRoom.chatRoom.id}", e)
+        null
     }
 
     companion object {

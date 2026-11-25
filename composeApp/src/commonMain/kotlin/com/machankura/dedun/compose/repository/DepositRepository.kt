@@ -1,5 +1,8 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.contacts.ContactIdentifier
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -62,7 +65,34 @@ interface DepositRepository {
     suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow>
 
     /** Proposes that the group sign whose each deposit in [assignments] is -- a member, or null for the group's own (Phase 9). */
-    suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession
+    suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, Party?>): FrostSigningSession
+
+    /** The current members whose devices haven't said they read contacts: who adding one waits for (`docs/non-member-deposits.md`, D5). */
+    suspend fun contactsWaitingFor(chatRoomId: String): List<HexKey> = emptyList()
+
+    /**
+     * Proposes the contact [identifier] called [name] -- straight to the group from a device that holds
+     * a share, or as a request for one that does (T10). Null when nothing could be sent.
+     */
+    suspend fun addContact(localChatRoom: LocalChatRoom, identifier: ContactIdentifier, name: String): ContactOutcome? = null
+
+    /** Proposes, or asks for, a contact's amendment. */
+    suspend fun amendContact(localChatRoom: LocalChatRoom, contactId: HexKey, change: ContactAmendmentEvent.Change): ContactOutcome? = null
+
+    /** Asks a share-holder to give [depositKey] to [party], from a member who holds no share. */
+    suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = false
+
+    /** The members' requests nobody has put to the group yet. */
+    suspend fun pendingRequests(chatRoomId: String): List<Contacts.PendingRequest> = emptyList()
+
+    /** Puts [request] to the group, from a device that holds a share. */
+    suspend fun putToGroup(localChatRoom: LocalChatRoom, request: Contacts.PendingRequest): FrostSigningSession? = null
+
+    /** What a contact proposal came to. */
+    sealed interface ContactOutcome {
+        data class Proposed(val session: FrostSigningSession) : ContactOutcome
+        data object Asked : ContactOutcome
+    }
 
     companion object {
         val NO_OP = object : DepositRepository {
@@ -76,7 +106,7 @@ interface DepositRepository {
             override suspend fun tallies(chatRoomId: String, chain: Chain) = DepositLedger.Tallies(emptyMap(), 0, 0)
             override suspend fun contacts(chatRoomId: String): Map<HexKey, Contacts.Contact> = emptyMap()
             override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = emptyList()
-            override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession =
+            override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, Party?>): FrostSigningSession =
                 throw UnsupportedOperationException("no repository")
         }
     }

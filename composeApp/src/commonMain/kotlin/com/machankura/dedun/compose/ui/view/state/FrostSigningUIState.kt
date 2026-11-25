@@ -83,6 +83,10 @@ sealed interface FrostSigningUIState {
         val payout: PayoutRule.Result? = null,
         /** Each member's name, by public key, for saying whose a coin is. */
         val names: Map<HexKey, String> = emptyMap(),
+        /** What the group calls each contact, by id (`docs/non-member-deposits.md`). */
+        val contactNames: Map<HexKey, String> = emptyMap(),
+        /** By event id, the members an attribution would take deposits from (D7). */
+        val membersLosingDeposits: Map<String, Set<HexKey>> = emptyMap(),
     ): FrostSigningUIState {
         /**
          * The members the session can be answered by, as rows to draw.

@@ -1,5 +1,17 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.this_was_someone_else_s_money
+import dedun.composeapp.generated.resources.someone_outside_the_group_ellipsis
+import dedun.composeapp.generated.resources.put_s_request_to_the_group
+import dedun.composeapp.generated.resources.requests
+import dedun.composeapp.generated.resources.asked_the_group_to_add_s
+import dedun.composeapp.generated.resources.asked_a_member_with_a_share
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.machankura.dedun.compose.text.ProposedEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.contacts.Party
 import dedun.composeapp.generated.resources.outside_the_group_s
 import dedun.composeapp.generated.resources.outside_the_group
 import dedun.composeapp.generated.resources.a_contact
@@ -104,8 +116,16 @@ fun DepositsScreen(
     }
     val notify = rememberNotifier(rememberCoroutineScope())
     val couldNotAsk = stringResource(Res.string.couldn_t_ask_the_group)
+    val askedAMember = stringResource(Res.string.asked_a_member_with_a_share)
     // The deposit whose attribution is being chosen, by key.
     var attributing by remember { mutableStateOf<String?>(null) }
+    // Whether the add-contact sheet is open: docs/non-member-deposits.md, Phase 3.
+    var addingContact by remember { mutableStateOf(false) }
+    // The name of the contact just asked for, for the notice that says so.
+    var askedFor by remember { mutableStateOf<String?>(null) }
+    val askedToAdd = askedFor?.let { stringResource(Res.string.asked_the_group_to_add_s, it) }
+    LaunchedEffect(askedToAdd) { askedToAdd?.let { notify(it); askedFor = null } }
+    val toSigning: (String) -> Unit = { sessionId -> onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId)) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
@@ -124,6 +144,22 @@ fun DepositsScreen(
                     modifier = Modifier.padding(padding).readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
                 ) {
+                    // Members' requests a device that holds a share can put to the group (T10).
+                    if (state.canSign && state.requests.isNotEmpty()) {
+                        item { Text(stringResource(Res.string.requests), style = MaterialTheme.typography.labelMedium) }
+                        items(state.requests, key = { it.id }) { request ->
+                            RequestRow(
+                                request = request,
+                                chatRoomId = chatRoomId,
+                                asker = "@" + (state.names[request.member] ?: request.member.take(8)),
+                                nameOf = { id -> state.contacts[id]?.name ?: state.names[id] },
+                                onPut = if (!viewModel.isActionPending.value) {
+                                    { viewModel.putToGroup(request, onSuccess = toSigning, onFailure = { notify(couldNotAsk) }) }
+                                } else null,
+                            )
+                        }
+                        item { HorizontalDivider() }
+                    }
                     item { Tallies(state.tallies, state.names, state.contacts) }
                     item { HorizontalDivider() }
                     if (state.deposits.isEmpty()) {
@@ -139,6 +175,11 @@ fun DepositsScreen(
                             onAttribute = if (state.canSign && !viewModel.isActionPending.value) {
                                 { attributing = deposit.depositKey }
                             } else null,
+                            // A member without a share says one of their own deposits was someone else's money,
+                            // and asks a member who holds one to put it to the group. docs/non-member-deposits.md, D7.
+                            onSomeoneElses = if (!state.canSign && deposit.member != null && deposit.member == state.self && !viewModel.isActionPending.value) {
+                                { attributing = deposit.depositKey }
+                            } else null,
                         )
                     }
                 }
@@ -150,16 +191,42 @@ fun DepositsScreen(
     val deposit = attributing?.let { key -> loaded?.deposits?.firstOrNull { it.depositKey == key } }
     if (loaded != null && deposit != null) {
         AttributeDialog(
-            depositors = loaded.depositors,
+            // A member without a share may only say their own deposit was a contact's.
+            depositors = if (loaded.canSign) loaded.depositors else emptyList(),
             names = loaded.names,
+            contacts = loaded.contacts.values.filter { it.isOpen }.sortedBy { it.name.lowercase() },
+            offersTheGroup = loaded.canSign,
             current = deposit.member,
             onDismiss = { attributing = null },
-            onChoose = { member ->
+            onChoose = { party ->
                 attributing = null
-                viewModel.attribute(
-                    depositKey = deposit.depositKey,
-                    member = member,
-                    onSuccess = { sessionId -> onNavigateToRoute(FrostSigningRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, sessionId = sessionId)) },
+                if (loaded.canSign) {
+                    viewModel.attribute(depositKey = deposit.depositKey, party = party, onSuccess = toSigning, onFailure = { notify(couldNotAsk) })
+                } else {
+                    viewModel.askToAttribute(deposit.depositKey, party, onAsked = { notify(askedAMember) }, onFailure = { notify(couldNotAsk) })
+                }
+            },
+            onSomeoneOutside = { attributing = null; addingContact = true },
+        )
+    }
+    if (loaded != null && addingContact) {
+        AddContactSheet(
+            chatRoomId = chatRoomId,
+            contacts = loaded.contacts,
+            waitingFor = loaded.waitingFor.map { loaded.names[it] ?: it.take(8) },
+            pending = viewModel.isActionPending.value,
+            onDismiss = { addingContact = false },
+            onUse = { addingContact = false },
+            onReopen = { contact ->
+                addingContact = false
+                viewModel.amendContact(contact.id, ContactAmendmentEvent.Change.Reopen, onProposed = toSigning, onAsked = { notify(askedAMember) }, onFailure = { notify(couldNotAsk) })
+            },
+            onAsk = { identifier, name ->
+                addingContact = false
+                viewModel.addContact(
+                    identifier, name,
+                    onProposed = { sessionId -> askedFor = name; toSigning(sessionId) },
+                    onAsked = { askedFor = name },
                     onFailure = { notify(couldNotAsk) },
                 )
             },
@@ -167,26 +234,62 @@ fun DepositsScreen(
     }
 }
 
-/** Whose a deposit is: one of the depositors, or the group's own. The current answer is marked. */
+/**
+ * A member's request a device that holds a share can put to the group: what it asks, said as the
+ * signing screen says it, and who asked. `docs/non-member-deposits.md`, Phase 3.
+ */
+@Composable
+private fun RequestRow(request: Contacts.PendingRequest, chatRoomId: String, asker: String, nameOf: (HexKey) -> String?, onPut: (() -> Unit)?) {
+    // Summarised as the group would sign it: the room is its author.
+    val summary = ProposedEvent.summarize(
+        Event("", chatRoomId, request.askedAt, request.request.kind, request.request.tags, request.request.content, ""),
+        nameOf,
+    )
+    ListItem(
+        headlineContent = { Text(summary.label) },
+        supportingContent = { Text(summary.detail) },
+        trailingContent = onPut?.let { put ->
+            { TextButton(onClick = put) { Text(stringResource(Res.string.put_s_request_to_the_group, asker)) } }
+        },
+    )
+}
+
+/**
+ * Whose a deposit is: one of the depositors, one of the contacts the group counts, the group's own,
+ * or someone outside the group not yet added (`docs/non-member-deposits.md`, Phase 3). The current
+ * answer is marked.
+ */
 @Composable
 private fun AttributeDialog(
     depositors: List<HexKey>,
     names: Map<HexKey, String>,
+    contacts: List<Contacts.Contact>,
+    offersTheGroup: Boolean,
     current: HexKey?,
     onDismiss: () -> Unit,
-    onChoose: (HexKey?) -> Unit,
+    onChoose: (Party?) -> Unit,
+    onSomeoneOutside: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.whose_deposit_is_this_question)) },
         text = {
-            androidx.compose.foundation.layout.Column {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 depositors.forEach { member ->
-                    TextButton(onClick = { onChoose(member) }, enabled = member != current) {
+                    TextButton(onClick = { onChoose(Party.Member(member)) }, enabled = member != current) {
                         Text("@" + (names[member] ?: member.take(8)))
                     }
                 }
-                TextButton(onClick = { onChoose(null) }) { Text(stringResource(Res.string.the_group_s_own)) }
+                if (offersTheGroup) {
+                    TextButton(onClick = { onChoose(null) }) { Text(stringResource(Res.string.the_group_s_own)) }
+                }
+                if (depositors.isNotEmpty() || offersTheGroup) HorizontalDivider()
+                contacts.forEach { contact ->
+                    TextButton(onClick = { onChoose(Party.Contact(contact.id)) }, enabled = contact.id != current) {
+                        Text(stringResource(Res.string.s_dot_s, contact.name, contact.identifier.formatted))
+                    }
+                }
+                TextButton(onClick = onSomeoneOutside) { Text(stringResource(Res.string.someone_outside_the_group_ellipsis)) }
             }
         },
         confirmButton = {},
@@ -243,14 +346,20 @@ internal fun Tallies(tallies: DepositLedger.Tallies, names: Map<HexKey, String>,
 }
 
 @Composable
-private fun DepositListRow(deposit: DepositRow, from: String?, onAttribute: (() -> Unit)?) {
+private fun DepositListRow(deposit: DepositRow, from: String?, onAttribute: (() -> Unit)?, onSomeoneElses: (() -> Unit)? = null) {
     ListItem(
-        trailingContent = onAttribute?.let { attribute ->
-            {
-                TextButton(onClick = attribute) {
-                    Text(stringResource(if (deposit.member == null) Res.string.attribute else Res.string.correct))
+        trailingContent = when {
+            onAttribute != null -> {
+                {
+                    TextButton(onClick = onAttribute) {
+                        Text(stringResource(if (deposit.member == null) Res.string.attribute else Res.string.correct))
+                    }
                 }
             }
+            onSomeoneElses != null -> {
+                { TextButton(onClick = onSomeoneElses) { Text(stringResource(Res.string.this_was_someone_else_s_money)) } }
+            }
+            else -> null
         },
         leadingContent = {
             Icon(if (deposit.source == DepositRow.LIGHTNING) Icons.Default.Bolt else Icons.Default.Savings, contentDescription = Decorative)
