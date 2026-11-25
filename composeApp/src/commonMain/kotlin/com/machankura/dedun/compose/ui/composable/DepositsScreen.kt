@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.outside_the_group_s
+import dedun.composeapp.generated.resources.outside_the_group
+import dedun.composeapp.generated.resources.a_contact
+import com.machankura.dedun.compose.managers.Contacts
 import dedun.composeapp.generated.resources.the_group_s_own
 import dedun.composeapp.generated.resources.whose_deposit_is_this_question
 import dedun.composeapp.generated.resources.couldn_t_ask_the_group
@@ -120,7 +124,7 @@ fun DepositsScreen(
                     modifier = Modifier.padding(padding).readableContent().fillMaxSize().padding(MaterialTheme.spacing.screenMargin),
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
                 ) {
-                    item { Tallies(state.tallies, state.names) }
+                    item { Tallies(state.tallies, state.names, state.contacts) }
                     item { HorizontalDivider() }
                     if (state.deposits.isEmpty()) {
                         item { EmptyState(message = stringResource(Res.string.nothing_has_been_deposited_yet), icon = Icons.Default.Savings) }
@@ -128,7 +132,8 @@ fun DepositsScreen(
                     items(state.deposits, key = { it.depositKey }) { deposit ->
                         DepositListRow(
                             deposit = deposit,
-                            from = deposit.member?.let { state.names[it] ?: it.take(8) },
+                            // A contact by what the group calls them, a member by @name. docs/non-member-deposits.md.
+                            from = deposit.member?.let { state.contacts[it]?.name ?: ("@" + (state.names[it] ?: it.take(8))) },
                             // A device that holds a share can ask the group to say whose a deposit
                             // is, or to correct what it said. docs/member-deposits.md, Phase 9.
                             onAttribute = if (state.canSign && !viewModel.isActionPending.value) {
@@ -189,13 +194,35 @@ private fun AttributeDialog(
     )
 }
 
-/** Each member's tally, then the unattributed, then the total they add up to. */
+/**
+ * Each member's tally, then each contact's -- the people outside the group it agreed to count
+ * (`docs/non-member-deposits.md`) -- then the unattributed, then the total they add up to.
+ */
 @Composable
-internal fun Tallies(tallies: DepositLedger.Tallies, names: Map<HexKey, String>) {
+internal fun Tallies(tallies: DepositLedger.Tallies, names: Map<HexKey, String>, contacts: Map<HexKey, Contacts.Contact> = emptyMap()) {
     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)) {
         tallies.members.values.sortedByDescending { it.depositedMsat }.forEach { tally ->
             val name = "@" + (names[tally.member] ?: tally.member.take(8))
             Text(stringResource(Res.string.s_put_in_s_sats, name, sats(tally.depositedMsat)), style = MaterialTheme.typography.bodyLarge)
+            if (tally.paidOutMsat > 0) {
+                Text(
+                    stringResource(Res.string.paid_to_them_s_sats, sats(tally.paidOutMsat)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        tallies.contacts.values.sortedByDescending { it.depositedMsat }.forEach { tally ->
+            val contact = contacts[tally.member]
+            Text(
+                stringResource(Res.string.s_put_in_s_sats, contact?.name ?: stringResource(Res.string.a_contact), sats(tally.depositedMsat)),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                contact?.let { stringResource(Res.string.outside_the_group_s, it.identifier.formatted) } ?: stringResource(Res.string.outside_the_group),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (tally.paidOutMsat > 0) {
                 Text(
                     stringResource(Res.string.paid_to_them_s_sats, sats(tally.paidOutMsat)),
@@ -230,7 +257,7 @@ private fun DepositListRow(deposit: DepositRow, from: String?, onAttribute: (() 
         },
         headlineContent = { Text(stringResource(Res.string.s_sats, sats(deposit.amountMsat))) },
         supportingContent = {
-            val whose = from?.let { stringResource(Res.string.from_s, "@$it") } ?: stringResource(Res.string.unattributed)
+            val whose = from?.let { stringResource(Res.string.from_s, it) } ?: stringResource(Res.string.unattributed)
             val how = when {
                 deposit.source == DepositRow.ONCHAIN && deposit.confirmedAt == null -> stringResource(Res.string.waiting_for_a_confirmation)
                 else -> when (deposit.attributedBy) {

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -43,4 +44,7 @@ class DatabasePayoutRepository(
 
     override suspend fun payoutContext(chatRoomId: String, chain: Chain): PayoutRule.Context =
         MemberBalances.payoutContextOf(database, chatRoomId, chain)
+
+    override suspend fun contactNames(chatRoomId: String): Map<HexKey, String> =
+        runCatching { Contacts.contactsIn(database, chatRoomId).mapValues { it.value.name } }.getOrDefault(emptyMap())
 }

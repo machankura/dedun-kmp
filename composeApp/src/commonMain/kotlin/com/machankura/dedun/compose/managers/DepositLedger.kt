@@ -39,7 +39,8 @@ object DepositLedger {
         val own = database.groupTransactionDao().getByChatRoomId(chatRoomId)
             .filterNot { row -> runCatching { CommonJson.decodeFromString(GroupSweep.Sweep.serializer(), row.psbt) }.getOrNull()?.isSwapInRefund == true }
             .map { it.txid.lowercase() }.toSet()
-        val byBranch = Depositors.statementsIn(database, chatRoomId, chain).values.associate { it.branch to it.member }
+        // A contact's branch is the contact's; a claim resolves it to the member when the ledger is read (docs/non-member-deposits.md).
+        val byBranch = Depositors.branchesIn(database, chatRoomId, chain).entries.associate { (party, branch) -> branch to party }
         deposits.filter { it.outPoint.txid.toString().lowercase() !in own }.forEach { deposit ->
             val member = byBranch[deposit.branch]
             merge(
@@ -159,14 +160,22 @@ object DepositLedger {
     }
 
     /**
-     * Every member's tally on [chain], the deposits nobody's yet, and the total. The members' and the
-     * unattributed add up to the total by construction, so a deposit missing from a tally shows as
-     * a mismatch against the chain, never as nothing.
+     * Every member's tally on [chain], every unclaimed contact's, the deposits nobody's yet, and the
+     * total. The members', the contacts' and the unattributed add up to the total by construction, so
+     * a deposit missing from a tally shows as a mismatch against the chain, never as nothing. A
+     * claimed contact's deposits and payouts are their member's (`docs/non-member-deposits.md`, D8).
      */
-    data class Tallies(val members: Map<HexKey, Tally>, val unattributedMsat: Long, val totalMsat: Long)
+    data class Tallies(
+        val members: Map<HexKey, Tally>,
+        val unattributedMsat: Long,
+        val totalMsat: Long,
+        /** By contact id: the people outside the group it has agreed to count, and not yet said were members. */
+        val contacts: Map<HexKey, Tally> = emptyMap(),
+    )
 
     suspend fun tallies(database: DedunDatabase, chatRoomId: String, chain: Chain): Tallies {
         val rows = depositsIn(database, chatRoomId, chain)
+        val contacts = Contacts.contactsIn(database, chatRoomId)
         val tallies = mutableMapOf<HexKey, Tally>()
         var unattributed = 0L
         rows.forEach { row ->
@@ -178,26 +187,37 @@ object DepositLedger {
                 else -> tally.copy(lightningMsat = tally.lightningMsat + row.amountMsat)
             }
         }
-        paidOut(database, chatRoomId, chain).forEach { (member, msat) ->
-            val tally = tallies.getOrPut(member) { Tally(member) }
-            tallies[member] = tally.copy(paidOutMsat = tally.paidOutMsat + msat)
+        paidOut(database, chatRoomId, chain).forEach { (paid, msat) ->
+            val party = contacts[paid]?.claimedBy ?: paid
+            val tally = tallies.getOrPut(party) { Tally(party) }
+            tallies[party] = tally.copy(paidOutMsat = tally.paidOutMsat + msat)
         }
-        return Tallies(tallies, unattributed, rows.sumOf { it.amountMsat })
+        val (contactTallies, memberTallies) = tallies.entries.partition { it.key in contacts }
+        return Tallies(memberTallies.associate { it.toPair() }, unattributed, rows.sumOf { it.amountMsat }, contactTallies.associate { it.toPair() })
     }
 
     /**
      * Every deposit on record for [chatRoomId] on [chain], newest first, with the group's signed
      * attribution of each applied over what this device found (D10): the group's word is the last.
+     *
+     * An attribution to a contact the group has no record of is ignored, since only a contact the
+     * group signed exists (`docs/non-member-deposits.md`, D1). With [resolveClaims], a deposit of a
+     * contact the group has said was a member is that member's (D8); without, it keeps the contact's
+     * id, for a screen that says *before they joined*.
      */
-    suspend fun depositsIn(database: DedunDatabase, chatRoomId: String, chain: Chain): List<DepositRow> {
+    suspend fun depositsIn(database: DedunDatabase, chatRoomId: String, chain: Chain, resolveClaims: Boolean = true): List<DepositRow> {
+        val contacts = Contacts.contactsIn(database, chatRoomId)
         val signed = DepositAttributionEvent.newestPerDeposit(
             database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, DepositAttributionEvent.KIND).map { it.toEvent() },
             chatRoomId,
             chain,
-        )
+        ).filterValues { (attribution, _) -> !attribution.contact || attribution.member in contacts }
         return database.depositDao().inRoom(chatRoomId, GroupWalletStatementEvent.chainName(chain)).map { row ->
-            val attribution = DepositAttributionEvent.DepositKey.parse(row.depositKey)?.let { signed[it]?.first } ?: return@map row
-            row.copy(member = attribution.member, attributedBy = DepositRow.BY_GROUP)
+            val attributed = DepositAttributionEvent.DepositKey.parse(row.depositKey)?.let { signed[it]?.first }
+                ?.let { row.copy(member = it.member, attributedBy = DepositRow.BY_GROUP) }
+                ?: row
+            if (!resolveClaims) return@map attributed
+            attributed.member?.let { contacts[it]?.claimedBy }?.let { attributed.copy(member = it) } ?: attributed
         }
     }
 
@@ -236,13 +256,23 @@ object DepositLedger {
             sentFees(database, chatRoomId, chain, pay.wallet)[pay.paymentHash.lowercase()]?.let { pay to it }
         }
 
-    /** Every payment authorisation for a member's destination on [chain] the room signed, verified. */
-    suspend fun signedPayouts(database: DedunDatabase, chatRoomId: String, chain: Chain): List<GroupLightningAuthorisationEvent.Pay> =
-        database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupLightningAuthorisationEvent.KIND)
+    /**
+     * Every payment authorisation for a member's or a contact's destination on [chain] the room signed,
+     * verified. One to a contact the group has since said was a member is that member's, so it counts
+     * against what they hold now (`docs/non-member-deposits.md`, D8).
+     */
+    suspend fun signedPayouts(database: DedunDatabase, chatRoomId: String, chain: Chain): List<GroupLightningAuthorisationEvent.Pay> {
+        val claims = Contacts.claimsIn(database, chatRoomId)
+        return database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, GroupLightningAuthorisationEvent.KIND)
             .filter { it.verifies() }
             .mapNotNull { GroupLightningAuthorisationEvent.read(it.toEvent().tags) }
             .filter { it.chain == chain && it.payout != null }
             .distinctBy { it.paymentHash.lowercase() }
+            .map { pay ->
+                val member = pay.payout!!.member.lowercase().takeIf { pay.payout.contact }?.let { claims[it] } ?: return@map pay
+                pay.copy(payout = GroupLightningAuthorisationEvent.Payout(member, pay.payout.destinationEventId))
+            }
+    }
 
     /** The fee of each outgoing payment [wallet] of [chatRoomId] reports settled, by payment hash. */
     suspend fun sentFees(database: DedunDatabase, chatRoomId: String, chain: Chain, wallet: Long): Map<String, Long> =
@@ -259,6 +289,7 @@ object DepositLedger {
      */
     suspend fun refuseAttribution(database: DedunDatabase, chatRoomId: String, proposed: com.vitorpamplona.quartz.nip01Core.core.Event): String? {
         val signed = DepositAttributionEvent.read(proposed) ?: return "does not read as an attribution"
+        if (signed.attributions.any { it.contact }) return Contacts.NOT_YET
         val depositors = Depositors.statementsIn(database, chatRoomId, signed.chain)
         signed.attributions.forEach { attribution ->
             val row = database.depositDao().get(chatRoomId, attribution.key.text) ?: return "names a deposit this device has not seen"

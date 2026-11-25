@@ -7,6 +7,13 @@ import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
+import com.machankura.dedun.compose.contacts.ContactIdentifier
+import com.machankura.dedun.compose.contacts.Party
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactClaimEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactDepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactRecordEvent
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -237,12 +244,59 @@ object ProposedEvent {
         // The group saying whose some deposits are. Every signer checks each against its own
         // ledger before signing; the summary is the count and the total.
         DepositAttributionEvent.KIND -> DepositAttributionEvent.read(event)?.let { signed ->
-            val members = signed.attributions.mapNotNull { it.member }.toSet()
+            val parties = signed.attributions.mapNotNull { it.party }.toSet()
             Summary(
                 label = "Attribute ${signed.attributions.size} deposit${if (signed.attributions.size == 1) "" else "s"}",
-                detail = if (members.isEmpty()) "To the group itself" else "To " + members.joinToString { "@" + (nameOf(it) ?: it.take(8)) },
+                detail = if (parties.isEmpty()) "To the group itself" else "To " + parties.joinToString { party ->
+                    when (party) {
+                        is Party.Member -> "@" + (nameOf(party.id) ?: party.id.take(8))
+                        is Party.Contact -> (nameOf(party.id) ?: "a contact") + ", outside the group"
+                    }
+                },
             )
         } ?: Summary(label = "Attribute deposits", detail = "An attribution this device cannot read")
+
+        // The group agreeing to count a person outside it: the name and the number in full, because
+        // they are the decision. docs/non-member-deposits.md, D6.
+        ContactRecordEvent.KIND -> ContactRecordEvent.read(event, event.pubKey)?.let { record ->
+            Summary(
+                label = "Count deposits for ${record.name}, ${record.identifier.formatted}",
+                detail = "Someone outside the group, added by @${nameOf(record.proposer) ?: record.proposer.take(8)}. " +
+                    "Everyone in the group, now and later, will see this ${if (record.identifier is ContactIdentifier.Phone) "number" else "address"}",
+            )
+        } ?: Summary(label = "Count deposits for someone outside the group", detail = "A contact this device cannot read")
+
+        ContactAmendmentEvent.KIND -> ContactAmendmentEvent.read(event)?.let { amendment ->
+            val name = nameOf(amendment.contactId) ?: "a contact"
+            when (val change = amendment.change) {
+                is ContactAmendmentEvent.Change.Rename -> Summary(label = "Rename $name to ${change.name}", detail = "Someone outside the group")
+                ContactAmendmentEvent.Change.Close -> Summary(label = "Stop counting new deposits for $name", detail = "Their deposits so far stay theirs")
+                ContactAmendmentEvent.Change.Reopen -> Summary(label = "Count new deposits for $name again", detail = "Someone outside the group")
+            }
+        } ?: Summary(label = "Change a contact", detail = "An amendment this device cannot read")
+
+        ContactDepositorStatementEvent.KIND -> ContactDepositorStatementEvent.read(event, event.pubKey)?.let { depositor ->
+            Summary(
+                label = "Open deposits for ${nameOf(depositor.contactId) ?: "a contact"}",
+                detail = "On ${GroupWalletStatementEvent.chainName(depositor.chain)} · a branch of the wallet that is theirs",
+            )
+        } ?: Summary(label = "Open deposits for a contact", detail = "A statement this device cannot read")
+
+        ContactClaimEvent.KIND -> ContactClaimEvent.read(event)?.let { claim ->
+            val name = nameOf(claim.contactId) ?: "a contact"
+            claim.member?.let { member ->
+                Summary(label = "$name is @${nameOf(member) ?: member.take(8)}", detail = "Their deposits and balance become @${nameOf(member) ?: member.take(8)}'s")
+            } ?: Summary(label = "$name is nobody in the group", detail = "Their deposits and balance are theirs again, outside the group")
+        } ?: Summary(label = "Say who a contact is", detail = "A claim this device cannot read")
+
+        ContactPayoutDestinationEvent.KIND -> ContactPayoutDestinationEvent.read(event)?.let { destination ->
+            val name = nameOf(destination.contactId) ?: "a contact"
+            if (destination.removed) Summary(label = "Pay $name nowhere", detail = "On ${GroupWalletStatementEvent.chainName(destination.chain)}")
+            else Summary(
+                label = "Pay $name at " + listOfNotNull(destination.lightningAddress?.toString(), destination.onchainAddress).joinToString(" or "),
+                detail = "On ${GroupWalletStatementEvent.chainName(destination.chain)} · someone outside the group",
+            )
+        } ?: Summary(label = "Say where the group pays a contact", detail = "A destination this device cannot read")
 
         // The group saying whose some of its coins are, so they can be paid out. Every signer
         // checks each coin against its own wallet; the summary is the count, and who gets what.

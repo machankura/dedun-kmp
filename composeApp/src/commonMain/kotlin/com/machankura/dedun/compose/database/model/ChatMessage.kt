@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.database.model
 
 import com.machankura.dedun.compose.nostr.MovedKinds
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
 import com.machankura.dedun.compose.text.grouped
@@ -62,6 +63,12 @@ import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactClaimEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactDepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactRecordEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactRequestEvent
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
@@ -640,6 +647,21 @@ data class ChatMessage(
         /** The group signed whose some of its coins are. See `docs/payouts-only.md`. */
         const val TYPE_COINS_ASSIGNED = "coinsAssigned"
 
+        /** The group agreed to count a person outside it. See `docs/non-member-deposits.md`. */
+        const val TYPE_CONTACT_ADDED = "contactAdded"
+
+        /** The group renamed a contact, closed one, or reopened one. */
+        const val TYPE_CONTACT_AMENDED = "contactAmended"
+
+        /** The group opened deposits for a contact, on a branch of the wallet that is theirs. */
+        const val TYPE_CONTACT_DEPOSITS_OPENED = "contactDepositsOpened"
+
+        /** The group said a contact was one of its members, or undid that. */
+        const val TYPE_CONTACT_CLAIMED = "contactClaimed"
+
+        /** The group said where it pays a contact, or removed it. */
+        const val TYPE_CONTACT_PAYOUT_DESTINATION = "contactPayoutDestination"
+
         /** A member asked the group to record a transfer of part of their balance, or took one back. See `docs/member-transfers.md`. */
         const val TYPE_MEMBER_TRANSFER_ASKED = "memberTransferAsked"
 
@@ -675,6 +697,11 @@ data class ChatMessage(
             TYPE_DEPOSITS_OPENED,
             TYPE_DEPOSITS_ATTRIBUTED,
             TYPE_COINS_ASSIGNED,
+            TYPE_CONTACT_ADDED,
+            TYPE_CONTACT_AMENDED,
+            TYPE_CONTACT_DEPOSITS_OPENED,
+            TYPE_CONTACT_CLAIMED,
+            TYPE_CONTACT_PAYOUT_DESTINATION,
             TYPE_MEMBER_TRANSFER_ASKED,
             TYPE_MEMBER_TRANSFER_RECORDED,
         )
@@ -1452,6 +1479,10 @@ data class ChatMessage(
         internal suspend fun memberName(database: DedunDatabase, publicKey: HexKey): String =
             database.profileDao().getProfileByPublicKey(publicKey)?.humanReadableNameOrPubkey() ?: publicKey.take(8)
 
+        /** A contact as a transcript line names them: what the group calls them, or "a contact" before its record arrives. */
+        private suspend fun contactName(database: DedunDatabase, chatRoomId: String, contactId: HexKey): String =
+            Contacts.nameOf(database, chatRoomId, contactId) ?: "a contact"
+
         /** Which of the group's wallets a transfer's balance is in, as a line names it. */
         private fun railName(rail: TransferRequestEvent.Rail): String = when (rail) {
             TransferRequestEvent.Rail.WAVELENGTH -> "Wavelength"
@@ -1470,6 +1501,19 @@ data class ChatMessage(
             createdAt: Instant,
             groupSignedEventId: HexKey? = null,
         ): ChatMessage? {
+            // A line the group signed about a contact.
+            fun contactLine(type: String, content: String) = ChatMessage(
+                giftWrapPayloadId = null,
+                messageType = type,
+                marmotGroupEventId = marmotGroupEventId,
+                marmotInnerEventId = marmotInnerEventId,
+                senderPublicKey = senderPublicKey,
+                isUserMessage = isUserMessage,
+                chatRoomId = groupId,
+                createdAt = createdAt,
+                content = content,
+            )
+
             // The last resort: raw JSON in a bubble, the only trace an
             // unrecognised payload leaves.
             fun unsupported() = ChatMessage(
@@ -1807,6 +1851,56 @@ data class ChatMessage(
                         content = "The group said whose $count deposit${if (count == 1) " is" else "s are"}",
                     )
                 }
+
+                // The group's records about people outside it: docs/non-member-deposits.md. Each is
+                // the room's own signature, read as the kind says; the line names the contact as the
+                // group's records do when it is written.
+                ContactRecordEvent.KIND -> {
+                    val record = ContactRecordEvent.verify(event, groupId) ?: return null
+                    contactLine(TYPE_CONTACT_ADDED, "The group is counting deposits for ${record.name}, ${record.identifier.formatted}")
+                }
+
+                ContactAmendmentEvent.KIND -> {
+                    val amendment = ContactAmendmentEvent.verify(event, groupId) ?: return null
+                    val name = contactName(database, groupId, amendment.contactId)
+                    contactLine(
+                        TYPE_CONTACT_AMENDED,
+                        when (val change = amendment.change) {
+                            is ContactAmendmentEvent.Change.Rename -> "The group renamed $name to ${change.name}"
+                            ContactAmendmentEvent.Change.Close -> "The group stopped counting new deposits for $name"
+                            ContactAmendmentEvent.Change.Reopen -> "The group counts new deposits for $name again"
+                        },
+                    )
+                }
+
+                ContactDepositorStatementEvent.KIND -> {
+                    val depositor = ContactDepositorStatementEvent.verify(event, groupId) ?: return null
+                    contactLine(TYPE_CONTACT_DEPOSITS_OPENED, "The group opened deposits for ${contactName(database, groupId, depositor.contactId)}")
+                }
+
+                ContactClaimEvent.KIND -> {
+                    val claim = ContactClaimEvent.verify(event, groupId) ?: return null
+                    val name = contactName(database, groupId, claim.contactId)
+                    contactLine(
+                        TYPE_CONTACT_CLAIMED,
+                        claim.member?.let { "The group said $name is @${memberName(database, it)}" } ?: "The group said $name is nobody in the group",
+                    )
+                }
+
+                ContactPayoutDestinationEvent.KIND -> {
+                    val destination = ContactPayoutDestinationEvent.verify(event, groupId) ?: return null
+                    val name = contactName(database, groupId, destination.contactId)
+                    contactLine(
+                        TYPE_CONTACT_PAYOUT_DESTINATION,
+                        if (destination.removed) "The group removed where it pays $name"
+                        else "The group will pay $name at " + listOfNotNull(destination.lightningAddress?.toString(), destination.onchainAddress).joinToString(" or "),
+                    )
+                }
+
+                // A member saying their device reads contacts, or asking a share-holder to put something
+                // to the group. Never a line: the first is housekeeping, and the second carries no authority
+                // (the proposal it becomes is the line). And never a bubble (D5).
+                ContactRequestEvent.KIND -> null
 
                 // A member asking the group to record a transfer of part of their balance, or
                 // taking one back. The inner event carries the giver's signed request whole; only

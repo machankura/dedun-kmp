@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.managers.Contacts
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -72,6 +73,13 @@ class DatabaseDepositRepository(
     } catch (e: Throwable) {
         logger.e("Error reading $chatRoomId's tallies", e)
         DepositLedger.Tallies(emptyMap(), 0, 0)
+    }
+
+    override suspend fun contacts(chatRoomId: String): Map<HexKey, Contacts.Contact> = try {
+        Contacts.contactsIn(database, chatRoomId)
+    } catch (e: Throwable) {
+        logger.e("Error reading $chatRoomId's contacts", e)
+        emptyMap()
     }
 
     override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = try {

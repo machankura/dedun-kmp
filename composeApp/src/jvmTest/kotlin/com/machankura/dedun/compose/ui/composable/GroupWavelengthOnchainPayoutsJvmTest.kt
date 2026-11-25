@@ -101,7 +101,7 @@ class GroupWavelengthOnchainPayoutsJvmTest {
 
     private class Proposing : GroupWavelengthRepository by GroupWavelengthRepository.NO_OP {
         val proposed = mutableListOf<Pair<Long, Long>>()
-        override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: String, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession {
+        override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: String, wallet: GroupWavelengthWalletManager.Wallet, destination: com.machankura.dedun.compose.nostr.wallet.PayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession {
             proposed += amountSat to maxFeeSat
             error("not here")
         }

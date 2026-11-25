@@ -50,6 +50,7 @@ class DepositsViewModel(
                 names = names,
                 canSign = localChatRoom.chatRoom.mlsGroupState != null && chatRepository.canSign(chatRoomId),
                 depositors = depositRepository.depositors(chatRoomId, chain).keys.sorted(),
+                contacts = depositRepository.contacts(chatRoomId),
             )
         }
     }

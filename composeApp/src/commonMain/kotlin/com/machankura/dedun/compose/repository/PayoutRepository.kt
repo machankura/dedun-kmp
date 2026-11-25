@@ -26,6 +26,9 @@ interface PayoutRepository {
     /** Everybody the group has opened deposits for in [chatRoomId] on [chain]: whom a coin can be assigned to. */
     suspend fun depositors(chatRoomId: String, chain: Chain): List<HexKey>
 
+    /** What the group calls each contact it counts, by id: a balance may be a contact's (`docs/non-member-deposits.md`). */
+    suspend fun contactNames(chatRoomId: String): Map<HexKey, String> = emptyMap()
+
     /** Proposes that the group sign whose [coins] are, as the active profile, which has to hold a share. */
     suspend fun assign(localChatRoom: LocalChatRoom, chain: Chain, coins: List<CoinAssignmentEvent.Coin>): FrostSigningSession
 

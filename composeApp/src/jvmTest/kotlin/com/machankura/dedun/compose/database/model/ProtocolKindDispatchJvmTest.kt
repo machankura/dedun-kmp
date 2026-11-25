@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import com.machankura.dedun.compose.managers.Contacts
 import androidx.room3.Room
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
@@ -203,6 +204,21 @@ class ProtocolKindDispatchJvmTest {
                 .toSet(),
             "every one is still stored, for the managers that replay them",
         )
+    }
+
+    /**
+     * No contact kind is ever a raw bubble: a build that showed one would show a number the group
+     * signed, raw, which is what the announcement exists to prevent. docs/non-member-deposits.md, D5.
+     */
+    @Test
+    fun `a contact kind is never an unsupported bubble`(): Unit = runBlocking {
+        Contacts.ALL_KINDS.forEach { kind ->
+            val (_, line) = arrive(
+                Event("%064x".format(3000 + next), sender, 1, kind, arrayOf(arrayOf("h", chatRoomId), arrayOf("identifier", "phone", "+27821234567")), "", "")
+            )
+            assertTrue(line == null || line.messageType != "unsupported", "kind $kind made a raw bubble")
+        }
+        assertTrue(database.chatMessageDao().getChatMessagesByChatRoomId(chatRoomId).none { it.chatMessage.messageType == "unsupported" })
     }
 
     /** The three the group signs are not protocol: their arms check them and describe them. */

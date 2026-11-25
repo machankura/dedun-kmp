@@ -1,6 +1,7 @@
 package com.machankura.dedun.compose.managers
 
 import com.machankura.dedun.compose.nostr.MovedKinds
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
@@ -162,8 +163,10 @@ object GroupWavelengthPayouts {
             .mapValues { it.value.sum() }
         val paid = HashMap<HexKey, Long>()
         val open = HashMap<HexKey, Long>()
+        // A payout to a contact the group has since said was a member is that member's (docs/non-member-deposits.md, D8).
+        val claims = Contacts.claimsIn(database, chatRoomId)
         signed(database, chatRoomId, chain).forEach { payment ->
-            val member = payment.payout!!.member.lowercase()
+            val member = payment.payout!!.member.lowercase().let { claims[it] ?: it }
             val cost = payment.maxSat ?: return@forEach
             val sent = sentFor(database, chatRoomId, payment)
             when {
@@ -172,7 +175,7 @@ object GroupWavelengthPayouts {
             }
         }
         signedOnchain(database, chatRoomId, chain).forEach { payout ->
-            val member = payout.member.lowercase()
+            val member = payout.member.lowercase().let { claims[it] ?: it }
             val left = leftWith(database, chatRoomId, payout)
             when {
                 left != null -> paid[member] = (paid[member] ?: 0) + left
@@ -233,12 +236,14 @@ object GroupWavelengthPayouts {
         val destination = GroupPayoutDestinations.payoutDestinationOf(database, chatRoomId, payment.chain, payout.member)
             ?: return "pays a member who has given nowhere to be paid"
         if (!destination.event.id.equals(payout.destinationEventId, ignoreCase = true)) return "pays a destination the member has since replaced"
+        if ((destination.payee is Party.Contact) != payout.contact) return "names its payee as a member when it is a contact, or the other way round"
+        val lightningAddress = destination.lightningAddress ?: return "pays a contact the group gave no Lightning address"
         val cost = payment.maxSat ?: return "names no amount"
         // The invoice commits to metadata naming the member's address, as the Lightning wallet's payouts do (`docs/payouts-only.md`, D8). It
         // doesn't prove the invoice pays them, which nothing can, but a proposer can no longer hand over any invoice at all.
         val metadata = payment.lnurl ?: return "carries no metadata to check the member's Lightning address against"
         if (payment.descriptionHash != Crypto.sha256(metadata.encodeToByteArray()).byteVector32()) return "carries an invoice that does not commit to the metadata beside it"
-        if (!GroupLightningPayouts.names(metadata, destination.lightningAddress.toString())) return "carries metadata that does not name the member's Lightning address"
+        if (!GroupLightningPayouts.names(metadata, lightningAddress.toString())) return "carries metadata that does not name the member's Lightning address"
         if (payment.expiresAt > nowSeconds + MAX_APPROVAL_SECONDS) return "stands for longer than the group lets anything stand"
         if (signed(database, chatRoomId, payment.chain).any { it.paymentHash == payment.paymentHash }) return "pays a hash the group has already approved"
         return refuseAgainstBalance(database, chatRoomId, payment.chain, payout.member, cost, payment.paymentHash.toString(), nowSeconds)
@@ -249,6 +254,7 @@ object GroupWavelengthPayouts {
         val destinations = GroupPayoutDestinations.payoutDestinationsIn(database, chatRoomId, payout.chain, nowSeconds)
         val destination = destinations[payout.member.lowercase()] ?: return "pays a member who has given nowhere to be paid"
         if (!destination.event.id.equals(payout.destinationEventId, ignoreCase = true)) return "pays a destination the member has since replaced"
+        if ((destination.payee is Party.Contact) != payout.contact) return "names its payee as a member when it is a contact, or the other way round"
         if (destination.onchainAddress == null) return "pays a member who has given no onchain address"
         if (destination.onchainAddress != payout.address) return "pays an address other than the one the member gave"
         if (destinations.any { (member, other) -> !member.equals(payout.member, ignoreCase = true) && other.onchainAddress == payout.address }) {

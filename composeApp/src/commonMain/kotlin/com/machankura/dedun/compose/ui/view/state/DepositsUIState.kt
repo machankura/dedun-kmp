@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.managers.DepositLedger
@@ -20,5 +21,7 @@ sealed interface DepositsUIState {
         val canSign: Boolean = false,
         /** Whom a deposit can be given to: the members the group has opened deposits for. */
         val depositors: List<HexKey> = emptyList(),
+        /** The people outside the group it has agreed to count, by id: `docs/non-member-deposits.md`. */
+        val contacts: Map<HexKey, Contacts.Contact> = emptyMap(),
     ) : DepositsUIState
 }

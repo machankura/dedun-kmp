@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.identity.Identity
@@ -66,8 +67,8 @@ class DatabasePayoutDestinationRepository(
     override suspend fun resolve(address: LightningAddress): LightningAddressResolver.Resolution =
         resolver.resolve(address, torEnabled = torEnabled())
 
-    override suspend fun invoiceFor(destination: GroupPayoutDestination, amount: MilliSatoshi, lightningChain: Chain): LightningAddressResolver.PayoutInvoice =
-        resolver.invoiceFor(destination.lightningAddress, amount, lightningChain, torEnabled = torEnabled())
+    override suspend fun invoiceFor(destination: PayoutDestination, amount: MilliSatoshi, lightningChain: Chain): LightningAddressResolver.PayoutInvoice =
+        resolver.invoiceFor(requireNotNull(destination.lightningAddress) { "No Lightning address to pay" }, amount, lightningChain, torEnabled = torEnabled())
 
     override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector): UnusedAddressCheck.Usage {
         val wallets = wallets() ?: return UnusedAddressCheck.Usage.Unknown

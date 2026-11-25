@@ -867,11 +867,13 @@ class ChronicleApplyJvmTest {
      * group's record of a member's transfer, applied last).
      */
     @Test
-    fun `the app's own list carries the deposit, assignment and transfer kinds, and nothing else`() {
+    fun `the app's own list carries the deposit, assignment, transfer and contact kinds, and nothing else`() {
         // Each under both numbers: the three that moved out of Giza's way (docs/giza-into-dedun.md, Phase K)
-        // are still handed on under their legacy ones, which the signed events' ids hash.
+        // are still handed on under their legacy ones, which the signed events' ids hash. The contact kinds
+        // never moved (docs/non-member-deposits.md).
         assertEquals(
-            MovedKinds.both(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND, com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent.KIND)).toSet(),
+            MovedKinds.both(listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent.KIND, com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent.KIND)).toSet() +
+                Contacts.SIGNED_KINDS,
             ChronicleEvent.CHRONICLABLE_KINDS,
         )
         assertTrue(ChronicleEvent.KINDS.applyRank(DepositorStatementEvent.KIND)!! < ChronicleEvent.KINDS.applyRank(DepositAttributionEvent.KIND)!!)

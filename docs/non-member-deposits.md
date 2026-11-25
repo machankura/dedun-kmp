@@ -28,7 +28,18 @@ payout follows, and [member-transfers.md](./member-transfers.md) T10, for how a 
 without a share asks. Read [member-chronicle.md](./member-chronicle.md) for how a
 member added later gets the group's signed record.
 
-**Not built.** Written against `1a111849`, schema version 49.
+**Being built.** Written against `1a111849`, schema version 49. Each phase is its own commit
+on this branch. Where the build chose differently from the phases below, the table says so,
+and the phases are kept as written.
+
+| where | the plan said | the build does, and why |
+|---|---|---|
+| D2 | an email address is NFC-normalised | ASCII only, trimmed and lowercased. NFC needs each platform's own normaliser, and two that disagreed on one address would give one person two ids. An internationalised address is refused rather than risked |
+| D4, 30398 | a member-signed request | an ordinary inner event. MLS already says who sent it, and the request decides nothing (D7), so no later reader needs a signature to check |
+| Phase 2 | `ContactRow` and `MemberFeatureRow` tables, schema 50 | no new table and no schema change. Contacts are read from `GroupSignedEvent` each time, as `Depositors` reads statements, and announcements from the stored inner events, as `GroupPayoutDestinations` reads destinations |
+| D6, Phase 2 | a transcript line renders the contact's name at display time | the line's text is written when the event arrives, as every other group-signed line's is. A rename after that doesn't rewrite older lines. The contact's page and the tallies always show the current name |
+| D9, Phase 2 | `payoutDestinationsIn` returns `Map<Party, PayoutDestination>` | it stays keyed by the 64-hex id. A contact's id never coincides with a member's key, and every caller already keys by id. `PayoutDestination` is an interface that a member's 30338 and a contact's 30399 both implement |
+| D8, Phase 2 | claims resolve where a party is read | also in `DepositLedger.signedPayouts` and `GroupWavelengthPayouts.balancesIn`, so a payout made to a contact before the claim counts against the member after it |
 
 **Decided by the owner, 2026-11-25:**
 1. The contact is signed whole and not encrypted, and every member sees it in full.

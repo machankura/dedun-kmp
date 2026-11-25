@@ -975,6 +975,9 @@
     <string name="you_ve_put_in_s_sats">You've put in %1$s sats</string>
     <string name="paid_to_them_s_sats">Paid to them: %1$s sats</string>
     <string name="unattributed_s_sats">Unattributed: %1$s sats</string>
+    <string name="a_contact">A contact</string>
+    <string name="outside_the_group">Outside the group</string>
+    <string name="outside_the_group_s">Outside the group · %1$s</string>
     <string name="altogether_s_sats">Altogether: %1$s sats</string>
     <string name="nothing_has_been_deposited_yet">Nothing has been deposited yet.</string>
     <string name="by_their_address">by their address</string>

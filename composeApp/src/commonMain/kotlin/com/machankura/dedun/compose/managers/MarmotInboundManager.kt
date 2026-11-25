@@ -286,6 +286,16 @@ object MarmotInboundManager {
                 .onSuccess { sent -> if (sent > 0) logger.i("Sent $sent payout destination(s) again for ${newParticipants.size} new member(s)") }
                 .onFailure { logger.e("Couldn't send this profile's payout destination again", it) }
         }
+
+        // Say this device reads contacts: once when it first sees the room, and again for the members a
+        // commit adds, who never saw the first. Nobody proposes a contact until every member has.
+        // docs/non-member-deposits.md, D5.
+        if (!disbanded && !removedUs) {
+            runCatching {
+                if (newParticipants.isNotEmpty()) Contacts.announce(database, localChatRoom.chatRoom.id, userPublicKey).let { true }
+                else Contacts.announceIfNeeded(database, localChatRoom.chatRoom.id, userPublicKey)
+            }.onFailure { logger.e("Couldn't say this device reads contacts", it) }
+        }
     }
 
     private suspend fun memberName(database: DedunDatabase, publicKey: HexKey): String =

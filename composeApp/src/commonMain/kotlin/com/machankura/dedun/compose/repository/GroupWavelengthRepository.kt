@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.GroupArkArriving
 import com.machankura.dedun.compose.database.model.GroupArkBoarded
@@ -73,7 +74,7 @@ interface GroupWavelengthRepository {
     suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout>
 
     /** Asks the group to pay a member onchain, [amountSat] to the address they gave, as a leave in a round. */
-    suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession
+    suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: PayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession
 
     /** Asks the group to leave [wallet] for its onchain wallet. */
     suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession
@@ -159,7 +160,7 @@ interface GroupWavelengthRepository {
             override suspend fun wentNowhere(chatRoomId: String, chain: Chain, wallet: Long): Set<String> = emptySet()
             override suspend fun proposePayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, invoice: String, maxFeeSat: Long, payout: GroupWavelengthPaymentEvent.Payout, lnurl: String?): FrostSigningSession = error("No room to propose in")
             override suspend fun onchainPayouts(chatRoomId: String, chain: Chain, wallet: Long): List<GroupWavelengthOnchainPayout> = emptyList()
-            override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession = error("No room to propose in")
+            override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: PayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession = error("No room to propose in")
             override suspend fun proposeExit(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet): FrostSigningSession = error("No room to propose in")
             override suspend fun leaveAsked(chatRoomId: String, chain: Chain, wallet: Long): Boolean = false
             override suspend fun isDepositor(chatRoomId: String, chain: Chain, member: HexKey): Boolean = false

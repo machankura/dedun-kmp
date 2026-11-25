@@ -27,6 +27,15 @@ object Depositors {
             chain,
         )
 
+    /**
+     * Every deposit branch the wallet watches in [chatRoomId] on [chain], by whose it is: each member
+     * the group opened deposits for, and each contact (`docs/non-member-deposits.md`, D10). A contact's
+     * id never coincides with a member's key, so one map holds both.
+     */
+    suspend fun branchesIn(database: DedunDatabase, chatRoomId: String, chain: Chain): Map<HexKey, Long> =
+        statementsIn(database, chatRoomId, chain).mapValues { (_, depositor) -> depositor.branch } +
+            Contacts.depositorsIn(database, chatRoomId, chain).mapValues { (_, depositor) -> depositor.branch }
+
     /** [member]'s statement in [chatRoomId] on [chain], or null while the group has not opened their deposits. */
     suspend fun statementOf(database: DedunDatabase, chatRoomId: String, chain: Chain, member: HexKey): DepositorStatementEvent.Depositor? =
         statementsIn(database, chatRoomId, chain)[member.lowercase()]

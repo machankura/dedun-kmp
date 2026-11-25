@@ -4,7 +4,8 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
-import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent.Rail
 import com.machankura.dedun.compose.wallet.CoinOwnership
 import com.machankura.dedun.compose.wallet.GroupUtxo
@@ -32,15 +33,19 @@ object MemberBalances {
     }
 
     data class MemberBalance(
+        /** A member's key, or a contact's id when [isContact]. */
         val member: HexKey,
-        /** Where a payout to them goes, or null while they have given nowhere. */
-        val destination: GroupPayoutDestination?,
+        /** Where a payout to them goes, or null while they have given nowhere. A contact's is the group's (D9). */
+        val destination: PayoutDestination?,
         val isFormerMember: Boolean,
         val coins: List<OwnedCoin>,
         val lightning: LightningBalance.Balance,
         /** What they hold in the group's Wavelength wallet, the third rail. */
         val wavelength: GroupWavelengthPayouts.Balance = GroupWavelengthPayouts.Balance.NONE,
+        /** Someone outside the group it agreed to count, and hasn't said was a member: `docs/non-member-deposits.md`. */
+        val isContact: Boolean = false,
     ) {
+        val party: Party get() = Party.of(member, isContact)
         val onchainConfirmedSat: Long get() = coins.filter { it.isConfirmed }.sumOf { it.sat }
         val onchainPendingSat: Long get() = coins.filterNot { it.isConfirmed }.sumOf { it.sat }
         val hasOnchainAddress: Boolean get() = destination?.onchainAddress != null
@@ -55,11 +60,18 @@ object MemberBalances {
 
     /** The group's signed word about whose its coins are, on [chain]: what [CoinOwnership] reads. */
     suspend fun recordsOf(database: DedunDatabase, chatRoomId: String, chain: Chain): CoinOwnership.Records {
+        // Only a contact the group has a record of owns anything, and a claimed one's coins are their member's
+        // (docs/non-member-deposits.md, D1 and D8).
+        val contacts = Contacts.contactsIn(database, chatRoomId)
         val attributions = DepositAttributionEvent.newestPerDeposit(
             database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, DepositAttributionEvent.KIND).map { it.toEvent() },
             chatRoomId,
             chain,
         ).mapValues { it.value.first }
+            .filterValues { !it.contact || it.member in contacts }
+            .mapValues { (_, attribution) ->
+                attribution.member?.let { contacts[it]?.claimedBy }?.let { attribution.copy(member = it, contact = false) } ?: attribution
+            }
         val assignments = CoinAssignmentEvent.newestPerCoin(
             database.groupSignedEventDao().getByChatRoomIdAndKind(chatRoomId, CoinAssignmentEvent.KIND).map { it.toEvent() },
             chatRoomId,
@@ -70,6 +82,7 @@ object MemberBalances {
             attributions,
             assignments,
             MemberTransfers.signedIn(database, chatRoomId, chain),
+            Contacts.depositorsIn(database, chatRoomId, chain).map { (id, depositor) -> depositor.branch to (contacts[id]?.claimedBy ?: id) }.toMap(),
         )
     }
 
@@ -121,6 +134,7 @@ object MemberBalances {
 
         val destinations = GroupPayoutDestinations.payoutDestinationsIn(database, chatRoomId, chain)
         val current = database.participantDao().findParticipantsByChatRoomId(chatRoomId).map { it.participantPublicKey.lowercase() }.toSet()
+        val contacts = Contacts.contactsIn(database, chatRoomId).filterValues { it.claimedBy == null }.keys
         val wavelength = GroupWavelengthPayouts.balancesIn(database, chatRoomId, chain, nowSeconds)
         val lightningTransfers = MemberTransfers.netsIn(database, chatRoomId, chain, Rail.LIGHTNING)
         val everybody = coins.keys + lightningDeposits.keys + records.branches.values + destinations.keys + wavelength.keys + lightningTransfers.keys
@@ -128,10 +142,11 @@ object MemberBalances {
             MemberBalance(
                 member = member,
                 destination = destinations[member],
-                isFormerMember = member !in current,
+                isFormerMember = member !in current && member !in contacts,
                 coins = coins[member].orEmpty(),
                 lightning = LightningBalance.of(member, lightningDeposits[member] ?: 0, payouts, sentFees, nowSeconds, (lightningTransfers[member]?.sat ?: 0) * 1000),
                 wavelength = wavelength[member] ?: GroupWavelengthPayouts.Balance.NONE,
+                isContact = member in contacts,
             )
         }
         return Balances(members, unowned)

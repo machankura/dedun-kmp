@@ -70,13 +70,18 @@ object CoinOwnership {
         companion object {
             val NONE = Records(emptyMap())
 
+            /**
+             * [contactBranches] are the contacts' deposit branches, each to whom it belongs now -- the
+             * contact, or the member the group said they were (`docs/non-member-deposits.md`, D8).
+             */
             fun of(
                 depositors: Collection<DepositorStatementEvent.Depositor>,
                 attributions: Map<DepositKey, DepositAttributionEvent.Attribution>,
                 assignments: Map<DepositKey.Onchain, CoinAssignmentEvent.Coin>,
                 transfers: List<MemberTransferEvent.Transfer> = emptyList(),
+                contactBranches: Map<Long, HexKey> = emptyMap(),
             ): Records = Records(
-                depositors.associate { it.branch to it.member.lowercase() },
+                contactBranches.mapValues { it.value.lowercase() } + depositors.associate { it.branch to it.member.lowercase() },
                 attributions,
                 assignments,
                 transfers.filter { it.rail == TransferRequestEvent.Rail.ONCHAIN },

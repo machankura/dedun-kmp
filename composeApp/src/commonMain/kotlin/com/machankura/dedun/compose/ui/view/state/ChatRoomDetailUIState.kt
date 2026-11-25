@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
@@ -152,6 +153,8 @@ sealed interface ChatRoomDetailUIState {
         val openableDepositors: Set<HexKey> = emptySet(),
         /** What each member has put in, the unattributed and the total: `docs/member-deposits.md`, Phase 8. */
         val tallies: DepositLedger.Tallies? = null,
+        /** The people outside the group it has agreed to count, for naming their tallies: `docs/non-member-deposits.md`. */
+        val contacts: Map<HexKey, Contacts.Contact> = emptyMap(),
         /**
          * The room's key as the Shares section shows it: the generation, who
          * holds what, and what this device is asked or may start. Null when the

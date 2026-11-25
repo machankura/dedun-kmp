@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -45,13 +46,16 @@ object GroupLightningPayouts {
         if (!destination.event.id.equals(payout.destinationEventId, ignoreCase = true)) {
             return "pays a destination the member has since replaced"
         }
+        // A contact's is the group's signature, a member's their own: the payee slot has to say which (docs/non-member-deposits.md, D9).
+        if ((destination.payee is Party.Contact) != payout.contact) return "names its payee as a member when it is a contact, or the other way round"
+        val lightningAddress = destination.lightningAddress ?: return "pays a contact the group gave no Lightning address"
 
         pay.lnurl?.let { metadata ->
             val invoice = runCatching { Bolt11Invoice.read(pay.invoice).get() }.getOrNull() ?: return "carries an invoice that does not read"
             if (invoice.descriptionHash != Crypto.sha256(metadata.encodeToByteArray()).byteVector32()) {
                 return "carries an invoice that does not commit to the metadata beside it"
             }
-            if (!names(metadata, destination.lightningAddress.toString())) {
+            if (!names(metadata, lightningAddress.toString())) {
                 return "carries metadata that does not name the member's Lightning address"
             }
         }

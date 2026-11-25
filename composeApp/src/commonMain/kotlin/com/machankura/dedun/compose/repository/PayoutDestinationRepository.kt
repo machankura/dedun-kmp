@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.network.LightningAddressResolver
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.Sendable
@@ -44,7 +45,7 @@ interface PayoutDestinationRepository {
      * An invoice of [amount] from [destination]'s Lightning address, for the group's Lightning wallet
      * on [lightningChain], unless the active profile has Tor on. Phase 7.
      */
-    suspend fun invoiceFor(destination: GroupPayoutDestination, amount: MilliSatoshi, lightningChain: Chain): LightningAddressResolver.PayoutInvoice
+    suspend fun invoiceFor(destination: PayoutDestination, amount: MilliSatoshi, lightningChain: Chain): LightningAddressResolver.PayoutInvoice
 
     /** Signs and sends the active profile's destination in [chatRoomId] on [chain]. */
     suspend fun set(chatRoomId: String, chain: Chain, lightningAddress: LightningAddress, sendable: Sendable?, onchainAddress: String?)
@@ -59,7 +60,7 @@ interface PayoutDestinationRepository {
             override suspend fun destinationsIn(chatRoomId: String, chain: Chain): Map<HexKey, GroupPayoutDestination> = emptyMap()
             override suspend fun resolve(address: LightningAddress): LightningAddressResolver.Resolution = LightningAddressResolver.Resolution.Unreachable
             override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector): UnusedAddressCheck.Usage = UnusedAddressCheck.Usage.Unknown
-            override suspend fun invoiceFor(destination: GroupPayoutDestination, amount: MilliSatoshi, lightningChain: Chain) =
+            override suspend fun invoiceFor(destination: PayoutDestination, amount: MilliSatoshi, lightningChain: Chain) =
                 LightningAddressResolver.PayoutInvoice.Unreachable
             override suspend fun set(chatRoomId: String, chain: Chain, lightningAddress: LightningAddress, sendable: Sendable?, onchainAddress: String?) =
                 throw UnsupportedOperationException("no repository")

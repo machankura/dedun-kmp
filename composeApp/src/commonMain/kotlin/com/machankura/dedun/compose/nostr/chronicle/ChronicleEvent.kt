@@ -4,6 +4,11 @@ import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactClaimEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactDepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactRecordEvent
 import androidx.compose.runtime.Immutable
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -169,9 +174,28 @@ class ChronicleEvent(
          * gave and approves paying it out a second time. Safe to replay: only the first transfer the group signed for a
          * request counts, it embeds the giver's own signature, and it moves no money. Last, since an onchain transfer's coin
          * shares are applied on top of whose the coin was by the three before it.
+         *
+         * Five for `docs/non-member-deposits.md`: the group's records about people outside it -- the
+         * contact itself, its amendments, its claim, its payout destination and its deposit branch.
+         * Without them a late joiner counts a contact's deposits as unattributed, pays a contact's
+         * coins to nobody, and refuses a payout everybody else signs. Each is safe to replay: the
+         * record and the branch are write-once and the first counts; an amendment is a fold in the
+         * group's own order; a claim and a destination are newest-wins by the group's timestamp. All
+         * of them first: an attribution, a branch and a payout name a contact, and only a contact
+         * the group has a record of exists.
          */
         val KINDS: ChronicleKinds = ChronicleKinds(
-            listOf(DepositorStatementEvent.KIND, DepositAttributionEvent.KIND, CoinAssignmentEvent.KIND, MemberTransferEvent.KIND)
+            listOf(
+                ContactRecordEvent.KIND,
+                ContactAmendmentEvent.KIND,
+                ContactClaimEvent.KIND,
+                ContactPayoutDestinationEvent.KIND,
+                DepositorStatementEvent.KIND,
+                ContactDepositorStatementEvent.KIND,
+                DepositAttributionEvent.KIND,
+                CoinAssignmentEvent.KIND,
+                MemberTransferEvent.KIND,
+            )
         )
 
         /** Every kind a chronicle may carry in this app. */

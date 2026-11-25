@@ -4,6 +4,7 @@ import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.managers.MemberWalletManager.asEvent
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestinationRemoved
 import com.machankura.dedun.compose.nostr.wallet.PayoutStatement
@@ -60,48 +61,55 @@ object GroupPayoutDestinations {
             .mapNotNull { GroupPayoutDestinationEvent.carried(it.asEvent()) }
 
     /**
-     * Where a payout to [member] goes, on [chain]: `docs/payouts-only.md`, D7. Their newest
+     * Where a payout to [payee] goes, on [chain]: `docs/payouts-only.md`, D7. A member's newest
      * destination this device holds, whether or not they are still in the room; a removal is
      * honoured, and means nowhere. Where this device holds none of theirs -- it joined after they
      * left, say -- the destination their depositor statement carries, which the group signed and
-     * the chronicle hands every member.
+     * the chronicle hands every member. A contact's is the newest the group signed for them, while
+     * they are unclaimed (`docs/non-member-deposits.md`, D9).
      */
     suspend fun payoutDestinationOf(
         database: DedunDatabase,
         chatRoomId: String,
         chain: Chain,
-        member: HexKey,
+        payee: HexKey,
         now: Long = Clock.System.now().epochSeconds,
-    ): GroupPayoutDestination? = payoutDestinationsIn(database, chatRoomId, chain, now)[member.lowercase()]
+    ): PayoutDestination? = payoutDestinationsIn(database, chatRoomId, chain, now)[payee.lowercase()]
 
-    /** [payoutDestinationOf] for everybody who has one: every member and former member with a statement or a branch. */
+    /**
+     * [payoutDestinationOf] for everybody who has one: every member and former member with a
+     * statement or a branch, and every unclaimed contact the group signed one for. A member's key and
+     * a contact's id never coincide (the id is a hash), so one map holds both.
+     */
     suspend fun payoutDestinationsIn(
         database: DedunDatabase,
         chatRoomId: String,
         chain: Chain,
         now: Long = Clock.System.now().epochSeconds,
-    ): Map<HexKey, GroupPayoutDestination> {
+    ): Map<HexKey, PayoutDestination> {
         val statements = everyonesStatementsIn(database, chatRoomId, chain, now)
         val embedded = Depositors.statementsIn(database, chatRoomId, chain).mapValues { it.value.destination }
-        return (statements.keys + embedded.keys).mapNotNull { member ->
+        val members: Map<HexKey, PayoutDestination> = (statements.keys + embedded.keys).mapNotNull { member ->
             when (val statement = statements[member]) {
                 is GroupPayoutDestination -> member to statement
                 is PayoutDestinationRemoved -> null
                 null -> embedded[member]?.let { member to it }
             }
         }.toMap()
+        return members + Contacts.destinationsIn(database, chatRoomId, chain)
     }
 
     /**
      * Every destination anybody has signed in [chatRoomId] on [chain], each one and not only the
      * newest: what an output the group paid could have been paid to, so a payout still counts after
-     * its member has given a new address.
+     * its member has given a new address. A contact's every 30399 too.
      */
-    suspend fun everSignedIn(database: DedunDatabase, chatRoomId: String, chain: Chain): List<GroupPayoutDestination> =
+    suspend fun everSignedIn(database: DedunDatabase, chatRoomId: String, chain: Chain): List<PayoutDestination> =
         signedIn(database, chatRoomId)
             .mapNotNull { GroupPayoutDestinationEvent.verified(it) as? GroupPayoutDestination }
             .filter { it.chain == chain && it.chatRoomId.equals(chatRoomId, ignoreCase = true) } +
-            Depositors.statementsIn(database, chatRoomId, chain).values.map { it.destination }
+            Depositors.statementsIn(database, chatRoomId, chain).values.map { it.destination } +
+            Contacts.everSignedIn(database, chatRoomId, chain)
 
     /** Every current member of [chatRoomId] who has said where it pays them on [chain], and where. */
     suspend fun destinationsIn(
@@ -202,12 +210,12 @@ object GroupPayoutDestinations {
      */
     fun payeesOf(
         payments: List<ByteVector>,
-        destinations: Collection<GroupPayoutDestination>,
+        destinations: Collection<PayoutDestination>,
         nameOf: (HexKey) -> String,
     ): Map<String, String> {
         val byScript = destinations.mapNotNull { destination ->
             val script = destination.onchainAddress?.let { PayoutAddress.parseOrNull(destination.chain, it) }?.script ?: return@mapNotNull null
-            script.toHex() to destination.member
+            script.toHex() to destination.payee.id
         }.toMap()
         return payments.mapNotNull { script -> byScript[script.toHex()]?.let { script.toHex() to nameOf(it) } }.toMap()
     }

@@ -411,9 +411,10 @@ fun DedunNavHost(
     // The group wallets this identity is watching. Remade with the client.
     val groupOnchainWallets = remember(groupChainClients) {
         groupChainClients?.let {
-            // Each depositor's branch, from the group's signed statements: docs/member-deposits.md.
+            // Each depositor's branch, a contact's included, from the group's signed statements:
+            // docs/member-deposits.md and docs/non-member-deposits.md.
             GroupOnchainWallets(it, applicationIOScope) { chatRoomId, chain ->
-                Depositors.statementsIn(auxDatabaseManager.auxDatabase, chatRoomId, chain).mapValues { (_, depositor) -> depositor.branch }
+                Depositors.branchesIn(auxDatabaseManager.auxDatabase, chatRoomId, chain)
             }
         }
     }

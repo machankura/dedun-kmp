@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.contacts.Party
 import kotlinx.coroutines.flow.first
 import fr.acinq.lightning.MilliSatoshi
 import com.machankura.dedun.compose.wallet.lightning.LightningBalance
@@ -114,6 +115,7 @@ class GroupPayoutsViewModel(
                 reserved = frostSigningRepository.reservedOutPoints(chatRoomId),
                 context = payoutRepository.payoutContext(chatRoomId, chain),
                 names = names,
+                contactNames = payoutRepository.contactNames(chatRoomId),
                 canSign = canSign && wallet != null,
                 self = activeUserPublicKey.lowercase(),
                 lightningWallet = lightningWallet,
@@ -321,7 +323,7 @@ class GroupPayoutsViewModel(
             val problem: LightningProblem? = run {
                 val invoice = payoutDestinationRepository.invoiceFor(destination, MilliSatoshi(amountMsat), wallet.statement.chain)
                 val ready = invoice as? LightningAddressResolver.PayoutInvoice.Ready ?: return@run LightningProblem.NoInvoice(invoice)
-                val payout = GroupWavelengthPaymentEvent.Payout(member, destination.event.id)
+                val payout = GroupWavelengthPaymentEvent.Payout(member, destination.event.id, contact = destination.payee is Party.Contact)
                 val session = runCatching { wavelengthRepository.proposePayout(state.localChatRoom, activeUserPublicKey, wallet, ready.bolt11, (maxFeeMsat + 999) / 1000, payout, ready.metadata) }
                     .onFailure { logger.e("Failed to propose a Wavelength payout from $chatRoomId", it) }.getOrNull()
                     ?: return@run LightningProblem.CouldNotPropose
@@ -433,7 +435,7 @@ class GroupPayoutsViewModel(
                 val ready = invoice as? LightningAddressResolver.PayoutInvoice.Ready ?: return@run LightningProblem.NoInvoice(invoice)
                 val pay = GroupLightningAuthorisations.prepare(wallet, ready.bolt11, null, maxFeeMsat)
                     .getOrElse { return@run LightningProblem.NotAuthorisable(it) }
-                    .copy(payout = GroupLightningAuthorisationEvent.Payout(member, destination.event.id), lnurl = ready.metadata)
+                    .copy(payout = GroupLightningAuthorisationEvent.Payout(member, destination.event.id, contact = destination.payee is Party.Contact), lnurl = ready.metadata)
                 val session = runCatching { lightningRepository.proposePayment(state.localChatRoom, activeUserPublicKey, pay) }
                     .onFailure { logger.e("Failed to propose a Lightning payout from $chatRoomId", it) }.getOrNull()
                     ?: return@run LightningProblem.CouldNotPropose

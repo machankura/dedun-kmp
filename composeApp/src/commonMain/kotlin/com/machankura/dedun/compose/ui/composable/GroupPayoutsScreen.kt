@@ -201,7 +201,8 @@ fun GroupPayoutsScreen(
                 GroupPayoutsUIState.Loading -> LoadingDataIndicator(modifier = Modifier.fillMaxWidth().padding(padding))
                 is GroupPayoutsUIState.Error -> ErrorState(modifier = Modifier.padding(padding), message = state.message, onRetry = viewModel::initiate)
                 is GroupPayoutsUIState.Loaded -> {
-                    fun name(member: HexKey) = "@" + (state.names[member] ?: member.take(8))
+                    // A contact by what the group calls them, a member by @name (docs/non-member-deposits.md).
+                    fun name(member: HexKey) = state.contactNames[member] ?: ("@" + (state.names[member] ?: member.take(8)))
                     val members = state.balances.members.values.sortedWith(
                         compareBy<MemberBalances.MemberBalance> { it.isFormerMember }.thenBy { name(it.member).lowercase() }
                     )
@@ -247,11 +248,11 @@ fun GroupPayoutsScreen(
                                     onNavigateToRoute(GroupPayoutDestinationRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId))
                                 },
                                 // The whole Lightning balance, through the group's Lightning wallet (D8).
-                                lightningOffer = if (state.canSign && state.lightningWallet != null && balance.destination != null) {
+                                lightningOffer = if (state.canSign && state.lightningWallet != null && balance.destination?.lightningAddress != null) {
                                     viewModel.lightningPayable(balance)
                                 } else null,
                                 // As much of the Wavelength balance as the wallet can spend, through the group's Wavelength wallet.
-                                wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && state.wavelengthPaysLightning && balance.destination != null) {
+                                wavelengthOffer = if (state.canSign && state.wavelengthWallet != null && state.wavelengthPaysLightning && balance.destination?.lightningAddress != null) {
                                     viewModel.wavelengthPayable(balance)
                                 } else null,
                                 // The same, onchain, as a leave in the wallet's next round (docs/group-wavelength-payouts.md).

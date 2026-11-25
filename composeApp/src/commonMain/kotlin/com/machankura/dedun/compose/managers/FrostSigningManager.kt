@@ -782,6 +782,16 @@ object FrostSigningManager {
             }
         }
 
+        // The group's records about people outside it: what the group agrees to count, call, pay and
+        // say was one of its members. docs/non-member-deposits.md, D7.
+        unsignedEvents.forEach { rebuilt ->
+            if (rebuilt.kind !in Contacts.SIGNED_KINDS) return@forEach
+            Contacts.refuse(database, rebuilt.pubKey, rebuilt)?.let { reason ->
+                logger.w("Signing proposal $sessionId carries a contact record that $reason; dropping")
+                return null
+            }
+        }
+
         // So does its Wavelength wallet.
         unsignedEvents.forEach { rebuilt ->
             if (!MovedKinds.isKind(rebuilt.kind, GroupWavelengthPaymentEvent.KIND)) return@forEach

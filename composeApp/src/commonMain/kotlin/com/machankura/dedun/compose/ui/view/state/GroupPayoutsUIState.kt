@@ -26,6 +26,8 @@ sealed interface GroupPayoutsUIState {
         /** What a payout is checked against, read with [balances]. */
         val context: PayoutRule.Context,
         val names: Map<HexKey, String>,
+        /** What the group calls each contact with a balance, by id (`docs/non-member-deposits.md`). */
+        val contactNames: Map<HexKey, String> = emptyMap(),
         /** Whether this device holds a share, and so can propose a payout. */
         val canSign: Boolean,
         /** The active profile, whose own row asks for an address it has not given. */

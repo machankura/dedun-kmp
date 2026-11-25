@@ -81,7 +81,7 @@ class GroupPayoutDestinationViewModelJvmTest {
         override suspend fun destinationsIn(chatRoomId: String, chain: Chain): Map<HexKey, GroupPayoutDestination> = emptyMap()
         override suspend fun resolve(address: LightningAddress): Resolution = resolution.also { resolved++ }
         override suspend fun usageOf(chatRoomId: String, chain: Chain, script: ByteVector): Usage = usage.also { checked++ }
-        override suspend fun invoiceFor(destination: GroupPayoutDestination, amount: MilliSatoshi, lightningChain: Chain) =
+        override suspend fun invoiceFor(destination: com.machankura.dedun.compose.nostr.wallet.PayoutDestination, amount: MilliSatoshi, lightningChain: Chain) =
             LightningAddressResolver.PayoutInvoice.Unreachable
         override suspend fun set(chatRoomId: String, chain: Chain, lightningAddress: LightningAddress, sendable: Sendable?, onchainAddress: String?) {
             sets += Set(lightningAddress, sendable, onchainAddress)

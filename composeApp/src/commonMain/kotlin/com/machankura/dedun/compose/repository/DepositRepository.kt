@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.database.model.FrostSigningSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.nostr.wallet.DepositorStatementEvent
@@ -54,6 +55,9 @@ interface DepositRepository {
     /** Every member's tally, the unattributed and the total (Phase 8). */
     suspend fun tallies(chatRoomId: String, chain: Chain): DepositLedger.Tallies
 
+    /** The people outside [chatRoomId] the group has agreed to count, by id: `docs/non-member-deposits.md`. */
+    suspend fun contacts(chatRoomId: String): Map<HexKey, Contacts.Contact>
+
     /** Every deposit on record, newest first, with the group's signed attributions applied. */
     suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow>
 
@@ -70,6 +74,7 @@ interface DepositRepository {
             override suspend fun openOwnIfReady(chatRoomId: String, chain: Chain): FrostSigningSession? = null
             override suspend fun recordOnchain(chatRoomId: String, chain: Chain, deposits: List<GroupOnchainWallets.OnchainDeposit>) = Unit
             override suspend fun tallies(chatRoomId: String, chain: Chain) = DepositLedger.Tallies(emptyMap(), 0, 0)
+            override suspend fun contacts(chatRoomId: String): Map<HexKey, Contacts.Contact> = emptyMap()
             override suspend fun deposits(chatRoomId: String, chain: Chain): List<DepositRow> = emptyList()
             override suspend fun attribute(localChatRoom: LocalChatRoom, chain: Chain, assignments: Map<String, HexKey?>): FrostSigningSession =
                 throw UnsupportedOperationException("no repository")

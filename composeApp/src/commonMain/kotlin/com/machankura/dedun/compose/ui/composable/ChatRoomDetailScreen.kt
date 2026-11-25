@@ -1088,6 +1088,7 @@ fun ChatRoomDetailScreen(
                                             participant.participant.participantPublicKey.lowercase() to
                                                 (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
                                         },
+                                        contacts = chatRoomDetailUIState.contacts,
                                     )
                                 }
                                 item {

@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.contacts.Party
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.repository.GroupWavelengthOnchainPayout
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
@@ -121,11 +123,11 @@ class DatabaseGroupWavelengthRepository(
         }
     }
 
-    override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: GroupPayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession {
+    override suspend fun proposeOnchainPayout(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupWavelengthWalletManager.Wallet, destination: PayoutDestination, amountSat: Long, maxFeeSat: Long): FrostSigningSession {
         val chain = wallet.statement.chain
         require(GroupWavelengthRollout.paysOnchain(chain)) { "Onchain payouts are off on ${chain.name}" }
         val address = requireNotNull(destination.onchainAddress) { "The member has given no onchain address" }
-        val payout = GroupWavelengthOnchainPayoutEvent.paying(chain, wallet.statement.wallet, destination.member, destination.event.id, address, amountSat, maxFeeSat)
+        val payout = GroupWavelengthOnchainPayoutEvent.paying(chain, wallet.statement.wallet, destination.payee.id, destination.event.id, address, amountSat, maxFeeSat, contact = destination.payee is Party.Contact)
         return GroupWavelengthPayouts.proposeOnchain(database, localChatRoom, userPublicKey, payout)
     }
 
