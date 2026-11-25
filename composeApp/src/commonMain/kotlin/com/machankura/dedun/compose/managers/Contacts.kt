@@ -197,6 +197,16 @@ object Contacts {
     suspend fun propose(database: DedunDatabase, localChatRoom: LocalChatRoom, proposer: HexKey, template: EventTemplate<*>): FrostSigningSession =
         FrostSigningManager.proposeSigning(database, localChatRoom, proposer, template.kind, template.tags, template.content)
 
+    /**
+     * The depositor statement opening [contactId]'s deposits on [chain] (D10): on the first salt whose
+     * branch nobody's is, a member's or another contact's.
+     */
+    suspend fun depositorTemplate(database: DedunDatabase, chatRoomId: String, chain: Chain, contactId: HexKey): EventTemplate<*> {
+        val taken = Depositors.branchesIn(database, chatRoomId, chain).values.toSet()
+        val salt = generateSequence(0) { it + 1 }.first { DepositBranch.of(chatRoomId, contactId.lowercase(), it) !in taken }
+        return ContactDepositorStatementEvent.template(chatRoomId, contactId, chain, salt)
+    }
+
     /** Asks a device that holds a share to put [template] to the group, for [member] who holds none: a 30398 into the room. */
     suspend fun ask(database: DedunDatabase, chatRoomId: String, member: HexKey, template: EventTemplate<*>): HexKey {
         val request = ContactRequestEvent.propose(chatRoomId, template)

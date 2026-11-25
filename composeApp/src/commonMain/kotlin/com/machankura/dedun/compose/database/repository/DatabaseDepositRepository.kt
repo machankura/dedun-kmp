@@ -161,6 +161,13 @@ class DatabaseDepositRepository(
         else ContactPayoutDestinationEvent.template(contactId, chain, lightning, onchain),
     )
 
+    override suspend fun openContactDeposits(localChatRoom: LocalChatRoom, chain: Chain, contactId: HexKey): DepositRepository.ContactOutcome? =
+        runCatching { Contacts.depositorTemplate(database, localChatRoom.chatRoom.id, chain, contactId) }.getOrNull()
+            ?.let { proposeOrAsk(localChatRoom, it) }
+
+    override suspend fun contactDepositsOpen(chatRoomId: String, chain: Chain, contactId: HexKey): Boolean =
+        runCatching { contactId.lowercase() in Contacts.depositorsIn(database, chatRoomId, chain) }.getOrDefault(false)
+
     override suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = try {
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")
         Contacts.ask(database, chatRoomId, me, DepositLedger.attributionTemplate(database, chatRoomId, chain, mapOf(depositKey to party)))

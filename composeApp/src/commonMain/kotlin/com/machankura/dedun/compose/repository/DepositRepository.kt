@@ -96,6 +96,12 @@ interface DepositRepository {
      */
     suspend fun setContactDestination(localChatRoom: LocalChatRoom, chain: Chain, contactId: HexKey, lightning: LightningAddress?, onchain: String?): ContactOutcome? = null
 
+    /** Proposes, or asks for, the group opening deposits for [contactId] on [chain]: a branch of the wallet that is theirs (D10). */
+    suspend fun openContactDeposits(localChatRoom: LocalChatRoom, chain: Chain, contactId: HexKey): ContactOutcome? = null
+
+    /** Whether the group has opened deposits for [contactId] on [chain]. */
+    suspend fun contactDepositsOpen(chatRoomId: String, chain: Chain, contactId: HexKey): Boolean = false
+
     /** Asks a share-holder to give [depositKey] to [party], from a member who holds no share. */
     suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = false
 

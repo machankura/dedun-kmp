@@ -67,7 +67,8 @@ object Depositors {
         val chatRoomId = localChatRoom.chatRoom.id
         refusal(database, chatRoomId, chain, member)?.let { throw IllegalStateException("Can't open deposits for ${member.take(8)}: $it") }
         val destination = GroupPayoutDestinations.destinationOf(database, chatRoomId, chain, member)!!
-        val taken = statementsIn(database, chatRoomId, chain).values.map { it.branch }.toSet()
+        // Clear of every branch the wallet watches, a contact's included (docs/non-member-deposits.md, D10).
+        val taken = branchesIn(database, chatRoomId, chain).values.toSet()
         val salt = generateSequence(0) { it + 1 }.first { DepositBranch.of(chatRoomId, member, it) !in taken }
         val template = DepositorStatementEvent.template(chatRoomId, destination, salt)
         return FrostSigningManager.proposeSigning(database, localChatRoom, proposerPublicKey, template.kind, template.tags, template.content)
@@ -92,6 +93,7 @@ object Depositors {
         val held = statementsIn(database, chatRoomId, depositor.chain)
         if (depositor.member in held) return "opens deposits the group has already opened"
         if (held.values.any { it.branch == depositor.branch }) return "gives the member a branch another member already has"
+        if (depositor.branch in Contacts.depositorsIn(database, chatRoomId, depositor.chain).values.map { it.branch }) return "gives the member a branch a contact already has"
 
         when (val newest = GroupPayoutDestinations.statementsIn(database, chatRoomId, depositor.chain)[depositor.member]) {
             null -> Unit
