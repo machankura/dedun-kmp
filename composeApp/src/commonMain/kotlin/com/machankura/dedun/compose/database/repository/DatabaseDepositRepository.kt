@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.text.LightningAddress
+import com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent
 import com.machankura.dedun.compose.nostr.wallet.ContactClaimEvent
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -146,6 +148,18 @@ class DatabaseDepositRepository(
 
     override suspend fun claimContact(localChatRoom: LocalChatRoom, contactId: HexKey, member: HexKey?): DepositRepository.ContactOutcome? =
         proposeOrAsk(localChatRoom, ContactClaimEvent.template(contactId, member))
+
+    override suspend fun setContactDestination(
+        localChatRoom: LocalChatRoom,
+        chain: Chain,
+        contactId: HexKey,
+        lightning: LightningAddress?,
+        onchain: String?,
+    ): DepositRepository.ContactOutcome? = proposeOrAsk(
+        localChatRoom,
+        if (lightning == null && onchain == null) ContactPayoutDestinationEvent.removedTemplate(contactId, chain)
+        else ContactPayoutDestinationEvent.template(contactId, chain, lightning, onchain),
+    )
 
     override suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = try {
         val me = activeIdentity.value?.nostrPublicKey ?: throw IllegalStateException("No profile")

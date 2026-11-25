@@ -44,6 +44,8 @@ and the phases are kept as written.
 | Phase 3 | `ProposedEvent.summarize` takes a separate `contactNameOf` | the one `nameOf` answers for a contact's id too. A second function parameter after it would have caught every caller's trailing lambda. The signing screen passes contacts' names. The proposal list and the transcript preview don't, and say "a contact" |
 | Phase 5 | *Deposits were made for me before I joined* is a banner for a member's first week | it is a button on the Deposits screen, for as long as the group counts an unclaimed contact. The app keeps no record of when a member joined, and the button costs nothing when unused |
 | Phase 5 | the Deposits screen says *For @mum, before they joined* | a claimed contact's deposits read *From @mum*, as any of the member's do. The contact's page says *Mum is @mum*, and keeps listing the deposits that were Mum's |
+| D9, Phase 6 | every signer checks a contact's onchain address is unused, by its own Electrum, and not the group's own | the proposing device makes both checks, as a member's own device does for theirs, and refuses to propose otherwise. Signers check what they can without the network: the address is on the group's chain, and nobody else is paid at it. A signer's check runs where `FrostSigningManager` has no wallet or Electrum client |
+| Phase 6 | *Pay out* on the contact's page opens the payout sheet | it opens the group's Payouts screen, where the contact's balance is a row like a member's, named and offered by the same rules |
 | Phase 3 | a request is put to the group from wherever a share-holder sees it | from a *Requests* section at the top of the Deposits screen, which shows each request summarised as the signing screen would summarise it |
 
 **Decided by the owner, 2026-11-25:**

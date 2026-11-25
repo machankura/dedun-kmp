@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.repository
 
+import com.machankura.dedun.compose.text.LightningAddress
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
 import com.machankura.dedun.compose.contacts.ContactIdentifier
@@ -88,6 +89,12 @@ interface DepositRepository {
 
     /** Proposes, or asks for, the group saying [contactId] was [member] -- or nobody in the group, when null (D8). */
     suspend fun claimContact(localChatRoom: LocalChatRoom, contactId: HexKey, member: HexKey?): ContactOutcome? = null
+
+    /**
+     * Proposes, or asks for, where the group pays [contactId] on [chain] -- or, with neither address,
+     * that it pays them nowhere there (D9). The addresses are checked by the caller first.
+     */
+    suspend fun setContactDestination(localChatRoom: LocalChatRoom, chain: Chain, contactId: HexKey, lightning: LightningAddress?, onchain: String?): ContactOutcome? = null
 
     /** Asks a share-holder to give [depositKey] to [party], from a member who holds no share. */
     suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = false

@@ -1882,6 +1882,7 @@ fun DedunNavHost(
                     chain = route.chain?.let(GroupWalletStatementEvent::chainNamed) ?: NodeParamsManager.chain,
                     chatRepository = databaseChatRepository,
                     depositRepository = databaseDepositRepository,
+                    payoutDestinationRepository = databasePayoutDestinationRepository,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()

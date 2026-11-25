@@ -1,5 +1,31 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.ask_the_group
+import dedun.composeapp.generated.resources.the_group_signs_where_it_pays_them
+import dedun.composeapp.generated.resources.give_a_lightning_or_an_onchain_address
+import dedun.composeapp.generated.resources.that_s_one_of_this_group_s_own_addresses
+import dedun.composeapp.generated.resources.couldn_t_check_the_address
+import dedun.composeapp.generated.resources.this_address_has_been_used_before
+import dedun.composeapp.generated.resources.that_address_is_for_another_network
+import dedun.composeapp.generated.resources.that_isn_t_an_onchain_address
+import dedun.composeapp.generated.resources.couldn_t_find_that_lightning_address
+import dedun.composeapp.generated.resources.that_isn_t_a_lightning_address
+import dedun.composeapp.generated.resources.onchain_address
+import dedun.composeapp.generated.resources.lightning_address
+import dedun.composeapp.generated.resources.pay_out
+import dedun.composeapp.generated.resources.remove
+import dedun.composeapp.generated.resources.set_where_the_group_pays_them
+import dedun.composeapp.generated.resources.nowhere_yet
+import dedun.composeapp.generated.resources.where_the_group_pays_them
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
+import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Button
 import dedun.composeapp.generated.resources.nobody_in_the_group
 import dedun.composeapp.generated.resources.which_member_is_s_question
 import dedun.composeapp.generated.resources.not_them_correct
@@ -97,12 +123,13 @@ fun ContactScreen(
     initialUIState: ContactUIState = ContactUIState.Loading,
     chatRepository: ChatRepository,
     depositRepository: DepositRepository,
+    payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
     onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: ContactViewModel = viewModel(
         key = "$chatRoomId:$contactId",
-        factory = ContactViewModel.factory(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository),
+        factory = ContactViewModel.factory(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository, payoutDestinationRepository),
     )
     LaunchedEffect(chatRoomId, contactId, chain) {
         if (initialUIState == ContactUIState.Loading) viewModel.initiate()
@@ -116,6 +143,8 @@ fun ContactScreen(
     var renaming by remember { mutableStateOf(false) }
     // Choosing which member the contact was: docs/non-member-deposits.md, Phase 5.
     var claiming by remember { mutableStateOf(false) }
+    // Saying where the group pays them: docs/non-member-deposits.md, Phase 6.
+    var settingDestination by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -209,6 +238,42 @@ fun ContactScreen(
                             onReopen = { viewModel.amend(ContactAmendmentEvent.Change.Reopen, toSigning, asked, failed) },
                         )
                     }
+                    // Where the group pays them, while they are nobody in the group (D9). A claimed contact
+                    // is paid as their member, at the member's own destination.
+                    if (contact.claimedBy == null) {
+                        item { HorizontalDivider() }
+                        item { Text(stringResource(Res.string.where_the_group_pays_them), style = MaterialTheme.typography.labelMedium) }
+                        item {
+                            val destination = state.destination
+                            SelectionContainer {
+                                Text(
+                                    destination?.let { listOfNotNull(it.lightningAddress?.toString(), it.onchainAddress).joinToString("\n") }
+                                        ?: stringResource(Res.string.nowhere_yet),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+                        item {
+                            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { settingDestination = true }, enabled = !viewModel.isActionPending.value) {
+                                Text(stringResource(Res.string.set_where_the_group_pays_them))
+                            }
+                        }
+                        if (state.destination != null) {
+                            item {
+                                OutlinedButton(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { viewModel.removeDestination(toSigning, asked, failed) },
+                                    enabled = !viewModel.isActionPending.value,
+                                ) { Text(stringResource(Res.string.remove)) }
+                            }
+                            item {
+                                Button(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { onNavigateToRoute(GroupPayoutsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, chain = GroupWalletStatementEvent.chainName(chain))) },
+                                ) { Text(stringResource(Res.string.pay_out)) }
+                            }
+                        }
+                    }
                     item { HorizontalDivider() }
                     if (state.deposits.isEmpty()) {
                         item { EmptyState(message = stringResource(Res.string.nothing_has_been_deposited_for_them_yet), icon = Icons.Default.Savings) }
@@ -243,6 +308,22 @@ fun ContactScreen(
             },
         )
     }
+    if (loaded != null && settingDestination) {
+        DestinationSheet(
+            current = loaded.destination,
+            problem = viewModel.destinationProblem,
+            pending = viewModel.isActionPending.value,
+            onDismiss = { settingDestination = false },
+            onAsk = { lightning, onchain ->
+                viewModel.setDestination(
+                    lightning, onchain,
+                    onProposed = { settingDestination = false; toSigning(it) },
+                    onAsked = { settingDestination = false; asked() },
+                    onFailure = failed,
+                )
+            },
+        )
+    }
     if (loaded != null && closing) {
         AlertDialog(
             onDismissRequest = { closing = false },
@@ -267,6 +348,72 @@ private fun ContactActions(closed: Boolean, name: String, enabled: Boolean, onRe
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onReopen, enabled = enabled) { Text(stringResource(Res.string.reopen_s, name)) }
         } else {
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onClose, enabled = enabled) { Text(stringResource(Res.string.stop_counting_deposits_for_them)) }
+        }
+    }
+}
+
+/**
+ * Where the group pays a contact: a Lightning address, an unused onchain address, or both, each
+ * checked here as a member's own device checks its own before the group is asked
+ * (`docs/non-member-deposits.md`, D9).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DestinationSheet(
+    current: PayoutDestination?,
+    problem: ContactViewModel.DestinationProblem?,
+    pending: Boolean,
+    onDismiss: () -> Unit,
+    onAsk: (lightning: String, onchain: String) -> Unit,
+) {
+    var lightning by remember { mutableStateOf(current?.lightningAddress?.toString() ?: "") }
+    var onchain by remember { mutableStateOf(current?.onchainAddress ?: "") }
+    val lightningProblem = when (problem) {
+        ContactViewModel.DestinationProblem.LIGHTNING_NOT_AN_ADDRESS -> stringResource(Res.string.that_isn_t_a_lightning_address)
+        ContactViewModel.DestinationProblem.LIGHTNING_NOT_FOUND -> stringResource(Res.string.couldn_t_find_that_lightning_address)
+        else -> null
+    }
+    val onchainProblem = when (problem) {
+        ContactViewModel.DestinationProblem.ONCHAIN_NOT_AN_ADDRESS -> stringResource(Res.string.that_isn_t_an_onchain_address)
+        ContactViewModel.DestinationProblem.ONCHAIN_OTHER_NETWORK -> stringResource(Res.string.that_address_is_for_another_network)
+        ContactViewModel.DestinationProblem.ONCHAIN_USED -> stringResource(Res.string.this_address_has_been_used_before)
+        ContactViewModel.DestinationProblem.ONCHAIN_UNKNOWN -> stringResource(Res.string.couldn_t_check_the_address)
+        ContactViewModel.DestinationProblem.ONCHAIN_THE_GROUPS -> stringResource(Res.string.that_s_one_of_this_group_s_own_addresses)
+        else -> null
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.readableContent().padding(MaterialTheme.spacing.screenMargin),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap),
+        ) {
+            Text(stringResource(Res.string.where_the_group_pays_them), style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = lightning,
+                onValueChange = { lightning = it },
+                singleLine = true,
+                label = { Text(stringResource(Res.string.lightning_address)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                isError = lightningProblem != null,
+                supportingText = lightningProblem?.let { { Text(it) } },
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = onchain,
+                onValueChange = { onchain = it },
+                singleLine = true,
+                label = { Text(stringResource(Res.string.onchain_address)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                isError = onchainProblem != null,
+                supportingText = onchainProblem?.let { { Text(it) } },
+            )
+            if (problem == ContactViewModel.DestinationProblem.NEEDS_ONE) {
+                Text(stringResource(Res.string.give_a_lightning_or_an_onchain_address), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(stringResource(Res.string.the_group_signs_where_it_pays_them), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(modifier = Modifier.fillMaxWidth(), onClick = { onAsk(lightning, onchain) }, enabled = !pending) {
+                Text(stringResource(Res.string.ask_the_group))
+            }
         }
     }
 }

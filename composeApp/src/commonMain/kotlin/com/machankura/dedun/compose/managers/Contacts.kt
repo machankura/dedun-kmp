@@ -151,7 +151,14 @@ object Contacts {
             ContactPayoutDestinationEvent.KIND -> {
                 val destination = ContactPayoutDestinationEvent.read(proposed) ?: return "does not read as a destination"
                 val contact = contacts[destination.contactId] ?: return NO_RECORD
-                if (contact.claimedBy != null) "gives a destination to a contact the group said is a member, who is paid at their own" else null
+                when {
+                    contact.claimedBy != null -> "gives a destination to a contact the group said is a member, who is paid at their own"
+                    // The check a Wavelength payout already makes between members: one address, one payee (D9).
+                    destination.onchainAddress != null && GroupPayoutDestinations.payoutDestinationsIn(database, chatRoomId, destination.chain)
+                        .any { (payee, other) -> payee != destination.contactId && other.onchainAddress == destination.onchainAddress } ->
+                        "pays a contact at an address somebody else is paid at"
+                    else -> null
+                }
             }
             ContactDepositorStatementEvent.KIND -> {
                 val depositor = ContactDepositorStatementEvent.read(proposed, chatRoomId) ?: return "does not read as a depositor statement for this group"

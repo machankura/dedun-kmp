@@ -1018,6 +1018,14 @@
     <string name="nobody_in_the_group">Nobody in the group</string>
     <string name="deposits_were_made_for_me_before_i_joined">Deposits were made for me before I joined</string>
     <string name="which_of_these_were_you_question">Which of these were you?</string>
+    <string name="where_the_group_pays_them">Where the group pays them</string>
+    <string name="nowhere_yet">Nowhere yet</string>
+    <string name="set_where_the_group_pays_them">Set where the group pays them</string>
+    <string name="couldn_t_find_that_lightning_address">Couldn't find that Lightning address. Check it, or try again when you're connected.</string>
+    <string name="that_isn_t_an_onchain_address">That isn't an onchain address.</string>
+    <string name="that_address_is_for_another_network">That address is for another network.</string>
+    <string name="give_a_lightning_or_an_onchain_address">Give a Lightning address, an onchain address, or both.</string>
+    <string name="the_group_signs_where_it_pays_them">They can't sign for themselves, so the group signs where it pays them. A payout goes only here.</string>
     <string name="moves_deposits_made_by_s">This gives away deposits made by %1$s. The group can do this without them.</string>
     <string name="put_s_request_to_the_group">Put %1$s's request to the group</string>
     <string name="altogether_s_sats">Altogether: %1$s sats</string>

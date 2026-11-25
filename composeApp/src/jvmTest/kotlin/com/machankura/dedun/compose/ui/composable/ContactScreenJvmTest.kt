@@ -41,12 +41,17 @@ class ContactScreenJvmTest {
         return Contacts.Contact(record, name, closed, claimedBy = claimedBy)
     }
 
-    private fun loaded(contact: Contacts.Contact, deposits: List<DepositRow> = emptyList(), tally: DepositLedger.Tally? = null) = ContactUIState.Loaded(
+    private fun loaded(
+        contact: Contacts.Contact,
+        deposits: List<DepositRow> = emptyList(),
+        tally: DepositLedger.Tally? = null,
+        destination: com.machankura.dedun.compose.nostr.wallet.PayoutDestination? = null,
+    ) = ContactUIState.Loaded(
         localChatRoom = LocalChatRoom(chatRoom = ChatRoom(id = room, userPublicKey = alice, subject = "#Council", description = null, mlsGroupState = "00")),
         contact = contact,
         tally = tally,
         deposits = deposits,
-        destination = null,
+        destination = destination,
         names = mapOf(alice to "alice"),
         members = listOf(alice),
     )
@@ -122,6 +127,27 @@ class ContactScreenJvmTest {
             onNodeWithText("Mum is @alice").assertExists()
             onNodeWithText("Not them: correct this").performClick()
             onNodeWithText("Nobody in the group").assertExists()
+        }
+    }
+
+    @Test
+    fun `where the group pays a contact is shown, with a way to pay them out`() {
+        render(loaded(contact())) {
+            onNodeWithText("Nowhere yet").assertExists()
+            assertEquals(0, onAllNodesWithText("Pay out").fetchSemanticsNodes().size)
+            onNodeWithText("Set where the group pays them").performClick()
+            onNodeWithText("Ask the group").performClick()
+            onNodeWithText("Give a Lightning address, an onchain address, or both.").assertExists()
+        }
+        val template = com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent.template(
+            mumId, Chain.Regtest, com.machankura.dedun.compose.text.LightningAddress("mum", "example.com"), null,
+        )
+        val destination = com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent.verify(
+            GroupFixtures.signedAsRoom(group, template.kind, template.tags, template.content), room,
+        )!!
+        render(loaded(contact(), destination = destination)) {
+            onNodeWithText("mum@example.com").assertExists()
+            onNodeWithText("Pay out").assertExists()
         }
     }
 }

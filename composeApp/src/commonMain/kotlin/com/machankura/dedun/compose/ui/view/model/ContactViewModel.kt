@@ -1,5 +1,11 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import fr.acinq.bitcoin.utils.Either
+import com.machankura.dedun.compose.network.LightningAddressResolver
+import com.machankura.dedun.compose.wallet.UnusedAddressCheck
+import com.machankura.dedun.compose.wallet.PayoutAddress
+import com.machankura.dedun.compose.text.LightningAddress
+import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +37,7 @@ class ContactViewModel(
     initialUIState: ContactUIState,
     private val chatRepository: ChatRepository,
     private val depositRepository: DepositRepository,
+    private val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
 ) : ViewModel() {
     var uiState: ContactUIState by mutableStateOf(initialUIState)
         private set
@@ -69,6 +76,65 @@ class ContactViewModel(
     fun claim(member: HexKey?, onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) =
         act({ depositRepository.claimContact(it, contactId, member) }, onProposed, onAsked, onFailure)
 
+    /** Why a destination can't be proposed as typed: `docs/non-member-deposits.md`, D9. */
+    enum class DestinationProblem { NEEDS_ONE, LIGHTNING_NOT_AN_ADDRESS, LIGHTNING_NOT_FOUND, ONCHAIN_NOT_AN_ADDRESS, ONCHAIN_OTHER_NETWORK, ONCHAIN_USED, ONCHAIN_UNKNOWN, ONCHAIN_THE_GROUPS }
+
+    var destinationProblem: DestinationProblem? by mutableStateOf(null)
+        private set
+
+    /**
+     * Proposes where the group pays this contact, checked first as a member's own device checks its
+     * own: the Lightning address resolves (unless Tor is on), and the onchain address is on this network,
+     * unused by Electrum, and not the group's own (group-payout-destination.md, D5-D7).
+     */
+    fun setDestination(lightningText: String, onchainText: String, onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) {
+        if (isActionPending.value) return
+        destinationProblem = null
+        val lightning = when (val parsed = LightningAddress.parse(lightningText)) {
+            is LightningAddress.Parsed.Address -> parsed.address
+            LightningAddress.Parsed.Empty -> null
+            else -> return run { destinationProblem = DestinationProblem.LIGHTNING_NOT_AN_ADDRESS }
+        }
+        val onchain = when (val parsed = PayoutAddress.parse(chain, onchainText)) {
+            is Either.Right -> parsed.value
+            is Either.Left -> when (parsed.value) {
+                PayoutAddress.Problem.Empty -> null
+                PayoutAddress.Problem.NotAnAddress -> return run { destinationProblem = DestinationProblem.ONCHAIN_NOT_AN_ADDRESS }
+                PayoutAddress.Problem.OtherNetwork -> return run { destinationProblem = DestinationProblem.ONCHAIN_OTHER_NETWORK }
+            }
+        }
+        if (lightning == null && onchain == null) return run { destinationProblem = DestinationProblem.NEEDS_ONE }
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val problem = lightning?.let { address ->
+                when (payoutDestinationRepository.resolve(address)) {
+                    is LightningAddressResolver.Resolution.Resolved, LightningAddressResolver.Resolution.NotCheckedTor -> null
+                    else -> DestinationProblem.LIGHTNING_NOT_FOUND
+                }
+            } ?: onchain?.let { parsed ->
+                when (payoutDestinationRepository.usageOf(chatRoomId, chain, parsed.script)) {
+                    UnusedAddressCheck.Usage.Unused -> null
+                    UnusedAddressCheck.Usage.Used -> DestinationProblem.ONCHAIN_USED
+                    UnusedAddressCheck.Usage.Unknown -> DestinationProblem.ONCHAIN_UNKNOWN
+                    UnusedAddressCheck.Usage.TheGroups -> DestinationProblem.ONCHAIN_THE_GROUPS
+                }
+            }
+            withContext(Dispatchers.Main) {
+                isActionPending.value = false
+                destinationProblem = problem
+            }
+            if (problem == null) {
+                withContext(Dispatchers.Main) {
+                    act({ depositRepository.setContactDestination(it, chain, contactId, lightning, onchain?.address) }, onProposed, onAsked, onFailure)
+                }
+            }
+        }
+    }
+
+    /** Proposes that the group pays this contact nowhere on this network. */
+    fun removeDestination(onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) =
+        act({ depositRepository.setContactDestination(it, chain, contactId, null, null) }, onProposed, onAsked, onFailure)
+
     internal fun act(
         action: suspend (LocalChatRoom) -> DepositRepository.ContactOutcome?,
         onProposed: (sessionId: String) -> Unit,
@@ -99,8 +165,9 @@ class ContactViewModel(
             initialUIState: ContactUIState = ContactUIState.Loading,
             chatRepository: ChatRepository,
             depositRepository: DepositRepository,
+            payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ContactViewModel(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository) }
+            initializer { ContactViewModel(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository, payoutDestinationRepository) }
         }
     }
 }
