@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.lightning
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -75,7 +76,20 @@ object GroupLightningAuthorisationEvent {
         val budgetMsat: Long get() = amountMsat + maxFeeMsat
     }
 
-    data class Payout(val member: String, val destinationEventId: String)
+    /** [member] is a member's key, or a contact's id when [contact] is true (`docs/non-member-deposits.md`, D9). */
+    data class Payout(val member: String, val destinationEventId: String, val contact: Boolean = false) {
+        /** How the payee slot spells it. */
+        val wire: String get() = if (contact) Party.Contact(member.lowercase()).wire else member
+
+        companion object {
+            /** A payout tag's two values: `contact:<id>` is a contact, anything else is read as it always was. */
+            fun of(payee: String, destinationEventId: String): Payout =
+                when (val party = Party.parseWire(payee)) {
+                    is Party.Contact -> Payout(party.id, destinationEventId, contact = true)
+                    else -> Payout(payee, destinationEventId)
+                }
+        }
+    }
 
     fun template(pay: Pay, createdAt: Long = Clock.System.now().epochSeconds): EventTemplate<*> =
         EventTemplate<Nothing>(
@@ -90,7 +104,7 @@ object GroupLightningAuthorisationEvent {
                 arrayOf(HASH_TAG, pay.paymentHash),
                 arrayOf(EXPIRES_TAG, pay.expiresAt.toString()),
                 *listOfNotNull(
-                    pay.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) },
+                    pay.payout?.let { arrayOf(PAYOUT_TAG, it.wire, it.destinationEventId) },
                     pay.lnurl?.let { arrayOf(LNURL_TAG, it) },
                 ).toTypedArray(),
             ),
@@ -120,7 +134,7 @@ object GroupLightningAuthorisationEvent {
         if (parts[2] != hash || invoice.paymentHash.toHex() != hash) return null
         if (invoice.amount != null && invoice.amount!!.msat != amount) return null
         if (expires > invoice.timestampSeconds + (invoice.expirySeconds ?: Bolt11Invoice.DEFAULT_EXPIRY_SECONDS.toLong())) return null
-        val payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout(it[1].lowercase(), it[2].lowercase()) }
+        val payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout.of(it[1].lowercase(), it[2].lowercase()) }
         val lnurl = value(LNURL_TAG)
         return Pay(chain, wallet, bolt11, amount, maxFee, hash, expires, payout, lnurl)
     }

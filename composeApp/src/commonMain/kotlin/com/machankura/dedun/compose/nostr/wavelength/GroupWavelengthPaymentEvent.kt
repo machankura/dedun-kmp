@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wavelength
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.vitorpamplona.quartz.nip01Core.core.Kind
@@ -26,7 +27,18 @@ object GroupWavelengthPaymentEvent {
     private const val LNURL_TAG = "lnurl"
 
     /** Whose balance it comes from, and the destination of theirs it pays: the only thing the group's wallet pays (`docs/payouts-only.md`). */
-    data class Payout(val member: String, val destinationEventId: String)
+    data class Payout(val member: String, val destinationEventId: String, val contact: Boolean = false) {
+        /** How the payee slot spells it: a contact as `contact:<id>` (`docs/non-member-deposits.md`, D9). */
+        val wire: String get() = if (contact) Party.Contact(member.lowercase()).wire else member
+
+        companion object {
+            fun of(payee: String, destinationEventId: String): Payout =
+                when (val party = Party.parseWire(payee)) {
+                    is Party.Contact -> Payout(party.id, destinationEventId, contact = true)
+                    else -> Payout(payee, destinationEventId)
+                }
+        }
+    }
 
     data class Payment(
         val chain: Chain,
@@ -131,7 +143,7 @@ object GroupWavelengthPaymentEvent {
                 arrayOf(MAX_FEE_TAG, payment.maxFeeSat.toString()),
                 arrayOf(MAX_REFUND_TAG, payment.maxRefundHeight.toString()),
                 arrayOf(EXPIRES_TAG, payment.expiresAt.toString()),
-            ) + listOfNotNull(payment.payout?.let { arrayOf(PAYOUT_TAG, it.member, it.destinationEventId) }, payment.lnurl?.let { arrayOf(LNURL_TAG, it) }),
+            ) + listOfNotNull(payment.payout?.let { arrayOf(PAYOUT_TAG, it.wire, it.destinationEventId) }, payment.lnurl?.let { arrayOf(LNURL_TAG, it) }),
             content = "",
         )
 
@@ -146,7 +158,7 @@ object GroupWavelengthPaymentEvent {
             maxFeeSat = tag(MAX_FEE_TAG)?.toLongOrNull()?.takeIf { it in 0..MAX_SAT } ?: return null,
             maxRefundHeight = tag(MAX_REFUND_TAG)?.toLongOrNull() ?: return null,
             expiresAt = tag(EXPIRES_TAG)?.toLongOrNull() ?: return null,
-            payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout(it[1], it[2]) },
+            payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG }?.let { Payout.of(it[1], it[2]) },
             lnurl = tag(LNURL_TAG),
         )
         // A label can't say one hash while the invoice says another, and an invoice with no hash or amount approves nothing.

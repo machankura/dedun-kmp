@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wallet
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.text.LightningAddress
 import com.machankura.dedun.compose.wallet.PayoutAddress
@@ -32,13 +33,15 @@ data class GroupPayoutDestination(
     override val member: HexKey,
     override val chatRoomId: String,
     override val chain: Chain,
-    val lightningAddress: LightningAddress,
+    override val lightningAddress: LightningAddress,
     /** What the address said it accepts when it was set; for showing, never for deciding. */
     val sendable: Sendable?,
     /** An address that was unused when it was set, or null. */
-    val onchainAddress: String?,
+    override val onchainAddress: String?,
     override val event: Event,
-) : PayoutStatement
+) : PayoutStatement, PayoutDestination {
+    override val payee: Party get() = Party.Member(member.lowercase())
+}
 
 /** [member] has withdrawn where [chatRoomId] pays them on [chain]: pay them nowhere. */
 data class PayoutDestinationRemoved(

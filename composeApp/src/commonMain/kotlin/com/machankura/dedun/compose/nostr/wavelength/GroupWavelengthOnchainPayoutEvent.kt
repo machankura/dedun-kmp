@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wavelength
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.wallet.PayoutAddress
@@ -45,6 +46,8 @@ object GroupWavelengthOnchainPayoutEvent {
         val maxFeeSat: Long,
         val expiresAt: Long,
         val askedAt: Long,
+        /** Whether [member] is a contact's id rather than a member's key (`docs/non-member-deposits.md`, D9). */
+        val contact: Boolean = false,
     ) {
         /** What the payout is known by, everywhere: its approval's `d`. */
         val id: String get() = "$TYPE_PAYOUT_ONCHAIN:${GroupWalletStatementEvent.chainName(chain)}:$wallet:${member.lowercase()}:$askedAt"
@@ -63,7 +66,7 @@ object GroupWavelengthOnchainPayoutEvent {
             tags = arrayOf(
                 arrayOf(D_TAG, payout.id),
                 arrayOf(TYPE_TAG, TYPE_PAYOUT_ONCHAIN),
-                arrayOf(PAYOUT_TAG, payout.member, payout.destinationEventId),
+                arrayOf(PAYOUT_TAG, if (payout.contact) Party.Contact(payout.member.lowercase()).wire else payout.member, payout.destinationEventId),
                 arrayOf(ADDRESS_TAG, payout.address),
                 arrayOf(AMOUNT_TAG, payout.amountSat.toString()),
                 arrayOf(MAX_FEE_TAG, payout.maxFeeSat.toString()),
@@ -77,23 +80,26 @@ object GroupWavelengthOnchainPayoutEvent {
         if (tag(TYPE_TAG) != TYPE_PAYOUT_ONCHAIN) return null
         val identifier = tag(D_TAG)?.split(":")?.takeIf { it.size == 5 && it[0] == TYPE_PAYOUT_ONCHAIN } ?: return null
         val payout = tags.firstOrNull { it.size >= 3 && it[0] == PAYOUT_TAG } ?: return null
+        // A contact's payee slot says `contact:<id>`; the label carries the bare id, so a build from before contacts reads no such payout.
+        val contact = Party.parseWire(payout[1]) as? Party.Contact
         val read = Payout(
             chain = GroupWalletStatementEvent.chainNamed(identifier[1]) ?: return null,
             wallet = identifier[2].toLongOrNull() ?: return null,
-            member = payout[1],
+            member = contact?.id ?: payout[1],
             destinationEventId = payout[2],
             address = tag(ADDRESS_TAG) ?: return null,
             amountSat = tag(AMOUNT_TAG)?.toLongOrNull()?.takeIf { it in 1..MAX_SAT } ?: return null,
             maxFeeSat = tag(MAX_FEE_TAG)?.toLongOrNull()?.takeIf { it in 0..MAX_SAT } ?: return null,
             expiresAt = tag(EXPIRES_TAG)?.toLongOrNull() ?: return null,
             askedAt = identifier[4].toLongOrNull() ?: return null,
+            contact = contact != null,
         )
         // The label names the member the payout tag does, and the address is one on this chain, written as it will be compared.
         return read.takeIf { it.member.equals(identifier[3], ignoreCase = true) && it.script != null && it.maxSat <= MAX_SAT }
     }
 
-    fun paying(chain: Chain, wallet: Long, member: HexKey, destinationEventId: String, address: String, amountSat: Long, maxFeeSat: Long, now: Long = Clock.System.now().epochSeconds): Payout =
-        Payout(chain, wallet, member.lowercase(), destinationEventId, address, amountSat, maxFeeSat, now + LASTS_SECONDS, now)
+    fun paying(chain: Chain, wallet: Long, member: HexKey, destinationEventId: String, address: String, amountSat: Long, maxFeeSat: Long, now: Long = Clock.System.now().epochSeconds, contact: Boolean = false): Payout =
+        Payout(chain, wallet, member.lowercase(), destinationEventId, address, amountSat, maxFeeSat, now + LASTS_SECONDS, now, contact)
 
     /** Long enough for a round with enough of the group's devices online, and short of the seven days a device lets anything stand. */
     private const val LASTS_SECONDS = 2L * 24 * 60 * 60

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.nostr.wallet
 
+import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -18,8 +19,12 @@ import kotlin.time.Clock
  * content: ""
  * tags:
  *   ["chain",   "mainnet" | …]
- *   ["deposit", "<txid>:<vout>" | "ln:<payment hash>", <member> | "group", "<amount>"]   one or more
+ *   ["deposit", "<txid>:<vout>" | "ln:<payment hash>", <member> | "contact:<id>" | "group", "<amount>"]   one or more
  * ```
+ *
+ * `contact:<id>` names a contact the group signed a record for (`docs/non-member-deposits.md`, D3). A build
+ * from before contacts reads no such event at all, so it shows those deposits as unattributed, and its
+ * signer refuses one.
  *
  * For the deposits nothing else explains: what landed on the legacy receive branch, a payment
  * to a change address, a payment to an offer, a Lightning payment a device could only take on
@@ -83,8 +88,16 @@ object DepositAttributionEvent {
         }
     }
 
-    /** One deposit's attribution: to [member], or to nobody when null -- the group's own. */
-    data class Attribution(val key: DepositKey, val member: HexKey?, val amount: Long)
+    /**
+     * One deposit's attribution: to [member], or to nobody when null -- the group's own. [member] is a
+     * member's key, or a contact's id when [contact] is true: both 64 hex, as the ledger keeps them.
+     */
+    data class Attribution(val key: DepositKey, val member: HexKey?, val amount: Long, val contact: Boolean = false) {
+        init { require(member != null || !contact) { "a contact attribution names the contact" } }
+
+        /** Whom it gives the deposit to, or null for the group's own. */
+        val party: Party? get() = member?.let { Party.of(it, contact) }
+    }
 
     data class Attributions(val chain: Chain, val attributions: List<Attribution>, val event: Event) {
         val createdAt: Long get() = event.createdAt
@@ -99,7 +112,7 @@ object DepositAttributionEvent {
             kind = MovedKinds.written(KIND),
             tags = arrayOf(
                 arrayOf(CHAIN_TAG, GroupWalletStatementEvent.chainName(chain)),
-                *attributions.map { arrayOf(DEPOSIT_TAG, it.key.text, it.member?.lowercase() ?: GROUP, it.amount.toString()) }.toTypedArray(),
+                *attributions.map { arrayOf(DEPOSIT_TAG, it.key.text, it.party?.wire ?: GROUP, it.amount.toString()) }.toTypedArray(),
             ),
             content = "",
         )
@@ -113,12 +126,12 @@ object DepositAttributionEvent {
         val attributions = event.tags.filter { it.isNotEmpty() && it[0] == DEPOSIT_TAG }.map { tag ->
             if (tag.size < 4) return null
             val key = DepositKey.parse(tag[1]) ?: return null
-            val member = when (val who = tag[2].lowercase()) {
+            val party = when (val who = tag[2].lowercase()) {
                 GROUP -> null
-                else -> who.takeIf { it.length == 64 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } } ?: return null
+                else -> Party.parseWire(who) ?: return null
             }
             val amount = tag[3].toLongOrNull()?.takeIf { it > 0 } ?: return null
-            Attribution(key, member, amount)
+            Attribution(key, party?.id, amount, contact = party is Party.Contact)
         }
         if (attributions.isEmpty() || attributions.map { it.key }.toSet().size != attributions.size) return null
         Attributions(chain, attributions, event)
