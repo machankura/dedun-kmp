@@ -750,6 +750,10 @@ frozen the day it upgrades, with no screen to unfreeze it.
 
 ## What this does not do
 
+**It does not change for contacts.** A coin the group signed as a contact's is paid
+to that contact's group-signed destination by the same rule: an owner's own coins to
+the owner's own address. See [non-member-deposits.md](./non-member-deposits.md), D9.
+
 **It does not bind a guardian.** An ancestor's spend through the leaf is the
 ancestor's to sign (D1). A subgroup's members are told.
 

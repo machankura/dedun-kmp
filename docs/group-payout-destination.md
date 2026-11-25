@@ -598,6 +598,11 @@ authorises.
 
 ## What this does not do
 
+**It does not reach people outside the group.** A contact can't sign a 30338, so the
+group signs where it pays them, a 30399, after checking the addresses as this plan's
+D5 and D7 do. Every rail reads either through the one lookup. See
+[non-member-deposits.md](./non-member-deposits.md), D9.
+
 **It does not let co-signers verify a Lightning payee.** A Lightning address
 resolves to an invoice from a server that signs nothing. Phase 7 labels a
 payment as being for a member, on the proposer's word. Proving the payee would

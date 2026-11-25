@@ -28,9 +28,11 @@ payout follows, and [member-transfers.md](./member-transfers.md) T10, for how a 
 without a share asks. Read [member-chronicle.md](./member-chronicle.md) for how a
 member added later gets the group's signed record.
 
-**Being built.** Written against `1a111849`, schema version 49. Each phase is its own commit
-on this branch. Where the build chose differently from the phases below, the table says so,
-and the phases are kept as written.
+**Built**, Phases 0-8, one commit each, written against `1a111849`, schema version 49. No
+schema change was needed. Phase 9's checks ran as the table below Phase 9 says; the
+four-emulator run has not. `Contacts`, `ContactIdentifier`, `Party`, the six `Contact*Event`
+kinds, `ContactScreen` and `AddContactSheet` are the entry points. Where the build chose
+differently from the phases below, this table says so, and the phases are kept as written.
 
 | where | the plan said | the build does, and why |
 |---|---|---|
@@ -46,6 +48,8 @@ and the phases are kept as written.
 | Phase 5 | the Deposits screen says *For @mum, before they joined* | a claimed contact's deposits read *From @mum*, as any of the member's do. The contact's page says *Mum is @mum*, and keeps listing the deposits that were Mum's |
 | D9, Phase 6 | every signer checks a contact's onchain address is unused, by its own Electrum, and not the group's own | the proposing device makes both checks, as a member's own device does for theirs, and refuses to propose otherwise. Signers check what they can without the network: the address is on the group's chain, and nobody else is paid at it. A signer's check runs where `FrostSigningManager` has no wallet or Electrum client |
 | Phase 6 | *Pay out* on the contact's page opens the payout sheet | it opens the group's Payouts screen, where the contact's balance is a row like a member's, named and offered by the same rules |
+| D10, Phase 8 | the receive card offers *Deposit for someone outside the group*, and the addresses screen lists contacts' branches | the contact's page has a *Deposits for them* section: *Open deposits for them*, then the address on their branch with its QR code and copy, and *Ask for a Lightning invoice for them*, which opens the Lightning receive screen for that contact. A contact's addresses aren't listed beside members' branches |
+| D10, Phase 8 | the operator answers a contact's invoice request from the contact's sponsor | from any current member, since the quorum, not the sponsor, decides about a contact (owner's decision 3) |
 | Phase 3 | a request is put to the group from wherever a share-holder sees it | from a *Requests* section at the top of the Deposits screen, which shows each request summarised as the signing screen would summarise it |
 
 **Decided by the owner, 2026-11-25:**
@@ -715,6 +719,17 @@ Write `docs/kinds.md`, which giza-into-dedun.md Phase 11 already asks for, with
 ```bash
 DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvmTest'
 ```
+
+### What the checks found, 2026-11-26
+
+| check | result |
+|---|---|
+| `./gradlew :composeApp:jvmTest`, on each release's last phase (R1, R2, R3) | 3,085 tests on R3, none failing; the 7 skipped are the regtest runs, which need `DEDUN_REGTEST=1` |
+| `DEDUN_REGTEST=1 … --tests '*GroupLightningRegtestJvmTest'` against `testing/regtest/regtest.sh up` | passes, run after Phase 8 changed how invoice requests are answered |
+| `./gradlew :composeApp:m3Audit` | every budget met, after each phase from 3 on |
+| `./gradlew :composeApp:compileDebugKotlinAndroid` | compiles, after each phase |
+| the iOS target | not compiled: this was a Linux host. `DeviceRegion.ios.kt` is the one iOS file, and it is unchecked |
+| the four-emulator run, steps 1-9 above | **not run.** It needs the four emulators and a person watching them. It is the one check left before mainnet |
 
 ---
 

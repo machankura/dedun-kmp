@@ -391,7 +391,10 @@ plan's.
 **It does not attribute a deposit to anybody but the member who was given the
 address or invoice.** A member paying in on another's behalf deposits under their
 own name. *Deposit for @bob* is a follow-up: a request naming another depositor,
-which the operator answers only if that depositor agreed.
+which the operator answers only if that depositor agreed. *Deposit for someone
+outside the group* is built: see [non-member-deposits.md](./non-member-deposits.md),
+where the group signs a contact by name and phone number or email address, and
+counts, pays and later resolves deposits to them.
 
 **It does not stop a payer from reusing an address.** A second payment to Alice's
 address is still Alice's deposit. The screen hands out the next unused address on
