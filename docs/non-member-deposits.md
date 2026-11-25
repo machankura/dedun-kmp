@@ -42,6 +42,8 @@ and the phases are kept as written.
 | D8, Phase 2 | claims resolve where a party is read | also in `DepositLedger.signedPayouts` and `GroupWavelengthPayouts.balancesIn`, so a payout made to a contact before the claim counts against the member after it |
 | D7, Phase 3 | the member whose deposit is moved is notified | the app has no notifications of its own. The signing screen says, in the error colour, whose deposits an attribution gives away and that the group can do it without them. Every member who opens the proposal sees it |
 | Phase 3 | `ProposedEvent.summarize` takes a separate `contactNameOf` | the one `nameOf` answers for a contact's id too. A second function parameter after it would have caught every caller's trailing lambda. The signing screen passes contacts' names. The proposal list and the transcript preview don't, and say "a contact" |
+| Phase 5 | *Deposits were made for me before I joined* is a banner for a member's first week | it is a button on the Deposits screen, for as long as the group counts an unclaimed contact. The app keeps no record of when a member joined, and the button costs nothing when unused |
+| Phase 5 | the Deposits screen says *For @mum, before they joined* | a claimed contact's deposits read *From @mum*, as any of the member's do. The contact's page says *Mum is @mum*, and keeps listing the deposits that were Mum's |
 | Phase 3 | a request is put to the group from wherever a share-holder sees it | from a *Requests* section at the top of the Deposits screen, which shows each request summarised as the signing screen would summarise it |
 
 **Decided by the owner, 2026-11-25:**

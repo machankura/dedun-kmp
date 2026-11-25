@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.which_of_these_were_you_question
+import dedun.composeapp.generated.resources.deposits_were_made_for_me_before_i_joined
 import com.machankura.dedun.compose.nostr.wallet.GroupWalletStatementEvent
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
 import androidx.compose.ui.semantics.Role
@@ -124,6 +126,8 @@ fun DepositsScreen(
     val askedAMember = stringResource(Res.string.asked_a_member_with_a_share)
     // The deposit whose attribution is being chosen, by key.
     var attributing by remember { mutableStateOf<String?>(null) }
+    // Whether the member is choosing which contact was them: docs/non-member-deposits.md, Phase 5.
+    var claimingSelf by remember { mutableStateOf(false) }
     // Whether the add-contact sheet is open: docs/non-member-deposits.md, Phase 3.
     var addingContact by remember { mutableStateOf(false) }
     // The name of the contact just asked for, for the notice that says so.
@@ -168,6 +172,14 @@ fun DepositsScreen(
                     item {
                         Tallies(state.tallies, state.names, state.contacts) { contactId ->
                             onNavigateToRoute(ContactRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, contactId = contactId, chain = GroupWalletStatementEvent.chainName(chain)))
+                        }
+                    }
+                    // A member who joined after deposits were made for them says which contact they were (D8).
+                    if (state.self != null && state.contacts.values.any { it.claimedBy == null }) {
+                        item {
+                            TextButton(onClick = { claimingSelf = true }, enabled = !viewModel.isActionPending.value) {
+                                Text(stringResource(Res.string.deposits_were_made_for_me_before_i_joined))
+                            }
                         }
                     }
                     item { HorizontalDivider() }
@@ -216,6 +228,24 @@ fun DepositsScreen(
                 }
             },
             onSomeoneOutside = { attributing = null; addingContact = true },
+        )
+    }
+    if (loaded != null && claimingSelf) {
+        AlertDialog(
+            onDismissRequest = { claimingSelf = false },
+            title = { Text(stringResource(Res.string.which_of_these_were_you_question)) },
+            text = {
+                androidx.compose.foundation.layout.Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    loaded.contacts.values.filter { it.claimedBy == null }.sortedBy { it.name.lowercase() }.forEach { contact ->
+                        TextButton(onClick = {
+                            claimingSelf = false
+                            viewModel.claimAsSelf(contact.id, onProposed = toSigning, onAsked = { notify(askedAMember) }, onFailure = { notify(couldNotAsk) })
+                        }) { Text(stringResource(Res.string.s_dot_s, contact.name, contact.identifier.formatted)) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { claimingSelf = false }) { Text(stringResource(Res.string.cancel)) } },
         )
     }
     if (loaded != null && addingContact) {

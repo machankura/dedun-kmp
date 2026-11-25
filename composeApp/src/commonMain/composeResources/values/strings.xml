@@ -1010,6 +1010,14 @@
     <string name="stop_counting_deposits_for_them_question">Stop counting deposits for them?</string>
     <string name="the_group_no_longer_counts_new_deposits_for_them">The group no longer counts new deposits for them.</string>
     <string name="their_deposits_so_far_stay_theirs">Their deposits so far stay theirs, and the group can still pay them out.</string>
+    <string name="s_is_s">%1$s is %2$s</string>
+    <string name="their_deposits_and_balance_are_s_s">Their deposits, coins and balance are this member's now.</string>
+    <string name="they_ve_joined_the_group">They've joined the group</string>
+    <string name="not_them_correct">Not them: correct this</string>
+    <string name="which_member_is_s_question">Which member is %1$s?</string>
+    <string name="nobody_in_the_group">Nobody in the group</string>
+    <string name="deposits_were_made_for_me_before_i_joined">Deposits were made for me before I joined</string>
+    <string name="which_of_these_were_you_question">Which of these were you?</string>
     <string name="moves_deposits_made_by_s">This gives away deposits made by %1$s. The group can do this without them.</string>
     <string name="put_s_request_to_the_group">Put %1$s's request to the group</string>
     <string name="altogether_s_sats">Altogether: %1$s sats</string>

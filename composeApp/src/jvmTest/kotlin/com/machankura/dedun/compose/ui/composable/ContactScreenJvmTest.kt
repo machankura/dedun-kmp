@@ -35,10 +35,10 @@ class ContactScreenJvmTest {
     private val mum = ContactIdentifier.Phone("+27821234567")
     private val mumId = mum.contactId(room)
 
-    private fun contact(name: String = "Mum", closed: Boolean = false): Contacts.Contact {
+    private fun contact(name: String = "Mum", closed: Boolean = false, claimedBy: String? = null): Contacts.Contact {
         val template = ContactRecordEvent.template(room, alice, "Mum", mum)
         val record = ContactRecordEvent.verify(GroupFixtures.signedAsRoom(group, template.kind, template.tags, template.content), room)!!
-        return Contacts.Contact(record, name, closed, claimedBy = null)
+        return Contacts.Contact(record, name, closed, claimedBy = claimedBy)
     }
 
     private fun loaded(contact: Contacts.Contact, deposits: List<DepositRow> = emptyList(), tally: DepositLedger.Tally? = null) = ContactUIState.Loaded(
@@ -109,5 +109,19 @@ class ContactScreenJvmTest {
     @Test
     fun `an error is said, with a way to try again`() = render(ContactUIState.Error("The group has no record of this contact")) {
         onNodeWithText("The group has no record of this contact").assertExists()
+    }
+
+    @Test
+    fun `an unclaimed contact can be said to have joined, and a claimed one corrected`() {
+        render(loaded(contact())) {
+            onNodeWithText("They've joined the group").performClick()
+            onNodeWithText("Which member is Mum?").assertExists()
+            onNodeWithText("@alice").assertExists()
+        }
+        render(loaded(contact(claimedBy = alice))) {
+            onNodeWithText("Mum is @alice").assertExists()
+            onNodeWithText("Not them: correct this").performClick()
+            onNodeWithText("Nobody in the group").assertExists()
+        }
     }
 }

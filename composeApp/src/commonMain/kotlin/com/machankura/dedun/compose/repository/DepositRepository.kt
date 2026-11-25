@@ -86,6 +86,9 @@ interface DepositRepository {
     /** Proposes, or asks for, a contact's amendment. */
     suspend fun amendContact(localChatRoom: LocalChatRoom, contactId: HexKey, change: ContactAmendmentEvent.Change): ContactOutcome? = null
 
+    /** Proposes, or asks for, the group saying [contactId] was [member] -- or nobody in the group, when null (D8). */
+    suspend fun claimContact(localChatRoom: LocalChatRoom, contactId: HexKey, member: HexKey?): ContactOutcome? = null
+
     /** Asks a share-holder to give [depositKey] to [party], from a member who holds no share. */
     suspend fun askToAttribute(chatRoomId: String, chain: Chain, depositKey: String, party: Party?): Boolean = false
 

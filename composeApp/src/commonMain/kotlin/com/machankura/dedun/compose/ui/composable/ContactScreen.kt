@@ -1,5 +1,13 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.nobody_in_the_group
+import dedun.composeapp.generated.resources.which_member_is_s_question
+import dedun.composeapp.generated.resources.not_them_correct
+import dedun.composeapp.generated.resources.they_ve_joined_the_group
+import dedun.composeapp.generated.resources.their_deposits_and_balance_are_s_s
+import dedun.composeapp.generated.resources.s_is_s
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -106,6 +114,8 @@ fun ContactScreen(
     val asked: () -> Unit = { notify(askedAMember) }
     val failed: () -> Unit = { notify(couldNotAsk) }
     var renaming by remember { mutableStateOf(false) }
+    // Choosing which member the contact was: docs/non-member-deposits.md, Phase 5.
+    var claiming by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -137,6 +147,21 @@ fun ContactScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    contact.claimedBy?.let { member ->
+                        item {
+                            Text(
+                                stringResource(Res.string.s_is_s, contact.name, "@" + (state.names[member] ?: member.take(8))),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                        item {
+                            Text(
+                                stringResource(Res.string.their_deposits_and_balance_are_s_s),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     if (contact.closed) {
                         item {
@@ -170,6 +195,11 @@ fun ContactScreen(
                         }
                     }
                     item {
+                        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { claiming = true }, enabled = !viewModel.isActionPending.value) {
+                            Text(stringResource(if (contact.claimedBy == null) Res.string.they_ve_joined_the_group else Res.string.not_them_correct))
+                        }
+                    }
+                    if (contact.claimedBy == null) item {
                         ContactActions(
                             closed = contact.closed,
                             name = contact.name,
@@ -200,6 +230,19 @@ fun ContactScreen(
             },
         )
     }
+    if (loaded != null && claiming) {
+        ClaimDialog(
+            name = loaded.contact.name,
+            members = loaded.members.filter { it != loaded.contact.claimedBy }.sortedBy { (loaded.names[it] ?: it).lowercase() },
+            names = loaded.names,
+            offersNobody = loaded.contact.claimedBy != null,
+            onDismiss = { claiming = false },
+            onChoose = { member ->
+                claiming = false
+                viewModel.claim(member, toSigning, asked, failed)
+            },
+        )
+    }
     if (loaded != null && closing) {
         AlertDialog(
             onDismissRequest = { closing = false },
@@ -226,6 +269,37 @@ private fun ContactActions(closed: Boolean, name: String, enabled: Boolean, onRe
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onClose, enabled = enabled) { Text(stringResource(Res.string.stop_counting_deposits_for_them)) }
         }
     }
+}
+
+/**
+ * Which member a contact was: any current member, or -- correcting a claim -- nobody in the group
+ * (`docs/non-member-deposits.md`, D8). Nothing proves it; the group knows who joined.
+ */
+@Composable
+private fun ClaimDialog(
+    name: String,
+    members: List<HexKey>,
+    names: Map<HexKey, String>,
+    offersNobody: Boolean,
+    onDismiss: () -> Unit,
+    onChoose: (HexKey?) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.which_member_is_s_question, name)) },
+        text = {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                members.forEach { member ->
+                    TextButton(onClick = { onChoose(member) }) { Text("@" + (names[member] ?: member.take(8))) }
+                }
+                if (offersNobody) {
+                    TextButton(onClick = { onChoose(null) }) { Text(stringResource(Res.string.nobody_in_the_group)) }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
 }
 
 @Composable

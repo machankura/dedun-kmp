@@ -115,6 +115,12 @@ class DepositsViewModel(
         }
     }
 
+    /** Says this member was [contactId], to the group or to a share-holder: deposits made for them before they joined (D8). */
+    fun claimAsSelf(contactId: HexKey, onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) {
+        val self = (uiState as? DepositsUIState.Loaded)?.self ?: return
+        contactAction({ depositRepository.claimContact(it, contactId, self) }, onProposed, onAsked, onFailure)
+    }
+
     /** Asks a share-holder to give [depositKey], one of this member's own, to [party]. */
     fun askToAttribute(depositKey: String, party: Party?, onAsked: () -> Unit, onFailure: () -> Unit) {
         if (isActionPending.value) return

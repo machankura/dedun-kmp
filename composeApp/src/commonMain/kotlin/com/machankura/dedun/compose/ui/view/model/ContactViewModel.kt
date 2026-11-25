@@ -65,6 +65,10 @@ class ContactViewModel(
     fun amend(change: ContactAmendmentEvent.Change, onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) =
         act({ depositRepository.amendContact(it, contactId, change) }, onProposed, onAsked, onFailure)
 
+    /** Proposes, or asks for, the group saying this contact was [member], or nobody in the group (D8). */
+    fun claim(member: HexKey?, onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) =
+        act({ depositRepository.claimContact(it, contactId, member) }, onProposed, onAsked, onFailure)
+
     internal fun act(
         action: suspend (LocalChatRoom) -> DepositRepository.ContactOutcome?,
         onProposed: (sessionId: String) -> Unit,
