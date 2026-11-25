@@ -356,6 +356,13 @@ on every build for as long as records are signed (D2), because the spelling is i
 id (D3). A library whose metadata updates could change a spelling between two
 members' builds.
 
+**Result, 2026-11-25: (2).** No libphonenumber port is in the version catalogue or the
+Gradle cache. A new one would be a dependency fetched over the network, and its
+metadata would move under signed ids. `PhoneNumbers.normalise` is hand-written. Its
+table covers the countries Machankura serves, plus US, CA and GB, each with its
+calling code, trunk prefix and national length. A number typed with `+` is taken
+whatever its country.
+
 ### Spike S2: where the announcement rides
 
 1. Which message does every device already send in a room often enough to announce
@@ -371,6 +378,23 @@ members' builds.
 3. Run the current release against an R1 build in `MarmotClientInteropJvmTest`'s
    fixture. Confirm that the older build has no row holding an identifier after an
    R1 room has announced and refused one proposal.
+
+**Result, 2026-11-25: the fallback, (2).** Nothing every device sends routinely is
+filed silently by every build:
+- FROST messages are sent only inside a signing session.
+- The key notice (30336) is sent only when a member asks.
+- A payout destination (30338) is re-sent only by members who have one.
+- Kind 1210 is Marmot v2's own system row. Other Marmot clients read it as an
+  assertion about the group's state, so Dedun must not write one.
+- The kinds older builds drop silently (`GizaProtocolEvents.ALL`) mean something in
+  Giza and Bennu rooms.
+
+So the announcement is a 30398 of its own form, `["request", "reads"]` with
+`["reads", "contacts/1"]` and nothing else. Each R1 device sends its own the first
+time it sees a room with no announcement of its own, and again for the members a
+commit adds, as `GroupPayoutDestinations.resendOwn` does. An older build shows one
+bubble per R1 member, with nothing in it but the feature name. Step 3 is left for
+the Phase 9 run, where an older build is in the room by design.
 
 ### Spike S3: the kinds register
 
