@@ -68,8 +68,8 @@ class DatabaseGroupLightningRepository(private val database: DedunDatabase) : Gr
     override fun observePayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupLightningPaymentRow>> =
         database.groupLightningRecordsDao().observePayments(GroupLightningCoSigner.walletKey(chatRoomId, chain, wallet))
 
-    override suspend fun requestInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, amountMsat: Long?, description: String): String =
-        GroupLightningReports.requestInvoice(database, localChatRoom, userPublicKey, wallet, amountMsat, description)
+    override suspend fun requestInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, amountMsat: Long?, description: String, contact: HexKey?): String =
+        GroupLightningReports.requestInvoice(database, localChatRoom, userPublicKey, wallet, amountMsat, description, contact)
 
     override fun observeInvoice(chatRoomId: String, chain: Chain, wallet: Long, requestId: String): Flow<GroupLightningInvoiceRow?> =
         database.groupLightningRecordsDao().observeInvoice(GroupLightningCoSigner.walletKey(chatRoomId, chain, wallet), requestId)

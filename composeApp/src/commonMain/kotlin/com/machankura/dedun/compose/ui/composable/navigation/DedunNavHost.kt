@@ -948,6 +948,7 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     lightningRepository = databaseGroupLightningRepository,
                     depositRepository = databaseDepositRepository,
+                    contactId = route.contactId,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onDepositOnchain = groupSwapInWallets?.let {
                         { navController.navigate(GroupSwapInRoute(activeUserPublicKey = route.activeUserPublicKey, chatRoomId = route.chatRoomId)) }
@@ -1883,6 +1884,7 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     depositRepository = databaseDepositRepository,
                     payoutDestinationRepository = databasePayoutDestinationRepository,
+                    wallets = groupOnchainWallets,
                     onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
                     onNavigateBack = {
                         navController.popBackStack()

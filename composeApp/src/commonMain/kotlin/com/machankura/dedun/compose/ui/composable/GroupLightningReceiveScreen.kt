@@ -108,13 +108,16 @@ fun GroupLightningReceiveScreen(
     chatRepository: ChatRepository,
     lightningRepository: GroupLightningRepository,
     depositRepository: DepositRepository = DepositRepository.NO_OP,
+    /** A contact the invoice is for, rather than this profile: `docs/non-member-deposits.md`, D10. */
+    contactId: HexKey? = null,
     onNavigateToRoute: (Route) -> Unit = {},
     /** Opens the member's swap-in address, where the network has a swap-in; null where it has none. */
     onDepositOnchain: (() -> Unit)? = null,
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: GroupLightningReceiveViewModel = viewModel(
-        factory = GroupLightningReceiveViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository, depositRepository)
+        key = "$chatRoomId:${contactId ?: "self"}",
+        factory = GroupLightningReceiveViewModel.factory(activeUserPublicKey, chatRoomId, GroupLightningRollout.NETWORK, chatRepository, lightningRepository, depositRepository, contactId)
     )
     val couldNotOpenDeposits = stringResource(Res.string.couldn_t_ask_the_group_to_open_your_deposits)
     LaunchedEffect(true) { viewModel.initiate() }

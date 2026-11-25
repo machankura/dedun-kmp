@@ -47,6 +47,8 @@ class GroupLightningReceiveViewModel(
     private val lightningRepository: GroupLightningRepository,
     /** Whether this profile is a depositor: only a depositor is issued an invoice (`docs/member-deposits.md`). */
     private val depositRepository: DepositRepository = DepositRepository.NO_OP,
+    /** A contact the invoice is for, rather than this profile: `docs/non-member-deposits.md`, D10. */
+    val contactId: HexKey? = null,
 ) : ViewModel() {
     private val logger = Logger.withTag(TAG)
 
@@ -68,6 +70,23 @@ class GroupLightningReceiveViewModel(
             val wallet = lightningRepository.lightningWallet(chatRoomId, chain)
             if (wallet == null || lightningRepository.operator(chatRoomId, chain, wallet.statement.wallet)?.publicKey == null) {
                 uiState = GroupLightningReceiveUIState.Unavailable
+                return@launch
+            }
+            // For a contact: any member may ask, once the group has opened the contact's deposits on this network.
+            if (contactId != null) {
+                val contact = depositRepository.contacts(chatRoomId)[contactId.lowercase()]
+                if (contact == null || !contact.isOpen || !depositRepository.contactDepositsOpen(chatRoomId, wallet.statement.chain, contactId)) {
+                    uiState = GroupLightningReceiveUIState.Error("The group hasn't opened deposits for them")
+                    return@launch
+                }
+                val group = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
+                withContext(Dispatchers.Main) {
+                    // The name and never the number: an invoice reaches the payer and the LSP.
+                    if (descriptionField.text.isEmpty()) {
+                        descriptionField.setTextAndPlaceCursorAtEnd(if (group != null) "Deposit for ${contact.name} to $group" else "Deposit for ${contact.name}")
+                    }
+                }
+                uiState = GroupLightningReceiveUIState.Form(localChatRoom, wallet)
                 return@launch
             }
             val canPropose = localChatRoom.chatRoom.mlsGroupState != null && chatRepository.canSign(chatRoomId)
@@ -102,7 +121,7 @@ class GroupLightningReceiveViewModel(
         isActionPending.value = true
         viewModelScope.launch(Dispatchers.IO) {
             val requestId = runCatching {
-                lightningRepository.requestInvoice(form.localChatRoom, activeUserPublicKey, form.wallet, amountMsat, descriptionField.text.toString().trim())
+                lightningRepository.requestInvoice(form.localChatRoom, activeUserPublicKey, form.wallet, amountMsat, descriptionField.text.toString().trim(), contactId)
             }.onFailure { logger.e("Invoice request in $chatRoomId failed", it) }.getOrNull()
             isActionPending.value = false
             if (requestId == null) return@launch withContext(Dispatchers.Main) { onFailure() }
@@ -195,9 +214,10 @@ class GroupLightningReceiveViewModel(
             chatRepository: ChatRepository,
             lightningRepository: GroupLightningRepository,
             depositRepository: DepositRepository = DepositRepository.NO_OP,
+            contactId: HexKey? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                GroupLightningReceiveViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningReceiveUIState.Loading, chatRepository, lightningRepository, depositRepository)
+                GroupLightningReceiveViewModel(activeUserPublicKey, chatRoomId, chain, GroupLightningReceiveUIState.Loading, chatRepository, lightningRepository, depositRepository, contactId)
             }
         }
     }

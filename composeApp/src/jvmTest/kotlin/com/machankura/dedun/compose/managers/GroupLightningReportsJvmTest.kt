@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactDepositorStatementEvent
+import com.machankura.dedun.compose.nostr.wallet.ContactRecordEvent
+import com.machankura.dedun.compose.contacts.ContactIdentifier
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 import kotlin.time.Instant
@@ -298,6 +302,41 @@ class GroupLightningReportsJvmTest {
         node.report(term = 1, force = true)
         fixture.pump(all, setOf(GroupLightningEvents.SNAPSHOT))
         assertEquals(requestId, GroupLightningReports.latest(all[0].db, key)!!.snapshot.payments.single { it.id == "in-deposit" }.requestId)
+    }
+
+    /**
+     * An invoice for someone outside the group: asked for by any member, against the contact's own branch,
+     * and counted to the contact on every device. `docs/non-member-deposits.md`, D10 and Phase 8.
+     */
+    @Test
+    fun `an invoice for a contact is issued against the contact's branch, and is the contact's`() = runBlocking<Unit> {
+        val (all, node) = running()
+        val wallet = GroupLightningWalletManager.walletFor(all[3].db, fixture.roomId, fixture.chain)!!
+        val mum = ContactIdentifier.Phone("+27821234567")
+        val mumId = mum.contactId(fixture.roomId)
+        val record = ContactRecordEvent.template(fixture.roomId, all[0].publicKey, "Mum", mum)
+        fixture.fileSignedAsRoom(all, record.kind, record.tags)
+        assertFailsWith<IllegalStateException>("no branch, no invoice") {
+            GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "Deposit for Mum", contact = mumId)
+        }
+
+        val branch = ContactDepositorStatementEvent.template(fixture.roomId, mumId, fixture.chain)
+        fixture.fileSignedAsRoom(all, branch.kind, branch.tags)
+        val requestId = GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 21_000_000, "Deposit for Mum", contact = mumId)
+        fixture.pump(all, setOf(GroupLightningEvents.INVOICE_REQUEST))
+        node.answerInvoiceRequests()
+        fixture.pump(all, setOf(GroupLightningEvents.INVOICE))
+        all.forEach { d ->
+            assertEquals(mumId, assertNotNull(d.db.groupLightningRecordsDao().invoice(key, requestId)).requester, "device ${d.index} counts it to Mum")
+        }
+
+        // Closed, the contact is asked for no more invoices: the operator leaves the request unanswered.
+        val close = ContactAmendmentEvent.template(mumId, ContactAmendmentEvent.Change.Close)
+        fixture.fileSignedAsRoom(all, close.kind, close.tags)
+        GroupLightningReports.requestInvoice(all[3].db, all[3].room, all[3].publicKey, wallet, 5_000_000, "Deposit for Mum", contact = mumId)
+        fixture.pump(all, setOf(GroupLightningEvents.INVOICE_REQUEST))
+        node.answerInvoiceRequests()
+        assertEquals(1, nodes.single().invoices.size)
     }
 
     @Test

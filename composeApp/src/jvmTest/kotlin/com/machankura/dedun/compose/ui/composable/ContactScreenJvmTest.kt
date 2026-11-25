@@ -150,4 +150,19 @@ class ContactScreenJvmTest {
             onNodeWithText("Pay out").assertExists()
         }
     }
+
+    @Test
+    fun `an open contact can have deposits opened for them, and then an invoice asked for`() {
+        render(loaded(contact())) {
+            onNodeWithText("Open deposits for them").assertExists()
+            assertEquals(0, onAllNodesWithText("Ask for a Lightning invoice for them").fetchSemanticsNodes().size)
+        }
+        render(loaded(contact()).copy(depositsOpen = true)) {
+            assertEquals(0, onAllNodesWithText("Open deposits for them").fetchSemanticsNodes().size)
+            onNodeWithText("Ask for a Lightning invoice for them").assertExists()
+        }
+        render(loaded(contact(closed = true)).copy(depositsOpen = true)) {
+            assertEquals(0, onAllNodesWithText("Deposits for them").fetchSemanticsNodes().size)
+        }
+    }
 }

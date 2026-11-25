@@ -232,12 +232,19 @@ object GroupLightningReports {
         wallet: GroupLightningWalletManager.Wallet,
         amountMsat: Long?,
         description: String,
+        /** A contact the invoice is for, rather than the member asking: `docs/non-member-deposits.md`, D10. */
+        contact: HexKey? = null,
     ): String {
-        val depositor = Depositors.statementOf(database, localChatRoom.chatRoom.id, wallet.statement.chain, userPublicKey)
-            ?: throw IllegalStateException("The group has not opened ${userPublicKey.take(8)}'s deposits")
+        val depositorId = if (contact != null) {
+            Contacts.depositorsIn(database, localChatRoom.chatRoom.id, wallet.statement.chain)[contact.lowercase()]?.event?.id
+                ?: throw IllegalStateException("The group has not opened deposits for contact ${contact.take(8)}")
+        } else {
+            Depositors.statementOf(database, localChatRoom.chatRoom.id, wallet.statement.chain, userPublicKey)?.event?.id
+                ?: throw IllegalStateException("The group has not opened ${userPublicKey.take(8)}'s deposits")
+        }
         val key = GroupLightningCoSigner.walletKey(localChatRoom.chatRoom.id, wallet.statement.chain, wallet.statement.wallet)
         val requestId = RandomInstance.bytes(16).toHex()
-        val request = WalletWire.InvoiceRequest(key, requestId, amountMsat, description, depositor = depositor.event.id)
+        val request = WalletWire.InvoiceRequest(key, requestId, amountMsat, description, depositor = depositorId, contact = contact?.lowercase())
         val queued = GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupLightningEvents.INVOICE_REQUEST, CommonJson.encodeToString(WalletWire.InvoiceRequest.serializer(), request))
         GroupLightningLines.write(database, localChatRoom.chatRoom.id, queued.id, ChatMessage.TYPE_LIGHTNING_INVOICE_REQUESTED, userPublicKey, asked(request), queued.createdAt)
         return requestId
@@ -281,6 +288,10 @@ object GroupLightningReports {
     suspend fun unanswered(database: DedunDatabase, chatRoomId: String, walletKey: String): List<Pending> {
         val chain = GroupLightningCoSigner.walletOf(database, chatRoomId, walletKey)?.statement?.chain ?: return emptyList()
         val depositors = Depositors.statementsIn(database, chatRoomId, chain)
+        // A contact's invoice is asked for by any current member, against the contact's open branch (D10).
+        val contacts = Contacts.contactsIn(database, chatRoomId)
+        val contactDepositors = Contacts.depositorsIn(database, chatRoomId, chain)
+        val members = database.participantDao().findParticipantsByChatRoomId(chatRoomId).map { it.participantPublicKey.lowercase() }.toSet()
         return database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupLightningEvents.INVOICE_REQUEST))
             .sortedBy { it.createdAt }
             .mapNotNull { row ->
@@ -289,7 +300,10 @@ object GroupLightningReports {
             }
             .filter { (request, requester) ->
                 request.wallet == walletKey && database.groupLightningRecordsDao().invoice(walletKey, request.requestId) == null &&
-                    depositors[requester]?.event?.id == request.depositor
+                    when (val contact = request.contact?.lowercase()) {
+                        null -> depositors[requester]?.event?.id == request.depositor
+                        else -> contacts[contact]?.isOpen == true && requester in members && contactDepositors[contact]?.event?.id == request.depositor
+                    }
             }
     }
 
@@ -299,7 +313,8 @@ object GroupLightningReports {
         val paymentHash = Bolt11Invoice.read(bolt11).get().paymentHash.toHex()
         val reply = WalletWire.InvoiceReply(request.wallet, request.requestId, bolt11, requester = pending.requester, paymentHash = paymentHash)
         val queued = GroupLightningWalletManager.queue(database, localChatRoom, userPublicKey, GroupLightningEvents.INVOICE, CommonJson.encodeToString(WalletWire.InvoiceReply.serializer(), reply))
-        database.groupLightningRecordsDao().upsertInvoice(GroupLightningInvoiceRow(request.wallet, request.requestId, bolt11, requester = pending.requester, paymentHash = paymentHash))
+        // Whose deposit its payment is: the contact's when the request names one, else the member who asked.
+        database.groupLightningRecordsDao().upsertInvoice(GroupLightningInvoiceRow(request.wallet, request.requestId, bolt11, requester = request.contact?.lowercase() ?: pending.requester, paymentHash = paymentHash))
         GroupLightningLines.write(
             database, localChatRoom.chatRoom.id, queued.id, ChatMessage.TYPE_LIGHTNING_INVOICE_ISSUED,
             userPublicKey, invoiceIssued(database, localChatRoom.chatRoom.id, request.requestId), queued.createdAt,
@@ -319,7 +334,7 @@ object GroupLightningReports {
         refuseReply(database, localChatRoom.chatRoom.id, reply, invoice)?.let { reason ->
             return logger.w("Invoice ${innerEvent.id} for request ${reply.requestId.take(8)} $reason; not filed")
         }
-        val requester = requesterOf(database, localChatRoom.chatRoom.id, reply.requestId)
+        val requester = depositorOf(database, localChatRoom.chatRoom.id, reply.requestId)
         database.groupLightningRecordsDao().upsertInvoice(
             GroupLightningInvoiceRow(reply.wallet, reply.requestId, reply.bolt11, requester = requester, paymentHash = invoice.paymentHash.toHex())
         )
@@ -327,6 +342,18 @@ object GroupLightningReports {
             database, localChatRoom.chatRoom.id, innerEvent.id, ChatMessage.TYPE_LIGHTNING_INVOICE_ISSUED,
             innerEvent.pubKey, invoiceIssued(database, localChatRoom.chatRoom.id, reply.requestId), Instant.fromEpochSeconds(innerEvent.createdAt),
         )
+    }
+
+    /**
+     * Whose deposit a payment of [requestId]'s invoice is: the contact the request names, or the member
+     * who sent it (`docs/non-member-deposits.md`, D10).
+     */
+    private suspend fun depositorOf(database: DedunDatabase, chatRoomId: String, requestId: String): HexKey? {
+        val row = database.marmotInnerEventDao().getByChatRoomAndKinds(chatRoomId, listOf(GroupLightningEvents.INVOICE_REQUEST))
+            .firstOrNull { runCatching { CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), it.content) }.getOrNull()?.requestId == requestId }
+            ?: return null
+        val contact = runCatching { CommonJson.decodeFromString(WalletWire.InvoiceRequest.serializer(), row.content) }.getOrNull()?.contact
+        return contact?.lowercase() ?: row.publicKey.lowercase()
     }
 
     /** Who sent the invoice request [requestId] in [chatRoomId], when this device holds it. */

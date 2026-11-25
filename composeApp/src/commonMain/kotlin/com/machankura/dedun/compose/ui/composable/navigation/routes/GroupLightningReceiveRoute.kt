@@ -7,4 +7,6 @@ import kotlinx.serialization.Serializable
 data class GroupLightningReceiveRoute(
     val activeUserPublicKey: String,
     val chatRoomId: String,
+    /** A contact the invoice is for, rather than the active profile: `docs/non-member-deposits.md`, D10. */
+    val contactId: String? = null,
 ) : Route()

@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import kotlinx.coroutines.Job
+import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import fr.acinq.bitcoin.utils.Either
 import com.machankura.dedun.compose.network.LightningAddressResolver
 import com.machankura.dedun.compose.wallet.UnusedAddressCheck
@@ -38,11 +40,19 @@ class ContactViewModel(
     private val chatRepository: ChatRepository,
     private val depositRepository: DepositRepository,
     private val payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    /** The group's onchain wallets, for the address to hand the contact; null where there are none (D10). */
+    private val wallets: GroupOnchainWallets? = null,
 ) : ViewModel() {
     var uiState: ContactUIState by mutableStateOf(initialUIState)
         private set
 
     val isActionPending: MutableState<Boolean> = mutableStateOf(false)
+
+    /** The lowest unused address on the contact's branch, once Electrum has answered: what a payer is handed (D10). */
+    var depositAddress: String? by mutableStateOf(null)
+        private set
+
+    private var following: Job? = null
 
     fun initiate() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -64,9 +74,25 @@ class ContactViewModel(
                         (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
                 },
                 members = localChatRoom.localParticipants.map { it.participant.participantPublicKey.lowercase() },
+                depositsOpen = depositRepository.contactDepositsOpen(chatRoomId, chain, contact.id),
             )
+            // Only an open, unclaimed contact is handed an address: once claimed, the member uses their own.
+            if (contact.isOpen) followAddress()
         }
     }
+
+    private fun followAddress() {
+        following?.cancel()
+        following = viewModelScope.launch(Dispatchers.IO) {
+            val wallet = chatRepository.groupWallet(chatRoomId, chain) ?: return@launch
+            val states = wallets?.walletFor(wallet.account, chatRoomId)?.state ?: return@launch
+            states.collect { state -> depositAddress = state.depositAddressOf(contactId) }
+        }
+    }
+
+    /** Proposes, or asks for, the group opening deposits for this contact on this network (D10). */
+    fun openDeposits(onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) =
+        act({ depositRepository.openContactDeposits(it, chain, contactId) }, onProposed, onAsked, onFailure)
 
     /** Proposes, or asks a share-holder to propose, [change] to this contact. */
     fun amend(change: ContactAmendmentEvent.Change, onProposed: (sessionId: String) -> Unit, onAsked: () -> Unit, onFailure: () -> Unit) =
@@ -166,8 +192,9 @@ class ContactViewModel(
             chatRepository: ChatRepository,
             depositRepository: DepositRepository,
             payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+            wallets: GroupOnchainWallets? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ContactViewModel(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository, payoutDestinationRepository) }
+            initializer { ContactViewModel(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository, payoutDestinationRepository, wallets) }
         }
     }
 }

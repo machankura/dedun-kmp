@@ -148,7 +148,7 @@ class GroupLightningWalletViewModelJvmTest {
         /** Mutable so a test can land a payment after a screen has already drawn its invoice. */
         val paid = MutableStateFlow(payments)
         override fun observePayments(chatRoomId: String, chain: Chain, wallet: Long): Flow<List<GroupLightningPaymentRow>> = paid
-        override suspend fun requestInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, amountMsat: Long?, description: String): String =
+        override suspend fun requestInvoice(localChatRoom: LocalChatRoom, userPublicKey: HexKey, wallet: GroupLightningWalletManager.Wallet, amountMsat: Long?, description: String, contact: String?): String =
             "r1".also { requests += amountMsat to description }
         override fun observeInvoice(chatRoomId: String, chain: Chain, wallet: Long, requestId: String): Flow<GroupLightningInvoiceRow?> = flowOf(invoice?.takeIf { it.requestId == requestId })
         override suspend fun proposePayment(localChatRoom: LocalChatRoom, userPublicKey: HexKey, pay: GroupLightningAuthorisationEvent.Pay): FrostSigningSession = error("unused")

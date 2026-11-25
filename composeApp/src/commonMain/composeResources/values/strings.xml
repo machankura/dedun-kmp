@@ -1026,6 +1026,10 @@
     <string name="that_address_is_for_another_network">That address is for another network.</string>
     <string name="give_a_lightning_or_an_onchain_address">Give a Lightning address, an onchain address, or both.</string>
     <string name="the_group_signs_where_it_pays_them">They can't sign for themselves, so the group signs where it pays them. A payout goes only here.</string>
+    <string name="deposits_for_them">Deposits for them</string>
+    <string name="open_deposits_for_them">Open deposits for them</string>
+    <string name="qr_their_deposit_address">QR code of their deposit address</string>
+    <string name="ask_for_a_lightning_invoice_for_them">Ask for a Lightning invoice for them</string>
     <string name="moves_deposits_made_by_s">This gives away deposits made by %1$s. The group can do this without them.</string>
     <string name="put_s_request_to_the_group">Put %1$s's request to the group</string>
     <string name="altogether_s_sats">Altogether: %1$s sats</string>

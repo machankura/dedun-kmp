@@ -26,5 +26,7 @@ sealed interface ContactUIState {
         val names: Map<HexKey, String>,
         /** The current members, for saying which of them the contact was (D8). */
         val members: List<HexKey>,
+        /** Whether the group has opened deposits for them on this network: a branch of their own (D10). */
+        val depositsOpen: Boolean = false,
     ) : ContactUIState
 }

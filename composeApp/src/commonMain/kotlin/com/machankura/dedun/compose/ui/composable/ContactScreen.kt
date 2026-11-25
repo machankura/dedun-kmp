@@ -1,5 +1,18 @@
 package com.machankura.dedun.compose.ui.composable
 
+import dedun.composeapp.generated.resources.ask_for_a_lightning_invoice_for_them
+import dedun.composeapp.generated.resources.address_copied
+import dedun.composeapp.generated.resources.copy_address
+import dedun.composeapp.generated.resources.qr_their_deposit_address
+import dedun.composeapp.generated.resources.finding_the_group_s_coins
+import dedun.composeapp.generated.resources.open_deposits_for_them
+import dedun.composeapp.generated.resources.deposits_for_them
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningReceiveRoute
+import com.machankura.dedun.compose.ui.composable.widgets.QRCodeView
+import com.machankura.dedun.compose.wallet.bip21Uri
+import com.machankura.dedun.compose.wallet.GroupOnchainWallets
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
 import dedun.composeapp.generated.resources.ask_the_group
 import dedun.composeapp.generated.resources.the_group_signs_where_it_pays_them
 import dedun.composeapp.generated.resources.give_a_lightning_or_an_onchain_address
@@ -124,12 +137,14 @@ fun ContactScreen(
     chatRepository: ChatRepository,
     depositRepository: DepositRepository,
     payoutDestinationRepository: PayoutDestinationRepository = PayoutDestinationRepository.NO_OP,
+    /** The group's onchain wallets, for the address to hand the contact (D10); null where there are none. */
+    wallets: GroupOnchainWallets? = null,
     onNavigateToRoute: (Route) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val viewModel: ContactViewModel = viewModel(
         key = "$chatRoomId:$contactId",
-        factory = ContactViewModel.factory(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository, payoutDestinationRepository),
+        factory = ContactViewModel.factory(chatRoomId, contactId, chain, initialUIState, chatRepository, depositRepository, payoutDestinationRepository, wallets),
     )
     LaunchedEffect(chatRoomId, contactId, chain) {
         if (initialUIState == ContactUIState.Loading) viewModel.initiate()
@@ -141,6 +156,8 @@ fun ContactScreen(
     val asked: () -> Unit = { notify(askedAMember) }
     val failed: () -> Unit = { notify(couldNotAsk) }
     var renaming by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val addressCopied = stringResource(Res.string.address_copied)
     // Choosing which member the contact was: docs/non-member-deposits.md, Phase 5.
     var claiming by remember { mutableStateOf(false) }
     // Saying where the group pays them: docs/non-member-deposits.md, Phase 6.
@@ -237,6 +254,39 @@ fun ContactScreen(
                             onClose = { closing = true },
                             onReopen = { viewModel.amend(ContactAmendmentEvent.Change.Reopen, toSigning, asked, failed) },
                         )
+                    }
+                    // Deposits for them, while they are nobody in the group and still counted: an address on a
+                    // branch of their own, and invoices issued against it. docs/non-member-deposits.md, D10.
+                    if (contact.isOpen) {
+                        item { HorizontalDivider() }
+                        item { Text(stringResource(Res.string.deposits_for_them), style = MaterialTheme.typography.labelMedium) }
+                        if (!state.depositsOpen) {
+                            item {
+                                OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { viewModel.openDeposits(toSigning, asked, failed) }, enabled = !viewModel.isActionPending.value) {
+                                    Text(stringResource(Res.string.open_deposits_for_them))
+                                }
+                            }
+                        } else {
+                            val address = viewModel.depositAddress
+                            if (address == null) {
+                                item { LoadingDataIndicator(fillScreen = false, text = stringResource(Res.string.finding_the_group_s_coins)) }
+                            } else {
+                                item { QRCodeView(bip21Uri(address), stringResource(Res.string.qr_their_deposit_address)) }
+                                item { SelectionContainer { Text(address, style = MaterialTheme.typography.bodyMedium) } }
+                                item {
+                                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                                        clipboardManager.setText(buildAnnotatedString { append(address) })
+                                        notify(addressCopied)
+                                    }) { Text(stringResource(Res.string.copy_address)) }
+                                }
+                            }
+                            item {
+                                OutlinedButton(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { onNavigateToRoute(GroupLightningReceiveRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, contactId = contact.id)) },
+                                ) { Text(stringResource(Res.string.ask_for_a_lightning_invoice_for_them)) }
+                            }
+                        }
                     }
                     // Where the group pays them, while they are nobody in the group (D9). A claimed contact
                     // is paid as their member, at the member's own destination.

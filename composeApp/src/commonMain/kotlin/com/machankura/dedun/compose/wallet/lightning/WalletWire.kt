@@ -134,7 +134,11 @@ object WalletWire {
      * no invoice. `docs/member-deposits.md`, D5.
      */
     @Serializable
-    data class InvoiceRequest(val wallet: String, val requestId: String, val amountMsat: Long? = null, val description: String, val depositor: String? = null)
+    /**
+     * [depositor] is the id of the depositor statement the invoice is issued against: the asking member's
+     * 30339, or -- with [contact] -- the contact's 30396, asked for by any member (`docs/non-member-deposits.md`, D10).
+     */
+    data class InvoiceRequest(val wallet: String, val requestId: String, val amountMsat: Long? = null, val description: String, val depositor: String? = null, val contact: String? = null)
 
     /**
      * Kind 30365: the operator's answer, addressed to the whole room by [requestId], naming whose
