@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import com.machankura.dedun.compose.notifications.MarkReadWhileVisible
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,6 +111,14 @@ fun ChatRoomMessagingScreen(
             chatRepository = chatRepository,
             activeUserPublicKey = activeUserPublicKey
         )
+    )
+
+    // Read while it is on screen, and the room the notification policy stays quiet about.
+    // docs/notifications-and-background-sync.md, Phase 4.
+    MarkReadWhileVisible(
+        activeUserPublicKey = activeUserPublicKey,
+        chatRoomId = chatRoomId,
+        chatRepository = chatRepository,
     )
 
     ScreenStateTransition(chatRoomMessagingViewModel.chatRoomMessagingUIState) { uiState ->

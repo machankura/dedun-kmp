@@ -88,7 +88,7 @@ class NotificationStorageJvmTest {
 
         line()
         assertEquals(1, dao.unreadCount(roomOne))
-        assertEquals(listOf(com.machankura.dedun.compose.database.dao.RoomUnread(roomOne, 1)), dao.observeUnreadCounts(user).first())
+        assertEquals(listOf(com.machankura.dedun.compose.database.dao.RoomUnread(roomOne, 1, ChatRoom.NOTIFICATIONS_ALL)), dao.observeUnreadCounts(user).first())
     }
 
     @Test

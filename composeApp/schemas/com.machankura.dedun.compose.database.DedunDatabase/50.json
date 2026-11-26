@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 50,
-    "identityHash": "8ba628d8b260067e015f1f388d3af564",
+    "identityHash": "f770c0c1c512ff3819c1417f2c66bcc2",
     "entities": [
       {
         "tableName": "BroadcastNostrEventReceipt",
@@ -5950,7 +5950,7 @@
       },
       {
         "tableName": "NotificationLedger",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userPublicKey` TEXT NOT NULL, `armedAt` INTEGER NOT NULL, `cursorMessageId` INTEGER NOT NULL, `lastBackgroundSyncAt` INTEGER, `lastBackgroundSyncOutcome` TEXT, `lastBackgroundSyncKind` TEXT, PRIMARY KEY(`userPublicKey`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userPublicKey` TEXT NOT NULL, `armedAt` INTEGER NOT NULL, `cursorMessageId` INTEGER NOT NULL, `lastBackgroundSyncAt` INTEGER, `lastBackgroundSyncOutcome` TEXT, `lastBackgroundSyncKind` TEXT, `enabled` INTEGER NOT NULL DEFAULT 1, `messages` INTEGER NOT NULL DEFAULT 1, `needsYou` INTEGER NOT NULL DEFAULT 1, `groupActivity` INTEGER NOT NULL DEFAULT 0, `showMessageText` INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(`userPublicKey`))",
         "fields": [
           {
             "fieldPath": "userPublicKey",
@@ -5984,6 +5984,41 @@
             "fieldPath": "lastBackgroundSyncKind",
             "columnName": "lastBackgroundSyncKind",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "messages",
+            "columnName": "messages",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "needsYou",
+            "columnName": "needsYou",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "groupActivity",
+            "columnName": "groupActivity",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "showMessageText",
+            "columnName": "showMessageText",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
           }
         ],
         "primaryKey": {
@@ -7271,7 +7306,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8ba628d8b260067e015f1f388d3af564')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f770c0c1c512ff3819c1417f2c66bcc2')"
     ]
   }
 }

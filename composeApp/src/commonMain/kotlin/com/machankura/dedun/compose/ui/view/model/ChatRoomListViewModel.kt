@@ -40,6 +40,8 @@ import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import com.machankura.dedun.compose.notifications.UnreadBadge
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.stringResource
@@ -68,11 +70,11 @@ class ChatRoomListViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             chatRepository.observeChatRoomListByPublicKey(
                 publicKey
-            ).collect { chatRooms ->
-                logger.d("ChatRoomList: $chatRooms")
-                chatRoomListUIState = ChatRoomListUIState.Loaded(
-                    chatRoomList = chatRooms
-                )
+            ).combine(chatRepository.observeUnreadCounts(publicKey)) { chatRooms, unread ->
+                ChatRoomListUIState.Loaded(chatRoomList = chatRooms, unread = unread)
+            }.collect { loaded ->
+                logger.d("ChatRoomList: ${loaded.chatRoomList.size} room(s), ${loaded.unread.size} unread")
+                chatRoomListUIState = loaded
             }
         }
     }
@@ -210,13 +212,24 @@ class ChatRoomListViewModel(
                                             // and the room's own creation -- which is
                                             // what it sorts on -- is not one the user
                                             // has any reason to read here.
-                                            localChatRoom.lastChatMessage?.let { lastChatMessage ->
-                                                Text(
-                                                    text = lastChatMessage.createdAt.toChatListTimestampString(),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 1
-                                                )
+                                            Column(
+                                                horizontalAlignment = Alignment.End,
+                                                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)
+                                            ) {
+                                                localChatRoom.lastChatMessage?.let { lastChatMessage ->
+                                                    Text(
+                                                        text = lastChatMessage.createdAt.toChatListTimestampString(),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1
+                                                    )
+                                                }
+
+                                                // What has not been read, said beside the time
+                                                // it was said. docs/notifications-and-background-sync.md, Phase 4.
+                                                chatRoomListUIState.unread[localChatRoom.chatRoom.id]?.let { roomUnread ->
+                                                    UnreadBadge(count = roomUnread.unread, muted = roomUnread.isMuted)
+                                                }
                                             }
                                         }
                                     }

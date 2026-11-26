@@ -56,7 +56,8 @@ abstract class NotificationDao {
 
     /** Unread lines per room, for every room [userPublicKey] is in and has not left or deleted. */
     @Query(
-        "SELECT ChatMessage.chatRoomId AS chatRoomId, COUNT(*) AS unread FROM ChatMessage " +
+        "SELECT ChatMessage.chatRoomId AS chatRoomId, COUNT(*) AS unread, " +
+            "ChatRoom.notifications AS notifications FROM ChatMessage " +
             "JOIN ChatRoom ON ChatRoom.id = ChatMessage.chatRoomId " +
             "WHERE ChatRoom.userPublicKey = :userPublicKey AND ChatRoom.deletedAt IS NULL " +
             "AND ChatRoom.leftGroupAt IS NULL AND ChatMessage.isUserMessage = 0 " +
@@ -136,6 +137,20 @@ abstract class NotificationDao {
     )
     abstract suspend fun getAfter(userPublicKey: HexKey, cursor: Long, limit: Int = 200): List<ChatMessage>
 
+    /** Writes the switches, leaving the cursor and the sync record alone. */
+    @Query(
+        "UPDATE NotificationLedger SET enabled = :enabled, messages = :messages, needsYou = :needsYou, " +
+            "groupActivity = :groupActivity, showMessageText = :showMessageText WHERE userPublicKey = :userPublicKey"
+    )
+    abstract suspend fun setSettings(
+        userPublicKey: HexKey,
+        enabled: Boolean,
+        messages: Boolean,
+        needsYou: Boolean,
+        groupActivity: Boolean,
+        showMessageText: Boolean,
+    ): Int
+
     // -- the background sync's record (D5) ---------------------------------------------------
 
     @Query(
@@ -150,5 +165,11 @@ abstract class NotificationDao {
     }
 }
 
-/** One room's unread count. */
-data class RoomUnread(val chatRoomId: String, val unread: Int)
+/** One room's unread count, and whether the room is muted -- a muted room counts, quietly. */
+data class RoomUnread(
+    val chatRoomId: String,
+    val unread: Int,
+    val notifications: String,
+) {
+    val isMuted: Boolean get() = notifications == com.machankura.dedun.compose.database.model.ChatRoom.NOTIFICATIONS_MUTED
+}

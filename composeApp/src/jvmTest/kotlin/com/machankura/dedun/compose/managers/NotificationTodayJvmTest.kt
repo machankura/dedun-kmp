@@ -9,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -38,11 +37,11 @@ class NotificationTodayJvmTest {
 
     /**
      * The premise of the background pass (Phase 0, check 5): a Welcome and the first message after
-     * it are filed by `storeNostrEvent` alone, with no view model running. And nothing records that
-     * the message has not been read -- the room carries no read state at all.
+     * it are filed by `storeNostrEvent` alone, with no view model running. Phase 4 flipped the second
+     * half: the room now knows the message has not been read.
      */
     @Test
-    fun `a group message is filed with no view model, and nothing marks it unread`() = runBlocking {
+    fun `a group message is filed with no view model, and counts as unread`() = runBlocking {
         MarmotStandIn.seedProfile(db, userHex, "us")
         MarmotStandIn.seedProfile(db, peer.hex, "peer")
         val roomId = peer.inviteApp(db, marmotRepository, user, peer.createGroup("notify"))
@@ -58,8 +57,7 @@ class NotificationTodayJvmTest {
         )
         assertFalse(line.isUserMessage)
 
-        // Phase 4 flips this: the room will say how far it has been read.
-        assertNull(assertNotNull(db.chatRoomDao().findChatRoomById(roomId)).chatRoom.viewedAt)
+        assertEquals(1, db.notificationDao().unreadCount(roomId))
     }
 
     private val source: File =

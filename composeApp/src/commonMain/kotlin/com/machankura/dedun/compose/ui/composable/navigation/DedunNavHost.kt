@@ -220,6 +220,8 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletAddressesRoute
@@ -709,6 +711,15 @@ fun DedunNavHost(
 
     // Once, above every screen: what a read-only identity may not be offered is decided
     // where the control is drawn, and this is how the control finds out.
+    // The rooms with something unread, muted ones left out: a muted room counts on its own row
+    // and stays off the tab. docs/notifications-and-background-sync.md, Phase 4.
+    val unreadConversations by remember(activeUserPublicKey) {
+        activeUserPublicKey
+            ?.let { publicKey -> databaseChatRepository.observeUnreadCounts(publicKey) }
+            ?.map { unread -> unread.values.count { !it.isMuted } }
+            ?: flowOf(0)
+    }.collectAsState(0)
+
     ProvideSigningCapability(sovereignWalletViewModel.activeIdentity) {
     ProvideExchangeRate(primaryFiatRate) {
     DedunNavigationSuite(
@@ -716,6 +727,7 @@ fun DedunNavHost(
         breakpoint = MaterialTheme.breakpoint,
         activeUserPublicKey = activeUserPublicKey,
         activeProfileNostrEventId = activeProfileNostrEventId,
+        unreadConversations = unreadConversations,
     ) {
         NavHost(
             navController = navController,

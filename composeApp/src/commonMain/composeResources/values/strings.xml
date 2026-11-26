@@ -1710,4 +1710,7 @@
     <string name="waiting_on_s_since_s">Waiting on %1$s since %2$s.</string>
     <string name="if_they_have_stopped_answering_any_member_can_abandon">If they have stopped answering, any member can abandon the ceremony. No key is made, and the group can start again.</string>
     <string name="open_the_room">Open the room</string>
+    <!-- Notifications and read state (docs/notifications-and-background-sync.md) -->
+    <string name="unread_count">Unread: %1$d</string>
+    <string name="unread_conversations">Conversations with unread messages: %1$d</string>
 </resources>

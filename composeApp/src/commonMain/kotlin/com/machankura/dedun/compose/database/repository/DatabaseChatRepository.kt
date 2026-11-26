@@ -61,6 +61,7 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.RotationHold
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
@@ -115,6 +116,18 @@ class DatabaseChatRepository(
 
     override suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>> {
         return database.chatRoomDao().observeChatRoomListByUserPublicKey(publicKey)
+    }
+
+    override suspend fun markChatRoomRead(chatRoomId: String) {
+        database.notificationDao().markAllRead(chatRoomId)
+    }
+
+    override fun observeUnreadCounts(publicKey: String): Flow<Map<String, com.machankura.dedun.compose.database.dao.RoomUnread>> =
+        database.notificationDao().observeUnreadCounts(publicKey)
+            .map { counts -> counts.associateBy { it.chatRoomId } }
+
+    override suspend fun setChatRoomNotifications(chatRoomId: String, notifications: String) {
+        database.notificationDao().setNotifications(chatRoomId, notifications)
     }
 
     override suspend fun getChatRoomListByPublicKey(publicKey: String): List<LocalChatRoom> {

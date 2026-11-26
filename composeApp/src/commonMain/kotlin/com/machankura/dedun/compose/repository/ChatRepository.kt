@@ -35,6 +35,19 @@ import com.machankura.dedun.compose.ui.view.state.RotationPreview
 interface ChatRepository {
     suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>>
 
+    /**
+     * Marks [chatRoomId] read up to its newest line. A no-op where nothing stores read state.
+     * docs/notifications-and-background-sync.md, D8.
+     */
+    suspend fun markChatRoomRead(chatRoomId: String) {}
+
+    /** Each of [publicKey]'s rooms that has unread lines, by room id. Empty where nothing stores them. */
+    fun observeUnreadCounts(publicKey: String): Flow<Map<String, com.machankura.dedun.compose.database.dao.RoomUnread>> =
+        kotlinx.coroutines.flow.flowOf(emptyMap())
+
+    /** Mutes or unmutes [chatRoomId]: [com.machankura.dedun.compose.database.model.ChatRoom.NOTIFICATIONS_ALL] or `…_MUTED`. */
+    suspend fun setChatRoomNotifications(chatRoomId: String, notifications: String) {}
+
     suspend fun getChatRoomListByPublicKey(publicKey: String): List<LocalChatRoom>
 
     suspend fun getChatRoomByIdentifier(id: HexKey): LocalChatRoom?
