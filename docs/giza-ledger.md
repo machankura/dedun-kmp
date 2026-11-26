@@ -64,14 +64,29 @@ next batch is measured from it: `git log --no-merges a5a802c5..giza/giza`.
 | after Phase 4, on `a8331b90` | pass | pass | pass | pass (3) |
 | AGP 9.5.1, Kotlin 2.4.21 and `lightning-kmp-app` at `d87af507`, on `27957e12` | pass | pass | pass | pass (3) |
 | second batch done, `lightning-kmp-app` at Dedun's `d4933708`, on `ffebce46` | pass | pass | pass | pass (3) |
-| the same, `lightning-kmp-app` at Giza's `3ca351af` (not taken; see below) | pass | **fail** in both runs of all four together, pass run alone | pass | pass (3) |
+| the same, `lightning-kmp-app` at Giza's `3ca351af` | pass | pass alone and straight after GroupLightning in a second Gradle run (3 of 3); fails straight after it in the same run (3 of 3) | pass | pass (3) |
+| the same, back on Dedun's `d4933708`, all four in one run with `--rerun` | pass | **fail**, straight after GroupLightning, as on Giza's pin | pass | pass (3) |
 
-Each suite ran on a fresh `dedun-regtest` network, apart from the last two rows, which shared one
-network across their runs. In both runs of all four on Giza's pin, `LiquidityPurchaseRegtestJvmTest`
-timed out waiting for the on-the-fly channel. Run alone on that pin, it passed. Run with the
-other three on Dedun's pin, straight after, it passed too. The two pins differ only in
-`lightning-kmp`'s confederation bumps, which bring bitcoin-kmp's Confederation API and a newer
-libsecp256k1-zkp. Phase 10 of the second batch keeps Dedun's pin until that is understood.
+Each suite ran on a fresh `dedun-regtest` network, apart from the last rows, which shared networks
+across runs.
+
+**`LiquidityPurchaseRegtestJvmTest` races eclair, on either pin.** GroupLightning ends by mining
+its sweep's CSV delay, about 145 blocks in one burst. eclair does not follow the chain block by
+block: it sits at one height and then jumps to the tip a few seconds after the burst ends. The
+liquidity test opens its on-the-fly channel within a second of starting, with our node's lock
+time at the tip, and its `lspCaughtUp()` wait guards only the later splices. When the test starts
+in the same Gradle run, straight after GroupLightning, eclair is still behind. It refuses the
+interactive transaction ("lock time is too far in the future": `lockTime=332,
+currentBlockHeight=186` on Giza's pin, `lockTime=1144, currentBlockHeight=1003` on Dedun's), and
+the test times out after three minutes waiting for a channel nobody will open. In a second Gradle
+run the JVM's start-up gives eclair the two seconds it needs. Every pass measured there had a
+margin of one second.
+
+The pin looked to blame because Gradle ran the classes in a different order. The passing
+"all four" run on Dedun's pin had the liquidity test first. The failing ones on Giza's had it
+second. The investigation also found two results Gradle had restored from its build cache
+(`org.gradle.caching`) without running anything; every run in the last two rows was made with
+`--rerun`, and the chain's height was polled through each.
 
 | giza | bennu port | group | phase | Bennu | Dedun | subject |
 |---|---|---|---|---|---|---|

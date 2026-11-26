@@ -936,16 +936,18 @@ sign for money with theirs.
 - **The ledger's high-water mark** is `a5a802c5`, recorded at the top of the ledger's second
   batch.
 - **Bennu.** None of this batch is in Bennu, so there is nothing to check against yet.
-- **`lightning-kmp-app`: Dedun does not pin Giza's commit yet.** Giza's `3ca351af` and Dedun's
+- **`lightning-kmp-app`: Dedun still pins its own commit.** Giza's `3ca351af` and Dedun's
   `d4933708` carry the same recovery-code change, on the same toolchain. They differ only in the
   nested `lightning-kmp`. Giza's moves it to `47a0f585`, which adds the bitcoin-kmp
   Confederation API and a newer libsecp256k1-zkp under it. On that pin, the FROST, Iceberg,
-  Lightning, share-refresh and ECDH JVM suites pass. But `LiquidityPurchaseRegtestJvmTest` timed
-  out waiting for the on-the-fly channel in both runs of the four regtest suites together. It
-  passed on its own, and the same four together passed on Dedun's pin straight after.
+  Lightning, share-refresh and ECDH JVM suites pass.
   
-  So Dedun keeps `d4933708`, which is still to be pushed, until that is understood. The ledger's
-  regtest table has the runs.
+  The regtest failure first blamed on that pin is not the pin's. `LiquidityPurchaseRegtestJvmTest`
+  races eclair whenever it runs straight after GroupLightning's 145-block burst, and fails that
+  way on Dedun's pin too. The ledger's regtest section has the runs and the timeline. Nothing
+  measured stands in the way of pinning Giza's commit. Doing so is a decision still to make,
+  separate from fixing the test, which needs to wait for eclair to reach the tip before its first
+  channel open.
 
 ## Checking each phase
 
