@@ -298,4 +298,15 @@ object Contacts {
         announce(database, chatRoomId, userPublicKey)
         return true
     }
+
+    /**
+     * Announces for [userPublicKey] in every Marmot room it is still in and hasn't announced in:
+     * once a start, so a device that updated, or joined from a Welcome with no commit since, isn't
+     * left on everybody's waiting list until its member happens to open the sheet. Returns how many
+     * it sent.
+     */
+    suspend fun announceInEveryRoom(database: DedunDatabase, userPublicKey: HexKey): Int =
+        database.chatRoomDao().getChatRoomListByUserPublicKey(userPublicKey)
+            .filter { it.chatRoom.mlsGroupState != null && it.chatRoom.leftGroupAt == null }
+            .count { announceIfNeeded(database, it.chatRoom.id, userPublicKey) }
 }

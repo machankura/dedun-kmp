@@ -993,6 +993,7 @@
     <string name="too_short_for_a_phone_number">That's too short for a phone number.</string>
     <string name="too_long_for_a_phone_number">That's too long for a phone number.</string>
     <string name="wrong_length_for_s">That's the wrong length for a number in %1$s.</string>
+    <string name="no_number_in_s_starts_like_that">No number in %1$s starts like that. For a number from another country, start with +.</string>
     <string name="the_group_will_see_s">The group will see %1$s</string>
     <string name="the_group_already_counts_this_as_s">The group already counts this as %1$s.</string>
     <string name="attribute_to_s">Attribute to %1$s</string>
@@ -1122,6 +1123,8 @@
     <string name="s_sats_nobody_s_yet">%1$s sats, nobody's yet</string>
     <string name="former_member">Former member</string>
     <string name="no_onchain_address">No onchain address</string>
+    <string name="no_lightning_address">No Lightning address</string>
+    <string name="a_deposit_for_someone_outside_the_group">A coin can be shared only among members with deposits. To count a deposit for someone outside the group, use Attribute on the Deposits screen.</string>
     <string name="onchain_s_sats_in_s_coins">Onchain %1$s sats in %2$s coins</string>
     <string name="lightning_s_sats">Lightning %1$s sats</string>
     <string name="s_sats_waiting_for_a_confirmation">%1$s sats waiting for a confirmation</string>

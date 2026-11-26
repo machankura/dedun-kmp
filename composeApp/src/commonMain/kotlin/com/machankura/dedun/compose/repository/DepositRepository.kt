@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.repository
 
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.Flow
 import com.machankura.dedun.compose.text.LightningAddress
 import com.machankura.dedun.compose.nostr.wallet.PayoutDestination
 import com.machankura.dedun.compose.nostr.wallet.ContactAmendmentEvent
@@ -77,6 +79,9 @@ interface DepositRepository {
 
     /** The current members whose devices haven't said they read contacts: who adding one waits for (`docs/non-member-deposits.md`, D5). */
     suspend fun contactsWaitingFor(chatRoomId: String): List<HexKey> = emptyList()
+
+    /** [contactsWaitingFor] again each time a member's announcement, or any other request, arrives in [chatRoomId]. */
+    fun observeContactsWaitingFor(chatRoomId: String): Flow<List<HexKey>> = emptyFlow()
 
     /**
      * Proposes the contact [identifier] called [name] -- straight to the group from a device that holds

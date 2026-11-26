@@ -60,6 +60,7 @@ class GroupAssignCoinsViewModel(
                     (participant.profile?.humanReadableNameOrPubkey() ?: participant.participant.participantPublicKey.take(8))
             }
             val depositors = payoutRepository.depositors(chatRoomId, chain)
+            val hasContacts = payoutRepository.contactNames(chatRoomId).isNotEmpty()
             val canSign = localChatRoom.chatRoom.mlsGroupState != null && chatRepository.canSign(chatRoomId)
             val states = wallets?.walletFor(wallet.account, chatRoomId)?.state
                 ?: return@launch run { uiState = GroupAssignCoinsUIState.Error("This device isn't watching the chain") }
@@ -75,7 +76,7 @@ class GroupAssignCoinsViewModel(
                             fields[key] = depositors.associateWith { member -> TextFieldState(suggested[member]?.toString() ?: "") }
                         }
                     }
-                    uiState = GroupAssignCoinsUIState.Loaded(localChatRoom, unowned, depositors, names, canSign)
+                    uiState = GroupAssignCoinsUIState.Loaded(localChatRoom, unowned, depositors, names, canSign, hasContacts)
                 }
             }
         }

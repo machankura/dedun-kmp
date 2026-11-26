@@ -61,6 +61,15 @@ class ContactIdentifierTest {
     }
 
     @Test
+    fun `a North American number starts as one does, so a South African one isn't read as American`() {
+        assertEquals(Refusal.WRONG_START_FOR_COUNTRY, refused("0821234567", "US"))
+        assertEquals(Refusal.WRONG_START_FOR_COUNTRY, refused("1 082 123 4567", "US"))
+        assertEquals(Refusal.WRONG_START_FOR_COUNTRY, refused("1 123 456 7890", "CA"))
+        assertEquals("+15551234567", phone("555 123 4567", "US"))
+        assertEquals("+27821234567", phone("+27 82 123 4567", "US"))
+    }
+
+    @Test
     fun `a signer takes only a spelling that is already canonical`() {
         assertTrue(PhoneNumbers.isCanonical("+27821234567"))
         listOf("27821234567", "+27 82 123 4567", "+027821234567", "+2782123456789012", "+27821a34567").forEach {

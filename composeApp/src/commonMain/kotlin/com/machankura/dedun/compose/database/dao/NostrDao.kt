@@ -77,6 +77,7 @@ import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.ShareRepairManager
 import com.machankura.dedun.compose.managers.CommitOrdering
 import com.machankura.dedun.compose.managers.FrostSigningManager
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.MarmotEngine.Companion.inRoom
 import com.machankura.dedun.compose.managers.MarmotInboundManager
@@ -971,6 +972,13 @@ abstract class NostrDao(
                                         database = database,
                                         chatRoomId = nostrGroupId
                                     )
+
+                                    // Say this device reads contacts, at the epoch it joined in.
+                                    // Nobody proposes a contact until every member has, and a
+                                    // Welcome isn't a commit, so the membership path that announces
+                                    // otherwise doesn't run for it. docs/non-member-deposits.md, D5.
+                                    runCatching { Contacts.announceIfNeeded(database, nostrGroupId, userPublicKey) }
+                                        .onFailure { logger.e("Couldn't say this device reads contacts", it) }
 
                                     // Where is the decoded welcome message...
                                     // TODO: Sync GroupEvents/Messages...

@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
@@ -159,6 +160,13 @@ class DatabaseNostrRepository(
                 database = database,
                 userPublicKey = userPublicKey,
             )
+        }
+    }
+
+    override suspend fun announceContactsSupport(activeKeyPair: KeyPair): Int {
+        if (activeKeyPair.privKey == null) return 0
+        return storeNostrEventMutex.withLock {
+            Contacts.announceInEveryRoom(database, activeKeyPair.pubKey.toHexKey())
         }
     }
 

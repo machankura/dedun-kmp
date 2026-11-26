@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.database.model.DepositRow
 import com.machankura.dedun.compose.wallet.GroupWalletState
 import com.machankura.dedun.compose.repository.DepositRepository
 import com.machankura.dedun.compose.repository.PayoutRepository
@@ -163,6 +164,7 @@ class GroupWalletViewModel(
                     Triple(state, transactions.map { rowOf(it) }, guardedWallets)
                 }.collect { (state, rows, guardedWallets) ->
                     val unowned = payoutRepository.balances(chatRoomId, chain, state).unownedSat
+                    val owners = coinOwners(loaded.memberNames)
                     val mine = state.depositAddressesOf(activeUserPublicKey)
                     val justPaid = paidWatch.seen(
                         current = state.depositAddressOf(activeUserPublicKey),
@@ -170,11 +172,26 @@ class GroupWalletViewModel(
                     )
                     groupWalletUIState = loaded.copy(
                         walletState = state, spends = rows, guardedWallets = guardedWallets,
-                        unownedSat = unowned, justPaidDeposit = justPaid,
+                        unownedSat = unowned, justPaidDeposit = justPaid, coinOwners = owners,
                     )
                 }
             }
         }
+    }
+
+    /**
+     * Whose each onchain deposit is, by `txid:vout`, as the ledger counts it: the coin list says what the
+     * Deposits screen says, including a coin the group attributed away from its branch.
+     */
+    private suspend fun coinOwners(memberNames: Map<HexKey, String>): Map<String, String> {
+        val contacts = depositRepository.contacts(chatRoomId)
+        return depositRepository.deposits(chatRoomId, chain)
+            .filter { it.source == DepositRow.ONCHAIN }
+            .mapNotNull { row ->
+                val party = row.member ?: return@mapNotNull null
+                row.depositKey to (contacts[party]?.name ?: ("@" + (memberNames[party] ?: party.take(8))))
+            }
+            .toMap()
     }
 
     /**

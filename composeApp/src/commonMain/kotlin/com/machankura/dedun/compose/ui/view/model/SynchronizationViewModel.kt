@@ -248,6 +248,12 @@ class SynchronizationViewModel(
                             // (docs/rotate-shares-single-approval.md, Phase 3).
                             runCatching { nostrRepository.resumeRunningCeremonies(keyPair) }
                                 .onFailure { logger.e("Could not resume running key ceremonies", it) }
+                            // A device that updated, or joined a room from a Welcome, hasn't
+                            // said it reads contacts there, and every contact proposal in the
+                            // room waits until it has. docs/non-member-deposits.md, D5.
+                            runCatching { nostrRepository.announceContactsSupport(keyPair) }
+                                .onSuccess { if (it > 0) logger.i { "Said this device reads contacts in $it room(s)" } }
+                                .onFailure { logger.e("Could not say this device reads contacts", it) }
                             launch(Dispatchers.IO) { observePendingBroadcastNostrEventRequests(keyPair) }
                             // Runs until cancelled rather than draining a queue, but it
                             // belongs here for the same reason the pumps do: it needs the

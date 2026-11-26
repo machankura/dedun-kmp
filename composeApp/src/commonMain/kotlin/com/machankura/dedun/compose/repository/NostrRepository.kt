@@ -67,6 +67,14 @@ interface NostrRepository {
      */
     suspend fun resumeRunningCeremonies(activeKeyPair: KeyPair): Int
 
+    /**
+     * Says, in every room [activeKeyPair] is in and hasn't yet, that this device reads contacts.
+     * Run once per activation: a device that updated, or joined from a Welcome, would otherwise wait
+     * for its member to open the sheet, and every contact proposal in the room waits for it.
+     * Returns how many it sent. docs/non-member-deposits.md, D5.
+     */
+    suspend fun announceContactsSupport(activeKeyPair: KeyPair): Int = 0
+
     suspend fun createNewProfile(
         publicKey: HexKey,
         name: String?,

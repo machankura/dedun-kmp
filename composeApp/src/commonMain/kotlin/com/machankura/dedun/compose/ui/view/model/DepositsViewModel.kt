@@ -20,6 +20,7 @@ import com.machankura.dedun.compose.ui.view.state.DepositsUIState
 import fr.acinq.bitcoin.Chain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -61,6 +62,22 @@ class DepositsViewModel(
                 waitingFor = depositRepository.contactsWaitingFor(chatRoomId),
                 requests = if (canSign) depositRepository.pendingRequests(chatRoomId) else emptyList(),
             )
+            watchWaitingFor()
+        }
+    }
+
+    private var waitingForWatch: Job? = null
+
+    /**
+     * Keeps [DepositsUIState.Loaded.waitingFor] current while the screen is open, so the sheet opens the
+     * moment the last member's device announces rather than on the next visit. D5.
+     */
+    private fun watchWaitingFor() {
+        if (waitingForWatch != null) return
+        waitingForWatch = viewModelScope.launch(Dispatchers.IO) {
+            depositRepository.observeContactsWaitingFor(chatRoomId).collect { waiting ->
+                (uiState as? DepositsUIState.Loaded)?.let { if (it.waitingFor != waiting) uiState = it.copy(waitingFor = waiting) }
+            }
         }
     }
 

@@ -39,6 +39,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.no_number_in_s_starts_like_that
 import dedun.composeapp.generated.resources.ask_the_group
 import dedun.composeapp.generated.resources.attribute_to_s
 import dedun.composeapp.generated.resources.country
@@ -105,6 +106,7 @@ fun AddContactSheet(
             PhoneNumbers.Refusal.TOO_SHORT -> stringResource(Res.string.too_short_for_a_phone_number)
             PhoneNumbers.Refusal.TOO_LONG -> stringResource(Res.string.too_long_for_a_phone_number)
             PhoneNumbers.Refusal.WRONG_LENGTH_FOR_COUNTRY -> stringResource(Res.string.wrong_length_for_s, region.code)
+            PhoneNumbers.Refusal.WRONG_START_FOR_COUNTRY -> stringResource(Res.string.no_number_in_s_starts_like_that, region.code)
             else -> stringResource(Res.string.not_a_phone_number)
         }
     }

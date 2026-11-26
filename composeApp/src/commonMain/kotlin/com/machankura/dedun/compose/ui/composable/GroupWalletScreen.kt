@@ -652,10 +652,12 @@ private fun OpenWallet(
                 } else {
                     items(walletState.utxos, key = { it.utxo.outPoint.toString() }) { utxo ->
                         val member = walletState.memberOfBranch(utxo.derivation.change)
+                        val outPoint = utxo.utxo.outPoint
                         CoinRow(
                             utxo = utxo,
                             confirmations = walletState.confirmations(utxo),
-                            from = member?.let { state.memberNames[it] ?: it.take(8) },
+                            from = state.coinOwners["${outPoint.txid}:${outPoint.index}"]
+                                ?: member?.let { "@" + (state.memberNames[it] ?: it.take(8)) },
                         )
                     }
                 }
@@ -1138,7 +1140,7 @@ internal fun DepositCard(
 }
 
 /**
- * One coin: how much, whose -- [from] for a member's deposit branch, *Change*, or *Unattributed*
+ * One coin: how much, whose -- [from], already written as *@member* or a contact's name, *Change*, or *Unattributed*
  * for the legacy receive branch -- and how deep. `docs/member-deposits.md`, Phase 5.
  */
 @Composable
@@ -1149,7 +1151,7 @@ internal fun CoinRow(utxo: GroupUtxo, confirmations: Int, from: String? = null) 
         supportingContent = {
             val branch = when {
                 utxo.derivation.change == GroupWalletDerivation.CHANGE -> stringResource(Res.string.change)
-                from != null -> stringResource(Res.string.from_s, "@$from")
+                from != null -> stringResource(Res.string.from_s, from)
                 else -> stringResource(Res.string.unattributed)
             }
             val depth = if (confirmations == 0) {

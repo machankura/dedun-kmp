@@ -142,13 +142,16 @@ class DepositCardJvmTest {
         setContent {
             DedunTheme {
                 androidx.compose.foundation.layout.Column {
-                    CoinRow(coin(DepositBranch.of(room, alice)), confirmations = 3, from = "alice")
+                    CoinRow(coin(DepositBranch.of(room, alice)), confirmations = 3, from = "@alice")
+                    // A coin the group attributed to a contact: named as the group recorded them, with no @.
+                    CoinRow(coin(GroupWalletDerivation.RECEIVE), confirmations = 3, from = "Mum")
                     CoinRow(coin(GroupWalletDerivation.RECEIVE), confirmations = 3)
                     CoinRow(coin(GroupWalletDerivation.CHANGE), confirmations = 3)
                 }
             }
         }
         onNodeWithText("From @alice", substring = true).assertIsDisplayed()
+        onNodeWithText("From Mum", substring = true).assertIsDisplayed()
         onNodeWithText("Unattributed", substring = true).assertIsDisplayed()
         onNodeWithText("Change", substring = true).assertIsDisplayed()
     }

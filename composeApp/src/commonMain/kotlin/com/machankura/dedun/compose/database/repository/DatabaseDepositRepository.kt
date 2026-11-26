@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.nostr.wallet.ContactRequestEvent
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
 import com.machankura.dedun.compose.text.LightningAddress
 import com.machankura.dedun.compose.nostr.wallet.ContactPayoutDestinationEvent
 import com.machankura.dedun.compose.nostr.wallet.ContactClaimEvent
@@ -120,6 +124,11 @@ class DatabaseDepositRepository(
         logger.e("Error reading who $chatRoomId waits for", e)
         emptyList()
     }
+
+    override fun observeContactsWaitingFor(chatRoomId: String): Flow<List<HexKey>> =
+        database.marmotInnerEventDao().observeCountByChatRoomAndKinds(chatRoomId, listOf(ContactRequestEvent.KIND))
+            .map { runCatching { Contacts.waitingFor(database, chatRoomId) }.getOrDefault(emptyList()) }
+            .distinctUntilChanged()
 
     /** [template] to the group from this device if it holds a share, or as a request for one that does. */
     private suspend fun proposeOrAsk(localChatRoom: LocalChatRoom, template: EventTemplate<*>): DepositRepository.ContactOutcome? = try {

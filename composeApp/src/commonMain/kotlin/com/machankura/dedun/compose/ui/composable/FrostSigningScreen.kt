@@ -244,7 +244,7 @@ fun FrostSigningScreen(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space200)
                 ) {
                     when {
-                        isSpend -> WhatIsBeingSpent(state.spend, state.payees, state.payout, state.names)
+                        isSpend -> WhatIsBeingSpent(state.spend, state.payees, state.payout, state.names, state.contactNames)
                         isSweep -> WhatIsBeingSwept(state.sweep)
                         else -> WhatIsBeingSigned(proposed, state.items.size, state.membersLosingDeposits) { member ->
                             state.contactNames[member.lowercase()] ?: state.localChatRoom.localParticipants
@@ -596,6 +596,8 @@ private fun WhatIsBeingSpent(
     payees: Map<String, String> = emptyMap(),
     payout: PayoutRule.Result? = null,
     names: Map<HexKey, String> = emptyMap(),
+    /** A contact paid out is named as the group recorded them, not by their id: docs/non-member-deposits.md. */
+    contactNames: Map<HexKey, String> = emptyMap(),
 ) {
     if (spend == null) {
         Text(
@@ -605,7 +607,7 @@ private fun WhatIsBeingSpent(
         return
     }
 
-    fun name(member: HexKey) = "@" + (names[member.lowercase()] ?: member.take(8))
+    fun name(member: HexKey) = contactNames[member.lowercase()] ?: ("@" + (names[member.lowercase()] ?: member.take(8)))
     val paid = (payout as? PayoutRule.Result.Payout)?.members?.associateBy { it.outputIndex }.orEmpty()
 
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.space200)) {

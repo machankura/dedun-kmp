@@ -18,5 +18,11 @@ sealed interface GroupAssignCoinsUIState {
         val names: Map<HexKey, String>,
         /** Whether this device holds a share, and so can propose an assignment. */
         val canSign: Boolean,
+        /**
+         * Whether the group counts anybody outside it. A coin assignment can't name a contact -- a signer
+         * gives shares only to those the group has opened deposits for -- so the screen says where a
+         * contact's deposit is given to them instead: *Attribute*, on the Deposits screen.
+         */
+        val hasContacts: Boolean = false,
     ) : GroupAssignCoinsUIState
 }

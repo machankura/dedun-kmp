@@ -21,9 +21,19 @@ object PhoneNumbers {
 
     /**
      * A country the picker offers: its calling code, the trunk prefix a national number may start
-     * with (dropped), and how many digits a national number has after that prefix.
+     * with (dropped), how many digits a national number has after that prefix, and, where the
+     * country's plan says, the digits one can start with.
      */
-    data class Region(val code: String, val callingCode: String, val trunkPrefix: String?, val nationalLengths: Set<Int>)
+    data class Region(
+        val code: String,
+        val callingCode: String,
+        val trunkPrefix: String?,
+        val nationalLengths: Set<Int>,
+        val nationalStarts: CharRange? = null,
+    )
+
+    /** No North American area code starts with 0 or 1: a 0 there is a number from somewhere else, typed without its `+`. */
+    private val NANP_STARTS: CharRange = '2'..'9'
 
     /**
      * The countries Machankura serves, and the three a member abroad most often has a number in.
@@ -53,16 +63,16 @@ object PhoneNumbers {
         Region("LS", "266", null, setOf(8)),
         Region("SZ", "268", null, setOf(8)),
         Region("HT", "509", null, setOf(8)),
-        Region("JM", "1", "1", setOf(10)),
-        Region("US", "1", "1", setOf(10)),
-        Region("CA", "1", "1", setOf(10)),
+        Region("JM", "1", "1", setOf(10), NANP_STARTS),
+        Region("US", "1", "1", setOf(10), NANP_STARTS),
+        Region("CA", "1", "1", setOf(10), NANP_STARTS),
         Region("GB", "44", "0", setOf(9, 10)),
     )
 
     fun region(code: String): Region? = REGIONS.firstOrNull { it.code.equals(code, ignoreCase = true) }
 
     /** Why a typed number has no canonical spelling. */
-    enum class Refusal { EMPTY, NOT_A_NUMBER, TOO_SHORT, TOO_LONG, NEEDS_A_COUNTRY, WRONG_LENGTH_FOR_COUNTRY }
+    enum class Refusal { EMPTY, NOT_A_NUMBER, TOO_SHORT, TOO_LONG, NEEDS_A_COUNTRY, WRONG_LENGTH_FOR_COUNTRY, WRONG_START_FOR_COUNTRY }
 
     sealed interface Normalised {
         data class Number(val e164: String) : Normalised
@@ -96,10 +106,18 @@ object PhoneNumbers {
         region ?: return Normalised.Refused(Refusal.NEEDS_A_COUNTRY)
         // A national number never starts with its country's trunk prefix, so one that does loses it, fitting or not.
         val national = region.trunkPrefix?.takeIf { digits.startsWith(it) }?.let { digits.drop(it.length) } ?: digits
-        if (national.length in region.nationalLengths) return checked(region.callingCode + national)
+        if (national.length in region.nationalLengths) return nationalChecked(region, national)
         // The calling code typed without `+`: 27821234567 for a South African picker.
-        if (digits.startsWith(region.callingCode) && digits.length - region.callingCode.length in region.nationalLengths) return checked(digits)
+        if (digits.startsWith(region.callingCode) && digits.length - region.callingCode.length in region.nationalLengths) {
+            return nationalChecked(region, digits.drop(region.callingCode.length))
+        }
         return Normalised.Refused(Refusal.WRONG_LENGTH_FOR_COUNTRY)
+    }
+
+    /** [national], the right length for [region], if it starts the way that country's numbers do. */
+    private fun nationalChecked(region: Region, national: String): Normalised {
+        if (region.nationalStarts != null && national.first() !in region.nationalStarts) return Normalised.Refused(Refusal.WRONG_START_FOR_COUNTRY)
+        return checked(region.callingCode + national)
     }
 
     private fun checked(digits: String): Normalised = when {

@@ -49,6 +49,7 @@ import com.machankura.dedun.compose.wallet.CoinOwnership
 import com.machankura.dedun.compose.wallet.GroupOnchainWallets
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.a_deposit_for_someone_outside_the_group
 import dedun.composeapp.generated.resources.a_share_is_at_least_s_sats
 import dedun.composeapp.generated.resources.asked_the_group_to_assign_this_coin
 import dedun.composeapp.generated.resources.assign
@@ -133,6 +134,15 @@ fun GroupAssignCoinsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        if (state.hasContacts) {
+                            item {
+                                Text(
+                                    stringResource(Res.string.a_deposit_for_someone_outside_the_group),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         items(state.unowned, key = { "${it.utxo.utxo.outPoint.txid}:${it.utxo.utxo.outPoint.index}" }) { coin ->
                             UnownedCoinCard(

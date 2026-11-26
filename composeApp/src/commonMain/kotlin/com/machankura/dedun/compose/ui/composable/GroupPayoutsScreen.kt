@@ -101,6 +101,7 @@ import com.machankura.dedun.compose.wallet.PayoutBuilder
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.no_lightning_address
 import dedun.composeapp.generated.resources.a_payout_pays_each_member_everything_they_own
 import dedun.composeapp.generated.resources.ask_the_group_to_pay_out
 import dedun.composeapp.generated.resources.asked_the_group_to_pay_out
@@ -410,9 +411,14 @@ private fun MemberPayoutRow(
                 if (balance.isFormerMember) {
                     Text(stringResource(Res.string.former_member), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                // A destination may be onchain only -- a contact's always is -- so a missing Lightning
+                // address isn't a missing destination.
                 val destination = balance.destination
                 Text(
-                    destination?.lightningAddress?.toString() ?: stringResource(Res.string.hasn_t_said_where_to_be_paid),
+                    when {
+                        destination == null -> stringResource(Res.string.hasn_t_said_where_to_be_paid)
+                        else -> destination.lightningAddress?.toString() ?: stringResource(Res.string.no_lightning_address)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (destination != null) {

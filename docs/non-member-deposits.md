@@ -31,7 +31,8 @@ member added later gets the group's signed record.
 **Built**, Phases 0-8, one commit each, written against `1a111849`, schema version 49. No
 schema change was needed. Phase 9's checks ran as the table below Phase 9 says, the
 four-emulator run included; it found one gap in this feature that blocks D5 in practice (a
-device doesn't announce on joining or updating) and five smaller ones. `Contacts`, `ContactIdentifier`, `Party`, the six `Contact*Event`
+device doesn't announce on joining or updating) and five smaller ones, all six since fixed in
+one commit. `Contacts`, `ContactIdentifier`, `Party`, the six `Contact*Event`
 kinds, `ContactScreen` and `AddContactSheet` are the entry points. Where the build chose
 differently from the phases below, this table says so, and the phases are kept as written.
 
@@ -730,7 +731,7 @@ DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvm
 | `./gradlew :composeApp:m3Audit` | every budget met, after each phase from 3 on |
 | `./gradlew :composeApp:compileDebugKotlinAndroid` | compiles, after each phase |
 | the iOS target | not compiled: this was a Linux host. `DeviceRegion.ios.kt` is the one iOS file, and it is unchecked |
-| the four-emulator run, steps 1-9 above | **run, every step passes, with the gaps below.** On a local regtest build, described below |
+| the four-emulator run, steps 1-9 above | **run, every step passes, with the gaps below, since fixed.** On a local regtest build, described below |
 
 ### The four-emulator run, 2026-11-26
 
@@ -757,14 +758,15 @@ Mum. Charlie ran `1a111849` with the same changes until step 1 had him update.
 | 8 | Mum set her own destination. 30,000 sats paid to the contact's branch counted to @mum, and the group paid @mum 29,802 sats at her new address. Payouts offered only her own destination; the contact's old one was gone. A proposal to the old address can't be made from the app, and `ContactPayoutsJvmTest` covers its refusal |
 | 9 | *Gogo*, by email (*Gogo@Example.COM* read *The group will see gogo@example.com*), was added, given a deposit and a destination, and closed. On every signer the attribute dialog no longer offered Gogo, and Gogo's page kept *Gogo put in 10,000 sats*, *The group no longer counts new deposits for them.*, *Pay out* and *Reopen Gogo* |
 
-What it found, in this feature:
+What it found, in this feature, and what fixed it. The fixes are checked by `jvmTest` and by
+compiling, and weren't run on the emulators again:
 
-1. **A device doesn't announce that it reads contacts when it joins or updates.** `Contacts.announceIfNeeded` runs from `MarmotInboundManager.processGroupMembershipChanges`, on a commit, and from `contactsWaitingFor`, when the member opens the sheet. A member who joined from a Welcome with no commit since, or who just updated, never announces until they open *Someone outside the group…* themselves, so D5 holds every proposal for a member who never does. The fix is to announce after a Welcome is processed and once for each room at start.
-2. The sheet reads who it waits for once, when the Deposits screen loads, and doesn't see an announcement that arrives while it is open.
-3. The group wallet's *Coins* list still said *From @alice* for the coin the group had attributed to Mum, while every Deposits screen counted it as Mum's.
-4. On the Payouts screen a contact with only an onchain destination reads *Hasn't said where to be paid* directly above that address: `GroupPayoutsScreen.kt:415` shows the Lightning address or that line.
-5. A spend's signing screen and its transcript line name a contact by its id, *Pay out @4a6e9c71* and *The group signed a payout of 74572 sats to @4a6e9c71*, where everything else says *Mum*. The *Assign coins* screen for a legacy coin offers members only; the Deposits screen's *Attribute* offers contacts.
-6. With the device's country on US, *0821234567* was accepted as *+1 082 123 4567*. No US area code starts with 0 or 1.
+1. **A device doesn't announce that it reads contacts when it joins or updates.** `Contacts.announceIfNeeded` runs from `MarmotInboundManager.processGroupMembershipChanges`, on a commit, and from `contactsWaitingFor`, when the member opens the sheet. A member who joined from a Welcome with no commit since, or who just updated, never announces until they open *Someone outside the group…* themselves, so D5 holds every proposal for a member who never does. **Fixed:** a device announces when it processes a Welcome, and `Contacts.announceInEveryRoom` runs once per activation from `SynchronizationViewModel`, after the inbox reopens, for every Marmot room it hasn't left.
+2. The sheet reads who it waits for once, when the Deposits screen loads, and doesn't see an announcement that arrives while it is open. **Fixed:** `DepositsViewModel` watches the room's 30398 count and reads the list again when it moves.
+3. The group wallet's *Coins* list still said *From @alice* for the coin the group had attributed to Mum, while every Deposits screen counted it as Mum's. **Fixed:** the coin list names each coin's owner from the deposit ledger, as the Deposits screen does, and falls back to the branch only for a coin the ledger has no owner for.
+4. On the Payouts screen a contact with only an onchain destination reads *Hasn't said where to be paid* directly above that address: `GroupPayoutsScreen.kt:415` showed the Lightning address or that line. **Fixed:** that line is for no destination at all; a destination without a Lightning address says *No Lightning address*.
+5. A spend's signing screen and its transcript line name a contact by its id, *Pay out @4a6e9c71* and *The group signed a payout of 74572 sats to @4a6e9c71*, where everything else says *Mum*. The *Assign coins* screen for a legacy coin offers members only; the Deposits screen's *Attribute* offers contacts. **Fixed:** the spend screen and both transcript lines name a contact as the group recorded them. *Assign coins* still offers members only, because a signer refuses a 30391 share for anybody without a 30339, and letting contacts in would change what every signer accepts; in a group with contacts, the screen says to use *Attribute* instead.
+6. With the device's country on US, *0821234567* was accepted as *+1 082 123 4567*. No US area code starts with 0 or 1. **Fixed:** a national number for US, CA or JM has to start with 2-9, or the sheet says *No number in US starts like that* and asks for a `+`. Only what a member types changes; a signer's `isCanonical` is as it was, so no id moves.
 
 And two that are older than this feature, but shaped what a contact's run looks like:
 

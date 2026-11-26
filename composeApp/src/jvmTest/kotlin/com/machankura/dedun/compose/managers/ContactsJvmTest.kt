@@ -6,6 +6,7 @@ import com.machankura.dedun.compose.contacts.Party
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.DepositRow
+import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.managers.GroupFixtures.keyMaterial
@@ -35,6 +36,7 @@ import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.TxId
 import fr.acinq.secp256k1.Hex
 import kotlinx.coroutines.runBlocking
+import kotlin.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -219,6 +221,23 @@ class ContactsJvmTest {
         GroupFixtures.seedProfile(db, carol)
         db.participantDao().upsert(listOf(Participant(participantPublicKey = carol, chatRoomId = room, relayHint = null)))
         assertEquals(listOf(carol), Contacts.waitingFor(db, room))
+    }
+
+    @Test
+    fun `a device announces at start in every room it is still in, and only once`(): Unit = runBlocking {
+        val owner = GroupFixtures.owner
+        GroupFixtures.seedProfile(db, owner)
+        val left = "left".padEnd(64, '0')
+        val plain = "plain".padEnd(64, '0')
+        db.chatRoomDao().upsert(ChatRoom(id = room, userPublicKey = owner, subject = null, description = null, mlsGroupState = "00"))
+        db.chatRoomDao().upsert(ChatRoom(id = left, userPublicKey = owner, subject = null, description = null, mlsGroupState = "00", leftGroupAt = Instant.fromEpochSeconds(clock)))
+        db.chatRoomDao().upsert(ChatRoom(id = plain, userPublicKey = owner, subject = null, description = null, mlsGroupState = null))
+
+        assertEquals(1, Contacts.announceInEveryRoom(db, owner), "a Marmot room it hasn't left; not one it left, nor a NIP-17 room")
+        assertTrue(owner in Contacts.announcedIn(db, room))
+        assertTrue(Contacts.announcedIn(db, left).isEmpty())
+        assertTrue(Contacts.announcedIn(db, plain).isEmpty())
+        assertEquals(0, Contacts.announceInEveryRoom(db, owner), "the next start has nothing to say")
     }
 
     @Test

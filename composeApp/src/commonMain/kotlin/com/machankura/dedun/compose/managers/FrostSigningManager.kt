@@ -1688,7 +1688,9 @@ object FrostSigningManager {
     private suspend fun payeesOf(database: DedunDatabase, chatRoomId: String, checked: GroupSpend.Checked): String? {
         val payout = PayoutRule.check(checked, MemberBalances.payoutContextOf(database, chatRoomId, checked.account.chain)) as? PayoutRule.Result.Payout
             ?: return null
-        val names = payout.members.map { "@" + ChatMessage.memberName(database, it.member) }
+        // A contact by the name the group recorded, a member by their profile's: docs/non-member-deposits.md.
+        val contacts = Contacts.contactsIn(database, chatRoomId)
+        val names = payout.members.map { contacts[it.member.lowercase()]?.name ?: ("@" + ChatMessage.memberName(database, it.member)) }
         return if (names.size == 1) names.single() else names.dropLast(1).joinToString() + " and " + names.last()
     }
 

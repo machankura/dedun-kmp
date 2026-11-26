@@ -74,6 +74,11 @@ sealed interface GroupWalletUIState {
         val deposits: DepositRepository.Standing = DepositRepository.Standing.CannotSign,
         /** Each member's name, for saying whose a coin is. */
         val memberNames: Map<HexKey, String> = emptyMap(),
+        /**
+         * Whose each coin is, by `txid:vout`, as the deposit ledger counts it -- a contact by name, a
+         * member as *@name*. A coin the group gave someone else is theirs, whatever branch it came in on.
+         */
+        val coinOwners: Map<String, String> = emptyMap(),
         /** What the wallet holds that nobody owns yet, and so nobody can be paid: `docs/payouts-only.md`. */
         val unownedSat: Long = 0,
         /**
