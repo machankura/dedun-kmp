@@ -1,6 +1,9 @@
 package com.machankura.dedun.compose.notifications
 
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.action_mark_read
+import dedun.composeapp.generated.resources.action_reply
+import dedun.composeapp.generated.resources.action_reply_hint
 import dedun.composeapp.generated.resources.notification_channel_group_activity
 import dedun.composeapp.generated.resources.notification_channel_group_activity_description
 import dedun.composeapp.generated.resources.notification_channel_messages
@@ -36,5 +39,8 @@ object NotificationResources {
         groupActivityDescription = getString(Res.string.notification_channel_group_activity_description),
         you = getString(Res.string.notification_you),
         newMessage = getString(Res.string.notification_new_message),
+        markRead = getString(Res.string.action_mark_read),
+        reply = getString(Res.string.action_reply),
+        replyHint = getString(Res.string.action_reply_hint),
     )
 }

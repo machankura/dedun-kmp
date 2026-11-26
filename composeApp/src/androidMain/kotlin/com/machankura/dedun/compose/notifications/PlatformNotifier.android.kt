@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import com.machankura.dedun.android.MainActivity
 import com.machankura.dedun.android.R
@@ -97,6 +98,14 @@ class AndroidNotifier(private val context: Context) : PlatformNotifier {
             .setOnlyAlertOnce(false)
             .setAutoCancel(true)
             .setContentIntent(openRoom(notification))
+            .apply {
+                // Only what somebody said can be answered or set aside from here. An approval is
+                // opened, never decided in the shade. Phase 13.
+                if (notification.category == NotificationCategory.Messages) {
+                    addAction(markReadAction(notification, names))
+                    addAction(replyAction(notification, names))
+                }
+            }
             .build()
 
         try {
@@ -121,6 +130,43 @@ class AndroidNotifier(private val context: Context) : PlatformNotifier {
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+    }
+
+    private fun actionIntent(action: String, notification: RoomNotification): Intent =
+        Intent(context, NotificationActionReceiver::class.java)
+            .setAction(action)
+            .putExtra(NotificationTaps.EXTRA_USER_PUBLIC_KEY, notification.userPublicKey)
+            .putExtra(NotificationTaps.EXTRA_CHAT_ROOM_ID, notification.chatRoomId)
+            .putExtra(NotificationActions.EXTRA_KEY, notification.key)
+
+    private fun markReadAction(notification: RoomNotification, names: NotificationChannelNames): NotificationCompat.Action {
+        val pending = PendingIntent.getBroadcast(
+            context,
+            (notification.key + NotificationActions.ACTION_MARK_READ).hashCode(),
+            actionIntent(NotificationActions.ACTION_MARK_READ, notification),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(0, names.markRead, pending)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
+    }
+
+    private fun replyAction(notification: RoomNotification, names: NotificationChannelNames): NotificationCompat.Action {
+        // Mutable: the system writes the typed text into this intent.
+        val pending = PendingIntent.getBroadcast(
+            context,
+            (notification.key + NotificationActions.ACTION_REPLY).hashCode(),
+            actionIntent(NotificationActions.ACTION_REPLY, notification),
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val input = RemoteInput.Builder(NotificationActions.REPLY_INPUT).setLabel(names.replyHint).build()
+        return NotificationCompat.Action.Builder(0, names.reply, pending)
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(false)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
     }
 
     private fun channelOf(category: NotificationCategory) = when (category) {

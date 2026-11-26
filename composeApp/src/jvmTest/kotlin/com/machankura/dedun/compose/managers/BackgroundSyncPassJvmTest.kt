@@ -231,4 +231,39 @@ class BackgroundSyncPassJvmTest {
         syncPending.value = false
         assertEquals(BackgroundSyncPass.Outcome.Completed, first.await())
     }
+
+    // -- a notification's reply (Phase 13) -------------------------------------------------
+
+    @Test
+    fun `a reply runs as the default profile, waits for it to leave, and puts the profile back`() = runBlocking {
+        seed()
+        var ranAs: Identity? = null
+        val sending = async(Dispatchers.Default) {
+            pass().withProfile(user, 30.seconds) {
+                ranAs = active.value
+                outbound.value = 1
+                true
+            }
+        }
+        // Under quietFor: a queue that has not moved for that long is treated as stuck, by design.
+        while (ranAs == null) delay(5)
+        delay(50)
+        assertTrue(sending.isActive, "returned before what it queued had left")
+        outbound.value = 0
+
+        assertTrue(sending.await())
+        assertSame(identity, ranAs)
+        assertNull(active.value)
+    }
+
+    @Test
+    fun `a reply is never sent as somebody else`() = runBlocking {
+        seed()
+        var ran = false
+        assertEquals(false, pass().withProfile("c".repeat(64), 5.seconds) { ran = true; true }, "the default profile is someone else")
+        active.value = pass(defaultIdentity = null).let { identity }
+        assertEquals(false, pass().withProfile("c".repeat(64), 5.seconds) { ran = true; true }, "another profile is open")
+        assertEquals(false, ran)
+        assertSame(identity, active.value, "the open profile was touched")
+    }
 }

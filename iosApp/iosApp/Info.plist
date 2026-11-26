@@ -4,5 +4,17 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Syncing while closed: a short refresh when iOS chooses, and a longer one overnight.
+	     docs/notifications-and-background-sync.md, Phase 11. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>mobi.giza.refresh</string>
+		<string>mobi.giza.sync</string>
+	</array>
 </dict>
 </plist>

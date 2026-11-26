@@ -40,6 +40,22 @@ import com.machankura.dedun.compose.DedunApp
 import com.machankura.dedun.compose.DedunGlobal
 import com.machankura.dedun.compose.AppLifecycle
 import com.machankura.dedun.compose.DedunRuntime
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.notifications.DesktopNotifier
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.app_name
+import dedun.composeapp.generated.resources.compose_multiplatform
+import dedun.composeapp.generated.resources.still_running
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+import dedun.composeapp.generated.resources.still_running_detail
+import dedun.composeapp.generated.resources.tray_open
+import dedun.composeapp.generated.resources.tray_quit
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.Tray
+import androidx.compose.ui.window.rememberTrayState
+import java.awt.SystemTray
 import com.machankura.dedun.compose.PlatformContext
 import com.machankura.dedun.compose.defaultDedunDir
 import com.machankura.dedun.compose.ui.theme.DedunTheme
@@ -60,9 +76,55 @@ import java.io.File
 fun main() = application {
     val appDir = remember { defaultDedunDir().apply { mkdirs() } }
 
+    // Closed to the tray rather than quit, where there is a tray and syncing while closed is on:
+    // the process is what receives, so the window is only one way of looking at it. Some Linux
+    // sessions have no tray, and there closing quits, as it always did.
+    // docs/notifications-and-background-sync.md, Phase 12.
+    val trayAvailable = remember { ExperimentalFeatures.backgroundSync && SystemTray.isSupported() }
+    val trayState = rememberTrayState()
+    var windowVisible by remember { mutableStateOf(true) }
+    var toldStillRunning by remember { mutableStateOf(false) }
+    val appName = stringResource(Res.string.app_name)
+    val stillRunning = stringResource(Res.string.still_running)
+    val stillRunningDetail = stringResource(Res.string.still_running_detail)
+
+    // A hidden window is nobody looking, whatever its lifecycle says; the policy posts for the
+    // room that was open in it.
+    LaunchedEffect(windowVisible) {
+        if (windowVisible) AppLifecycle.enteredForeground() else AppLifecycle.enteredBackground()
+    }
+
+    if (trayAvailable) {
+        DisposableEffect(trayState) {
+            DesktopNotifier.sink = { title, body -> trayState.sendNotification(Notification(title, body, Notification.Type.None)) }
+            onDispose { DesktopNotifier.sink = null }
+        }
+        Tray(
+            icon = painterResource(Res.drawable.compose_multiplatform),
+            state = trayState,
+            tooltip = appName,
+            onAction = { windowVisible = true },
+            menu = {
+                Item(stringResource(Res.string.tray_open), onClick = { windowVisible = true })
+                Item(stringResource(Res.string.tray_quit), onClick = ::exitApplication)
+            },
+        )
+    }
+
     Window(
-        onCloseRequest = ::exitApplication,
-        title = "Dedun",
+        onCloseRequest = {
+            if (trayAvailable) {
+                windowVisible = false
+                if (!toldStillRunning) {
+                    toldStillRunning = true
+                    trayState.sendNotification(Notification(stillRunning, stillRunningDetail, Notification.Type.Info))
+                }
+            } else {
+                exitApplication()
+            }
+        },
+        visible = windowVisible,
+        title = appName,
         // 1100dp is the expanded breakpoint -- 840 to 1199 -- which is the narrowest window
         // M3 recommends two panes in, and so the smallest opening size at which a desktop
         // user sees a desktop layout rather than a phone one stretched. It used to open at

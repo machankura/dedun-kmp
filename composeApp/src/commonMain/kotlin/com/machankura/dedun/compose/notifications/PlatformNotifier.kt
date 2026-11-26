@@ -19,6 +19,10 @@ data class NotificationChannelNames(
     val you: String,
     /** What a locked screen shows in place of a message. */
     val newMessage: String,
+    /** The actions on a message notification (Phase 13). */
+    val markRead: String = "",
+    val reply: String = "",
+    val replyHint: String = "",
 )
 
 /**

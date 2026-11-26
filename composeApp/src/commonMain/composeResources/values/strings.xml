@@ -1747,4 +1747,11 @@
     <string name="stay_connected_supporting">Messages arrive within seconds. Android shows a notification for as long as it is on, and the battery runs down faster.</string>
     <string name="stay_connected_channel">Connection</string>
     <string name="stay_connected_notification">Connected for new messages</string>
+    <string name="tray_open">Open window</string>
+    <string name="tray_quit">Quit</string>
+    <string name="still_running">Dedun is still running</string>
+    <string name="still_running_detail">It keeps checking for messages until you quit it from the tray.</string>
+    <string name="action_mark_read">Mark as read</string>
+    <string name="action_reply">Reply</string>
+    <string name="action_reply_hint">Message</string>
 </resources>

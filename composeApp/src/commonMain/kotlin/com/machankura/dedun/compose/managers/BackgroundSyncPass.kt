@@ -129,6 +129,49 @@ class BackgroundSyncPass(
     }
 
     /**
+     * Runs [work] as [userPublicKey], from a notification's action with no screen up, and waits for
+     * what it queued to be sent: the reply typed into a notification. False when that profile is
+     * not the one this device would run as -- another is open, or the default is someone else --
+     * because sending as somebody the user did not choose is worse than not sending. Phase 13.
+     *
+     * Takes the same lock as [run], waiting rather than leaving, so a reply and a sync never both
+     * activate and deactivate the profile under each other.
+     */
+    suspend fun withProfile(userPublicKey: HexKey, deadline: Duration, work: suspend () -> Boolean): Boolean {
+        mutex.lock()
+        try {
+            val running = activeIdentity.value
+            val identity = when {
+                running == null -> loadDefaultIdentity()?.takeIf { it.nostrPublicKey == userPublicKey } ?: return false
+                running.nostrPublicKey == userPublicKey && running.nostrPrivateKey != null -> running
+                else -> return false
+            }
+            val activatedHere = running == null
+            try {
+                startEngines()
+                if (activatedHere) activeIdentity.value = identity
+                if (!work()) return false
+                withTimeoutOrNull(deadline) {
+                    outboundQueued(userPublicKey)
+                        .distinctUntilChanged()
+                        .transformLatest { queued ->
+                            if (queued == 0) emit(Unit) else {
+                                delay(quietFor)
+                                emit(Unit)
+                            }
+                        }
+                        .first()
+                }
+                return true
+            } finally {
+                if (activatedHere && !isVisible.value && activeIdentity.value == identity) activeIdentity.value = null
+            }
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    /**
      * Waits at least [minimum] -- long enough for subscriptions to reach EOSE, which no queue
      * records -- and until the sync queue is empty and the outbound queue has not moved, both for
      * [quietFor]. A queue that is draining moves; one that is stuck does not, and is no reason to
