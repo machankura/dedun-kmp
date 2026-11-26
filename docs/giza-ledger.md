@@ -304,36 +304,36 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `e723e70a` | confederations | — | skip (D12) | feat: a confederation signs as itself, one person per device (confederation, Phase 14) |
 | `bacd53a1` | confederations | — | skip (D12) | feat: what a confederation signs: its profile, its posts and its charter (confederation, Phase 15) |
 | `e909313c` | confederations | — | skip (D12) | docs: Part C is built, and what it chose differently (confederation, Phase 16) |
-| `ccc439b2` | group inbox | 6 | pending | docs: the group's inbox, planned as NIP-4E on a group's npub (group-inbox, Phase 0) |
-| `877f5bbe` | group inbox | 6 | pending | test: a threshold-1 ceremony leaves every admin one secret, and a group-signed seal verifies (group-inbox, Phase 0) |
-| `dd16df9c` | group inbox | 6 | pending | test: pin what a group's inbox events do today (group-inbox, Phase 1) |
-| `e215cff8` | group inbox | 6 | pending | feat: the group inbox's wire, in one package (group-inbox, Phase 2) |
-| `1f66c39f` | group inbox | 6 | pending | feat: where a group's inbox is kept, schema 44 to 45 (group-inbox, Phase 3) |
-| `057d0b79` | group inbox | 6 | pending | feat: the group's inbox key, made by its admins at threshold 1 (group-inbox, Phase 4) |
-| `1c29df61` | group inbox | 6 | pending | feat: the group announces its inbox, and declines a wrong announcement out loud (group-inbox, Phase 5) |
-| `5370527a` | group inbox | 6 | pending | feat: the group's inbox, read on its admins' devices (group-inbox, Phase 6) |
-| `12a93bd4` | group inbox | 6 | pending | feat: the group's inbox, seen (group-inbox, Phase 7) |
-| `d21d6ecd` | group inbox | 6 | pending | feat: the group answers from its inbox, once its quorum has read and signed the reply (group-inbox, Phase 8) |
-| `6b59282e` | group inbox | 6 | pending | test: two pins Phase 8 moved, moved with it (group-inbox, Phase 8) |
-| `8bc7ab3e` | group inbox | 6 | pending | feat: the inbox key changes with the group's admins (group-inbox, Phase 9) |
-| `31bcb3a3` | group inbox | 6 | pending | docs: the group's inbox is built, and what it chose differently (group-inbox, Phase 10) |
-| `dae0a345` | group messages | 6 | pending | docs: the group's direct messages, by threshold ECDH (group-threshold-ecdh, Phase 0) |
-| `0d339238` | group messages | 6 | pending | test: threshold ECDH's six premises, against the real libraries (group-threshold-ecdh, Phase 0) |
-| `c8df3633` | group messages | 6 | pending | test: what Giza does with a group's direct messages today (group-threshold-ecdh, Phase 1) |
-| `77e154d4` | group messages | 6 | pending | feat: threshold ECDH's arithmetic, alone (group-threshold-ecdh, Phase 2) |
-| `fcdc2db7` | group messages | 6 | pending | feat: the wire for a group's direct messages (group-threshold-ecdh, Phase 3) |
-| `42ebfc45` | group messages | 6 | pending | feat: storage for a group's direct messages, schema 45 (group-threshold-ecdh, Phase 4) |
-| `311f61ab` | group messages | 6 | pending | feat: the admins answer and combine rounds (group-threshold-ecdh, Phase 5) |
-| `b2cb0aaa` | group messages | 6 | pending | feat: where the group receives direct messages (group-threshold-ecdh, Phase 6) |
-| `ffb254da` | group messages | 6 | pending | feat: receiving the group's direct messages (group-threshold-ecdh, Phase 7) |
-| `0e952f99` | group messages | 6 | pending | feat: the group's messages, seen (group-threshold-ecdh, Phase 8) |
+| `ccc439b2` | group inbox | 6 | `52c4eac5` | docs: the group's inbox, planned as NIP-4E on a group's npub (group-inbox, Phase 0) |
+| `877f5bbe` | group inbox | 6 | `49d51b5a` | test: a threshold-1 ceremony leaves every admin one secret, and a group-signed seal verifies (group-inbox, Phase 0) |
+| `dd16df9c` | group inbox | 6 | `b1ab1469` | test: pin what a group's inbox events do today (group-inbox, Phase 1) |
+| `e215cff8` | group inbox | 6 | `47be48b0` | feat: the group inbox's wire, in one package (group-inbox, Phase 2) |
+| `1f66c39f` | group inbox | 6 | `9bb2a13b` | feat: where a group's inbox is kept, schema 44 to 45 (group-inbox, Phase 3) |
+| `057d0b79` | group inbox | 6 | `b8e28b61` | feat: the group's inbox key, made by its admins at threshold 1 (group-inbox, Phase 4) |
+| `1c29df61` | group inbox | 6 | `06bb9f36` | feat: the group announces its inbox, and declines a wrong announcement out loud (group-inbox, Phase 5) |
+| `5370527a` | group inbox | 6 | `1fcbf318` | feat: the group's inbox, read on its admins' devices (group-inbox, Phase 6) |
+| `12a93bd4` | group inbox | 6 | `22303299` | feat: the group's inbox, seen (group-inbox, Phase 7) |
+| `d21d6ecd` | group inbox | 6 | `84712e0b` | feat: the group answers from its inbox, once its quorum has read and signed the reply (group-inbox, Phase 8) |
+| `6b59282e` | group inbox | 6 | `51b71c42` | test: two pins Phase 8 moved, moved with it (group-inbox, Phase 8) |
+| `8bc7ab3e` | group inbox | 6 | `43a27bfd` | feat: the inbox key changes with the group's admins (group-inbox, Phase 9) |
+| `31bcb3a3` | group inbox | 6 | `454ebe93` | docs: the group's inbox is built, and what it chose differently (group-inbox, Phase 10) |
+| `dae0a345` | group messages | 6 | `a3b03215` | docs: the group's direct messages, by threshold ECDH (group-threshold-ecdh, Phase 0) |
+| `0d339238` | group messages | 6 | `f12f3463` | test: threshold ECDH's six premises, against the real libraries (group-threshold-ecdh, Phase 0) |
+| `c8df3633` | group messages | 6 | `3f6012f9` | test: what Giza does with a group's direct messages today (group-threshold-ecdh, Phase 1) |
+| `77e154d4` | group messages | 6 | `2868e2fd` | feat: threshold ECDH's arithmetic, alone (group-threshold-ecdh, Phase 2) |
+| `fcdc2db7` | group messages | 6 | `7f7a9576` | feat: the wire for a group's direct messages (group-threshold-ecdh, Phase 3) |
+| `42ebfc45` | group messages | 6 | `530daa40` | feat: storage for a group's direct messages, schema 45 (group-threshold-ecdh, Phase 4) |
+| `311f61ab` | group messages | 6 | `2d6976a2` | feat: the admins answer and combine rounds (group-threshold-ecdh, Phase 5) |
+| `b2cb0aaa` | group messages | 6 | `a59c1fab` | feat: where the group receives direct messages (group-threshold-ecdh, Phase 6) |
+| `ffb254da` | group messages | 6 | `0e327ff9` | feat: receiving the group's direct messages (group-threshold-ecdh, Phase 7) |
+| `0e952f99` | group messages | 6 | `cb538548` | feat: the group's messages, seen (group-threshold-ecdh, Phase 8) |
 | `5683199c` | notifications | 3 | `02fad206` | docs: notifications, and the background sync they need, planned (notifications, Phase 0) |
 | `be6e29b2` | notifications | 3 | `a9058e83` | test: pin what notifications change, before they change it (notifications, Phase 1) |
-| `7ddc3f3b` | group messages | 6 | pending | feat: the group writes, and every signer reads it first (group-threshold-ecdh, Phase 9) |
+| `7ddc3f3b` | group messages | 6 | `68e36d60` | feat: the group writes, and every signer reads it first (group-threshold-ecdh, Phase 9) |
 | `1ac51905` | notifications | 3 | `b41c758f` | refactor: one runtime per process, owned by the process (notifications, Phase 2) |
-| `6f33f6f1` | group messages | 6 | pending | feat: admin changes for the group's direct messages (group-threshold-ecdh, Phase 10) |
-| `49fb8a92` | group messages | 6 | pending | test: a non-admin device now forgets the wraps it held (group-threshold-ecdh, Phase 10) |
-| `082d0971` | group messages | 6 | pending | docs: the group's direct messages, built (group-threshold-ecdh, Phase 11) |
+| `6f33f6f1` | group messages | 6 | `65588a39` | feat: admin changes for the group's direct messages (group-threshold-ecdh, Phase 10) |
+| `49fb8a92` | group messages | 6 | `10a6f950` | test: a non-admin device now forgets the wraps it held (group-threshold-ecdh, Phase 10) |
+| `082d0971` | group messages | 6 | `45daf218` | docs: the group's direct messages, built (group-threshold-ecdh, Phase 11) |
 | `c248ab52` | notifications | 3 | `38719f7f` | feat: read marks, mute and the notification ledger, schema 46 to 47 (notifications, Phase 3) |
 | `b6db6d04` | notifications | 3 | `fee7bb05` | feat: a room on screen is read, and what is not is counted (notifications, Phase 4) |
 | `f2e57edc` | notifications | 3 | `fee7bb05` | feat: which lines notify, and when not, decided in one pure place (notifications, Phase 5) |

@@ -108,8 +108,8 @@ describe a database with no wallets in it.
 | 47→48 | read marks, mute, `NotificationLedger` | `ReadMarkMigrationSpec` (marks every room read up to its newest line) | 3 | 50 |
 | — | first plan's governed rooms | — | first plan, 8 | 51 |
 | — | first plan's promotion | — | first plan, 9 | 52 |
-| 45→46 | the group's inbox | — | 6 | 53 |
-| 46→47 | the group's direct messages | — | 6 | 54 |
+| 45→46 | the group's inbox | — | 6 | 53 (as built) |
+| 46→47 | the group's direct messages | — | 6 | 54 (as built) |
 | 49→50 | disappearing messages: the policy columns, `ChatMessage.expiresAt`, `GiftWrapPayload.expiresAt`, `DisappearingSetting`, `ExpiredGiftWrap` | — (Giza needs no data step; see Phase 7 for Dedun's default) | 7 | 55 |
 | 52→53, 54→55 | group names stored bare | `MarmotGroupBareNameMigrationSpec`: Dedun goes from `#name` straight to the bare name, in one migration and one spec | 8 | 56 |
 | 42→45, 48→49, 50→52, 53→54 | confederations | three specs, two of which assume Giza's earlier versions | never (D12) | — |
@@ -612,6 +612,43 @@ plan's took 51 and 52.
 **Done when** Giza's inbox and ECDH suites pass, the "no signing path finds the inbox key"
 test covers every Dedun wallet, and a debug run has an outside npub write to a group and get
 a group-signed reply.
+
+**As built.** All 27 commits are in, behind `ExperimentalFeatures.groupInbox` and
+`groupDirectMessages`, which are off in a release as Giza's are. The inbox is schema 53 and the
+direct messages 54, generated against Dedun's 52 and 53.
+
+- **Giza's merge.** Giza built the two features on separate branches and joined them in
+  `f57e9b8d`. That merge decided which code handles what: a seal naming an inbox key is the
+  inbox's, any other seal is the direct messages'; a group-signed 10050 is read once, by the
+  inbox; and a wrap the inbox key opens is never sent to an ECDH round. The commits are picked
+  one at a time here, so the merge's decisions land in two places. Those touching files Dedun
+  resolved by hand went in with those picks. The rest is a commit of its own
+  (`fix: ... as Giza's merge of them resolved`), with the merge's new `GroupSealRoutingJvmTest`.
+- **Taken from commits Dedun did not take.** These came out of Giza's group profile, broadcast
+  and confederation work, because the inbox and direct messages need them:
+  - `RelayUrlInput` and `EventPublishTransport`;
+  - `SharedKeyDerivation.Derived.tweaks`;
+  - `proposeSigningBatch(proposalTags = ...)`;
+  - `LiveSubscriptionManager`'s `onEvent`;
+  - `SigningProposalHarness`, a test helper.
+- **Wired where Dedun builds things.** The inbox and direct-message repositories and publishers
+  are created in `DedunRuntime`, beside the process-owned `SynchronizationViewModel`. Their rows
+  on the group's screen sit above the Wavelength wallet's. 30400-30401 and 30410-30416 are no
+  longer in `GizaProtocolEvents`.
+- **The inbox key reaches no wallet** (`InboxKeyReachesNoWalletJvmTest`). A room is set up with
+  both the group's key and an announced inbox key, and each Dedun lookup that signs for money
+  is checked. The onchain wallet and the signer find the group's key. The Lightning and
+  Wavelength wallets' Iceberg lookups find nothing. `WalletKeysHeld` does not count an inbox as
+  a wallet.
+- **D4 and the inbox's rotation.** These are tested apart, not together. A rotation is owed only
+  when the admins differ from those the key was made over (`InboxRotationJvmTest`). In a keyed
+  room that keeps a wallet, no admin change is made (Phase 9's tests). No test has yet run an
+  inbox rotation in a room that holds a real wallet.
+- Seven new line types are classified as Giza classifies them.
+
+jvmTest: 3,542 run, 0 failed, 7 skipped. `compileDebugKotlinAndroid` and `m3Audit` pass. Not
+run: the device test (an outside npub writes to a group and gets a group-signed reply). The
+contacts plan this phase suggested is not written.
 
 ## Phase 7: disappearing messages (D11)
 
