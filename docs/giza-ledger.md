@@ -418,7 +418,7 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `916b5c35` | names | 8 | `b5c189ac` | feat: draw a group's name as {name} and a confederation's as {{name}} (group-name-braces, Phase 1) |
 | `cc64856c` | names | 8 | `2a5bfe86` | feat: store and send a group's bare name (group-name-braces, Phase 2) |
 | `435590d6` | names | 8 | `ae4a0fba` | feat: store the Marmot rooms already on a device under their bare names (group-name-braces, Phase 3) |
-| `0e5fd96f` | names | 8 | pending | feat: write confederation and group names into stored lines in braces (group-name-braces, Phase 4) |
+| `0e5fd96f` | names | 8 | skip (D12): confederation files only, empty here | feat: write confederation and group names into stored lines in braces (group-name-braces, Phase 4) |
 | `6035a5bf` | names | 8 | `db41b5c1` | test: seed groups under their bare names (group-name-braces, Phase 5) |
 | `1d8e9cb5` | names | 8 | `02c983b2` | docs: record the braces as built (group-name-braces, Phase 6) |
 | `5017547f` | names | — | skip (D12) | test: a confederation proposed as {Atlas} keeps that name and signs its charter (group-name-braces, D10) |

@@ -34,6 +34,7 @@ LEDGER = "docs/giza-ledger.md"
 # docs/giza-second-batch.md: (subject pattern or sha, group, phase, verdict). First match wins.
 SECOND_BATCH = [
     ("5017547f", "names", "—", "skip (D12)"),
+    ("0e5fd96f", "names", "8", "skip (D12): confederation files only, empty here"),
     ("50f73e17", "confederations", "—", "skip (D12)"),
     ("22d36931", "fix", "1", "audited: the bug is in confederation code"),
     ("9a1abc61", "fix", "1", "pending"),
