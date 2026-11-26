@@ -138,4 +138,67 @@ class CredentialParserJvmTest {
             assertNull(CredentialParser.npubOrNull(input), "for '$input'")
         }
     }
+
+    // --- recovery codes (docs/recovery-code-v3.md, Phase 5) ---
+
+    private val code = "LBZC-MYTK-E9P3-7C7B-AHJN-KX79-22CY-WAY7-K7QZ"
+    /** RecoveryCodeKeysTest's pinned npub for [code]. */
+    private val codePublicKey = "ece2bc031552ccd5062f6fb933f7e00187e6391df2b81fe0a83e697a7589b89f"
+
+    @Test
+    fun `a recovery code, typed any way, is the same code`() {
+        for (input in listOf(code, code.lowercase(), code.replace('-', ' '), code.replace("-", ""), "  $code\n", code.replace("-", "  "))) {
+            val credential = assertIs<SignInCredential.RecoveryCode>(recognised(input), "for '$input'")
+            assertEquals(code, credential.code.canonical, "for '$input'")
+            assertEquals(codePublicKey, credential.nostrPublicKey, "for '$input'")
+        }
+    }
+
+    @Test
+    fun `one wrong symbol is a typo, with the one code it could be`() {
+        val result = assertIs<CredentialParser.Result.Refused>(CredentialParser.parse("LBTP-WJRN-FXBT-U8KT-ZP5P-AQN9-XK3J-K3CV-2TB5"))
+        assertEquals(CredentialProblem.RecoveryCodeTypo, result.problem)
+        val suggestion = result.suggestion ?: error("no suggestion")
+        assertEquals(5, suggestion.block)
+        assertEquals(2, suggestion.character)
+        assertEquals("LBTP-WJRN-FXBT-U8KT-Z45P-AQN9-XK3J-K3CV-2TB5", suggestion.suggested.canonical)
+    }
+
+    /**
+     * Two typos: refused as a typo, and with no suggestion -- or, where two errors happen to
+     * sit one symbol from another valid code, with a suggestion that is *not* the original.
+     * That second case is why a suggestion is never applied without a press.
+     */
+    @Test
+    fun `two wrong symbols are a typo without the original as a suggestion`() {
+        val result = assertIs<CredentialParser.Result.Refused>(CredentialParser.parse("LBTP-RJRN-FXBT-U8KT-Z45P-AQN9-XK33-K3CV-2TB5"))
+        assertEquals(CredentialProblem.RecoveryCodeTypo, result.problem)
+        assertNotEquals("LBTP-WJRN-FXBT-U8KT-Z45P-AQN9-XK3J-K3CV-2TB5", result.suggestion?.suggested?.canonical)
+    }
+
+    @Test
+    fun `an older code is named for what it is`() {
+        assertEquals(CredentialProblem.UnsupportedRecoveryCode, refused("LA2Q-48Z3-25JR-S5JB-5SUS-HXHJ-RCMM-8YUA"))
+        assertEquals(CredentialProblem.UnsupportedRecoveryCode, refused("R52Q-48Z3-25JR-S5JB-5SUS-HXHJ-RCMM-8YUA"))
+    }
+
+    @Test
+    fun `the shape of a code that is not one is refused as a code`() {
+        assertEquals(CredentialProblem.InvalidRecoveryCode, refused("LBZC-MOTK-OOOO-7C7B-AHJN-KX79-22CY-WAY7-K7QZ"))
+        assertEquals(CredentialProblem.InvalidRecoveryCode, refused("ABCD EFGH JKLM NPQR STUV WXYZ 2345 7899"))
+    }
+
+    /** Twelve groups is a phrase, however short its words: only eight or nine is a code. */
+    @Test
+    fun `twelve four-letter words are still a phrase`() {
+        assertEquals(CredentialProblem.InvalidPhrase, refused("able acid also area army atom aunt auto away baby back bake"))
+    }
+
+    /** The code's 24 words are a phrase, and the same person. */
+    @Test
+    fun `a code's words are the code's key`() {
+        val parsed = assertIs<SignInCredential.RecoveryCode>(recognised(code))
+        val words = com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys.words(parsed.code).joinToString(" ")
+        assertEquals(codePublicKey, assertIs<SignInCredential.RecoveryPhrase>(recognised(words)).nostrPublicKey)
+    }
 }

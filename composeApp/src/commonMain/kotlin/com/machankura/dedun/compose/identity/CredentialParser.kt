@@ -8,6 +8,9 @@ import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.XonlyPublicKey
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
 import fr.acinq.phoenix.utils.MnemonicLanguage
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode as Code
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeProblem
 
 /**
  * What a user pasted into the sign-in field, once it has been recognised.
@@ -24,6 +27,17 @@ sealed interface SignInCredential {
         override val nostrPublicKey: HexKey,
     ) : SignInCredential {
         override fun toString(): String = "RecoveryPhrase(npub=$nostrPublicKey, words=***)"
+    }
+
+    /**
+     * A nine-block recovery code: a 24-word phrase in another notation, and the nostr key
+     * its words derive. See docs/recovery-code-v3.md.
+     */
+    data class RecoveryCode(
+        val code: Code,
+        override val nostrPublicKey: HexKey,
+    ) : SignInCredential {
+        override fun toString(): String = "RecoveryCode(npub=$nostrPublicKey, code=***)"
     }
 
     /** A bare nostr secret. No wallet comes with it. */
@@ -57,6 +71,18 @@ enum class CredentialProblem {
     /** An ncryptsec (NIP-49). Decrypting one is a follow-on; say so rather than fail opaquely. */
     EncryptedKey,
 
+    /** Shaped like a recovery code, and not one: the wrong length, or a symbol no code has. */
+    InvalidRecoveryCode,
+
+    /**
+     * A recovery code with a typo: well formed, and its ninth block disagrees. With a
+     * suggestion when exactly one symbol explains it -- see [CredentialParser.Result.Refused].
+     */
+    RecoveryCodeTypo,
+
+    /** A recovery code of an older, eight-block version. Dedun only makes nine-block codes. */
+    UnsupportedRecoveryCode,
+
     /** An identity with this nostr public key is already on the device, as a wallet or a key. */
     AlreadyOnThisDevice,
 
@@ -67,9 +93,9 @@ enum class CredentialProblem {
 /**
  * Recognises a pasted credential. Pure, so it can be pinned row by row.
  *
- * A user does not choose an input type; they paste what they have. The three accepted
- * shapes are unambiguous -- words have spaces, keys do not, and a bech32 prefix says
- * which key -- and the one refused shape is named for what it is rather than lumped in
+ * A user does not choose an input type; they paste what they have. The four accepted
+ * shapes are unambiguous -- a recovery code is eight or nine blocks of four, words are
+ * twelve or more and have spaces, keys do not, and a bech32 prefix says which key -- and the one refused shape is named for what it is rather than lumped in
  * with garbage, because a user who pasted an ncryptsec did something reasonable and
  * should be told what to do instead.
  *
@@ -84,14 +110,33 @@ object CredentialParser {
 
     sealed interface Result {
         data class Recognised(val credential: SignInCredential) : Result
-        data class Refused(val problem: CredentialProblem) : Result
+        /**
+         * @param suggestion for [CredentialProblem.RecoveryCodeTypo], the one code a single
+         *   symbol away, when there is exactly one. A suggestion and nothing more: it becomes
+         *   the input only when a person accepts it, because two typos can sit one symbol
+         *   from somebody else's code.
+         */
+        data class Refused(val problem: CredentialProblem, val suggestion: Code.Parse.Typo? = null) : Result
     }
 
     private val hex64 = Regex("[0-9a-f]{64}")
 
+    /**
+     * Eight or nine groups of four letters or digits, apart by dashes or whitespace, or one
+     * run of 32 or 36: the shapes of a recovery code as typed, copied or pasted. Nothing else
+     * this field reads has them -- a phrase has 12 to 24 words of three to eight letters, a
+     * key a prefix or 64 characters -- so an input of this shape is a code, and its problems
+     * are a code's problems.
+     */
+    private val recoveryCodeShape = Regex("[A-Za-z0-9]{4}(?:[\\s-]+[A-Za-z0-9]{4}){7,8}|[A-Za-z0-9]{32}|[A-Za-z0-9]{36}")
+
     fun parse(raw: String): Result {
         val text = raw.trim()
         if (text.isEmpty()) return Result.Refused(CredentialProblem.Empty)
+
+        // Before the words: a code typed by hand arrives as `LBZC MYTK …` as often as with
+        // dashes, and would otherwise read as a phrase that failed its checksum.
+        if (recoveryCodeShape.matches(text)) return recoveryCode(text)
 
         // Whitespace anywhere inside means words. Not lower-cased: the wordlist already
         // is, and a capitalised word is a paste artefact worth showing rather than fixing.
@@ -115,6 +160,17 @@ object CredentialParser {
         Result.Recognised(SignInCredential.RecoveryPhrase(words, StoredIdentity.nostrPublicKeyOf(words)))
     } catch (e: Exception) {
         Result.Refused(CredentialProblem.InvalidPhrase)
+    }
+
+    private fun recoveryCode(text: String): Result = when (val parsed = Code.parse(text)) {
+        is Code.Parse.Valid -> Result.Recognised(
+            SignInCredential.RecoveryCode(parsed.code, StoredIdentity.nostrPublicKeyOf(RecoveryCodeKeys.words(parsed.code)))
+        )
+        is Code.Parse.Typo -> Result.Refused(CredentialProblem.RecoveryCodeTypo, suggestion = parsed)
+        is Code.Parse.Invalid -> Result.Refused(
+            if (parsed.problem == RecoveryCodeProblem.Checksum) CredentialProblem.RecoveryCodeTypo else CredentialProblem.InvalidRecoveryCode
+        )
+        is Code.Parse.UnsupportedVersion -> Result.Refused(CredentialProblem.UnsupportedRecoveryCode)
     }
 
     private fun nsec(token: String): Result {

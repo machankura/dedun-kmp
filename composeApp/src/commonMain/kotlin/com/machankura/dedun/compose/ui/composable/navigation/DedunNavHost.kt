@@ -1329,6 +1329,7 @@ fun DedunNavHost(
                             onSeedWriteError = onError,
                         )
                     },
+                    writeRecoveryCode = { code -> sovereignWalletViewModel.writeRecoveryCode(code) },
                     onNavigateBack = {
                         navController.popBackStack()
                     },

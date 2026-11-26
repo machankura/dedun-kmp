@@ -47,6 +47,7 @@ import com.machankura.dedun.compose.identity.IdentityKind
 import com.machankura.dedun.compose.identity.IdentityWriter
 import com.machankura.dedun.compose.identity.SeedCredentials
 import com.machankura.dedun.compose.identity.StoredIdentity
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
 
 sealed class WritingSeedState {
     data object Init : WritingSeedState()
@@ -504,6 +505,17 @@ class SovereignWalletViewModel(
             phoenixGlobal = phoenixGlobal,
             globalPrefs = getGlobalPrefs(),
             privateKey = privateKey,
+            isTorEnabled = isTorEnabled.value,
+            customElectrumServer = customElectrumServer.value,
+        )
+
+    /** Writes a recovery code, its words and its key, with the same options. See [IdentityWriter.writeRecoveryCode]. */
+    suspend fun writeRecoveryCode(code: RecoveryCode): IdentityWriter.WriteRecoveryCodeResult =
+        IdentityWriter.writeRecoveryCode(
+            log = log,
+            phoenixGlobal = phoenixGlobal,
+            globalPrefs = getGlobalPrefs(),
+            code = code,
             isTorEnabled = isTorEnabled.value,
             customElectrumServer = customElectrumServer.value,
         )

@@ -193,6 +193,7 @@ class MultipleProfilesRoundTripJvmTest {
             writeNostrKey = { key -> sovereign.writeNostrKey(key) },
             writeNostrPublicKey = { pubkey -> sovereign.writeNostrPublicKey(pubkey) },
             writeRecoveryPhrase = { _, _, onError -> onError(WritingSeedState.Error.CannotLoadSeedMap) },
+            writeRecoveryCode = { com.machankura.dedun.compose.identity.IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys },
         )
 
         // A, from a phrase: both files written, listed once with a wallet attached.

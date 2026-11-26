@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
@@ -21,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
@@ -41,6 +43,13 @@ import dedun.composeapp.generated.resources.Res
 import dedun.composeapp.generated.resources.a_password_protected_key_ncryptsec_is_not
 import dedun.composeapp.generated.resources.enter_a_recovery_phrase_or_an_nsec_to_sign_in
 import dedun.composeapp.generated.resources.next
+import dedun.composeapp.generated.resources.block_character_looks_wrong_did_you_mean
+import dedun.composeapp.generated.resources.recognised_as_a_recovery_code
+import dedun.composeapp.generated.resources.that_is_an_older_eight_block_code
+import dedun.composeapp.generated.resources.that_is_not_a_recovery_code_check_it_has_nine_blocks
+import dedun.composeapp.generated.resources.there_s_a_typo_in_this_code_check_each_block
+import dedun.composeapp.generated.resources.use_this_code
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
 import dedun.composeapp.generated.resources.paste
 import dedun.composeapp.generated.resources.recognised_as_a_nostr_secret_key_no_wallet
 import dedun.composeapp.generated.resources.recognised_as_a_public_key_you_will_see
@@ -102,6 +111,7 @@ fun SignInToProfileScreen(
         onWritten: (WalletId) -> Unit,
         onError: (WritingSeedState.Error) -> Unit,
     ) -> Unit,
+    writeRecoveryCode: suspend (RecoveryCode) -> IdentityWriter.WriteRecoveryCodeResult,
     onNavigateBack: () -> Unit,
     /**
      * The tail: re-list, select, go to startup. Also what "switch to it" does when the key
@@ -116,6 +126,7 @@ fun SignInToProfileScreen(
             writeNostrKey = writeNostrKey,
             writeNostrPublicKey = writeNostrPublicKey,
             writeRecoveryPhrase = writeRecoveryPhrase,
+            writeRecoveryCode = writeRecoveryCode,
         )
     )
 
@@ -181,6 +192,7 @@ fun SignInToProfileScreen(
 private fun InputPrompt(viewModel: SignInToProfileViewModel) {
     val field = viewModel.signInToProfileFormState.textFieldForm.textFieldState
     val problem = viewModel.inputProblem.value
+    val suggestion = viewModel.typoSuggestion.value
     val clipboardManager = LocalClipboardManager.current
 
     Column(
@@ -200,7 +212,7 @@ private fun InputPrompt(viewModel: SignInToProfileViewModel) {
             modifier = Modifier.fillMaxWidth(),
             state = field,
             isError = problem != null,
-            supportingText = problem?.let { { Text(text = problemMessage(it)) } },
+            supportingText = problem?.let { { Text(text = problemMessage(it, suggestion)) } },
             // Two lines shows a whole phrase without scrolling and an nsec on one; four is
             // room for a phrase pasted with line breaks.
             lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 4),
@@ -227,6 +239,22 @@ private fun InputPrompt(viewModel: SignInToProfileViewModel) {
                 }
             },
         )
+
+        // A located typo is offered, never applied: two typos can sit one symbol from
+        // somebody else's code, so the corrected code becomes the input only on this press,
+        // and the confirm step still shows the npub it derives before anything is written.
+        if (suggestion != null) {
+            Text(
+                text = suggestion.suggested.canonical,
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            )
+            OutlinedButton(
+                modifier = Modifier.align(Alignment.End),
+                onClick = { viewModel.acceptSuggestion() },
+            ) {
+                Text(text = stringResource(Res.string.use_this_code))
+            }
+        }
 
         Button(
             modifier = Modifier.align(Alignment.End),
@@ -274,6 +302,13 @@ private fun Confirm(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                is SignInCredential.RecoveryCode -> {
+                    Icon(Icons.Default.Password, contentDescription = Decorative)
+                    Text(
+                        text = stringResource(Res.string.recognised_as_a_recovery_code),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 is SignInCredential.NostrSecret -> {
                     Icon(Icons.Default.Key, contentDescription = Decorative)
                     Text(
@@ -308,14 +343,33 @@ private fun Confirm(
     }
 }
 
-/** Each refusal is a sentence that says what to do instead, not a code. */
+/**
+ * Each refusal is a sentence that says what to do instead, not a code. A recovery code with
+ * one located typo says where, and what the symbol should be.
+ */
 @Composable
-private fun problemMessage(problem: CredentialProblem): String = stringResource(
+private fun problemMessage(problem: CredentialProblem, suggestion: RecoveryCode.Parse.Typo? = null): String =
+    if (problem == CredentialProblem.RecoveryCodeTypo && suggestion != null) {
+        stringResource(
+            Res.string.block_character_looks_wrong_did_you_mean,
+            suggestion.block,
+            suggestion.character,
+            suggestion.suggestedSymbol.toString(),
+        )
+    } else {
+        problemMessageOf(problem)
+    }
+
+@Composable
+private fun problemMessageOf(problem: CredentialProblem): String = stringResource(
     when (problem) {
         CredentialProblem.Empty -> Res.string.enter_a_recovery_phrase_or_an_nsec_to_sign_in
         CredentialProblem.NotRecognised -> Res.string.that_is_not_a_recovery_phrase_or_a_nostr_key
         CredentialProblem.InvalidPhrase -> Res.string.that_recovery_phrase_is_not_valid_check
         CredentialProblem.InvalidKey -> Res.string.that_nostr_secret_key_is_not_valid
+        CredentialProblem.InvalidRecoveryCode -> Res.string.that_is_not_a_recovery_code_check_it_has_nine_blocks
+        CredentialProblem.RecoveryCodeTypo -> Res.string.there_s_a_typo_in_this_code_check_each_block
+        CredentialProblem.UnsupportedRecoveryCode -> Res.string.that_is_an_older_eight_block_code
         CredentialProblem.EncryptedKey -> Res.string.a_password_protected_key_ncryptsec_is_not
         CredentialProblem.AlreadyOnThisDevice -> Res.string.this_key_is_already_on_this_device
         CredentialProblem.CouldNotWrite -> Res.string.the_key_could_not_be_saved_on_this_device
@@ -334,6 +388,7 @@ private fun SignInToProfileScreenPreview() {
                 writeNostrKey = { IdentityWriter.WriteNostrCredentialResult.CannotLoadKeys },
                 writeNostrPublicKey = { IdentityWriter.WriteNostrCredentialResult.CannotLoadKeys },
                 writeRecoveryPhrase = { _, _, onError -> onError(WritingSeedState.Error.CannotLoadSeedMap) },
+                writeRecoveryCode = { IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys },
                 onNavigateBack = {},
                 onSignedIn = {},
             )
