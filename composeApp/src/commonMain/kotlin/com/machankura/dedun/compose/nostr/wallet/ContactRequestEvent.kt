@@ -19,15 +19,15 @@ import kotlin.time.Clock
  * D4, D5 and Spike S2. Two forms:
  *
  * ```
- * kind: 30398, pubkey: <member>, content: ""
+ * kind: 30428, pubkey: <member>, content: ""
  *   ["h",       <room id>]
  *   ["request", "reads"]
  *   ["reads",   "contacts/1"]                       this device reads contacts (D5)
  *
- * kind: 30398, pubkey: <member>, content: ""
+ * kind: 30428, pubkey: <member>, content: ""
  *   ["h",        <room id>]
  *   ["request",  "propose"]
- *   ["template", "{\"kind\":30394,\"tags\":[…],\"content\":\"\"}"]   put this to the group (T10)
+ *   ["template", "{\"kind\":30424,\"tags\":[…],\"content\":\"\"}"]   put this to the group (T10)
  * ```
  *
  * ### It carries no authority
@@ -44,7 +44,7 @@ import kotlin.time.Clock
  * announcement is what keeps a number from reaching a build that would show it raw.
  */
 object ContactRequestEvent {
-    val KIND: Kind = 30398
+    val KIND: Kind = 30428
 
     private const val ROOM_TAG = "h"
     private const val REQUEST_TAG = "request"

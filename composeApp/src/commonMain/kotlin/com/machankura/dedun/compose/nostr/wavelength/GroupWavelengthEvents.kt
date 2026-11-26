@@ -8,27 +8,27 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
  * it.
  *
  * They were 30370-30382, from just past the Lightning family, until Giza and Bennu took 30370-30377 for governed
- * rooms. The whole family moved to 30400-30412, keeping its order (docs/giza-into-dedun.md, Phase K), and each old
+ * rooms. The whole family moved to 30400-30412 and then 30430-30442, keeping its order (docs/giza-into-dedun.md, Phase K, and docs/giza-second-batch.md, Phase 4), and each old
  * number is its kind's legacy number: an event signed or sent under it keeps it, and every reader takes either
  * through [com.machankura.dedun.compose.nostr.MovedKinds]. Every set below holds the new numbers; dispatch on
  * `MovedKinds.current(kind)`.
  */
 object GroupWavelengthEvents {
-    val WALLET_STATEMENT: Kind = 30400
-    val OPERATOR_STATEMENT: Kind = 30401
-    val AUTH_SEED: Kind = 30402
+    val WALLET_STATEMENT: Kind = 30430
+    val OPERATOR_STATEMENT: Kind = 30431
+    val AUTH_SEED: Kind = 30432
 
-    val SIGNING_REQUEST: Kind = 30403
-    val ECHO: Kind = 30404
-    val PROVISION: Kind = 30405
-    val SIGNATURE_SHARES: Kind = 30406
-    val HIGH_WATER: Kind = 30407
+    val SIGNING_REQUEST: Kind = 30433
+    val ECHO: Kind = 30434
+    val PROVISION: Kind = 30435
+    val SIGNATURE_SHARES: Kind = 30436
+    val HIGH_WATER: Kind = 30437
 
-    val SNAPSHOT: Kind = 30408
-    val AUTHORISATION: Kind = 30409
-    val DEPOSIT_REQUEST: Kind = 30410
-    val DEPOSIT_ANSWER: Kind = 30411
-    val STOPPED: Kind = 30412
+    val SNAPSHOT: Kind = 30438
+    val AUTHORISATION: Kind = 30439
+    val DEPOSIT_REQUEST: Kind = 30440
+    val DEPOSIT_ANSWER: Kind = 30441
+    val STOPPED: Kind = 30442
 
     /** The co-signing protocol's kinds, for routing to the co-signer. */
     val CO_SIGNING: Set<Kind> = setOf(SIGNING_REQUEST, ECHO, PROVISION, SIGNATURE_SHARES, HIGH_WATER)

@@ -11,7 +11,12 @@ import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
 import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberTransferEvent
 import com.machankura.dedun.compose.nostr.wallet.TransferRequestEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthDepositAnswer
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthExitEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOnchainPayoutEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
+import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthStopped
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthOperatorStatementEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthWalletStatementEvent
 import com.machankura.dedun.compose.wallet.wavelength.group.ArkWire
@@ -45,6 +50,10 @@ import kotlin.time.Instant
  * transcript has to show nothing at all: neither a line nor a raw-JSON bubble.
  *
  * K3 turns this round: from then on these numbers are Giza's meaning on every Dedun device.
+ *
+ * Giza went on to take 30379-30416 for confederations, a group's direct messages and its inbox
+ * (docs/giza-second-batch.md, Phase 4), and Dedun's own numbers there moved to 30420-30442. The
+ * last section feeds those in as Giza writes them at a5a802c5.
  */
 class GizaKindsRefusedJvmTest {
 
@@ -176,6 +185,72 @@ class GizaKindsRefusedJvmTest {
         }
         for (kind in (30370..30377) - 30372) {
             assertNull(arrive(governance(kind)), "governance kind $kind reached the transcript")
+        }
+    }
+
+    // --- Giza after d0437d6c: docs/giza-second-batch.md, Phase 4 ---
+
+    /**
+     * A confederation's carried envelope as Giza's `ConfederationRitualManager.writeIntoRoom` and
+     * `ConfederationSigningManager` write it at a5a802c5: the proposal and the room named in
+     * tags, and a JSON array of its author's signed events as the content.
+     */
+    private fun carried(kind: Kind): Event = giza.sign<Event>(
+        createdAt = 1_800_000_000,
+        kind = kind,
+        tags = arrayOf(arrayOf("confederation_proposal_id", hex(13)), arrayOf("room", chatRoomId)),
+        content = "[" + giza.sign<Event>(createdAt = 1_800_000_000, kind = 30381, tags = arrayOf(arrayOf("confederation_proposal_id", hex(13))), content = "{\"roles\":{}}").toJson() + "]",
+    )
+
+    /** A round of a group's direct messages or of its inbox's key ceremony: Giza's session tag and a hex payload. */
+    private fun round(kind: Kind): Event = giza.sign<Event>(
+        createdAt = 1_800_000_000,
+        kind = kind,
+        tags = arrayOf(arrayOf("d", chatRoomId), arrayOf("session", hex(14))),
+        content = "024f99efa68cafafd766eec95ad940cd096a5f1a7b42d14132121ad7d2dc310d03",
+    )
+
+    @Test
+    fun `Giza's new kinds are reserved, and none of them is one of Dedun's`() {
+        val dedun = setOf(
+            DepositAttributionEvent.KIND, CoinAssignmentEvent.KIND, TransferRequestEvent.KIND, MemberTransferEvent.KIND,
+        ) + GroupWavelengthEvents.ALL + (30424..30429)
+        val giza = GizaProtocolEvents.CONFEDERATION_CEREMONY + GizaProtocolEvents.CONFEDERATION_SIGNING +
+            GizaProtocolEvents.GROUP_DM + GizaProtocolEvents.INBOX_KEY
+        assertEquals((30420..30442).toSet(), dedun, "Dedun's block after the second move")
+        // 30379-30382 are still the legacy numbers of four Wavelength kinds until K3; every other
+        // number Giza took reaches no Dedun reader at all.
+        val stillLegacy = setOf(30379, 30380, 30381, 30382)
+        for (kind in giza) {
+            if (kind in stillLegacy) continue
+            assertTrue(MovedKinds.current(kind) !in dedun, "Giza's $kind reaches a Dedun reader")
+            assertTrue(kind in GizaProtocolEvents.ALL, "Giza's $kind is not reserved")
+        }
+    }
+
+    @Test
+    fun `a carried confederation envelope at 30379 is no Wavelength authorisation`() {
+        val envelope = carried(30379)
+        assertEquals(GroupWavelengthEvents.AUTHORISATION, MovedKinds.current(envelope.kind))
+        assertNull(GroupWavelengthExitEvent.read(envelope.tags))
+        assertNull(GroupWavelengthPaymentEvent.read(envelope.tags))
+        assertNull(GroupWavelengthOnchainPayoutEvent.read(envelope.tags))
+    }
+
+    @Test
+    fun `a confederation's host keys and dealings are no Wavelength deposit answer or stop`() {
+        // Giza no longer sends these bare -- they travel inside a 30379 -- but an older Giza build did.
+        assertFails { CommonJson.decodeFromString(GroupWavelengthDepositAnswer.serializer(), carried(30381).content) }
+        assertFails { CommonJson.decodeFromString(GroupWavelengthStopped.serializer(), carried(30382).content) }
+    }
+
+    @Test
+    fun `none of Giza's new events leaves a line or a bubble in the transcript`() = runBlocking {
+        for (kind in GizaProtocolEvents.CONFEDERATION_CEREMONY + GizaProtocolEvents.CONFEDERATION_SIGNING) {
+            assertNull(arrive(carried(kind)), "confederation kind $kind reached the transcript")
+        }
+        for (kind in GizaProtocolEvents.GROUP_DM + GizaProtocolEvents.INBOX_KEY) {
+            assertNull(arrive(round(kind)), "kind $kind reached the transcript")
         }
     }
 }

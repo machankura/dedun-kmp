@@ -94,7 +94,7 @@ object Contacts {
     }
 
     /**
-     * Where the group pays each recorded, unclaimed contact on [chain]: their newest 30399, unless it
+     * Where the group pays each recorded, unclaimed contact on [chain]: their newest 30429, unless it
      * says removed (D9). A claimed contact is paid as the member, at the member's own destination.
      */
     suspend fun destinationsIn(database: DedunDatabase, chatRoomId: String, chain: Chain): Map<HexKey, ContactPayoutDestinationEvent.Destination> {
@@ -207,7 +207,7 @@ object Contacts {
         return ContactDepositorStatementEvent.template(chatRoomId, contactId, chain, salt)
     }
 
-    /** Asks a device that holds a share to put [template] to the group, for [member] who holds none: a 30398 into the room. */
+    /** Asks a device that holds a share to put [template] to the group, for [member] who holds none: a 30428 into the room. */
     suspend fun ask(database: DedunDatabase, chatRoomId: String, member: HexKey, template: EventTemplate<*>): HexKey {
         val request = ContactRequestEvent.propose(chatRoomId, template)
         return MemberWalletManager.queue(

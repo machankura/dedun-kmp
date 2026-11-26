@@ -102,7 +102,7 @@ object GroupPayoutDestinations {
     /**
      * Every destination anybody has signed in [chatRoomId] on [chain], each one and not only the
      * newest: what an output the group paid could have been paid to, so a payout still counts after
-     * its member has given a new address. A contact's every 30399 too.
+     * its member has given a new address. A contact's every 30429 too.
      */
     suspend fun everSignedIn(database: DedunDatabase, chatRoomId: String, chain: Chain): List<PayoutDestination> =
         signedIn(database, chatRoomId)

@@ -34,16 +34,16 @@ import kotlin.time.Clock
  *
  * The newest signed attribution of a deposit wins, so a mistake is corrected by signing again.
  *
- * ### Why 30390, and 30340 before it
+ * ### Why 30420, and 30340 before it
  *
  * After the depositor statement, 30339.
  *
  * It was 30340 until Giza and Bennu took that number for a share refresh round. It moved to
- * 30390 (docs/giza-into-dedun.md, Phase K), and 30340 is its legacy number: an event signed
+ * 30420 (docs/giza-into-dedun.md, Phase K, then docs/giza-second-batch.md, Phase 4), and 30340 is its legacy number: an event signed
  * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object DepositAttributionEvent {
-    val KIND: Kind = 30390
+    val KIND: Kind = 30420
 
     private const val CHAIN_TAG = "chain"
     private const val DEPOSIT_TAG = "deposit"

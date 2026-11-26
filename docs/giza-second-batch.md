@@ -444,6 +444,32 @@ As decided under D8, Dedun moves:
 **Done when** `MovedKindsJvmTest` and the refusal tests pass, `kinds.md` is in all three
 trees, and the first plan's K2 and K3 are written against the new block.
 
+**As built.** Phase 0 found that no release carries K1 or contacts, so this is one change with no
+K1′. Every Dedun kind in 30390–30412 moved up by 30 and kept its order:
+
+- the deposit attribution, coin assignment, transfer request and member transfer: 30420–30423;
+- the six contacts kinds: 30424–30429;
+- the thirteen Wavelength kinds: 30430–30442.
+
+`MovedKinds` maps the legacy 30340–30343 and 30370–30382 straight to the new block, and
+`writesNew` is still `false`. The interim numbers are not legacy numbers. No device holds an
+event signed under one, and they are Giza's now.
+
+`GizaProtocolEvents` reserves Giza's confederation ceremony (30379–30388), confederation signing
+(30390–30399), group direct messages (30400–30401) and inbox key ceremony (30410–30416), so the
+transcript shows none of them. `GizaKindsRefusedJvmTest` gains four tests:
+
+- none of Giza's new numbers reaches a Dedun reader;
+- a carried confederation envelope at 30379 is no Wavelength authorisation;
+- host keys and dealings are no deposit answer or stop;
+- none of Giza's new kinds leaves a line in the transcript.
+
+`docs/kinds.md` is the new map, and the two plans that name the old numbers say so at the top.
+jvmTest: 3,144 run, 0 failed.
+
+**Not done:** the register in Giza's and Bennu's trees. That is a change in two other
+repositories, and the owner's to make.
+
 ## Phase 5: a second group from the same people, and the group's profile
 
 Two features, independent of each other, with no schema and no kinds.

@@ -1,5 +1,11 @@
 # Deposits for someone outside the group: attributed to a phone number or an email address
 
+> **The numbers moved.** This plan allocated the contact kinds 30394–30399 and refers to the
+> deposit attribution as 30390. Giza took both ranges for confederations, so in November 2026
+> every one moved up by 30 before any release carried it: the attribution is 30420, and the six
+> contact kinds are 30424–30429 ([giza-second-batch.md](./giza-second-batch.md), Phase 4, and
+> [kinds.md](./kinds.md)). The text below keeps the numbers it was written with.
+
 A group saves together, but not everyone whose money goes into it is a member. A
 mother saves through her son's group. A cousin with no smartphone hands over cash, and
 somebody in the group deposits it for them. A neighbour pays the group's invoice for a

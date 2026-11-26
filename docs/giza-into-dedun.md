@@ -111,6 +111,11 @@ a share rotation another app started, and the mirror's commits apply without a k
 
 ### Where they go
 
+> **Moved again.** Giza took 30379–30416 after `d0437d6c`, so the targets below changed before K2
+> shipped: 30340–30343 now go to **30420–30423**, and 30370–30382 to **30430–30442**. The legacy
+> numbers are unchanged. See [giza-second-batch.md](./giza-second-batch.md), Phase 4. The table
+> keeps the numbers K1 was built with.
+
 | Dedun kind | from | to | rule |
 |---|---|---|---|
 | `DepositAttributionEvent` | 30340 | **30390** | +50 |

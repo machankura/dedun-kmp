@@ -13,7 +13,7 @@ import kotlin.time.Clock
  * The group saying a contact was one of its members: `docs/non-member-deposits.md`, D8.
  *
  * ```
- * kind:    30397
+ * kind:    30427
  * pubkey:  <the room>
  * content: ""
  * tags:
@@ -26,7 +26,7 @@ import kotlin.time.Clock
  * or `none`. From the newest claim on, every reader resolves the contact to the member.
  */
 object ContactClaimEvent {
-    val KIND: Kind = 30397
+    val KIND: Kind = 30427
 
     private const val D_TAG = "d"
     private const val MEMBER_TAG = "p"

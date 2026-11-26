@@ -17,7 +17,7 @@ import kotlin.time.Clock
  * Where the group pays a contact on one network: `docs/non-member-deposits.md`, D9.
  *
  * ```
- * kind:    30399
+ * kind:    30429
  * pubkey:  <the room>
  * content: ""
  * tags:
@@ -46,7 +46,7 @@ import kotlin.time.Clock
  * Newest wins per contact per network, as the member's 30338 does.
  */
 object ContactPayoutDestinationEvent {
-    val KIND: Kind = 30399
+    val KIND: Kind = 30429
 
     private const val D_TAG = "d"
     private const val CONTACT_TAG = "contact"
@@ -57,7 +57,7 @@ object ContactPayoutDestinationEvent {
 
     fun identifier(contactId: HexKey, chain: Chain): String = "${contactId.lowercase()}:${GroupWalletStatementEvent.chainName(chain)}"
 
-    /** What a 30399 says: an address or two, or [removed]. */
+    /** What a 30429 says: an address or two, or [removed]. */
     data class Destination(
         val contactId: HexKey,
         override val chain: Chain,
