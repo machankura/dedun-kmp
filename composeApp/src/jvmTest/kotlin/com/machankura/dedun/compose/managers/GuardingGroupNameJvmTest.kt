@@ -122,8 +122,8 @@ class GuardingGroupNameJvmTest {
         noticeIn(rRoom, savings)
 
         val subject = heldByR()
-        assertEquals("#M", subject.guardianName)
-        assertEquals("#P", subject.branchName)
+        assertEquals("{M}", subject.guardianName)
+        assertEquals("{P}", subject.branchName)
     }
 
     @Test
@@ -134,7 +134,7 @@ class GuardingGroupNameJvmTest {
 
         val subject = heldByR()
         assertNull(subject.guardianName)
-        assertEquals("#P", subject.branchName)
+        assertEquals("{P}", subject.branchName)
     }
 
     @Test
@@ -156,7 +156,7 @@ class GuardingGroupNameJvmTest {
         fileSigned(pCertificate, signer = rRoom)
         noticeIn(rRoom, savings)
 
-        assertEquals("#M", heldByR().guardianName)
+        assertEquals("{M}", heldByR().guardianName)
     }
 
     @Test
@@ -165,7 +165,7 @@ class GuardingGroupNameJvmTest {
         inRoom(m, subject = "#Here")
         noticeIn(rRoom, savings)
 
-        assertEquals("#Here", heldByR().guardianName)
+        assertEquals("{Here}", heldByR().guardianName)
     }
 
     // ---- Phase 3: the notice carries the guardian's certificate ----------
@@ -176,7 +176,7 @@ class GuardingGroupNameJvmTest {
         noticeIn(rRoom, savings, certificate = mCertificate)
 
         val listed = GuardianManager.guardedWalletsOf(db, rRoom).single()
-        assertEquals("#M", assertIs<GuardedSubject.Member>(listed.subject).guardianName)
+        assertEquals("{M}", assertIs<GuardedSubject.Member>(listed.subject).guardianName)
         assertEquals(mCertificate.id, listed.guardianCertificate?.id)
     }
 

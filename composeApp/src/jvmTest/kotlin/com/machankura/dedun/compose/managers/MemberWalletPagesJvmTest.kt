@@ -101,7 +101,7 @@ class MemberWalletPagesJvmTest {
         assertEquals(setOf(groupRoom, parentRoom), here.map { it.wallet.ancestorChatRoomId }.toSet())
         assertEquals(true, here.single { it.wallet.ancestorChatRoomId == groupRoom }.canSpend, "a share of the group's key")
         assertEquals(false, here.single { it.wallet.ancestorChatRoomId == parentRoom }.canSpend, "none of the root's")
-        assertEquals("#Root", here.single { it.wallet.ancestorChatRoomId == parentRoom }.holderName)
+        assertEquals("{Root}", here.single { it.wallet.ancestorChatRoomId == parentRoom }.holderName)
         assertTrue(MemberWalletManager.guardedByGroupsHere(db, GroupFixtures.owner, bobPublicKey).isEmpty())
     }
 
@@ -129,7 +129,7 @@ class MemberWalletPagesJvmTest {
         val entry = MemberWalletManager.byWallet(MemberWalletManager.guardedByGroupsHere(db, GroupFixtures.owner, alicePublicKey)).single()
         assertEquals(wallet.walletId, entry.walletId)
         assertEquals("Savings", entry.label)
-        assertEquals("#Child", entry.guardianName, "the founding name the parent certified")
+        assertEquals("{Child}", entry.guardianName, "the founding name the parent certified")
         assertEquals(listOf(groupRoom, parentRoom), entry.holders.map { it.wallet.ancestorChatRoomId })
         assertEquals(listOf(true, false), entry.holders.map { it.canSpend }, "a share of the group's key, none of the root's")
     }

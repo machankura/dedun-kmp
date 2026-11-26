@@ -264,7 +264,7 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     /** The wallet row is named for its room: the fixture's subject. */
-    private val WALLET_ROW = "Translation room onchain wallet"
+    private val WALLET_ROW = "{Translation room} onchain wallet"
 
     /** What a Wavelength row says while there is no onchain wallet on its network. */
     private val WAVELENGTH_WAITS = "A Wavelength wallet is only available once the group has an onchain wallet."

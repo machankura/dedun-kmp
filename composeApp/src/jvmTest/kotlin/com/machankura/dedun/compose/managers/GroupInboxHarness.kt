@@ -102,7 +102,7 @@ class GroupInboxHarness(
             ChatRoom(
                 id = roomId,
                 userPublicKey = publicKey,
-                subject = "#Ekklesia",
+                subject = "Ekklesia",
                 description = SharedKeyDerivation.describe("Admins of the group."),
                 mlsGroupState = "00",
             )

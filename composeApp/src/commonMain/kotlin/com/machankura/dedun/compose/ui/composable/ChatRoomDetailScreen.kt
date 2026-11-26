@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.database.model.title
 import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
 import dedun.composeapp.generated.resources.new_group_with_these_members
 import dedun.composeapp.generated.resources.waiting_for_its_room
@@ -897,7 +898,7 @@ fun ChatRoomDetailScreen(
                                 item {
                                     SignedWorkRow(
                                         icon = Icons.Default.AccountBalanceWallet,
-                                        headline = chatRoomDetailUIState.localChatRoom.chatRoom.subject
+                                        headline = chatRoomDetailUIState.localChatRoom.chatRoom.title
                                             ?.let { stringResource(Res.string.s_onchain_wallet, it) }
                                             ?: stringResource(Res.string.group_wallet),
                                         supporting = chatRoomDetailUIState.groupWallet?.let { wallet ->

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.model.title
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import co.touchlab.kermit.Logger
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -768,7 +769,7 @@ object MemberWalletManager {
                     .filter { (it.subject as? GuardianManager.GuardedSubject.Member)?.ownerPublicKey.equals(ownerPublicKey, ignoreCase = true) }
                 if (wallets.isEmpty()) return@flatMap emptyList()
                 val canSpend = FrostSigningManager.canSign(database, room.chatRoom.id)
-                wallets.map { GuardedHere(it, room.chatRoom.subject?.takeIf { name -> name.isNotBlank() }, canSpend) }
+                wallets.map { GuardedHere(it, room.chatRoom.title?.takeIf { name -> name.isNotBlank() }, canSpend) }
             }
 
     /** A member's wallet as one of the guarding groups on this device holds it. */

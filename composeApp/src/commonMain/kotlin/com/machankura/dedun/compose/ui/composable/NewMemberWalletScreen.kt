@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.database.model.title
 import dedun.composeapp.generated.resources.this_group_has_stopped_guarding_members_wallets
 import dedun.composeapp.generated.resources.this_group_doesn_t_guard_members_wallets
 import com.machankura.dedun.compose.ui.composable.widgets.delayText
@@ -152,7 +153,7 @@ fun NewMemberWalletScreen(
                                 modifier = Modifier.clickable { viewModel.pick(choice.room.chatRoom.id) }.minimumInteractiveComponentSize(),
                                 leadingContent = { Icon(Icons.Default.Groups, contentDescription = Decorative) },
                                 headlineContent = {
-                                    Text(choice.room.chatRoom.subject?.takeIf { it.isNotBlank() } ?: fallbackName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(choice.room.chatRoom.title?.takeIf { it.isNotBlank() } ?: fallbackName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 },
                                 supportingContent = choice.refusal?.let { refusal -> { Text(refusalText(refusal)) } },
                             )
