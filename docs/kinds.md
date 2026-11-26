@@ -26,9 +26,9 @@ Checked against Bennu at `2db6dde5`, Giza at `a5a802c5` and quartz 2.20.1, by
 | 30370–30377 | governed rooms: statement, own commit, support, carrier, promotion offer, acceptance and handover, step-down (`GovernanceEvents`, `PromotionEvents`) | Giza | in use, at Giza's meaning; until K3 told from the legacy Wavelength numbers by shape (`GovernanceEvents.isGovernance`) |
 | 30379–30388 | confederation key ceremony (30380 and 30383 retired, 30386 and 30388 reserved) | Giza | refused (`GizaProtocolEvents`); Dedun takes no confederations |
 | 30390–30399 | confederation signing (30397 free) | Giza | refused (`GizaProtocolEvents`) |
-| 30400–30401 | a group's direct messages, threshold ECDH | Giza | refused until [giza-second-batch.md](./giza-second-batch.md), Phase 6 |
+| 30400–30401 | a group's direct messages, threshold ECDH (`GroupEcdhEvents`) | Giza | in use, at Giza's meaning, since [giza-second-batch.md](./giza-second-batch.md), Phase 6 |
 | 30402–30403 | NIP-99 classified listings | NIP-99 | not used |
-| 30410–30416 | a group inbox's key ceremony | Giza | refused until [giza-second-batch.md](./giza-second-batch.md), Phase 6 |
+| 30410–30416 | a group inbox's key ceremony (`InboxKeyRitualEvents`) | Giza | in use, at Giza's meaning, since [giza-second-batch.md](./giza-second-batch.md), Phase 6 |
 | 30420–30423 | deposit attribution, coin assignment, transfer request, member transfer | **Dedun** | in use |
 | 30424–30429 | contacts: record, amendment, depositor statement, claim, request, payout destination ([non-member-deposits.md](./non-member-deposits.md)) | **Dedun** | in use |
 | 30430–30442 | group Wavelength wallet (`GroupWavelengthEvents`) | **Dedun** | in use |
@@ -44,8 +44,9 @@ Dedun never reallocates them:
 - 30370–30382, now 30430–30442.
 
 30390–30393, 30394–30399 and 30400–30412 were Dedun's numbers for a few days in November 2026.
-No release wrote them, so they are not legacy numbers. They are Giza's now, and Dedun refuses
-them like any of Giza's kinds it does not act on.
+No release wrote them, so they are not legacy numbers. They are Giza's now: Dedun refuses the
+confederation's 30390–30399 like any of Giza's kinds it does not act on, and reads 30400–30401
+and 30410–30412 at Giza's meanings since Phase 6 brought the group's direct messages and inbox.
 
 ## Allocating a kind
 
