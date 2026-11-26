@@ -81,6 +81,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.WalletKeysHeld
 import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import com.machankura.dedun.compose.managers.RotationHold
@@ -895,6 +896,7 @@ class DatabaseChatRepository(
                 val group = runCatching { chatRoom.toMlsGroup() }.getOrNull() ?: return emptyMap()
                 val context = AdminGovernance.context(group, me, AdminGovernance.adminFloor(database, chatRoom.id, group))
                 val engine = database.marmotEngine
+                val heldWallet = if (context.isKeyed) WalletKeysHeld.of(database, chatRoom.id) else null
                 context.copy(
                     hasLeft = hasLeft,
                     // Only asked when it is the answer: a keyed room not yet governed.
@@ -905,9 +907,9 @@ class DatabaseChatRepository(
                     changePending = engine.groupFor(localChatRoom.routingId) != null &&
                         !engine.gate.canPrepareLocalCommit(localChatRoom.routingId),
                     offeredAdmin = if (context.isKeyed) PromotionManager.unansweredOfferTargets(database, chatRoom.id) else emptySet(),
-                    // Dedun's: no admin change in a room with a Lightning wallet (D4).
-                    hasLightningWallet = context.isKeyed && GroupLightningRollout.ENABLED &&
-                        GroupLightningWalletManager.walletFor(database, chatRoom.id, GroupLightningRollout.NETWORK) != null,
+                    // Dedun's: no admin change in a room with a Lightning or Wavelength wallet (D4).
+                    hasLightningWallet = context.isKeyed && heldWallet == WalletKeysHeld.Wallet.LIGHTNING,
+                    hasWavelengthWallet = context.isKeyed && heldWallet == WalletKeysHeld.Wallet.WAVELENGTH,
                 ).let { if (it.isKeyed) withShares(localChatRoom, it) else it }
             }
         }
@@ -940,29 +942,26 @@ class DatabaseChatRepository(
     }
 
     override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
-        refuseAdminChangeOverLightning(localChatRoom)
+        refuseAdminChangeOverWallets(localChatRoom)
         // The key, for the rotation a first promotion starts (docs/admin-change-rotation.md, Phase 6).
         database.marmotOutboundDao().promote(localChatRoom, memberPublicKey, privateKeyOrNull()?.second)
     }
 
     override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
-        refuseAdminChangeOverLightning(localChatRoom)
+        refuseAdminChangeOverWallets(localChatRoom)
         database.marmotOutboundDao().demote(localChatRoom, adminPublicKey)
     }
 
     /**
-     * Dedun's: a keyed room with a Lightning wallet changes no admins (D4 in
-     * docs/giza-into-dedun.md). Promotion enrols into the onchain key and demotion
-     * rotates the share out of it, but the Lightning wallet's Iceberg key has no
-     * enrolment and no refresh, so its signers would stop being the room's admins.
-     * The menu says so first (`MemberActionBlocker.LightningWalletHeld`); this is the
-     * same rule where the change would be made.
+     * Dedun's: a keyed room with a Lightning or Wavelength wallet changes no admins (D4 in
+     * docs/giza-into-dedun.md, and [WalletKeysHeld]). The menu says so first
+     * (`MemberActionBlocker.LightningWalletHeld`, `WavelengthWalletHeld`), and
+     * `MarmotOutboundDao` holds to it where the change is made; this says it before
+     * anything is sent.
      */
-    private suspend fun refuseAdminChangeOverLightning(localChatRoom: LocalChatRoom) {
-        if (!GroupLightningRollout.ENABLED || AdminGovernance.keyOf(database, localChatRoom.chatRoom.id) == null) return
-        check(GroupLightningWalletManager.walletFor(database, localChatRoom.chatRoom.id, GroupLightningRollout.NETWORK) == null) {
-            "This group has a Lightning wallet, whose key no change of admins can move. Open a new Lightning wallet for the new admins first."
-        }
+    private suspend fun refuseAdminChangeOverWallets(localChatRoom: LocalChatRoom) {
+        if (AdminGovernance.keyOf(database, localChatRoom.chatRoom.id) == null) return
+        WalletKeysHeld.refuseAdminChange(database, localChatRoom.chatRoom.id)
     }
 
     override suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer? {

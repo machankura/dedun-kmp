@@ -58,6 +58,8 @@ data class MemberActionContext(
     val shareHolders: Set<HexKey> = emptySet(),
     /** Dedun's: the room keeps a Lightning wallet, whose key no admin change reaches (D4). */
     val hasLightningWallet: Boolean = false,
+    /** Dedun's: the room keeps a Wavelength wallet, whose Iceberg key no admin change reaches either (D4). */
+    val hasWavelengthWallet: Boolean = false,
 )
 
 /**
@@ -94,7 +96,9 @@ object MemberActionPolicy {
                 // [AdminGovernance.canAskToStepDown]: a request another admin's device
                 // proposes, because a rotation's proposer has to keep a share. So the
                 // room's rules, the floor, and another admin with a leaf to ask.
+                // Dedun's D4: not while a group wallet's Iceberg key would keep them.
                 context.governed && context.shareRefresh &&
+                    !context.hasLightningWallet && !context.hasWavelengthWallet &&
                     context.rotationPending == null &&
                     context.me in context.admins &&
                     keepsFloor(context, context.me) &&
@@ -122,6 +126,7 @@ object MemberActionPolicy {
                 MemberActionBlocker.SignaturesNotRequired(context.waitingOn).takeUnless { context.governed },
                 MemberActionBlocker.ShareRotationUnavailable.takeUnless { context.shareRefresh },
                 MemberActionBlocker.LightningWalletHeld.takeIf { context.hasLightningWallet },
+                MemberActionBlocker.WavelengthWalletHeld.takeIf { context.hasWavelengthWallet },
             )
         } else {
             emptyList()

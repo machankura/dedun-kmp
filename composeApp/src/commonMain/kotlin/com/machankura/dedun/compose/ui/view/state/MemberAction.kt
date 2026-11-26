@@ -88,6 +88,12 @@ sealed interface MemberActionBlocker {
      * stop being the room's admins. docs/giza-into-dedun.md, D4.
      */
     data object LightningWalletHeld : MemberActionBlocker
+
+    /**
+     * Dedun's: the room has a Wavelength wallet, an Iceberg key like the Lightning
+     * wallet's, with no enrolment and no refresh either. docs/giza-into-dedun.md, D4.
+     */
+    data object WavelengthWalletHeld : MemberActionBlocker
 }
 
 /**

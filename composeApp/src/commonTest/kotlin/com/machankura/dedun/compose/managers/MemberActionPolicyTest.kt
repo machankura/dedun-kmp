@@ -63,6 +63,25 @@ class MemberActionPolicyTest {
         assertTrue(MemberActionBlocker.LightningWalletHeld !in keyed().blockers(bob, role))
     }
 
+    /**
+     * Dedun's D4 for the other Iceberg wallet: the Wavelength wallet's key follows no admin
+     * change either. A step-down is a role change too, made by another admin's device, so it
+     * is not offered at all while either wallet is kept.
+     */
+    @Test
+    fun `a Wavelength wallet holds every role change in a keyed room, a step-down with them`() {
+        val context = keyed().copy(hasWavelengthWallet = true)
+        for (role in listOf(MemberAction.REMOVE_AS_ADMIN, MemberAction.MAKE_ADMIN)) {
+            val target = if (role == MemberAction.REMOVE_AS_ADMIN) bob else "e".repeat(64)
+            val withTarget = if (role == MemberAction.MAKE_ADMIN) context.copy(members = context.members + target) else context
+            assertTrue(MemberActionBlocker.WavelengthWalletHeld in withTarget.blockers(target, role), "$role")
+        }
+        assertTrue(MemberActionBlocker.WavelengthWalletHeld !in context.blockers(bob, MemberAction.REMOVE_FROM_GROUP))
+        assertEquals(null, MemberActionPolicy.options(context, listOf(me))[me])
+        assertEquals(null, MemberActionPolicy.options(keyed().copy(hasLightningWallet = true), listOf(me))[me])
+        assertEquals(listOf(MemberActionOption(MemberAction.STEP_DOWN)), MemberActionPolicy.options(keyed(), listOf(me))[me])
+    }
+
     @Test
     fun `a member is offered make admin and removal, an admin removal as admin and removal, in that order`() {
         val options = MemberActionPolicy.options(convenient(admins = setOf(me, carol)), listOf(bob, carol))

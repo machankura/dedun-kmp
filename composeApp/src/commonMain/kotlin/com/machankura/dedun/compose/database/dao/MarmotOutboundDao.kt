@@ -23,7 +23,7 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.exceptions.MarmotCommitPendingException
 import com.machankura.dedun.compose.exceptions.MarmotGovernedRoomException
-import com.machankura.dedun.compose.managers.refusesBareCommits
+import com.machankura.dedun.compose.managers.WalletKeysHeld
 import com.machankura.dedun.compose.exceptions.MarmotKeyPackageProfileException
 import com.machankura.dedun.compose.exceptions.MarmotMissingChatGroupException
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -957,6 +957,8 @@ abstract class MarmotOutboundDao(
         // Phase 8).
         if (AdminGovernance.isKeyedRoom(group)) {
             check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
+            // Dedun's D4: a group wallet's Iceberg key follows no admin change.
+            WalletKeysHeld.refuseAdminChange(database, localChatRoom.chatRoom.id)
             PromotionManager.offer(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, memberPublicKey, nostrPrivateKey)
             return
         }
@@ -985,6 +987,9 @@ abstract class MarmotOutboundDao(
         // away once it lands (docs/member-admin-promotion.md, Phase 9).
         if (AdminGovernance.isKeyedRoom(group)) {
             check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
+            // Dedun's D4, here as well as at the menu: a step-down reaches this from
+            // another admin's device (`PromotionManager.followStepDowns`), past any menu.
+            WalletKeysHeld.refuseAdminChange(database, localChatRoom.chatRoom.id)
             val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
             if (!AdminGovernance.keepsFloor(group, adminPublicKey, floor)) {
                 throw IllegalStateException("A group with a shared key needs at least $floor admins. Make someone else an admin first")

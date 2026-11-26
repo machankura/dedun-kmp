@@ -136,7 +136,7 @@
     <string name="governance_switch_waits_for">Changes will need the group's signature as soon as %1$s's Dedun is next online.</string>
     <string name="require_signatures_explainer">From then on, adding or removing a member, or changing who the admins are, is proposed and has to be signed by the group before it happens.</string>
     <string name="governance_waiting">Waiting for %1$s to open an up-to-date Dedun. Until then, this group can't require its signature on changes, and nobody else can be made an admin.</string>
-    <string name="make_admin_body_keyed">They'll be asked to accept, then the group signs it, and they'll hold a share of the group's key and be asked to approve its changes.</string>
+    <string name="make_admin_body_keyed">They'll be asked to accept, then the group signs it, and they'll hold a share of the group's key. That key signs the group's changes, its payouts and who owns which coins, so they'll be asked to approve all three.</string>
     <string name="make_admin_rotates_first">The group's shares are rotated first. Nobody needs to approve that, and they're asked once it's done.</string>
     <string name="remove_as_admin_body_keyed">Once the group signs it, they stay in the group as a member and their share of the group's key is rotated away. Nobody is asked again.</string>
     <string name="admin_offer_sent">Asked; they become an admin once they accept and the group signs it</string>
@@ -1817,6 +1817,8 @@
     <string name="member_action_signatures_waiting">That waits until %1$s update Dedun.</string>
     <string name="member_action_share_rotation_title">Not in this version of Dedun yet</string>
     <string name="member_action_lightning_wallet_title">This group has a Lightning wallet</string>
+    <string name="member_action_wavelength_wallet_title">This group has a Wavelength wallet</string>
+    <string name="member_action_wavelength_wallet_body">Its admins hold the Wavelength wallet's key, which no change of admins can move. Keep the admins as they are while it holds the group's money.</string>
     <string name="member_action_lightning_wallet_body">Its admins hold the Lightning wallet's key, which no change of admins can move. Open a new Lightning wallet for the group's new admins first, or keep the admins as they are.</string>
     <string name="member_action_share_rotation_body">Changing the admins of a group with a shared key moves a share of the key, and this version of Dedun can't do that yet.</string>
     <string name="member_action_not_in_group_title">%1$s isn't fully in the group</string>

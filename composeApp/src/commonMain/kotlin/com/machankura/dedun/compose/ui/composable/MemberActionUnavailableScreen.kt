@@ -60,6 +60,8 @@ import dedun.composeapp.generated.resources.member_action_only_admin_title
 import dedun.composeapp.generated.resources.member_action_share_rotation_body
 import dedun.composeapp.generated.resources.member_action_lightning_wallet_body
 import dedun.composeapp.generated.resources.member_action_lightning_wallet_title
+import dedun.composeapp.generated.resources.member_action_wavelength_wallet_body
+import dedun.composeapp.generated.resources.member_action_wavelength_wallet_title
 import dedun.composeapp.generated.resources.member_action_share_rotation_title
 import dedun.composeapp.generated.resources.member_action_signatures_body
 import dedun.composeapp.generated.resources.member_action_signatures_title
@@ -300,6 +302,7 @@ private fun MemberActionBlocker.icon(): ImageVector = when (this) {
     MemberActionBlocker.OfferPending -> Icons.Default.Schedule
     is MemberActionBlocker.RotationPending -> Icons.Default.Sync
     MemberActionBlocker.LightningWalletHeld -> Icons.Default.Key
+    MemberActionBlocker.WavelengthWalletHeld -> Icons.Default.Key
 }
 
 @Composable
@@ -318,6 +321,7 @@ private fun MemberActionBlocker.title(memberName: String): String = when (this) 
     MemberActionBlocker.OfferPending -> stringResource(Res.string.member_action_offer_pending_title, memberName)
     is MemberActionBlocker.RotationPending -> stringResource(Res.string.member_action_rotation_pending_title)
     MemberActionBlocker.LightningWalletHeld -> stringResource(Res.string.member_action_lightning_wallet_title)
+    MemberActionBlocker.WavelengthWalletHeld -> stringResource(Res.string.member_action_wavelength_wallet_title)
 }
 
 @Composable
@@ -338,6 +342,7 @@ private fun MemberActionBlocker.body(names: Map<HexKey, String>): String = when 
         if (waitingOn.isEmpty()) stringResource(Res.string.member_action_rotation_pending_body)
         else stringResource(Res.string.member_action_rotation_pending_waiting_body, waitingOn.namedBy(names))
     MemberActionBlocker.LightningWalletHeld -> stringResource(Res.string.member_action_lightning_wallet_body)
+    MemberActionBlocker.WavelengthWalletHeld -> stringResource(Res.string.member_action_wavelength_wallet_body)
 }
 
 /** The menu's word for [this], which is also this screen's title. */
