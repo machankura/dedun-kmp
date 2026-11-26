@@ -139,6 +139,7 @@ fun KeyRecoveryScreen(
                             IdentityKind.NostrSecret,
                             IdentityKind.NostrPublic -> stringResource(Res.string.these_are_your_keys_keep_them_safe_no_wallet)
                             IdentityKind.Mnemonic,
+                            IdentityKind.RecoveryCode,
                             null -> stringResource(Res.string.these_are_your_keys_keep_them_safe_so_they)
                         },
                         style = MaterialTheme.typography.bodyMedium,
@@ -188,6 +189,7 @@ fun KeyRecoveryScreen(
                     IdentityKind.NostrPublic -> Unit
 
                     IdentityKind.Mnemonic,
+                    IdentityKind.RecoveryCode,
                     null -> KeyRecoveryOption(
                         icon = Icons.Default.Spellcheck,
                         title = stringResource(Res.string.recovery_phrase),

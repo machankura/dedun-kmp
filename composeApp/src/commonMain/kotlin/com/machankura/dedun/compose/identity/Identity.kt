@@ -31,12 +31,28 @@ enum class IdentityKind {
      */
     Mnemonic,
 
+    /**
+     * A [Mnemonic] whose words came from a recovery code the device also holds. To
+     * everything that reads `seed.dat` it is a phrase profile; the code is what a person
+     * wrote down, and what the backup screen shows. Its words start the same Lightning node
+     * a typed phrase's do, so the code backs the wallet too. See docs/recovery-code-v3.md
+     * and docs/giza-second-batch.md, Phase 2.
+     */
+    RecoveryCode,
+
     /** A bare nostr secret. Nothing else can be derived from it. */
     NostrSecret,
 
     /** A bare nostr public key. Nothing can be signed, opened or derived from it. */
     NostrPublic,
 }
+
+/**
+ * A backup this device can show again -- a phrase, or a code and the phrase it is -- and so a
+ * profile with words in `seed.dat` and a Lightning node attached.
+ */
+val IdentityKind.hasBackup: Boolean
+    get() = this == IdentityKind.Mnemonic || this == IdentityKind.RecoveryCode
 
 /**
  * The signing identity the app is running as -- or, for [IdentityKind.NostrPublic],
@@ -56,14 +72,15 @@ enum class IdentityKind {
  * [readOnly] are the two ways to get one built without tripping them.
  *
  * @param id keys the per-identity preference files and the wallet metadata. For a
- *   [IdentityKind.Mnemonic] identity it is the hash160 of the node id, as it always
- *   was; for the two bare kinds it is the hash160 of the x-only public key
+ *   [IdentityKind.Mnemonic] or [IdentityKind.RecoveryCode] identity it is the hash160 of
+ *   the node id, as it always was; for the two bare kinds it is the hash160 of the x-only public key
  *   ([toWalletId]) -- the *same* id whether the device holds the secret or only the
  *   public key, which is what lets a read-only identity become a signing one and keep
  *   its preferences. Same shape as a wallet's, so nothing downstream can tell the
  *   kinds apart by the id -- the kind is here, where it can be asked.
  * @param nostrPrivateKey null only for [IdentityKind.NostrPublic].
- * @param business the running node. Non-null only for [IdentityKind.Mnemonic].
+ * @param business the running node. Non-null only for the kinds that [hasBackup]: [IdentityKind.Mnemonic]
+ *   and [IdentityKind.RecoveryCode].
  */
 data class Identity(
     val id: WalletId,

@@ -12,10 +12,12 @@ import fr.acinq.phoenix.data.WalletId
 import fr.acinq.phoenix.managers.DataStoreManager
 import fr.acinq.phoenix.managers.NodeParamsManager
 import fr.acinq.phoenix.managers.NostrCredentialManager
+import fr.acinq.phoenix.managers.RecoveryCodeManager
 import fr.acinq.phoenix.managers.SeedManager
 import fr.acinq.phoenix.managers.nostrPrivateKey
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
 import fr.acinq.phoenix.security.EncryptedNostrCredentials
+import fr.acinq.phoenix.security.EncryptedRecoveryCodes
 import fr.acinq.phoenix.security.EncryptedSeed
 import fr.acinq.phoenix.security.NostrCredential
 import fr.acinq.phoenix.utils.preferences.GlobalPrefs
@@ -26,6 +28,8 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.AppVersion
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys
 import com.machankura.dedun.compose.ui.view.model.WritingSeedState
 
 /**
@@ -198,6 +202,89 @@ object IdentityWriter {
                 onSeedWritten(newWalletId)
             }
         }
+    }
+
+    sealed class WriteRecoveryCodeResult {
+        /** The code is on the device, with its words and its key. [isNew] is false when it attached to a phrase profile already here. */
+        data class Written(val id: WalletId, val isNew: Boolean) : WriteRecoveryCodeResult()
+
+        /** This code is already on the device, under [id]. */
+        data class AlreadyExists(val id: WalletId) : WriteRecoveryCodeResult()
+
+        /** One of the three stores exists and could not be read; nothing was written. */
+        data object CannotLoadKeys : WriteRecoveryCodeResult()
+    }
+
+    /**
+     * Puts [code] on the device: its key in the credentials file, its 24 words in `seed.dat`,
+     * and the code in `recovery-codes.dat` -- in that order, the order [writeMnemonic]
+     * established with the code last, so that a crash between any two leaves something
+     * valid: a bare key the code derives, or a phrase profile the code attaches to the next
+     * time it is entered. See docs/recovery-code-v3.md, Phase 4.
+     *
+     * What is already here for the derived key decides what the write means, not whether
+     * it happens -- with one refusal, the same code twice:
+     *
+     *  - nothing: a new profile;
+     *  - a public entry: the read-only upgrade landing on a backup;
+     *  - a bare secret: the key acquiring the code that derives it. The id changes to the
+     *    words', so the bare key's preference files are deleted, as [writeMnemonic] does;
+     *  - the code's words, no code: the code attached to the phrase profile it already is.
+     *    Same id, same preferences, and nothing but the code is written.
+     */
+    suspend fun writeRecoveryCode(
+        log: Logger,
+        phoenixGlobal: PhoenixGlobal,
+        globalPrefs: GlobalPrefs,
+        code: RecoveryCode,
+        isTorEnabled: Boolean,
+        customElectrumServer: ElectrumConfig.Custom?,
+    ): WriteRecoveryCodeResult {
+        log.d("writing recovery code to disk...")
+        val words = RecoveryCodeKeys.words(code)
+        // The derivation writeMnemonic uses, so a code and its words typed are one profile:
+        // the node's id names it, and the node is the wallet the code backs.
+        val keyManager = LocalKeyManager(MnemonicCode.toSeed(words, "").toByteVector(), NodeParamsManager.chain, NodeParamsManager.remoteSwapInXpub)
+        val id = WalletId(keyManager.nodeKeys.nodeKey.publicKey)
+        val privateKey = keyManager.nostrPrivateKey()
+        val publicKey = privateKey.nostrPublicKeyHex()
+
+        val seeds = SeedManager.loadAndDecryptOrNull(phoenixGlobal)?.mapValues { it.value.words }
+        val credentials = NostrCredentialManager.loadAndDecryptOrNull(phoenixGlobal)
+        val codes = RecoveryCodeManager.loadAndDecryptOrNull(phoenixGlobal)
+        if (seeds == null || credentials == null || codes == null) {
+            log.e("could not load the existing keys, aborting...")
+            return WriteRecoveryCodeResult.CannotLoadKeys
+        }
+        if (codes[id] == code.canonical) {
+            log.i("attempting to import a recovery code that is already here, aborting...")
+            return WriteRecoveryCodeResult.AlreadyExists(id)
+        }
+
+        val phraseHere = seeds.containsKey(id)
+        val existingEntry = credentials[publicKey]
+        if (existingEntry !is NostrCredential.Secret) {
+            NostrCredentialManager.writeToDisk(
+                phoenixGlobal,
+                EncryptedNostrCredentials.encrypt(credentials + (publicKey to NostrCredential.Secret(privateKey))),
+            )
+        }
+        if (!phraseHere) {
+            SeedManager.writeSeedToDisk(phoenixGlobal, EncryptedSeed.V2.encrypt(seeds + (id to words)), overwrite = true)
+        }
+        RecoveryCodeManager.writeToDisk(phoenixGlobal, EncryptedRecoveryCodes.encrypt(codes + (id to code.canonical)))
+
+        if (phraseHere) {
+            log.i("attached a recovery code to wallet=$id")
+            return WriteRecoveryCodeResult.Written(id, isNew = false)
+        }
+        if (existingEntry != null) {
+            log.i("the code's nostr key was here without a backup; it is now a profile with one")
+            DataStoreManager(phoenixGlobal.ctx, chain = NodeParamsManager.chain).deleteNodeUserPrefs(StoredIdentity.nostrPublic(publicKey).id)
+        }
+        prepareIdentity(phoenixGlobal, globalPrefs, id, isTorEnabled, customElectrumServer)
+        log.i("successfully wrote recovery code for wallet=$id")
+        return WriteRecoveryCodeResult.Written(id, isNew = true)
     }
 
     sealed class WriteNostrCredentialResult {

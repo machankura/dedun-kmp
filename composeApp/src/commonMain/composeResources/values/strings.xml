@@ -231,6 +231,7 @@
     <string name="asked_again_recently">Asked again just now. You can ask again in a few minutes.</string>
     <string name="read_to_the_end_of_the_list_to_sign">Read to the end of the list to sign.</string>
     <string name="recovery_phrase">Recovery phrase</string>
+    <string name="recovery_code">Recovery code</string>
     <string name="ready_to_sign">Ready to sign</string>
     <string name="recents">Recents</string>
     <string name="reindex_events">Reindex events</string>

@@ -129,8 +129,8 @@ class MultipleProfilesRoundTripJvmTest {
 
     /** What startup does for each kind, minus the node: a wallet-attached profile gets a business it can stop. */
     private fun activated(stored: StoredIdentity): Identity = when (stored) {
-        is StoredIdentity.Mnemonic -> Identity.signing(
-            id = stored.id, kind = IdentityKind.Mnemonic, nostrPrivateKey = stored.privateKey,
+        is StoredIdentity.Seeded -> Identity.signing(
+            id = stored.id, kind = stored.kind, nostrPrivateKey = stored.privateKey,
             userPrefs = dataStoreManager.loadUserPrefsForWallet(stored.id),
             internalPrefs = dataStoreManager.loadInternalPrefsForWallet(stored.id),
             business = PhoenixBusiness(phoenixGlobal),

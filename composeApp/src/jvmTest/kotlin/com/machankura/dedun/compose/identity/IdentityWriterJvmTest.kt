@@ -13,6 +13,7 @@ import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.data.WalletId
 import fr.acinq.phoenix.managers.NodeParamsManager
 import fr.acinq.phoenix.managers.NostrCredentialManager
+import fr.acinq.phoenix.managers.RecoveryCodeManager
 import fr.acinq.phoenix.managers.SeedManager
 import fr.acinq.phoenix.managers.computePreferencePath
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
@@ -40,6 +41,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys
 import com.machankura.dedun.compose.ui.view.model.WritingSeedState
 import okio.FileSystem
 import okio.SYSTEM
@@ -331,5 +334,151 @@ class IdentityWriterJvmTest {
             ),
             credentials(),
         )
+    }
+
+    // --- recovery codes (docs/recovery-code-v3.md, Phase 4) ---
+
+    /** A fresh code, and what its 24 words derive. */
+    private class Coded {
+        val code = RecoveryCode.generate()
+        val words = RecoveryCodeKeys.words(code)
+        private val keyManager = LocalKeyManager(
+            seed = MnemonicCode.toSeed(words, "").byteVector(),
+            chain = NodeParamsManager.chain,
+            remoteSwapInExtendedPublicKey = NodeParamsManager.remoteSwapInXpub,
+        )
+        val walletId = WalletId(keyManager.nodeKeys.nodeKey.publicKey)
+        val nostrKey = StoredIdentity.nostrPrivateKeyOf(words)
+        val nostrPublicKey = nostrKey.nostrPublicKeyHex()
+    }
+
+    private suspend fun writeCode(coded: Coded) = IdentityWriter.writeRecoveryCode(
+        log = log,
+        phoenixGlobal = phoenixGlobal,
+        globalPrefs = globalPrefs,
+        code = coded.code,
+        isTorEnabled = false,
+        customElectrumServer = null,
+    )
+
+    private fun codes() = RecoveryCodeManager.loadAndDecryptOrNull(phoenixGlobal)
+
+    @Test
+    fun `a code writes its key, its 24 words and itself`() = runBlocking<Unit> {
+        val coded = Coded()
+
+        val result = assertIs<IdentityWriter.WriteRecoveryCodeResult.Written>(writeCode(coded))
+
+        assertEquals(coded.walletId, result.id)
+        assertTrue(result.isNew)
+        assertEquals(mapOf(coded.nostrPublicKey to NostrCredential.Secret(coded.nostrKey)), credentials())
+        assertEquals(coded.words, seeds()?.get(coded.walletId)?.words)
+        assertEquals(mapOf(coded.walletId to coded.code.canonical), codes())
+        assertTrue(FileSystem.SYSTEM.exists(computePreferencePath(phoenixGlobal.ctx, "userprefs_${result.id.nodeIdHash}.preferences_pb")))
+    }
+
+    @Test
+    fun `the same code twice is refused`() = runBlocking<Unit> {
+        val coded = Coded()
+        writeCode(coded)
+
+        assertEquals(coded.walletId, assertIs<IdentityWriter.WriteRecoveryCodeResult.AlreadyExists>(writeCode(coded)).id)
+        assertEquals(1, codes()?.size)
+    }
+
+    /**
+     * The words are a phrase, and the other writers already know what a phrase is: the
+     * code's words are a seed that is already here, its key is a wallet's, and forgetting
+     * it would only see it derived again.
+     */
+    @Test
+    fun `a code profile is a phrase profile to the other writers`() = runBlocking<Unit> {
+        val coded = Coded()
+        writeCode(coded)
+
+        val words = coded.words
+        val outcome = CompletableDeferred<Result<WalletId>>()
+        IdentityWriter.writeMnemonic(
+            log = log, phoenixGlobal = phoenixGlobal, globalPrefs = globalPrefs,
+            writingState = WritingSeedState.Init, viewModelScope = scope, mnemonics = words,
+            onWritingSeedError = { outcome.complete(Result.failure(IllegalStateException(it.toString()))) },
+            onWritingSeedStateWriting = {}, isRestoringWallet = true, isTorEnabled = false, customElectrumServer = null,
+            onSeedWritten = { outcome.complete(Result.success(it)) },
+        )
+        val second = withTimeout(15_000) { outcome.await() }
+        assertTrue(second.exceptionOrNull()?.message?.contains("SeedAlreadyExists") == true, "$second")
+
+        assertEquals(coded.walletId, assertIs<IdentityWriter.WriteNostrCredentialResult.AlreadyExists>(write(coded.nostrKey)).id)
+        assertIs<IdentityWriter.ForgetNostrCredentialResult.WalletAttached>(
+            IdentityWriter.forgetNostrCredential(log, phoenixGlobal, coded.walletId, coded.nostrPublicKey)
+        )
+    }
+
+    /** Signed in with the code's 24 words first, then with the code: one profile, the code attached. */
+    @Test
+    fun `a code attaches to the phrase profile its words already made`() = runBlocking<Unit> {
+        val coded = Coded()
+        val outcome = CompletableDeferred<Result<WalletId>>()
+        IdentityWriter.writeMnemonic(
+            log = log, phoenixGlobal = phoenixGlobal, globalPrefs = globalPrefs,
+            writingState = WritingSeedState.Init, viewModelScope = scope, mnemonics = coded.words,
+            onWritingSeedError = { outcome.complete(Result.failure(IllegalStateException(it.toString()))) },
+            onWritingSeedStateWriting = {}, isRestoringWallet = true, isTorEnabled = false, customElectrumServer = null,
+            onSeedWritten = { outcome.complete(Result.success(it)) },
+        )
+        assertEquals(coded.walletId, withTimeout(15_000) { outcome.await() }.getOrThrow())
+        val prefs = computePreferencePath(phoenixGlobal.ctx, "userprefs_${coded.walletId.nodeIdHash}.preferences_pb")
+        assertTrue(FileSystem.SYSTEM.exists(prefs))
+
+        val result = assertIs<IdentityWriter.WriteRecoveryCodeResult.Written>(writeCode(coded))
+
+        assertEquals(coded.walletId, result.id)
+        assertFalse(result.isNew)
+        assertEquals(setOf(coded.walletId), seeds()?.keys)
+        assertEquals(mapOf(coded.walletId to coded.code.canonical), codes())
+        assertTrue(FileSystem.SYSTEM.exists(prefs), "the phrase profile's preferences are kept")
+    }
+
+    @Test
+    fun `the code of a key held as a bare secret attaches to it`() = runBlocking<Unit> {
+        val coded = Coded()
+        write(coded.nostrKey)
+        val bareUserPrefs = userPrefsFile(StoredIdentity.nostrSecret(coded.nostrKey))
+        assertTrue(FileSystem.SYSTEM.exists(bareUserPrefs))
+
+        val result = assertIs<IdentityWriter.WriteRecoveryCodeResult.Written>(writeCode(coded))
+
+        assertEquals(coded.walletId, result.id)
+        assertEquals(mapOf(coded.nostrPublicKey to NostrCredential.Secret(coded.nostrKey)), credentials())
+        assertFalse(FileSystem.SYSTEM.exists(bareUserPrefs), "the bare key's preferences went with its id")
+    }
+
+    @Test
+    fun `the code of a key held read-only attaches and the entry becomes a secret`() = runBlocking<Unit> {
+        val coded = Coded()
+        writePublic(coded.nostrKey)
+
+        assertIs<IdentityWriter.WriteRecoveryCodeResult.Written>(writeCode(coded))
+
+        assertEquals(mapOf(coded.nostrPublicKey to NostrCredential.Secret(coded.nostrKey)), credentials())
+    }
+
+    /**
+     * What an older build sees: no codes file. The profile is the phrase in seed.dat, with
+     * the same npub and the same id.
+     */
+    @Test
+    fun `without the codes file a code profile lists as its phrase`() = runBlocking<Unit> {
+        val coded = Coded()
+        writeCode(coded)
+
+        val withCodes = StoredIdentity.merge(
+            seeds()!!, credentials()!!, StoredIdentity.parseCodes(codes()!!),
+        )
+        val withoutCodes = StoredIdentity.merge(seeds()!!, credentials()!!)
+
+        assertIs<StoredIdentity.RecoveryCode>(withCodes[coded.walletId])
+        val phrase = assertIs<StoredIdentity.Mnemonic>(withoutCodes[coded.walletId])
+        assertEquals(coded.nostrPublicKey, phrase.nostrPublicKey)
     }
 }

@@ -143,4 +143,74 @@ class StoredIdentityJvmTest {
     fun `the nsec form and the hex form name the same key`() {
         assertEquals(nip06PublicKey.toXonlyPublicKey().value.toHex(), nip06PublicKey)
     }
+
+    // --- recovery codes (docs/recovery-code-v3.md, Phase 4) ---
+
+    private val code = (com.machankura.dedun.compose.identity.recoverycode.RecoveryCode.parse("LBZC-MYTK-E9P3-7C7B-AHJN-KX79-22CY-WAY7-K7QZ")
+        as com.machankura.dedun.compose.identity.recoverycode.RecoveryCode.Parse.Valid).code
+    private val codeWords = com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys.words(code)
+    private val codeWallet = UserWallet(
+        walletId = WalletId(
+            fr.acinq.lightning.crypto.LocalKeyManager(
+                seed = fr.acinq.bitcoin.MnemonicCode.toSeed(codeWords, "").let { fr.acinq.bitcoin.ByteVector(it) },
+                chain = fr.acinq.phoenix.managers.NodeParamsManager.chain,
+                remoteSwapInExtendedPublicKey = fr.acinq.phoenix.managers.NodeParamsManager.remoteSwapInXpub,
+            ).nodeKeys.nodeKey.publicKey
+        ),
+        nodeId = "",
+        words = codeWords,
+    )
+
+    @Test
+    fun `a seed whose code derives its words is listed as a recovery code`() {
+        val merged = StoredIdentity.merge(
+            wallets = mapOf(codeWallet.walletId to codeWallet, wallet.walletId to wallet),
+            credentials = emptyMap(),
+            codes = mapOf(codeWallet.walletId to code),
+        )
+
+        assertEquals(2, merged.size)
+        val coded = assertIs<StoredIdentity.RecoveryCode>(merged[codeWallet.walletId])
+        assertEquals(code, coded.code)
+        assertEquals(IdentityKind.RecoveryCode, coded.kind)
+        assertEquals(StoredIdentity.nostrPublicKeyOf(codeWords), coded.nostrPublicKey)
+        assertIs<StoredIdentity.Mnemonic>(merged[wallet.walletId])
+    }
+
+    /** Two files that disagree: the words are what every build reads, so the words win. */
+    @Test
+    fun `a code that does not derive the words beside it is dropped, and the phrase stays`() {
+        val merged = StoredIdentity.merge(
+            wallets = mapOf(wallet.walletId to wallet),
+            credentials = emptyMap(),
+            codes = mapOf(wallet.walletId to code),
+        )
+
+        assertIs<StoredIdentity.Mnemonic>(merged[wallet.walletId])
+    }
+
+    @Test
+    fun `a code with no seed attaches to nothing`() {
+        val merged = StoredIdentity.merge(
+            wallets = emptyMap(),
+            credentials = mapOf(bareKey.publicKey().xOnly().value.toHex() to NostrCredential.Secret(bareKey)),
+            codes = mapOf(codeWallet.walletId to code),
+        )
+
+        assertEquals(1, merged.size)
+        assertIs<StoredIdentity.NostrSecret>(merged.values.single())
+    }
+
+    @Test
+    fun `a stored code that does not parse is ignored`() {
+        val parsed = StoredIdentity.parseCodes(
+            mapOf(
+                codeWallet.walletId to code.canonical,
+                WalletId("12".repeat(20)) to "not a code",
+                WalletId("34".repeat(20)) to "LBZC-MYTK-E9P3-7C7B-AHJN-KX79-22CY-WAY7-K7QA",
+            )
+        )
+
+        assertEquals(mapOf(codeWallet.walletId to code), parsed)
+    }
 }

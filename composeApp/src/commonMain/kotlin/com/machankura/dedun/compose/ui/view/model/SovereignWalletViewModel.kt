@@ -23,6 +23,8 @@ import fr.acinq.phoenix.data.UserWallet
 import fr.acinq.phoenix.data.WalletId
 import fr.acinq.phoenix.managers.DataStoreManager
 import fr.acinq.phoenix.managers.NostrCredentialManager
+import fr.acinq.phoenix.managers.RecoveryCodeManager
+import fr.acinq.phoenix.data.DecryptRecoveryCodesResult
 import fr.acinq.phoenix.security.NostrCredential
 import fr.acinq.phoenix.managers.nostrPrivateKey
 import fr.acinq.phoenix.utils.preferences.GlobalPrefs
@@ -205,7 +207,7 @@ class SovereignWalletViewModel(
      * error. It cannot happen for a file the repair wrote, since that derived the key
      * from the same seed.
      */
-    fun setActiveWallet(stored: StoredIdentity.Mnemonic, business: PhoenixBusiness) {
+    fun setActiveWallet(stored: StoredIdentity.Seeded, business: PhoenixBusiness) {
         val walletId = stored.id
         val keyManager = business.walletManager.keyManager.value
         if (keyManager == null) {
@@ -223,7 +225,7 @@ class SovereignWalletViewModel(
         setActiveIdentity(
             Identity.signing(
                 id = walletId,
-                kind = IdentityKind.Mnemonic,
+                kind = stored.kind,
                 nostrPrivateKey = stored.privateKey,
                 userPrefs = dataStoreManager.loadUserPrefsForWallet(walletId = walletId),
                 internalPrefs = dataStoreManager.loadInternalPrefsForWallet(walletId = walletId),
@@ -342,7 +344,20 @@ class SovereignWalletViewModel(
                 }
             }
 
-            val identities = StoredIdentity.merge(wallets, credentials)
+            // Read, never written, and never fatal: every profile with a code is also the
+            // phrase in seed.dat, so a codes file that cannot be read loses nothing but the
+            // code itself, which the backup screen reports when it is asked for. See
+            // docs/recovery-code-v3.md, Phase 4.
+            val codes = when (val result = RecoveryCodeManager.loadAndDecrypt(phoenixGlobal)) {
+                is DecryptRecoveryCodesResult.Success -> StoredIdentity.parseCodes(result.codes)
+                is DecryptRecoveryCodesResult.Failure.FileNotFound -> emptyMap()
+                is DecryptRecoveryCodesResult.Failure -> {
+                    log.e { "cannot read the recovery codes file: $result; listing those profiles as their phrases" }
+                    emptyMap()
+                }
+            }
+
+            val identities = StoredIdentity.merge(wallets, credentials, codes)
 
             val metadataMap = getAvailableWalletsMeta(phoenixGlobal).first()
             identities.keys.forEach { walletId ->
