@@ -152,6 +152,14 @@ class BackgroundSyncPassJvmTest {
         assertEquals(0, enginesStarted)
     }
 
+    @Test
+    fun `nothing runs for a profile whose notifications are off`() = runBlocking {
+        seed()
+        db.notificationDao().setSettings(user, enabled = false, messages = true, needsYou = true, groupActivity = false, showMessageText = true)
+        assertEquals(BackgroundSyncPass.Outcome.Disabled, pass().run(BackgroundSyncPass.Kind.Full, 5.seconds))
+        assertEquals(0, enginesStarted)
+    }
+
     /** The pass's whole job, in one: activate, hold, notice the delivery, post it, let go, record. */
     @Test
     fun `a message delivered during the pass is posted, and the pass puts everything back`() = runBlocking {

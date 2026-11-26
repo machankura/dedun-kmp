@@ -63,6 +63,11 @@ kotlin {
             implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.24.0")
 
             implementation(libs.androidx.activity.compose)
+
+            // The periodic background sync (docs/notifications-and-background-sync.md, Phase 10):
+            // WorkManager reschedules itself across reboots and respects Doze, which a hand-made
+            // alarm would have to relearn.
+            implementation(libs.androidx.work.runtime)
             implementation(libs.compose.uiToolingPreview)
 
             // The daemon itself, for Android. A separate line from core and engine below: this

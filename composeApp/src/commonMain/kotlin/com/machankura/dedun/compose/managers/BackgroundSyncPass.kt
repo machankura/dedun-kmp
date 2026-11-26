@@ -76,6 +76,8 @@ class BackgroundSyncPass(
         /** The app is on screen; its own subscriptions already cover this. */
         Visible("visible"),
         NoIdentity("noIdentity"),
+        /** The profile's notifications are switched off, so there is nobody to sync for. */
+        Disabled("disabled"),
         /** Another pass is running in this process. */
         AlreadyRunning("alreadyRunning"),
         Failed("failed"),
@@ -90,6 +92,7 @@ class BackgroundSyncPass(
             val identity = running ?: loadDefaultIdentity() ?: return Outcome.NoIdentity
             val publicKey = identity.nostrPublicKey
             val activatedHere = running == null
+            if (ledger.getLedger(publicKey)?.enabled == false) return Outcome.Disabled
 
             logger.i { "Background ${kind.wire} pass for $publicKey, deadline $deadline" }
 

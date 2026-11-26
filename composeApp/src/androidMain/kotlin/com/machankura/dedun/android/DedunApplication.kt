@@ -10,6 +10,9 @@ import fr.acinq.phoenix.android.BusinessManager
 import fr.acinq.phoenix.android.LightningApplication
 import fr.acinq.phoenix.utils.PlatformContext
 import fr.acinq.phoenix.utils.preferences.GlobalPrefs
+import com.machankura.dedun.android.background.BackgroundSyncWorker
+import com.machankura.dedun.compose.AppLifecycle
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.DedunGlobal
 import com.machankura.dedun.compose.DedunRuntime
 
@@ -32,6 +35,10 @@ class DedunApplication: Application(), LightningApplication {
     override fun onCreate() {
         super.onCreate()
 
+        // Nobody is looking until an activity says so. A process started for the background sync
+        // has no activity at all, and the pass declines to run while the app is "visible".
+        AppLifecycle.enteredBackground()
+
         phoenixGlobal = PhoenixGlobal(PlatformContext(applicationContext))
         globalPrefs = GlobalPrefs(applicationContext.globalPrefs)
         BusinessManager.initialize(this)
@@ -43,6 +50,14 @@ class DedunApplication: Application(), LightningApplication {
                 ),
                 phoenixGlobal = phoenixGlobal,
             )
+        }
+
+        // Every launch, so a schedule lost to a cleared app or a reinstall comes back. KEEP leaves
+        // one already there alone. docs/notifications-and-background-sync.md, Phase 10.
+        if (ExperimentalFeatures.backgroundSync) {
+            BackgroundSyncWorker.schedule(this)
+        } else {
+            BackgroundSyncWorker.cancel(this)
         }
     }
 

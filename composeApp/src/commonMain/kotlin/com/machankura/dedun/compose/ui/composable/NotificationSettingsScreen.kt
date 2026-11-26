@@ -26,7 +26,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import kotlinx.coroutines.launch
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.database.model.NotificationLedger
+import com.machankura.dedun.compose.notifications.BackgroundSyncSection
 import com.machankura.dedun.compose.notifications.NotificationSettings
 import com.machankura.dedun.compose.notifications.NotificationSettingsStore
 import com.machankura.dedun.compose.notifications.rememberNotificationPermission
@@ -72,8 +74,6 @@ fun NotificationSettingsScreen(
     activeUserPublicKey: String,
     store: NotificationSettingsStore,
     onNavigateBack: () -> Unit,
-    /** Extra rows from the platform's background sync (Part B); nothing until it exists. */
-    backgroundSection: @Composable () -> Unit = {},
 ) {
     val ledgerState by remember(activeUserPublicKey) { store.observe(activeUserPublicKey) }
         .collectAsState(initial = Unit)
@@ -170,7 +170,7 @@ fun NotificationSettingsScreen(
                                     enabled = settings.enabled && settings.messages,
                                 ) { save(settings.copy(showMessageText = it)) }
                             }
-                            item { backgroundSection() }
+                            if (ExperimentalFeatures.backgroundSync) item { BackgroundSyncSection(state.ledger) }
                         }
                     }
                 }

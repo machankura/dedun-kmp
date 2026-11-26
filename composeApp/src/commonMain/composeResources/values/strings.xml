@@ -1736,4 +1736,15 @@
     <string name="show_message_text_supporting">Off, a notification says only that a message arrived</string>
     <string name="mute_notifications">Mute notifications</string>
     <string name="mute_notifications_supporting">Unread messages are still counted</string>
+    <string name="background_sync">Background sync</string>
+    <string name="background_last_checked">Last checked while closed: %1$s</string>
+    <string name="background_never_checked">Not checked while closed yet</string>
+    <string name="background_android_explanation">While Dedun is closed, Android lets it check for messages about every 15 minutes, and less often while the phone is idle.</string>
+    <string name="background_ios_explanation">While Dedun is closed, iOS decides when it may check for messages: sometimes within minutes, sometimes a few times a day, and not at all after Dedun is swiped away.</string>
+    <string name="background_ios_refresh_off">Background App Refresh is off for Dedun, so it cannot check for messages while closed. You can turn it on in the Settings app.</string>
+    <string name="background_desktop_explanation">Dedun checks for messages while it is running, minimised or not. Closed, it checks nothing.</string>
+    <string name="stay_connected">Stay connected</string>
+    <string name="stay_connected_supporting">Messages arrive within seconds. Android shows a notification for as long as it is on, and the battery runs down faster.</string>
+    <string name="stay_connected_channel">Connection</string>
+    <string name="stay_connected_notification">Connected for new messages</string>
 </resources>

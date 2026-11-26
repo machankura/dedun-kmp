@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.rememberNavController
 import fr.acinq.phoenix.NFCActivity
+import com.machankura.dedun.android.background.StayConnectedService
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.DedunApp
 import fr.acinq.phoenix.android.services.HceService
 import com.machankura.dedun.compose.notifications.NotificationTaps
@@ -25,6 +27,12 @@ class MainActivity : ComponentActivity(), NFCActivity {
         val runtime = (application as DedunApplication).runtime
 
         tapped(intent)
+
+        // From here, in front, because Android will not start a foreground service from the
+        // background: a reboot or a killed process brings it back on the next launch.
+        if (ExperimentalFeatures.backgroundSync && StayConnectedService.isOn(this)) {
+            StayConnectedService.start(this)
+        }
 
         setContent {
             val navController = rememberNavController()

@@ -16,6 +16,18 @@ object ExperimentalFeatures {
 
     val shareRefresh: Boolean
         get() = shareRefreshOverride ?: isDevelopmentBuild()
+
+    /** Set by a test that has to see the build a release would be. */
+    var backgroundSyncOverride: Boolean? = null
+
+    /**
+     * Syncing while the app is off screen (docs/notifications-and-background-sync.md, D12): the
+     * WorkManager worker, the iOS background tasks, Android's Stay connected and the desktop tray.
+     * Off in a release until a device run says the pass behaves. Notifications while the app runs
+     * are not behind it: they carry no protocol risk.
+     */
+    val backgroundSync: Boolean
+        get() = backgroundSyncOverride ?: isDevelopmentBuild()
 }
 
 /** Whether this is a debug or development build of the app, rather than a release. */
