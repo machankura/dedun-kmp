@@ -188,6 +188,17 @@ tween(300)                                                   // no
 `MaterialTheme.motionScheme` is the public surface. Honour `MaterialTheme.reducedMotion`
 — it means drop the movement, not the transition.
 
+## A recovery code backs the profile and its wallet
+
+A new profile from Landing is backed by a nine-block recovery code
+([docs/giza-second-batch.md](docs/giza-second-batch.md), Phase 2). The code's key is BIP39
+entropy, so `RecoveryCodeKeys.words` turns it into 24 words. Those words go in `seed.dat` as a
+phrase does, and derive the npub, the profile id and the Lightning node through
+`LocalKeyManager`, as typed words do. So a code restores money, and the copy says so.
+
+The derivation is pinned in `RecoveryCodeKeysTest`, including the node id. A change there is
+a different person, and a different wallet, behind the same piece of paper.
+
 ## Checking your work
 
 ```bash
