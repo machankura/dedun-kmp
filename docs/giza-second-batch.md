@@ -946,8 +946,8 @@ sign for money with theirs.
   races eclair whenever it runs straight after GroupLightning's 145-block burst, and fails that
   way on Dedun's pin too. The ledger's regtest section has the runs and the timeline. Nothing
   measured stands in the way of pinning Giza's commit. Doing so is a decision still to make,
-  separate from fixing the test, which needs to wait for eclair to reach the tip before its first
-  channel open.
+  separate from the test's fix, which now waits for eclair to reach the tip before its first
+  channel open and passes straight after GroupLightning.
 
 ## Checking each phase
 

@@ -66,6 +66,7 @@ next batch is measured from it: `git log --no-merges a5a802c5..giza/giza`.
 | second batch done, `lightning-kmp-app` at Dedun's `d4933708`, on `ffebce46` | pass | pass | pass | pass (3) |
 | the same, `lightning-kmp-app` at Giza's `3ca351af` | pass | pass alone and straight after GroupLightning in a second Gradle run (3 of 3); fails straight after it in the same run (3 of 3) | pass | pass (3) |
 | the same, back on Dedun's `d4933708`, all four in one run with `--rerun` | pass | **fail**, straight after GroupLightning, as on Giza's pin | pass | pass (3) |
+| the same, with the liquidity test waiting for eclair before its first channel open, all four in one run with `--rerun`, twice | pass | pass, once first and once straight after GroupLightning | pass | pass (3) |
 
 Each suite ran on a fresh `dedun-regtest` network, apart from the last rows, which shared networks
 across runs.
@@ -87,6 +88,10 @@ The pin looked to blame because Gradle ran the classes in a different order. The
 second. The investigation also found two results Gradle had restored from its build cache
 (`org.gradle.caching`) without running anything; every run in the last two rows was made with
 `--rerun`, and the chain's height was polled through each.
+
+The fix is in the test. `LiquidityPurchaseRegtestJvmTest` now waits for eclair to reach the tip
+(`lspCaughtUp()`) before it opens its channel, as it already did before each splice. Run straight
+after GroupLightning in one Gradle run, it passed, and eclair refused nothing.
 
 | giza | bennu port | group | phase | Bennu | Dedun | subject |
 |---|---|---|---|---|---|---|
