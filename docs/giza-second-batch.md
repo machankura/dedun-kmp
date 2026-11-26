@@ -411,6 +411,38 @@ Wavelength alert still firing with chat muted.
 **Done when** an Android emulator with the app swiped away shows a notification for a payout
 to sign within one worker period, and the desktop app closed to the tray does the same.
 
+**As built.** Giza's Phases 1–13 came in as eight commits, with Giza's note in
+[notifications-and-background-sync.md](./notifications-and-background-sync.md) and a Dedun preface.
+
+- **The runtime.** `DedunRuntime` holds the database, the six shared repositories and the
+  notary and synchronization engines. The wallets' objects and their five repositories stay in
+  `DedunNavHost`, on the runtime's database.
+- **Schema 50.** Read marks, mute and the notification ledger. Giza widened its unshipped 47 in
+  place when the switches came, and Dedun's 50 is widened the same way.
+- **What notifies.** All 59 transcript types that Dedun has and Giza doesn't are classified:
+  - *needs you:* the three Iceberg approvals, an operator's equivocation, quiet Wavelength
+    signers, a Wavelength deadline;
+  - *group activity*, off by default: money that moved, and wallets and ceremonies that began or
+    ended;
+  - *silent:* everything else.
+
+  The categories go by line type, so a payout to *you* is not yet told apart from a payout to
+  another member.
+- **The background pass.** `DefaultIdentity` (held back from 2c) runs a profile with words as its
+  nostr key without starting its node. It lists a recovery-code profile as one. The Wavelength
+  daemon follows `AppLifecycle.isVisible`.
+- **Platforms.** Android's worker and Stay connected, iOS's tasks, the desktop tray and the
+  notification actions are all in. Background sync is behind `ExperimentalFeatures.backgroundSync`,
+  off in release.
+
+**Not done:**
+
+- Stay connected and `GroupWavelengthService` are still two foreground services.
+- No test runs a cold background pass that files a FROST signing proposal and posts its
+  notification.
+- No device run (an emulator with the app swiped away, the desktop closed to the tray).
+- The iOS half is not compiled: there is no Mac here.
+
 ## Phase 4: the kinds again (D8: Dedun moves)
 
 This runs alongside Phases 2 and 3. It has to be done before Phase 6, before any K2 release,
