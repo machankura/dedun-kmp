@@ -669,6 +669,12 @@ re-deriving:
 - **`adopt` before the members are added**, because filing the key state is local
   and certain and adding members is neither.
 
+> **Since [robust-group-admins.md](./robust-group-admins.md):** the repository's
+> `createMarmotGroup` takes the ceremony and the room it ran in instead of
+> `adminPublicKeys`, and `MarmotGroupCreation.createFor` reads the admins, the id and the name
+> off the ceremony. A subgroup's founding admins are its ceremony's participants, as a
+> group's are, so the same rule makes both.
+
 `parentChatRoomId` is the one genuinely new parameter, written onto the
 `ChatRoom` row. The subgroup's description carries the path through
 `SharedKeyDerivation.describe`, exactly as the admin room's does — MIP-01 has no
@@ -750,13 +756,15 @@ naming them all after the parent names none of them. The name is required, trave
 on the route to Phase 6's `MarmotGroupData`, and is copied into the birth
 certificate so the parent's admins approve something legible.
 
-`MarmotGroupName.of` puts the `#` on it. The field shows the prefix beside what is
-typed rather than in it, so the caret does not move under somebody mid-word, and
-the bare name is what goes down — since Phase 10 onto `DkgSession.subject`, which
+`MarmotGroupName.bare` takes any mark off it, and the app draws it as `{name}`
+([group-name-braces.md](./group-name-braces.md); a stored `&` before that, and a `#`
+before [group-name-prefix.md](./group-name-prefix.md)). The field frames what is typed
+in braces rather than putting them in it, so the caret does not move under somebody
+mid-word, and the bare name is what goes down — since Phase 10 onto `DkgSession.subject`, which
 is where a ceremony held in somebody else's room has to keep it. The subgroup's
 own name is derived from that twice, by two unrelated callers:
-`proposeBirthCertificate` normalises the name the parent signs,
-`MarmotGroupCreation` normalises the name the room carries. Those two have to be the same string or the subgroup is not called
+`proposeBirthCertificate` makes bare the name the parent signs,
+`MarmotGroupCreation` the name the room carries. Those two have to be the same string or the subgroup is not called
 what its parent certified, which is what the rule being idempotent buys.
 
 ### Key packages, checked here rather than discovered at step 4

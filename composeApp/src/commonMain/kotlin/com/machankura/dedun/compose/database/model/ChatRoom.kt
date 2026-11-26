@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Ignore
@@ -58,6 +59,9 @@ data class ChatRoom(
      *  Any member can change the topic by simply submitting a new subject to an existing pubkey + p tags room.
      *
      *  There is no need to send subject in every message. The newest subject in the chat room is the subject of the conversation.
+     *
+     * For a Marmot room, the group's bare name. Draw a room's name through [title], which
+     * puts a group's in braces; never off this (docs/group-name-braces.md).
      */
     val subject: String?,
 
@@ -138,6 +142,33 @@ data class ChatRoom(
      */
     val parentChatRoomId: HexKey? = null,
 
+    /**
+     * The newest line the user has been shown in this room, by [ChatMessage.id], or null for
+     * none. A row id rather than a time because a line's time is the sender's claim and lines
+     * are written out of order -- "load older messages" files old lines now. Only ever moves
+     * forward. Local: no NIP says how to share it between devices.
+     * docs/notifications-and-background-sync.md, D8.
+     */
+    val lastReadMessageId: Long? = null,
+
+    /**
+     * Whether this room may notify: [NOTIFICATIONS_ALL] or [NOTIFICATIONS_MUTED]. A muted room
+     * still counts what is unread; it only stays quiet about it.
+     */
+    @ColumnInfo(defaultValue = NOTIFICATIONS_ALL)
+    val notifications: String = NOTIFICATIONS_ALL,
+
+    /**
+     * How long what the user writes here lasts, in seconds: null follows the identity's default,
+     * `0` is Off for this conversation only. Read once per message, when it is queued, and only in
+     * a NIP-17 room -- an MLS room follows the group's own retention. Local: NIP-17 has no shared
+     * timer, so each sender's choice rides their own messages. docs/disappearing-messages.md, D4.
+     */
+    val disappearingMessageSecs: Long? = null,
+
+    /** When the one-time "messages now disappear" notice was shown here, or null for not yet (D9). */
+    val disappearingNoticeShownAt: Instant? = null,
+
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,
@@ -148,6 +179,9 @@ data class ChatRoom(
 {
     companion object {
         const val TAG = "ChatRoom"
+
+        const val NOTIFICATIONS_ALL = "all"
+        const val NOTIFICATIONS_MUTED = "muted"
 
         @Ignore
         val logger = Logger.withTag(TAG)

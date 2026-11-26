@@ -24,6 +24,8 @@ import com.machankura.dedun.compose.identity.SignInCredential
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.view.state.SignInToProfileUIState
 import com.machankura.dedun.compose.ui.view.state.form.SignInToProfileFormState
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 
 /**
  * Signs in with something the user already has: a recovery phrase, an nsec, or -- to
@@ -51,6 +53,7 @@ class SignInToProfileViewModel(
         onWritten: (WalletId) -> Unit,
         onError: (WritingSeedState.Error) -> Unit,
     ) -> Unit,
+    private val writeRecoveryCode: suspend (RecoveryCode) -> IdentityWriter.WriteRecoveryCodeResult,
     val signInToProfileFormState: SignInToProfileFormState = SignInToProfileFormState(),
 ) : ViewModel() {
 
@@ -66,6 +69,7 @@ class SignInToProfileViewModel(
                 onWritten: (WalletId) -> Unit,
                 onError: (WritingSeedState.Error) -> Unit,
             ) -> Unit,
+            writeRecoveryCode: suspend (RecoveryCode) -> IdentityWriter.WriteRecoveryCodeResult,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SignInToProfileViewModel(
@@ -73,6 +77,7 @@ class SignInToProfileViewModel(
                     writeNostrKey = writeNostrKey,
                     writeNostrPublicKey = writeNostrPublicKey,
                     writeRecoveryPhrase = writeRecoveryPhrase,
+                    writeRecoveryCode = writeRecoveryCode,
                 )
             }
         }
@@ -85,15 +90,36 @@ class SignInToProfileViewModel(
     /** Why the field's contents were refused, shown as its supporting text; null when they were not. */
     val inputProblem: MutableState<CredentialProblem?> = mutableStateOf(null)
 
+    /**
+     * For a recovery code with one wrong symbol, the code it is one symbol away from; null
+     * otherwise. Shown beside the field, and applied only by [acceptSuggestion].
+     */
+    val typoSuggestion: MutableState<RecoveryCode.Parse.Typo?> = mutableStateOf(null)
+
     /** Reads the field and either moves to [SignInToProfileUIState.Confirm] or marks the field. */
     fun recognise() {
         when (val result = CredentialParser.parse(signInToProfileFormState.textFieldForm.textFieldState.text.toString())) {
-            is CredentialParser.Result.Refused -> inputProblem.value = result.problem
+            is CredentialParser.Result.Refused -> {
+                inputProblem.value = result.problem
+                typoSuggestion.value = result.suggestion
+            }
             is CredentialParser.Result.Recognised -> {
                 inputProblem.value = null
+                typoSuggestion.value = null
                 uiState.value = SignInToProfileUIState.Confirm(result.credential)
             }
         }
+    }
+
+    /**
+     * The person accepted the suggested correction: the field becomes the corrected code and
+     * is read again, so the confirm step -- the npub it derives -- still stands between the
+     * suggestion and the disk.
+     */
+    fun acceptSuggestion() {
+        val suggestion = typoSuggestion.value ?: return
+        signInToProfileFormState.textFieldForm.textFieldState.setTextAndPlaceCursorAtEnd(suggestion.suggested.canonical)
+        recognise()
     }
 
     /** Back to the field, keeping what was typed. */
@@ -133,6 +159,19 @@ class SignInToProfileViewModel(
             is SignInCredential.NostrSecret -> write("nostr key") { writeNostrKey(credential.privateKey) }
 
             is SignInCredential.NostrPublicKey -> write("nostr public key") { writeNostrPublicKey(credential.nostrPublicKey) }
+
+            is SignInCredential.RecoveryCode -> try {
+                when (val result = writeRecoveryCode(credential.code)) {
+                    is IdentityWriter.WriteRecoveryCodeResult.Written -> Outcome.SignedIn(result.id)
+                    is IdentityWriter.WriteRecoveryCodeResult.AlreadyExists -> Outcome.Failed(CredentialProblem.AlreadyOnThisDevice, alreadyHere = result.id)
+                    is IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys -> Outcome.Failed(CredentialProblem.CouldNotWrite)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.e("could not write the recovery code", e)
+                Outcome.Failed(CredentialProblem.CouldNotWrite)
+            }
 
             is SignInCredential.RecoveryPhrase -> {
                 // Callback-shaped writer, awaited: the seed writer drives WritingSeedState and

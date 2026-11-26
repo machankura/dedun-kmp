@@ -204,6 +204,12 @@ class LiquidityPurchaseRegtestJvmTest {
 
         // A channel, by on-the-fly funding of a payment to the node's offer; confirmed, since eclair splices
         // only a channel whose funding transaction has locked.
+        //
+        // The open is an interactive transaction too, locked at our node's height, so eclair has to have
+        // seen the tip first. A run that follows GroupLightningRegtestJvmTest starts straight after its
+        // sweep mined ~145 blocks at once, which eclair takes a few seconds to jump to; opening before it
+        // has is refused ("lock time is too far in the future") and nothing asks again.
+        lspCaughtUp()
         val offer = nodeParams.defaultOffer(lspId).offer.encode()
         payer("payoffer", mapOf("offer" to offer, "amountMsat" to "100000000"))
         mineUntil("the on-the-fly channel") { peer.normal() }

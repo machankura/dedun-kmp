@@ -21,19 +21,6 @@ import kotlinx.coroutines.flow.flowOf
  * not publish on their behalf until they say so.
  */
 interface DkgRepository {
-    /**
-     * The room's current ritual for one purpose — the group's own when
-     * [parentChatRoomId] is null, or that parent's subgroup when it is not.
-     * Abandoned attempts are superseded by the newest.
-     *
-     * A room routinely holds several: a parent's room hosts the ceremony of every
-     * subgroup the group makes. See `DkgSessionDao.getLatestSessionFor`.
-     */
-    fun observeLatestSessionForChatRoom(
-        chatRoomId: String,
-        parentChatRoomId: String? = null,
-    ): Flow<DkgSession?>
-
     fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>>
 
     /**
@@ -64,7 +51,25 @@ interface DkgRepository {
      */
     suspend fun roomAwaitingCreation(session: DkgSession): String?
 
-    suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession?
+    /**
+     * Every group of its own [chatRoomId] holds, newest first, failed ones left
+     * out: in a NIP-17 room, the groups its members have made there.
+     *
+     * The same people always share one NIP-17 room -- its id is derived from them --
+     * so a second group they make is a second ceremony in that room rather than a
+     * room of its own (docs/nip17-multiple-ceremonies.md).
+     */
+    fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>>
+
+    /**
+     * The groups the people in [memberPublicKeys] have already made together, as
+     * [observeOwnSessionsForChatRoom] has them, read from the room they would share
+     * without making it. Empty if they have made none, or share no room yet.
+     *
+     * [memberPublicKeys] is everybody, the reader included: it is the set the room's
+     * id is derived from.
+     */
+    suspend fun getOwnSessionsAmong(memberPublicKeys: Set<HexKey>): List<DkgSession>
 
     /**
      * Opens a ritual in [localChatRoom], making this device the coordinator.
@@ -206,11 +211,6 @@ interface DkgRepository {
 
     companion object {
         val NO_OP_DKG_REPOSITORY: DkgRepository = object : DkgRepository {
-            override fun observeLatestSessionForChatRoom(
-                chatRoomId: String,
-                parentChatRoomId: String?,
-            ): Flow<DkgSession?> = flowOf(null)
-
             override fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>> = flowOf(emptyList())
 
             override fun observeSessionById(sessionId: String): Flow<DkgSession?> = flowOf(null)
@@ -220,7 +220,11 @@ interface DkgRepository {
 
             override suspend fun roomAwaitingCreation(session: DkgSession): String? = null
 
-            override suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession? = null
+            override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
+                flowOf(emptyList())
+
+            override suspend fun getOwnSessionsAmong(memberPublicKeys: Set<HexKey>): List<DkgSession> =
+                emptyList()
 
             override suspend fun proposeRitual(
                 localChatRoom: LocalChatRoom,

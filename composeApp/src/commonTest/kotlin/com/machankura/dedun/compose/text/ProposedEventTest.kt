@@ -4,6 +4,8 @@ import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.ByteVector32
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
+import com.machankura.dedun.compose.nostr.frost.GovernanceChange
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
@@ -31,6 +33,11 @@ class ProposedEventTest {
         assertEquals("An article", summary.detail)
     }
 
+    /**
+     * `#Translation` on purpose: a certificate proposed before docs/group-name-prefix.md. The
+     * summary is of what the signer approves, so it shows the name as signed, `#` and all,
+     * where the rest of the app would show `&Translation` (D5).
+     */
     @Test
     fun `a birth certificate says what it decides about the child's wallet, either way`() {
         val parent = "1".repeat(64)
@@ -66,14 +73,74 @@ class ProposedEventTest {
         )
     }
 
+    /** docs/member-admin-promotion.md, Phase 3: a member approves names, not a hash. */
     @Test
-    fun `a profile, a post and a relay list are no longer described`() {
-        // The group's nostr profile, posts and relay lists were removed, and with
-        // them the words for what they were; a proposal for one from an older
-        // build is said like any other kind the app does not know.
-        listOf(MetadataEvent.KIND, TextNoteEvent.KIND, AdvertisedRelayListEvent.KIND).forEach { kind ->
-            assertEquals("Event of kind $kind", ProposedEvent.summarize(event(kind)).label)
-        }
+    fun `a change to the group says who, in names`() {
+        val bob = "b".repeat(64)
+        val carol = "c".repeat(64)
+        val tags = GovernanceStatementEvent.assembleTags(
+            chatRoomId = "1".repeat(64),
+            epoch = 4,
+            change = GovernanceChange(removes = setOf(carol), admins = setOf(bob)),
+            proposer = bob,
+        )
+        val names = mapOf(bob to "Bob", carol to "Carol")
+
+        val summary = ProposedEvent.summarize(event(GovernanceStatementEvent.KIND, tags = tags), nameOf = names::get)
+
+        assertEquals("A change to who is in this group", summary.label)
+        assertEquals("Removes Carol · Admins afterwards: Bob", summary.detail)
+    }
+
+    @Test
+    fun `a profile is said by its name and what it says about itself`() {
+        val summary = ProposedEvent.summarize(
+            event(MetadataEvent.KIND, content = """{"name":"Translation collective","about":"Hard books"}""")
+        )
+
+        assertEquals("Nostr profile", summary.label)
+        assertEquals("Translation collective · Hard books", summary.detail)
+
+        assertEquals("An empty profile", ProposedEvent.summarize(event(MetadataEvent.KIND, content = "{}")).detail)
+        assertEquals("Unreadable profile", ProposedEvent.summarize(event(MetadataEvent.KIND, content = "not json")).detail)
+    }
+
+    @Test
+    fun `a post is said by its words`() {
+        val summary = ProposedEvent.summarize(event(TextNoteEvent.KIND, content = "We meet on Thursday"))
+
+        assertEquals("Post", summary.label)
+        assertEquals("We meet on Thursday", summary.detail)
+    }
+
+    @Test
+    fun `a relay list is still said by its number`() {
+        // The group's relay lists were not brought back with its profile and posts
+        // (docs/group-nostr-profile-and-posts.md, D1), so a proposal for one from a
+        // Curare member is said like any other kind the app does not know.
+        assertEquals(
+            "Event of kind ${AdvertisedRelayListEvent.KIND}",
+            ProposedEvent.summarize(event(AdvertisedRelayListEvent.KIND)).label,
+        )
+    }
+
+    /**
+     * docs/group-inbox.md: the group's inbox key and its relays are said by what they are
+     * (Phase 5), and a seal as the sealed reply it is (Phase 8).
+     */
+    @Test
+    fun `an inbox key, its relays and a sealed reply are named`() {
+        val key = "e".repeat(64)
+        val announcement = ProposedEvent.summarize(event(10044, tags = arrayOf(arrayOf("n", key))))
+        assertEquals("The group's inbox key", announcement.label)
+        assertEquals("Key eeeeeeee…eeeeeeee", announcement.detail)
+        val relays = ProposedEvent.summarize(event(10050, tags = arrayOf(arrayOf("relay", "wss://inbox.example.com/"))))
+        assertEquals("Where the group receives private messages", relays.label)
+        assertEquals("inbox.example.com", relays.detail)
+        // A reply names the inbox key it is sealed from; a seal without that `n` tag is the
+        // group writing by threshold ECDH instead (docs/group-threshold-ecdh.md, D12).
+        assertEquals("A private reply from the group's inbox", ProposedEvent.summarize(event(13, tags = arrayOf(arrayOf("n", "c".repeat(64))))).label)
+        assertEquals("A private message from the group", ProposedEvent.summarize(event(13)).label)
     }
 
     private fun event(

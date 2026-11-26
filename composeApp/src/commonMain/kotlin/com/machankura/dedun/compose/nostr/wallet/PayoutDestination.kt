@@ -6,7 +6,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import fr.acinq.bitcoin.Chain
 
 /**
- * Where the group pays one party on one chain: a member's own signed 30338, or the 30399 the group
+ * Where the group pays one party on one chain: a member's own signed 30338, or the 30429 the group
  * signed for a contact (`docs/non-member-deposits.md`, D9). Every rail checks a payout against the
  * payee's newest one by its [event]'s id, so the check reads either unchanged.
  */

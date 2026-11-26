@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.database.model.title
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -94,7 +95,7 @@ fun LazyListScope.memberWalletItems(
 /** The guarding group as the member's rows name it: the room's name here, or a generic one. */
 @Composable
 internal fun groupNameOf(wallet: MemberWalletManager.MemberWalletRow): String =
-    wallet.groupRoom?.chatRoom?.subject?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.a_group)
+    wallet.groupRoom?.chatRoom?.title?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.a_group)
 
 @Composable
 private fun supportingLine(row: MemberWalletsViewModel.Row): String {

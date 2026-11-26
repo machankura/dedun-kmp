@@ -111,6 +111,11 @@ a share rotation another app started, and the mirror's commits apply without a k
 
 ### Where they go
 
+> **Moved again.** Giza took 30379–30416 after `d0437d6c`, so the targets below changed before K2
+> shipped: 30340–30343 now go to **30420–30423**, and 30370–30382 to **30430–30442**. The legacy
+> numbers are unchanged. See [giza-second-batch.md](./giza-second-batch.md), Phase 4. The table
+> keeps the numbers K1 was built with.
+
 | Dedun kind | from | to | rule |
 |---|---|---|---|
 | `DepositAttributionEvent` | 30340 | **30390** | +50 |
@@ -203,8 +208,8 @@ transfers, and Room would fail validation on them.
 | 38 | 37 | **47** | `KeyShareGeneration`, `KeyShareMember`, generation columns | 6 |
 | 39 | 38 | **48** | refresh session, message and confirmation | 7 |
 | 40 | 39 | **49** | repair tables, `GroupKeyState.memberBindings` | 7 |
-| 41 | 40 | **50** | `GovernanceProposal` | 8 |
-| 42 | 41 | **51** | `thenRotateWithout`, `ShareRepairSession.nParticipants` | 9 |
+| 41 | 40 | **51** (planned 50; notifications took 50) | `GovernanceProposal` | 8 |
+| 42 | 41 | **52** (planned 51) | `thenRotateWithout`, `ShareRepairSession.nParticipants` | 9 |
 
 All of them are `AutoMigration`s. `ShippedProfileUpgradeJvmTest` hardcodes its versions and
 is renumbered to 45/46. If Dedun adds a migration of its own while this is in progress, every
@@ -723,6 +728,64 @@ not as a bare commit. Test that each of these still fires, exactly once.
 
 **Done when** those pass.
 
+**As built, on a branch before K3.** Phases 8 and 9 came in together, in Bennu's order,
+because Bennu ported Giza's Phase 9 enrollment before two of Phase 8's fixes, which are
+written on top of it. That is Bennu's commits #82-#107, #109-#113 and #115-#142, without
+Bennu's own notes; the ledger maps each one. The schema is 51 for `GovernanceProposal` and 52
+for Phase 9's two columns: notifications took 50 first ([giza-second-batch.md](./giza-second-batch.md),
+Phase 3).
+
+Phase 8 does not wait for K3 here, as planned, because the two families can be told apart
+without it. Until K3, 30370-30377 are both governance and the legacy numbers of eight
+Wavelength kinds that Dedun devices still write. Every Wavelength event at those numbers is
+either a statement with its own tags or a `queue`d message with no tags and a JSON body.
+Every governance event has a tag none of them carries -- `epoch`, `governance`, `target`,
+`offer` and `host` -- or, for a carrier, a statement inside, or, for a step-down, an empty
+body. `GovernanceEvents.isGovernance` asks that, and is asked wherever a number alone was
+asked:
+
+- `NostrDao`'s inbound arms for envelopes, the support word and the promotion steps, which sit
+  before the Wavelength co-signer's arms so that a carrier is not taken for a signing request;
+- the transcript's protocol filter;
+- the signers' check of a proposal, which would otherwise hand a Wavelength wallet statement,
+  proposed at 30370, to the governed room's door and decline it;
+- the approval's summary;
+- `PromotionManager.followStepDowns`, which would otherwise demote an admin for their device's
+  Wavelength high-water mark at 30377, and delete the wallet's row.
+
+`GovernanceBesideWavelengthJvmTest` builds both families as Dedun writes them and holds them
+apart. Governance leaves `GizaProtocolEvents`.
+
+A release with this in it still needs K3 before it is safe in a room a Giza or Bennu device
+shares. Their governance events are told apart the same way, but a Wavelength statement a
+Dedun device writes is, to them, a governance kind that does not parse.
+
+The rest of the Dedun-only work:
+
+- **Quorum.** `IcebergDkg.isDeployable` does not read `ChatRoomType`, so nothing moved.
+- **Every commit through `GovernanceManager`.** Dedun added no commit site of its own: invite,
+  removal, the leave folded in, disband and promotion are Bennu's routed ones. Phase 1's
+  stopgap guard is gone with Bennu's.
+- **What reacts to a member leaving.** Less than this plan feared. `1a8b2124`'s "approved
+  leave" is an Ark round's exit, not a member leaving the group, and the closing payout is
+  not built. What does react is each group wallet's "departed" list, read from the room's
+  participants. `MixedDeviceGovernedRoomJvmTest` holds that a leave inside an envelope takes the
+  member out of them as a bare one does.
+- **The mixed-device test** pays out as Dedun's wallet allows: a member's own coin to their
+  address, with no change. Bennu's version spends with change, which Dedun refuses before it is
+  proposed.
+
+jvmTest: 3,391 run, 0 failed, 7 skipped, once the notification classifier filed the five line
+types these phases added as Giza does: an admin added or removed is group activity, and an
+offer, a refused change, a rotation taken part in and the founding-admins line are silent.
+`compileDebugKotlinAndroid` and the audits pass.
+
+Not done here:
+
+- the Wavelength payout approval signed in a governed room, beside governance traffic;
+- a test that a release build declines a 30340, and a Dedun device rotating with a Giza-shaped
+  one: both mean something only after K3.
+
 ## Phase 9: promotion, demotion and the rotations they owe (D4)
 
 Bennu's port Phase 9:
@@ -753,6 +816,30 @@ member-row-actions' tests, which never saw it.
   and check that the share is gone.
 
 **Done when** those pass, with the flag on.
+
+**As built,** with Phase 8 (see there for the commits and the schema):
+
+- **D4.** `WalletKeysHeld` names the group wallet a room keeps, Lightning or Wavelength, and
+  `MemberActionBlocker.WavelengthWalletHeld` stands beside Bennu's Lightning one, with its own
+  explanation. The rule is also kept in `MarmotOutboundDao.promote` and `demote`, where every
+  keyed admin change is made. A step-down is proposed by another admin's device, past any menu,
+  and Bennu's menu did not hold it at all; here it is not offered while either wallet is kept.
+- **The wording.** The keyed "make admin" confirmation says the key signs the group's changes,
+  its payouts and who owns which coins. It says so in every keyed room, rather than asking a
+  second time only where the onchain wallet holds funds.
+- **The member row.** member-row-actions came in without a conflict on the row itself: the
+  payout line and "open deposits" stay under the name, and the actions are the row's menu.
+
+Tests: Bennu's Phase 9 suite; `MemberActionPolicyTest`, a Wavelength wallet holding every role
+change and the step-down.
+
+Not done here:
+
+- a promotion end to end that signs a payout as the new admin, then demotes them and checks
+  the share is gone. Bennu's `ShareRefreshRitualJvmTest` covers promotion and demotion without
+  the payout;
+- a test of the D4 refusal at `promote` and `demote` with a real Wavelength wallet in the room:
+  the menu's rule is tested, and the refusal is the same `WalletKeysHeld`.
 
 ## Phase 10: the product choices left (D3, D6)
 

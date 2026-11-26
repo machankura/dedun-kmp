@@ -115,6 +115,7 @@ import dedun.composeapp.generated.resources.each_member_s_device_checks_the_comb
 import dedun.composeapp.generated.resources.shared_key
 import dedun.composeapp.generated.resources.the_ceremony_was_abandoned
 import dedun.composeapp.generated.resources.the_group_has_a_shared_key
+import dedun.composeapp.generated.resources.s_has_a_shared_key
 import dedun.composeapp.generated.resources.the_group_has_agreed_what_the_admin_room
 import dedun.composeapp.generated.resources.the_group_could_not_agree_what_the_admin
 import dedun.composeapp.generated.resources.the_group_is_agreeing_what_the_admin_room
@@ -132,6 +133,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * One shared-key ceremony: a ChillDKG ritual, shown as a ladder of rounds so
@@ -198,12 +200,12 @@ fun DkgRitualScreen(
                                 Text(
                                     // The ceremony's name, not the room's: a subgroup's
                                     // runs in its parent's room, and "Shared key for
-                                    // #Checkers" over Tapscript's ceremony names the
+                                    // {Checkers}" over Tapscript's ceremony names the
                                     // one group it is not for.
                                     text = stringResource(
                                         Res.string.shared_key_for,
-                                        session.subject
-                                            ?: dkgRitualUIState.localChatRoom.chatRoom.subject
+                                        (session.subject ?: dkgRitualUIState.localChatRoom.chatRoom.subject)
+                                            ?.let(MarmotGroupName::display)
                                             ?: "this group"
                                     ),
                                     maxLines = 1,
@@ -387,7 +389,9 @@ fun DkgRitualScreen(
 /**
  * Where a failed ceremony is tried again: the screen that starts that kind.
  *
- * A group's own goes back to `CreateSharedKeyScreen`. A subgroup's goes back to
+ * A group's own goes back to `CreateSharedKeyScreen`, filled in from the one that
+ * failed -- its name above all, since the room may hold other groups and its own
+ * name is the first one's (docs/nip17-multiple-ceremonies.md). A subgroup's goes back to
  * the picker, filled in from the ceremony that failed, because trying again is a
  * new ceremony over choices the member may want to change -- an admin who never
  * showed up, say.
@@ -401,7 +405,7 @@ internal fun retryRoute(activeUserPublicKey: HexKey, chatRoomId: String, session
                 retrying = session.id,
             )
         }
-        ?: CreateSharedKeyRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId)
+        ?: CreateSharedKeyRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, retrying = session.id)
 
 /** The ladder, and the members it is climbing. */
 /**
@@ -471,7 +475,7 @@ private fun StalledCeremonyCard(
 }
 
 @Composable
-private fun RitualProgress(
+internal fun RitualProgress(
     session: DkgSession,
     participantCount: Int,
     activeUserPublicKey: HexKey,
@@ -597,7 +601,14 @@ private fun RitualProgress(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.CheckCircle, contentDescription = Decorative)
-                    Text(stringResource(Res.string.the_group_has_a_shared_key), style = MaterialTheme.typography.titleSmall)
+                    // Named, as the transcript's line is: the same people may have made
+                    // more than one group in this room (docs/nip17-multiple-ceremonies.md).
+                    Text(
+                        text = session.subject
+                            ?.let { stringResource(Res.string.s_has_a_shared_key, MarmotGroupName.display(it)) }
+                            ?: stringResource(Res.string.the_group_has_a_shared_key),
+                        style = MaterialTheme.typography.titleSmall
+                    )
                 }
 
                 session.thresholdPublicKey?.let { thresholdPublicKey ->

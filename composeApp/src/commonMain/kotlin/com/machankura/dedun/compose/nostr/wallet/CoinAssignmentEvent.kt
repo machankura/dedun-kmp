@@ -37,16 +37,16 @@ import kotlin.time.Clock
  * deposit would count its money twice: once when it came in, and again now. An assignment says
  * who *owns* a coin, moves no tally, and is read only by the owner rule and the balances.
  *
- * ### Why 30391, and 30341 before it
+ * ### Why 30421, and 30341 before it
  *
  * After the deposit attribution, 30340. Nothing used 30341 to 30348.
  *
  * It was 30341 until Giza and Bennu took that number for a share refresh round. It moved to
- * 30391 (docs/giza-into-dedun.md, Phase K), and 30341 is its legacy number: an event signed
+ * 30421 (docs/giza-into-dedun.md, Phase K, then docs/giza-second-batch.md, Phase 4), and 30341 is its legacy number: an event signed
  * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object CoinAssignmentEvent {
-    val KIND: Kind = 30391
+    val KIND: Kind = 30421
 
     private const val CHAIN_TAG = "chain"
     private const val COIN_TAG = "coin"

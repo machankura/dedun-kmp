@@ -99,6 +99,7 @@ class RobustRoomKeyCeremonyTest {
         room: LocalChatRoom,
         threshold: Int = quorum,
         parentChatRoomId: String? = null,
+        subject: String? = null,
     ) =
         ChillDkgRitualManager.proposeRitual(
             database = db,
@@ -107,6 +108,7 @@ class RobustRoomKeyCeremonyTest {
             nostrPrivateKey = creatorPrivateKey,
             threshold = threshold,
             parentChatRoomId = parentChatRoomId,
+            subject = subject,
         )
 
     private suspend fun ritualPayloads(room: LocalChatRoom) =
@@ -204,6 +206,144 @@ class RobustRoomKeyCeremonyTest {
             chatMessages(room).count { it.messageType == ChatMessage.TYPE_DKG_STARTED },
             "and the room is told once",
         )
+    }
+
+    /**
+     * The same people making a second group, after the first is made.
+     *
+     * The room is the same room -- its id is derived from its members -- and its
+     * first ceremony is finished. That used to be handed back as though it were
+     * the group asked for, under the old name and the old quorum, with nothing
+     * said. A finished ceremony is a group that exists, not an ask still pending.
+     * docs/nip17-multiple-ceremonies.md, Phase 1.
+     */
+    @Test
+    fun `a finished group does not stop the same people making another`() = runBlocking {
+        val room = robustRoom()
+        val first = openCeremony(room)
+        db.dkgSessionDao().upsert(first.copy(stage = DkgRitualStage.COMPLETE))
+
+        val second = openCeremony(room, threshold = 3, subject = "Agora")
+
+        assertNotEquals(first.id, second.id)
+        assertEquals(3, second.threshold, "the quorum asked for, not the first group's")
+        assertEquals("Agora", second.subject)
+
+        val proposals = ritualPayloads(room).filter { it.kind == DkgRitualEvents.PROPOSAL }
+        assertEquals(2, proposals.size, "the group proposes again")
+        assertEquals(
+            "Agora",
+            DkgRitualEvents.parseSubject(
+                proposals.single { DkgRitualEvents.parseSessionId(it.tags) == second.id }.tags
+            ),
+            "and the proposal carries the new group's name",
+        )
+        assertEquals("Robust Group", db.chatRoomDao().findChatRoomById(room.chatRoom.id)?.chatRoom?.subject,
+            "the room keeps its name")
+    }
+
+    /**
+     * A group still waiting on somebody's phone does not hold the next one up. Two
+     * names are two groups, and the protocol keeps two sessions apart already.
+     */
+    @Test
+    fun `two groups can be in the making at once`() = runBlocking {
+        val room = robustRoom()
+        val first = openCeremony(room)
+        val second = openCeremony(room, subject = "Agora")
+
+        assertNotEquals(first.id, second.id)
+        assertEquals(
+            setOf(first.id, second.id),
+            db.dkgSessionDao().getRunningOwnSessionsFor(room.chatRoom.id).map { it.id }.toSet(),
+        )
+    }
+
+    /** The name is how a repeat is told apart from a new group, so it is read loosely. */
+    @Test
+    fun `asking again under the same name, however it is typed, is the same ask`() = runBlocking {
+        val room = robustRoom()
+        val first = openCeremony(room, subject = "Agora")
+
+        assertEquals(first.id, openCeremony(room, subject = "  agora ").id)
+        assertEquals(first.id, openCeremony(room, subject = "AGORA").id)
+        assertEquals(1, ritualPayloads(room).count { it.kind == DkgRitualEvents.PROPOSAL })
+    }
+
+    /**
+     * A second group named by the room would be the first group's namesake, and the
+     * room its key makes another `&Robust Group`. The screens always name it, so a
+     * caller that does not is a bug, said as one. docs/nip17-multiple-ceremonies.md, D2.
+     */
+    @Test
+    fun `a second group without a name of its own is refused`() = runBlocking {
+        val room = robustRoom()
+        val first = openCeremony(room)
+        db.dkgSessionDao().upsert(first.copy(stage = DkgRitualStage.COMPLETE))
+
+        val refused = runCatching { openCeremony(room) }.exceptionOrNull()
+        assertTrue(refused is IllegalArgumentException, "got $refused")
+        assertEquals(1, ritualPayloads(room).count { it.kind == DkgRitualEvents.PROPOSAL })
+
+        // The room's name, given outright, is a name: a second group may share it.
+        val namesake = openCeremony(room, subject = "Robust Group")
+        assertNotEquals(first.id, namesake.id)
+    }
+
+    /**
+     * A line is written once and read later, perhaps after the same people have
+     * started a second group in the room, so it names the group it is about.
+     * docs/nip17-multiple-ceremonies.md, Phase 4.
+     */
+    @Test
+    fun `a ceremony's lines name the group it makes`() = runBlocking {
+        val room = robustRoom()
+        val first = openCeremony(room)
+        db.dkgSessionDao().upsert(first.copy(stage = DkgRitualStage.COMPLETE))
+        val agora = openCeremony(room, subject = "Agora")
+
+        val started = chatMessages(room).filter { it.messageType == ChatMessage.TYPE_DKG_STARTED }
+        assertTrue(
+            started.single { it.dkgSessionId == first.id }.content.startsWith("started a key ceremony for Robust Group."),
+            "the room's first group is named for the room",
+        )
+        assertTrue(
+            started.single { it.dkgSessionId == agora.id }.content.startsWith("started a key ceremony for Agora."),
+        )
+
+        ChillDkgRitualManager.abandon(db, room, agora.id)
+        val abandoned = chatMessages(room).single { it.messageType == ChatMessage.TYPE_DKG_FAILED }
+        assertTrue(abandoned.content.startsWith("abandoned the key ceremony for Agora."), abandoned.content)
+    }
+
+    /** A room with no name opens a ceremony with none, and its lines read as they did. */
+    @Test
+    fun `an unnamed ceremony keeps the words it always had`() = runBlocking {
+        listOf(user, alice, bob).forEach { seedProfile(it) }
+        val room = assertNotNull(
+            db.nostrNip17Dao().createNip17ChatRoom(userPublicKey = user, participantPublicKeys = listOf(alice, bob))
+        )
+        val session = openCeremony(room)
+
+        assertNull(session.subject)
+        val started = chatMessages(room).single { it.messageType == ChatMessage.TYPE_DKG_STARTED }
+        assertTrue(started.content.startsWith("started a shared key ceremony."), started.content)
+    }
+
+    /**
+     * A ceremony from a build before ceremonies carried names has none on its row. It
+     * was named by its room when it opened, so that is the name a repeated ask is
+     * matched against, and a device upgraded mid-ceremony folds into it rather than
+     * opening a second. docs/nip17-multiple-ceremonies.md, Phase 7.
+     */
+    @Test
+    fun `a ceremony from before names were carried is named by its room`() = runBlocking {
+        val room = robustRoom()
+        val old = openCeremony(room).let { it.copy(subject = null).also { row -> db.dkgSessionDao().upsert(row) } }
+
+        assertEquals(old.id, openCeremony(room).id, "the same ask, under the room's name")
+        assertEquals(old.id, openCeremony(room, subject = "robust group").id)
+        assertNotEquals(old.id, openCeremony(room, subject = "Agora").id, "another name is another group")
     }
 
     /**
@@ -432,8 +572,10 @@ class RobustRoomKeyCeremonyTest {
      * empty one and the subgroup's is buried under it.
      *
      * Nothing on the wire stops that and nothing should: two purposes are two
-     * ceremonies. What stops it is not offering it -- the shared-key screen exists
-     * to give a ceremony to a room that has none, and this room has one.
+     * ceremonies, and since docs/nip17-multiple-ceremonies.md two groups made by
+     * the same people are too. What keeps it from burying anything is that no
+     * screen asks a room for "its newest ceremony" any more -- each one names the
+     * ceremony it means.
      */
     @Test
     fun `a room holding a ceremony will still take one for another purpose`() = runBlocking {
@@ -452,7 +594,7 @@ class RobustRoomKeyCeremonyTest {
             2,
             db.dkgSessionDao().getByParentChatRoomId("ab".repeat(32)).size +
                 (if (db.dkgSessionDao().getLatestSessionFor(room.chatRoom.id, null) != null) 1 else 0),
-            "a room can end up holding two ceremonies, so the UI must not offer a third",
+            "a room can hold more than one ceremony, so nothing may ask it for one",
         )
     }
 }

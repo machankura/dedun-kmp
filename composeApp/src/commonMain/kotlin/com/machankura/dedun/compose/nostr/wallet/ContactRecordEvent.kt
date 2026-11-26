@@ -12,7 +12,7 @@ import kotlin.time.Clock
  * The group agreeing to count a person outside it: `docs/non-member-deposits.md`, D3.
  *
  * ```
- * kind:    30394
+ * kind:    30424
  * pubkey:  <the room>
  * content: ""
  * tags:
@@ -35,12 +35,12 @@ import kotlin.time.Clock
  * onto a member's key, and the same number in the same room is always the same id -- so the
  * record is write-once and a second for that number is a second, refused.
  *
- * ### Why 30394
+ * ### Why 30424
  *
- * After the member transfer, 30393: the first of the six contact kinds, 30394-30399 (`docs/kinds.md`).
+ * After the member transfer, 30423: the first of the six contact kinds, 30424-30429 (`docs/kinds.md`).
  */
 object ContactRecordEvent {
-    val KIND: Kind = 30394
+    val KIND: Kind = 30424
 
     private const val D_TAG = "d"
     private const val PROPOSER_TAG = "p"

@@ -20,7 +20,13 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletCertificateEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletRequestEvent
+import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
+import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
+import com.machankura.dedun.compose.nostr.inbox.InboxSeal
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
@@ -59,7 +65,11 @@ object ProposedEvent {
      * person: a caller with profiles to hand passes them, and one without gets
      * the summary without a name rather than a wrong one.
      */
-    fun summarize(event: Event, nameOf: (HexKey) -> String? = { null }): Summary = when (MovedKinds.current(event.kind)) {
+    fun summarize(event: Event, nameOf: (HexKey) -> String? = { null }): Summary = when (
+        // A governed room's statement shares 30370 with the Wavelength wallet statement's
+        // legacy number until K3, and is told by its shape (`GovernanceEvents.isGovernance`).
+        if (GovernanceEvents.isGovernance(event)) event.kind else MovedKinds.current(event.kind)
+    ) {
         // The one thing a group signs that is about the group rather than about
         // its work, and the only one a member sees before the room has done
         // anything. Shown as the path and the ceremony rather than as the key:
@@ -82,6 +92,12 @@ object ProposedEvent {
         SubgroupBirthCertificateEvent.KIND -> Summary(
             label = "A new subgroup of this group",
             detail = listOfNotNull(
+                // Verbatim, neither made bare nor drawn in braces: this is what
+                // the signer is about to approve, and a certificate proposed
+                // before docs/group-name-braces.md says `&name` (or `#name`,
+                // before docs/group-name-prefix.md). The summary of a signature
+                // shows the bytes being signed, even where the rest of the app
+                // draws the name in braces (docs/group-name-braces.md, D5).
                 SubgroupBirthCertificateEvent.parseName(event.tags),
                 SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags)
                     .size
@@ -128,6 +144,53 @@ object ProposedEvent {
                 "On ${GroupWalletStatementEvent.chainName(statement.chain)}, account ${statement.account}"
             } ?: "A wallet statement this device cannot read"
         )
+
+        // The group's inbox (docs/group-inbox.md, D5 and D6): the key anyone writing to
+        // the group will encrypt to, shown by its fingerprint, and the relays its mail is
+        // to arrive on. Deciding to sign the first is deciding the group has an inbox.
+        InboxAnnouncement.KEY_KIND -> Summary(
+            label = "The group's inbox key",
+            detail = InboxAnnouncement.announcedKeyOf(event)?.let { "Key ${it.take(8)}…${it.takeLast(8)}" }
+                ?: "Names no key",
+        )
+        // A reply from the group's inbox: sealed, so said for what it is. The signing screen
+        // reads it out for a device that holds the inbox key (docs/group-inbox.md, D12), and a
+        // member without one sees only that it exists (D11).
+        // A seal with no `n` tag is the group writing by threshold ECDH instead
+        // (docs/group-threshold-ecdh.md, D12): ciphertext to its recipient's own key.
+        InboxSeal.KIND -> if (InboxSeal.encryptionKeyOf(event.tags) != null) {
+            Summary(
+                label = "A private reply from the group's inbox",
+                detail = "Sealed: only the group's inbox key opens it",
+            )
+        } else {
+            Summary(label = "A private message from the group", detail = "Sealed to its recipient")
+        }
+        InboxAnnouncement.RELAYS_KIND -> Summary(
+            label = "Where the group receives private messages",
+            detail = InboxAnnouncement.announcedRelaysOf(event).joinToString(", ") { it.url.removePrefix("wss://").trimEnd('/') }
+                .ifEmpty { "No relays" },
+        )
+
+        // The group's own profile. Named by what the group would be called and
+        // what it would say about itself, which is the whole of what is being
+        // decided; the JSON in the content is the one thing a signer should not
+        // have to read to find that out. docs/group-nostr-profile-and-posts.md.
+        MetadataEvent.KIND -> Summary(
+            label = "Nostr profile",
+            detail = MetadataEvent(
+                event.id, event.pubKey, event.createdAt, event.tags, event.content, event.sig
+            ).contactMetaData()?.let { metadata ->
+                listOfNotNull(
+                    metadata.anyName()?.takeIf { it.isNotBlank() },
+                    metadata.about?.takeIf { it.isNotBlank() }
+                ).joinToString(" · ").ifEmpty { "An empty profile" }
+            } ?: "Unreadable profile"
+        )
+
+        // A post in the group's name. The words are what is being decided, so
+        // they are the detail rather than a count of them.
+        TextNoteEvent.KIND -> Summary(label = "Post", detail = event.content)
 
         // The group keeping a Lightning wallet. What a member agrees to is a key, a node and an LSP
         // holding money under a policy, so the summary names the network, the threshold and the cap
@@ -367,6 +430,24 @@ object ProposedEvent {
                 }
                 ?: "A member wallet this device cannot read"
         )
+
+        // A change to the room itself, which no single admin may make: who is in
+        // it and who governs it, said in names, because a member approving it is
+        // approving those lines and not a hash. docs/member-admin-promotion.md,
+        // Phase 3.
+        GovernanceStatementEvent.KIND -> GovernanceStatementEvent.parse(event)?.let { statement ->
+            val name = { key: HexKey -> nameOf(key) ?: key.take(8) }
+            val change = statement.change
+            Summary(
+                label = "A change to who is in this group",
+                detail = listOfNotNull(
+                    change.adds.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Adds ") { name(it.account) },
+                    change.removes.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Removes ") { name(it) },
+                    change.admins?.joinToString(prefix = "Admins afterwards: ") { name(it) },
+                    "Changes its settings".takeIf { change.components.isNotEmpty() },
+                ).joinToString(" · ")
+            )
+        } ?: Summary(label = "A change to this group that cannot be read", detail = "")
 
         else -> Summary(label = "Event of kind ${event.kind}", detail = event.content)
     }

@@ -1,5 +1,12 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.unread_conversations
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -57,6 +64,11 @@ fun DedunNavigationSuite(
     breakpoint: Breakpoint,
     activeUserPublicKey: String?,
     activeProfileNostrEventId: String?,
+    /**
+     * Conversations with unread messages, shown on [TopLevelDestination.Messages]. Muted rooms are
+     * left out by the caller. docs/notifications-and-background-sync.md, Phase 4.
+     */
+    unreadConversations: Int = 0,
     content: @Composable () -> Unit,
 ) {
     val currentDestination: NavDestination? =
@@ -116,14 +128,28 @@ fun DedunNavigationSuite(
                         }
                     },
                     icon = {
-                        Icon(
-                            imageVector = destination.icon,
-                            // The label is beside the icon in the bar and in the expanded
-                            // rail, and a reader would hear the name twice. The collapsed
-                            // rail is the exception, and it draws the label as a tooltip
-                            // the accessibility tree still carries.
-                            contentDescription = Decorative,
-                        )
+                        val icon = @Composable {
+                            Icon(
+                                imageVector = destination.icon,
+                                // The label is beside the icon in the bar and in the expanded
+                                // rail, and a reader would hear the name twice. The collapsed
+                                // rail is the exception, and it draws the label as a tooltip
+                                // the accessibility tree still carries.
+                                contentDescription = Decorative,
+                            )
+                        }
+                        if (destination == TopLevelDestination.Messages && unreadConversations > 0) {
+                            val description = stringResource(Res.string.unread_conversations, unreadConversations)
+                            BadgedBox(
+                                badge = {
+                                    Badge(modifier = Modifier.clearAndSetSemantics { contentDescription = description }) {
+                                        Text(unreadConversations.toString())
+                                    }
+                                },
+                            ) { icon() }
+                        } else {
+                            icon()
+                        }
                     },
                     label = { Text(stringResource(destination.label)) },
                 )

@@ -195,7 +195,7 @@ class ChronicleAssemblyJvmTest {
             ChatRoom(
                 id = chatRoomId,
                 userPublicKey = newMember,
-                subject = "#Ekklesia",
+                subject = "Ekklesia",
                 description = null,
                 mlsGroupState = null,
             )

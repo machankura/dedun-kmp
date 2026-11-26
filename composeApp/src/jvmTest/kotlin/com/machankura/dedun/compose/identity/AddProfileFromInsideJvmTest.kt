@@ -97,6 +97,7 @@ class AddProfileFromInsideJvmTest {
         writeNostrKey = { key -> sovereign.writeNostrKey(key) },
         writeNostrPublicKey = { pubkey -> sovereign.writeNostrPublicKey(pubkey) },
         writeRecoveryPhrase = { _, _, onError -> onError(com.machankura.dedun.compose.ui.view.model.WritingSeedState.Error.CannotLoadSeedMap) },
+        writeRecoveryCode = { com.machankura.dedun.compose.identity.IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys },
     )
 
     private fun activated(stored: StoredIdentity.NostrSecret): Identity {

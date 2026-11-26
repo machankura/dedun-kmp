@@ -7,6 +7,7 @@ import com.machankura.dedun.compose.database.model.Profile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
@@ -170,6 +171,19 @@ class ChatRoomLastMessagePreviewTest {
                 "$messageType should not be attributed to its sender"
             )
         }
+    }
+
+    /**
+     * No longer written, but rows of it are still on devices, written as the user's own.
+     * Out of the set, each one would render as a bubble from the user.
+     * docs/remove-founding-admins-card.md, D3.
+     */
+    @Test
+    fun `a retired caption type still renders as a caption`() {
+        assertTrue(
+            ChatMessage.TYPE_FOUNDING_ADMINS_MISSING in ChatMessage.MEMBERSHIP_TYPES,
+            "it would render as a chat bubble",
+        )
     }
 
     /**

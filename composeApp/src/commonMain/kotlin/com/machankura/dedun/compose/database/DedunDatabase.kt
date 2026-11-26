@@ -63,12 +63,19 @@ import com.machankura.dedun.compose.database.dao.FrostSigningSessionDao
 import com.machankura.dedun.compose.database.dao.GiftWrapMessageDao
 import com.machankura.dedun.compose.database.dao.GiftWrapPayloadDao
 import com.machankura.dedun.compose.database.dao.GiftWrapSealDao
+import com.machankura.dedun.compose.database.dao.DisappearingDao
+import com.machankura.dedun.compose.database.dao.GroupDmDao
 import com.machankura.dedun.compose.database.dao.GroupKeyStateDao
 import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
+import com.machankura.dedun.compose.database.dao.NotificationDao
+import com.machankura.dedun.compose.database.migrations.ReadMarkMigrationSpec
+import com.machankura.dedun.compose.database.dao.GroupInboxDao
+import com.machankura.dedun.compose.database.dao.InboxKeyDao
 import com.machankura.dedun.compose.database.dao.InReplyToRelationDao
 import com.machankura.dedun.compose.database.dao.KeyShareDao
 import com.machankura.dedun.compose.database.dao.ShareRefreshDao
 import com.machankura.dedun.compose.database.dao.ShareRepairDao
+import com.machankura.dedun.compose.database.dao.GovernanceProposalDao
 import com.machankura.dedun.compose.database.dao.MarmotCommitResultDao
 import com.machankura.dedun.compose.database.dao.MarmotOutboundDao
 import com.machankura.dedun.compose.database.dao.MarmotGroupEventDao
@@ -105,6 +112,14 @@ import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEven
 import com.machankura.dedun.compose.database.model.ChatMessageBroadcastNostrEventRequestRelation
 import com.machankura.dedun.compose.database.model.ChatMessageNostrEventRelation
 import com.machankura.dedun.compose.database.model.ChatRoom
+import com.machankura.dedun.compose.database.model.DisappearingSetting
+import com.machankura.dedun.compose.database.model.ExpiredGiftWrap
+import com.machankura.dedun.compose.database.model.GroupConversationKey
+import com.machankura.dedun.compose.database.model.GroupDmMessage
+import com.machankura.dedun.compose.database.model.GroupDmOutbound
+import com.machankura.dedun.compose.database.model.GroupDmWrap
+import com.machankura.dedun.compose.database.model.GroupEcdhPartial
+import com.machankura.dedun.compose.database.model.GroupEcdhRound
 import com.machankura.dedun.compose.database.model.Connection
 import com.machankura.dedun.compose.database.model.GiftWrapMessage
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
@@ -117,6 +132,7 @@ import com.machankura.dedun.compose.database.model.ShareRefreshMessage
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
 import com.machankura.dedun.compose.database.model.ShareRepairMessage
 import com.machankura.dedun.compose.database.model.ShareRepairSession
+import com.machankura.dedun.compose.database.model.GovernanceProposal
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.InReplyToRelation
 import com.machankura.dedun.compose.database.model.MarmotCommitResult
@@ -137,6 +153,7 @@ import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeResult
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.NostrEventRelay
+import com.machankura.dedun.compose.database.model.NotificationLedger
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.Post
 import com.machankura.dedun.compose.database.model.Profile
@@ -145,6 +162,13 @@ import com.machankura.dedun.compose.database.model.Reaction
 import com.machankura.dedun.compose.database.model.RecentSearch
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
 import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.GroupInboxMessage
+import com.machankura.dedun.compose.database.model.GroupInboxPublication
+import com.machankura.dedun.compose.database.model.GroupInboxWrap
+import com.machankura.dedun.compose.database.model.InboxKey
+import com.machankura.dedun.compose.database.model.InboxKeyCeremony
+import com.machankura.dedun.compose.database.model.InboxKeyCeremonyMessage
+import com.machankura.dedun.compose.database.model.InboxSigning
 import com.machankura.dedun.compose.database.model.FrostSignerMessage
 import com.machankura.dedun.compose.database.model.FrostSigningItem
 import com.machankura.dedun.compose.database.model.FrostSigningSession
@@ -155,6 +179,7 @@ import com.machankura.dedun.compose.database.model.SynchronizeNostrEventResult
 import com.machankura.dedun.compose.database.model.UnsignedNostrEvent
 import com.machankura.dedun.compose.database.model.Zap
 import kotlin.time.Instant
+import com.machankura.dedun.compose.database.migrations.MarmotGroupBareNameMigrationSpec
 
 val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
 
@@ -176,6 +201,17 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         GiftWrapMessage::class,
         GiftWrapSeal::class,
         GiftWrapPayload::class,
+        DisappearingSetting::class,
+        ExpiredGiftWrap::class,
+        GroupConversationKey::class,
+        GroupDmMessage::class,
+        GroupDmOutbound::class,
+        GroupDmWrap::class,
+        GroupEcdhPartial::class,
+        GroupEcdhRound::class,
+        GroupInboxMessage::class,
+        GroupInboxPublication::class,
+        GroupInboxWrap::class,
         GroupKeyState::class,
         GroupLightningInvoiceRow::class,
         DepositRow::class,
@@ -211,6 +247,10 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         IcebergNonceRow::class,
         IcebergParticipantMessage::class,
         IcebergShareRow::class,
+        InboxKey::class,
+        InboxKeyCeremony::class,
+        InboxKeyCeremonyMessage::class,
+        InboxSigning::class,
         KeyShareGeneration::class,
         KeyShareMember::class,
         ShareRefreshConfirmation::class,
@@ -218,6 +258,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         ShareRefreshSession::class,
         ShareRepairMessage::class,
         ShareRepairSession::class,
+        GovernanceProposal::class,
         InReplyToRelation::class,
         MarmotCommitResult::class,
         MarmotGroupEvent::class,
@@ -236,6 +277,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         NegentropySynchronizeResult::class,
         NostrEvent::class,
         NostrEventRelay::class,
+        NotificationLedger::class,
         Participant::class,
         Post::class,
         Profile::class,
@@ -249,7 +291,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 49,
+    version = 56,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -545,6 +587,43 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // ShareRepairSession and ShareRepairMessage tables, and the nullable
         // GroupKeyState.memberBindings. Room generates it. Giza's v40, Bennu's v39.
         AutoMigration(from = 48, to = 49),
+        // v50 adds notifications' storage (docs/giza-second-batch.md, Phase 3, from Giza's
+        // notifications Phase 3, its v47): ChatRoom.lastReadMessageId, ChatRoom.notifications and
+        // the NotificationLedger table. Room generates the shape; ReadMarkMigrationSpec then marks
+        // every existing room read up to its newest line, so an upgrade does not turn the user's
+        // whole history unread.
+        AutoMigration(from = 49, to = 50, spec = ReadMarkMigrationSpec::class),
+        // v51 adds GovernanceProposal (docs/member-admin-promotion.md, Phase 5): a
+        // change this device proposed to a governed room, held while the group signs
+        // it. One new table, so Room generates it. Giza's v41, Bennu's v40.
+        AutoMigration(from = 50, to = 51),
+        // v52 adds GovernanceProposal.thenRotateWithout and ShareRepairSession.nParticipants
+        // (docs/member-admin-promotion.md, Phases 8 and 9): two nullable columns, so
+        // Room generates it. Giza's v42, Bennu's v41.
+        AutoMigration(from = 51, to = 52),
+        // v53 adds the group's inbox (docs/group-inbox.md, Phase 3, Giza's v45; docs/giza-second-batch.md,
+        // Phase 6): InboxKeyCeremony, InboxKeyCeremonyMessage and InboxKey, kept apart from DkgSession so
+        // no signing path can find a threshold-1 key, and GroupInboxWrap, GroupInboxMessage and
+        // GroupInboxPublication, and InboxSigning (Phase 5). New tables only, so Room generates it.
+        AutoMigration(from = 52, to = 53),
+        // v54 adds a group's direct messages (docs/group-threshold-ecdh.md, Phase 4, Giza's v45 there;
+        // docs/giza-second-batch.md, Phase 6): GroupEcdhRound, GroupEcdhPartial, GroupConversationKey,
+        // GroupDmWrap, GroupDmMessage and GroupDmOutbound. New tables only, so Room generates it.
+        AutoMigration(from = 53, to = 54),
+        // v55 adds disappearing messages' storage (docs/disappearing-messages.md, Phase 2, Giza's v50;
+        // docs/giza-second-batch.md, Phase 7): the nullable ChatRoom.disappearingMessageSecs and
+        // disappearingNoticeShownAt, the nullable ChatMessage.expiresAt and GiftWrapPayload.expiresAt
+        // with an index each, and the DisappearingSetting and ExpiredGiftWrap tables. Nullable columns
+        // and new tables only, so Room generates it. No data moves: an identity with no
+        // DisappearingSetting row reads as Off, Dedun's default (D11), so nothing anyone writes starts
+        // disappearing on upgrade.
+        AutoMigration(from = 54, to = 55),
+        // v56 changes no shape. MarmotGroupBareNameMigrationSpec stores every Marmot room already
+        // on the device under its bare name, `#name` becoming `name`, which the app draws as
+        // `{name}` (docs/group-name-braces.md, Phase 3; docs/giza-second-batch.md, Phase 8). Giza
+        // went `#` to `&` (its v52 or v53) and `&` to bare (its v55); Dedun never stored `&`, so it
+        // goes once, straight to bare, with the same body.
+        AutoMigration(from = 55, to = 56, spec = MarmotGroupBareNameMigrationSpec::class),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -575,6 +654,10 @@ abstract class DedunDatabase: RoomDatabase() {
 
     abstract fun frostSigningSessionDao(): FrostSigningSessionDao
 
+    abstract fun disappearingDao(): DisappearingDao
+
+    abstract fun groupDmDao(): GroupDmDao
+
     abstract fun groupKeyStateDao(): GroupKeyStateDao
 
     abstract fun keyShareDao(): KeyShareDao
@@ -582,10 +665,17 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun shareRefreshDao(): ShareRefreshDao
 
     abstract fun shareRepairDao(): ShareRepairDao
+    abstract fun governanceProposalDao(): GovernanceProposalDao
 
     abstract fun groupSignedEventDao(): GroupSignedEventDao
 
     abstract fun groupTransactionDao(): GroupTransactionDao
+
+    abstract fun inboxKeyDao(): InboxKeyDao
+
+    abstract fun groupInboxDao(): GroupInboxDao
+
+    abstract fun notificationDao(): NotificationDao
 
     abstract fun memberWalletDao(): MemberWalletDao
 

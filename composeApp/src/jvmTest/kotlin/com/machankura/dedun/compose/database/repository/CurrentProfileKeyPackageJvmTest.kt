@@ -206,7 +206,9 @@ class CurrentProfileKeyPackageJvmTest {
         )
 
         // The room is keyed on the routing id from the group's 0x8004 component, and its
-        // restored state is a current-profile group that names the inviter as admin.
+        // restored state is a current-profile group that names the inviter as admin. The
+        // client named it without a mark, and it is stored bare, as every Marmot room is
+        // (docs/group-name-braces.md, D4).
         val room = assertNotNull(db.chatRoomDao().findChatRoomById(routingId.toHexKey()), "no room was made for the routing id")
         assertEquals("made elsewhere", room.chatRoom.subject)
         val restored = assertNotNull(room.chatRoom.toMlsGroup(), "the joined state does not restore")

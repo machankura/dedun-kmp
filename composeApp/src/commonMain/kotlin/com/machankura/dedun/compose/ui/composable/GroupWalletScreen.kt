@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.database.model.title
 import dedun.composeapp.generated.resources.qr_group_onchain_address
 import dedun.composeapp.generated.resources.this_address_was_paid_and_the_next_one_is_below
 import dedun.composeapp.generated.resources.your_device_signs_only_payouts
@@ -277,8 +278,8 @@ fun GroupWalletScreen(
     // Named for its group once the room is known; a room with no subject, and
     // the moment before it loads, fall back to the generic name.
     val groupName = when (val state = groupWalletViewModel.groupWalletUIState) {
-        is GroupWalletUIState.NotOpened -> state.localChatRoom.chatRoom.subject
-        is GroupWalletUIState.Loaded -> state.localChatRoom.chatRoom.subject
+        is GroupWalletUIState.NotOpened -> state.localChatRoom.chatRoom.title
+        is GroupWalletUIState.Loaded -> state.localChatRoom.chatRoom.title
         else -> null
     }
 

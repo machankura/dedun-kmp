@@ -16,6 +16,7 @@ import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.extensions.memberName
 import com.machankura.dedun.compose.ui.composable.widgets.profile.ProfileColor
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.machankura.dedun.compose.database.model.title
 
 data class LocalChatRoom(
     @Embedded val chatRoom: ChatRoom,
@@ -64,9 +65,10 @@ data class LocalChatRoom(
 
     @Composable
     fun RenderChatRoomTitleText() {
-        if (chatRoom.subject != null) {
+        val title = chatRoom.title
+        if (title != null) {
             Text(
-                text = chatRoom.subject,
+                text = title,
                 color = ProfileColor.fromPublicKey(chatRoom.id),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

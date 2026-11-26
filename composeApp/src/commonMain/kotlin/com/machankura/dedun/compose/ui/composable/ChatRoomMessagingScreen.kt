@@ -1,5 +1,9 @@
 package com.machankura.dedun.compose.ui.composable
 
+import androidx.compose.runtime.remember
+import com.machankura.dedun.compose.DedunRuntime
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.IcebergCeremonyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
 import com.machankura.dedun.compose.repository.GroupLightningRepository
@@ -36,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import com.machankura.dedun.compose.notifications.MarkReadWhileVisible
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,6 +105,10 @@ fun ChatRoomMessagingScreen(
      * phone the same screen is a destination, and the button is what leaves it.
      */
     onNavigateBack: (() -> Unit)?,
+    /** How long what the user writes here lasts (docs/disappearing-messages.md, D12); none in a preview. */
+    disappearingSettings: DisappearingSettingsStore? = remember {
+        DedunRuntime.current()?.let { DisappearingSettingsStore(it.auxDatabaseManager.auxDatabase) }
+    },
 ) {
     val chatRoomMessagingViewModel: ChatRoomMessagingViewModel = viewModel(
         factory = ChatRoomMessagingViewModel.factory(
@@ -110,6 +119,14 @@ fun ChatRoomMessagingScreen(
             chatRepository = chatRepository,
             activeUserPublicKey = activeUserPublicKey
         )
+    )
+
+    // Read while it is on screen, and the room the notification policy stays quiet about.
+    // docs/notifications-and-background-sync.md, Phase 4.
+    MarkReadWhileVisible(
+        activeUserPublicKey = activeUserPublicKey,
+        chatRoomId = chatRoomId,
+        chatRepository = chatRepository,
     )
 
     ScreenStateTransition(chatRoomMessagingViewModel.chatRoomMessagingUIState) { uiState ->
@@ -152,6 +169,12 @@ fun ChatRoomMessagingScreen(
                                 if (onNavigateBack != null) NavigateBackButton(onNavigateBack)
                             },
                             actions = {
+                                // A NIP-17 conversation's timer: an MLS room follows the group's own retention.
+                                if (disappearingSettings != null && chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) {
+                                    DisappearingTimerAction(chatRoomId, activeUserPublicKey, disappearingSettings) {
+                                        onNavigateToRoute.invoke(DisappearingMessagesRoute(activeUserPublicKey, chatRoomId))
+                                    }
+                                }
                                 IconButton(
                                     onClick = {
                                         // Navigate to the invite user screen...
@@ -176,6 +199,11 @@ fun ChatRoomMessagingScreen(
                     Column(
                         modifier = Modifier.padding(innerPadding).readableContent().fillMaxSize()
                     ) {
+                        if (disappearingSettings != null && chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) {
+                            DisappearingNotice(chatRoomId, activeUserPublicKey, disappearingSettings) {
+                                onNavigateToRoute.invoke(DisappearingMessagesRoute(activeUserPublicKey, chatRoomId))
+                            }
+                        }
                         Column(
                             modifier = Modifier.weight(1f).fillMaxWidth()
                         ) {

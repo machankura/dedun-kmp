@@ -1,6 +1,27 @@
 package com.machankura.dedun.compose.ui.composable.navigation
 
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
+import com.machankura.dedun.compose.ui.composable.ProposeGroupEventScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.BroadcastGroupSignedEventRoute
+import com.machankura.dedun.compose.ui.composable.BroadcastGroupSignedEventScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.AddGroupPostRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
+import com.machankura.dedun.compose.ui.composable.AddGroupPostScreen
+import com.machankura.dedun.compose.ui.composable.GroupPostsScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.EditGroupNostrProfileRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
+import com.machankura.dedun.compose.ui.composable.EditGroupNostrProfileScreen
+import com.machankura.dedun.compose.ui.composable.GroupNostrProfileScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
+import com.machankura.dedun.compose.ui.composable.DisappearingMessagesScreen
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import com.machankura.dedun.compose.ui.composable.ContactScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxConversationRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxSettingsRoute
+import com.machankura.dedun.compose.ui.composable.GroupInboxScreen
+import com.machankura.dedun.compose.ui.composable.GroupInboxConversationScreen
+import com.machankura.dedun.compose.ui.composable.GroupInboxSettingsScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
 import com.machankura.dedun.compose.repository.GroupWalletPrefs
 import com.machankura.dedun.compose.ui.composable.GroupPayoutsScreen
@@ -114,7 +135,11 @@ import com.machankura.dedun.compose.database.repository.DatabaseFrostSigningRepo
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
 import com.machankura.dedun.compose.database.repository.DatabaseSearchRepository
-import com.machankura.dedun.compose.managers.AuxDatabaseManager
+import com.machankura.dedun.compose.DedunRuntime
+import com.machankura.dedun.compose.notifications.NotificationTaps
+import com.machankura.dedun.compose.notifications.NotificationSettingsStore
+import com.machankura.dedun.compose.ui.composable.NotificationSettingsScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.NotificationSettingsRoute
 import com.machankura.dedun.compose.ui.composable.ActiveProfileScreen
 import com.machankura.dedun.compose.ui.composable.AddMemberToChatRoomConfirmationScreen
 import com.machankura.dedun.compose.ui.composable.ChatRoomCreationScreen
@@ -163,6 +188,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateShared
 import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRitualRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.MemberActionUnavailableRoute
+import com.machankura.dedun.compose.ui.composable.MemberActionUnavailableScreen
 import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyPackageManagementRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.KeyRecoveryRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.LandingRoute
@@ -171,13 +198,15 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrEventDe
 import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrSecretRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilePreviewRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilesRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.RecoveryCodeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.RecoveryPhraseRoute
+import com.machankura.dedun.compose.ui.composable.RecoveryCodeScreen
 import com.machankura.dedun.compose.ui.composable.ProfilePreviewScreen
 import com.machankura.dedun.compose.ui.composable.ProfilesScreen
 import com.machankura.dedun.compose.ui.view.model.ProfilesViewModel
 import com.machankura.dedun.compose.ui.view.model.getAvailableWalletsMeta
 import com.machankura.dedun.compose.ui.view.model.bareKeyProfileWriter
-import com.machankura.dedun.compose.ui.view.model.seedProfileWriter
+import com.machankura.dedun.compose.ui.view.model.recoveryCodeProfileWriter
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchMemberToAddToChatRoomRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchResultRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchRoute
@@ -218,6 +247,8 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletAddressesRoute
@@ -246,57 +277,41 @@ import com.machankura.dedun.compose.ui.composable.ProposalListScreen
 
 @Composable
 fun DedunNavHost(
-    dedunGlobal: DedunGlobal,
-    phoenixGlobal: PhoenixGlobal,
+    runtime: DedunRuntime,
     navController: NavHostController
 ) {
     val logger = Logger.withTag("DedunNavHost")
 
-    val exceptionHandler = remember {
-        CoroutineExceptionHandler { _, throwable ->
-            logger.e("Caught exception: ${throwable.message}", throwable)
-        }
-    }
+    val phoenixGlobal = runtime.phoenixGlobal
 
-    val applicationIOScope = remember { CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler) }
+    // The process's, not this composition's: a screen's coroutine that outlives the screen is
+    // the point of using it. docs/notifications-and-background-sync.md, Phase 2.
+    val applicationIOScope = runtime.ioScope
     val applicationMainScope = remember { CoroutineScope(Dispatchers.Main) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val auxDatabaseManager = remember {
-        AuxDatabaseManager(dedunGlobal)
-    }
-
-    // Before the repositories: the nostr repository stamps every fetch request it queues
-    // with the active identity, and takes the flow at construction.
+    // Before the repositories are read: they all follow the identity this view model writes,
+    // through the flow the runtime owns.
     val sovereignWalletViewModel: SovereignWalletViewModel = viewModel(
         factory = SovereignWalletViewModel.factory(
-            phoenixGlobal = phoenixGlobal
+            phoenixGlobal = phoenixGlobal,
+            activeIdentityState = runtime.activeIdentity,
         )
     )
 
-    val databaseNostrRepository = remember {
-        DatabaseNostrRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope,
-            activeIdentity = sovereignWalletViewModel.activeIdentity,
-        )
-    }
+    val databaseNostrRepository = runtime.nostrRepository
+    val databaseChatRepository = runtime.chatRepository
+    val databaseGroupInboxRepository = runtime.groupInboxRepository
+    val databaseGroupDmRepository = runtime.groupDmRepository
+    val databaseDkgRepository = runtime.dkgRepository
+    val databaseFrostSigningRepository = runtime.frostSigningRepository
+    val databaseMarmotRepository = runtime.marmotRepository
+    val searchRepository = runtime.searchRepository
 
-    val databaseChatRepository = remember {
-        DatabaseChatRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope,
-            activeIdentity = sovereignWalletViewModel.activeIdentity,
-        )
-    }
-
-    val databaseDkgRepository = remember {
-        DatabaseDkgRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope
-        )
-    }
+    // Dedun's wallet repositories stay here for now, on the runtime's database: nothing that
+    // runs without a screen reads them yet. docs/giza-second-batch.md, Phase 3.
+    val auxDatabaseManager = runtime.auxDatabaseManager
 
     val databaseGroupLightningRepository = remember {
         DatabaseGroupLightningRepository(database = auxDatabaseManager.auxDatabase)
@@ -305,13 +320,6 @@ fun DedunNavHost(
     val currentChainClients = remember { mutableStateOf<GroupChainClients?>(null) }
     val databaseGroupWavelengthRepository = remember {
         DatabaseGroupWavelengthRepository(database = auxDatabaseManager.auxDatabase, clients = { currentChainClients.value })
-    }
-
-    val databaseFrostSigningRepository = remember {
-        DatabaseFrostSigningRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope
-        )
     }
 
     val databaseMemberWalletRepository = remember {
@@ -337,18 +345,6 @@ fun DedunNavHost(
         )
     }
 
-    val databaseMarmotRepository = remember {
-        DatabaseMarmotRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope
-        )
-    }
-
-    val searchRepository = remember {
-        DatabaseSearchRepository(
-            database = auxDatabaseManager.auxDatabase
-        )
-    }
 
     // The Electrum client this identity watches the chain on: its node's, or --
     // for an nsec or npub profile, which has no node -- one of its own. Remade
@@ -377,7 +373,7 @@ fun DedunNavHost(
         // Here and not with the node's jobs in schedulePlatformLogic, which an nsec profile never
         // reaches. It does nothing for a profile that hasn't turned the wallet on.
         WavelengthPlatform.scheduleRenewal(phoenixGlobal.ctx)
-        AppLifecycle.isForeground.collect { foreground ->
+        AppLifecycle.isVisible.collect { foreground ->
             if (foreground) identityWavelength.enteredForeground() else identityWavelength.enteredBackground()
         }
     }
@@ -519,7 +515,7 @@ fun DedunNavHost(
     // same lifetime: without it, a device never spends a group's Wavelength coin.
     val groupArkWatcher = remember(groupChainClients) {
         groupChainClients?.let {
-            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope, groupWavelengthAlerts(dedunGlobal.platformContext)).also { watcher -> watcher.start() }
+            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope, groupWavelengthAlerts(runtime.dedunGlobal.platformContext)).also { watcher -> watcher.start() }
         }
     }
     DisposableEffect(groupArkWatcher) {
@@ -553,26 +549,11 @@ fun DedunNavHost(
         )
     )
 
-    val notaryViewModel: NotaryViewModel = viewModel(
-        factory = NotaryViewModel.factory(
-            activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
-            nostrRepository = databaseNostrRepository,
-            chatRepository = databaseChatRepository,
-            marmotRepository = databaseMarmotRepository,
-            scope = applicationIOScope
-        )
-    )
-
-    // TODO: Produce a notary UI Element...
-    val synchronizationViewModel: SynchronizationViewModel = viewModel(
-        factory = SynchronizationViewModel.factory(
-            activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
-            nostrRepository = databaseNostrRepository,
-            chatRepository = databaseChatRepository,
-            relayRepository = databaseNostrRepository,
-            scope = applicationIOScope
-        )
-    )
+    // One of each per process, started on first read and never cleared.
+    val notaryViewModel: NotaryViewModel = runtime.notary
+    val synchronizationViewModel: SynchronizationViewModel = runtime.synchronization
+    remember(runtime) { runtime.notifications }
+    remember(runtime) { runtime.disappearing }
 
     // TODO: Produce a synchronization UI element...
 
@@ -582,8 +563,8 @@ fun DedunNavHost(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> AppLifecycle.enteredForeground()
-                Lifecycle.Event.ON_STOP -> AppLifecycle.enteredBackground()
+                Lifecycle.Event.ON_START -> runtime.enteredForeground()
+                Lifecycle.Event.ON_STOP -> runtime.enteredBackground()
                 else -> Unit
             }
         }
@@ -761,6 +742,28 @@ fun DedunNavHost(
 
     // Once, above every screen: what a read-only identity may not be offered is decided
     // where the control is drawn, and this is how the control finds out.
+    // The rooms with something unread, muted ones left out: a muted room counts on its own row
+    // and stays off the tab. docs/notifications-and-background-sync.md, Phase 4.
+    val unreadConversations by remember(activeUserPublicKey) {
+        activeUserPublicKey
+            ?.let { publicKey -> databaseChatRepository.observeUnreadCounts(publicKey) }
+            ?.map { unread -> unread.values.count { !it.isMuted } }
+            ?: flowOf(0)
+    }.collectAsState(0)
+
+    // A tapped notification's room, opened once the identity it is for is the one running.
+    // One for another profile waits for that profile. docs/notifications-and-background-sync.md, Phase 6.
+    LaunchedEffect(activeUserPublicKey) {
+        val publicKey = activeUserPublicKey ?: return@LaunchedEffect
+        NotificationTaps.pending.collect { tap ->
+            if (tap == null || tap.userPublicKey != publicKey) return@collect
+            NotificationTaps.consumed(tap)
+            navController.navigate(
+                ChatRoomMessagingRoute(activeUserPublicKey = publicKey, chatRoomId = tap.chatRoomId, relayHint = null)
+            )
+        }
+    }
+
     ProvideSigningCapability(sovereignWalletViewModel.activeIdentity) {
     ProvideExchangeRate(primaryFiatRate) {
     DedunNavigationSuite(
@@ -768,6 +771,7 @@ fun DedunNavHost(
         breakpoint = MaterialTheme.breakpoint,
         activeUserPublicKey = activeUserPublicKey,
         activeProfileNostrEventId = activeProfileNostrEventId,
+        unreadConversations = unreadConversations,
     ) {
         NavHost(
             navController = navController,
@@ -834,7 +838,8 @@ fun DedunNavHost(
                             route = SignInRoute
                         )
                     },
-                    // The first profile on a device is the one the wallet will belong to.
+                    // The first profile on a device is the one the wallet will belong to,
+                    // backed by a recovery code.
                     onNavigateToCreateProfile = {
                         navController.navigate(
                             route = CreateProfileRoute(withWallet = true)
@@ -850,9 +855,10 @@ fun DedunNavHost(
                     },
                     nostrRepository = databaseNostrRepository,
                     marmotRepository = databaseMarmotRepository,
-                    // A seed from Landing, a bare key from inside: the screen does not know
-                    // which. See docs/multiple-profiles.md, Phase 5.
-                    newProfile = if (route.withWallet) sovereignWalletViewModel.seedProfileWriter() else sovereignWalletViewModel.bareKeyProfileWriter(),
+                    // A wallet backed by a recovery code from Landing, a bare key from inside: the
+                    // screen does not know which. See docs/multiple-profiles.md, Phase 5, and
+                    // docs/giza-second-batch.md, Phase 2f.
+                    newProfile = if (route.withWallet) sovereignWalletViewModel.recoveryCodeProfileWriter() else sovereignWalletViewModel.bareKeyProfileWriter(),
                     // The sign-in tail, with the popUpTo(0) it always had there: back from the
                     // new profile's startup must not return to a form whose secret is already
                     // on disk. The account rows are in the database before this runs, so the
@@ -1212,7 +1218,8 @@ fun DedunNavHost(
                     chatRepository = databaseChatRepository,
                     dkgRepository = databaseDkgRepository,
                     // Replaces this screen with the ceremony, whether it was just
-                    // opened or was already there, so back from the ceremony goes
+                    // opened or one running under the same name was handed back, so
+                    // back from the ceremony goes
                     // wherever the member came from rather than to a second offer.
                     onCeremonyOpened = { dkgSessionId ->
                         navController.navigate(
@@ -1225,7 +1232,8 @@ fun DedunNavHost(
                             popUpTo<CreateSharedKeyRoute> { inclusive = true }
                         }
                     },
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    retrying = route.retrying,
                 )
             }
             composable<DkgRitualRoute> { backStackEntry ->
@@ -1329,6 +1337,7 @@ fun DedunNavHost(
                             onSeedWriteError = onError,
                         )
                     },
+                    writeRecoveryCode = { code -> sovereignWalletViewModel.writeRecoveryCode(code) },
                     onNavigateBack = {
                         navController.popBackStack()
                     },
@@ -1591,6 +1600,23 @@ fun DedunNavHost(
                     },
                 )
             }
+            composable<NotificationSettingsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<NotificationSettingsRoute>()
+                NotificationSettingsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    store = remember(runtime) { NotificationSettingsStore(runtime.auxDatabaseManager.auxDatabase) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<DisappearingMessagesRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<DisappearingMessagesRoute>()
+                DisappearingMessagesScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    store = remember(runtime) { DisappearingSettingsStore(runtime.auxDatabaseManager.auxDatabase) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
             composable<KeyRecoveryRoute> { backStackEntry ->
                 val route = backStackEntry.toRoute<KeyRecoveryRoute>()
 
@@ -1614,6 +1640,20 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            composable<RecoveryCodeRoute> {
+                RecoveryCodeScreen(
+                    phoenixGlobal = phoenixGlobal,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    // Every code profile is also its 24 words, which the phrase screen reads
+                    // from seed.dat when the codes file cannot be.
+                    onShowRecoveryPhrase = {
+                        navController.navigate(RecoveryPhraseRoute)
+                    },
                 )
             }
             composable<NostrSecretRoute> {
@@ -1803,6 +1843,88 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            // Where a group receives direct messages: docs/group-threshold-ecdh.md, D8.
+            composable<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmSetupRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmSetupRoute>()
+
+                com.machankura.dedun.compose.ui.composable.GroupDmSetupScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chatRepository = databaseChatRepository,
+                    groupDmRepository = databaseGroupDmRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        navController.navigate(route = signingRoute) {
+                            popUpTo(route) { inclusive = true }
+                        }
+                    },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            // A group's direct messages: docs/group-threshold-ecdh.md, Phase 8.
+            composable<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmListRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmListRoute>()
+
+                com.machankura.dedun.compose.ui.composable.GroupDmListScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    chatRepository = databaseChatRepository,
+                    groupDmRepository = databaseGroupDmRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmConversationRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmConversationRoute>()
+
+                com.machankura.dedun.compose.ui.composable.GroupDmConversationScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    conversationId = route.conversationId,
+                    recipients = route.recipients,
+                    chatRepository = databaseChatRepository,
+                    groupDmRepository = databaseGroupDmRepository,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                )
+            }
+            // The group's inbox (docs/group-inbox.md, Phase 7).
+            composable<GroupInboxRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupInboxRoute>()
+                GroupInboxScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    inboxRepository = databaseGroupInboxRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<GroupInboxConversationRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupInboxConversationRoute>()
+                GroupInboxConversationScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    conversationId = route.conversationId,
+                    chatRepository = databaseChatRepository,
+                    inboxRepository = databaseGroupInboxRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+            composable<GroupInboxSettingsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupInboxSettingsRoute>()
+                GroupInboxSettingsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    inboxRepository = databaseGroupInboxRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<GroupPayoutsRoute> { backStackEntry ->
@@ -1999,7 +2121,7 @@ fun DedunNavHost(
                     }
                 )
             }
-            composable<ProposalListRoute> { backStackEntry ->
+            composable<ProposalListRoute>(typeMap = routeTypeMap) { backStackEntry ->
                 val route = backStackEntry.toRoute<ProposalListRoute>()
 
                 ProposalListScreen(
@@ -2129,6 +2251,147 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     },
+                )
+            }
+            composable<MemberActionUnavailableRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<MemberActionUnavailableRoute>()
+
+                MemberActionUnavailableScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    memberPublicKey = route.memberPublicKey,
+                    action = route.memberAction,
+                    nostrRepository = databaseNostrRepository,
+                    chatRepository = databaseChatRepository,
+                    onNavigateToRoute = { actionRoute -> navController.navigate(route = actionRoute) },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                )
+            }
+            // The group's nostr profile: docs/group-nostr-profile-and-posts.md.
+            composable<GroupNostrProfileRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupNostrProfileRoute>()
+
+                GroupNostrProfileScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    onNavigateToRoute = { actionRoute ->
+                        navController.navigate(route = actionRoute)
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<EditGroupNostrProfileRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<EditGroupNostrProfileRoute>()
+
+                EditGroupNostrProfileScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the form so back returns to the profile rather
+                        // than to an edit whose proposal has already gone out.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<EditGroupNostrProfileRoute> {
+                                inclusive = true
+                            }
+                        }
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            // The group's posts: docs/group-nostr-profile-and-posts.md.
+            composable<GroupPostsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<GroupPostsRoute>()
+
+                GroupPostsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    onNavigateToRoute = { actionRoute ->
+                        navController.navigate(route = actionRoute)
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable<AddGroupPostRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<AddGroupPostRoute>()
+
+                AddGroupPostScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the composer so back returns to the posts rather
+                        // than to a draft whose proposal has already gone out.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<AddGroupPostRoute> {
+                                inclusive = true
+                            }
+                        }
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            // A group-signed event, sent to relays: docs/group-nostr-profile-and-posts.md.
+            composable<BroadcastGroupSignedEventRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<BroadcastGroupSignedEventRoute>()
+
+                BroadcastGroupSignedEventScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    signedEventId = route.signedEventId,
+                    chatRepository = databaseChatRepository,
+                    // Handed the pool itself rather than a queue to write to: a
+                    // group-signed event must not become a `NostrEvent` row, and
+                    // the queue hangs off one (D7). See
+                    // `BroadcastGroupSignedEventViewModel`.
+                    publishTransport = synchronizationViewModel.relaysSocketManager,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            // An unsigned event, pasted for the group to sign: D9 of
+            // docs/group-nostr-profile-and-posts.md.
+            composable<ProposeGroupEventRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<ProposeGroupEventRoute>()
+
+                ProposeGroupEventScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    chatRoomId = route.chatRoomId,
+                    relayHint = route.relayHint,
+                    chatRepository = databaseChatRepository,
+                    frostSigningRepository = databaseFrostSigningRepository,
+                    onNavigateToRouteAndPopUpInclusive = { signingRoute ->
+                        // Replace the paste so back returns to the group rather
+                        // than to an event whose proposal has already gone out.
+                        navController.navigate(route = signingRoute) {
+                            popUpTo<ProposeGroupEventRoute> {
+                                inclusive = true
+                            }
+                        }
+                    },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
                 )
             }
             composable<ImplementationPendingRoute> { backStackEntry ->

@@ -203,11 +203,13 @@ fun SovereignWalletStartupScreen(
                                             promptScreenLockImmediately = startWalletImmediately,
                                             doLoadWallet = { identity ->
                                                 when (identity) {
-                                                    is StoredIdentity.Mnemonic -> {
+                                                    is StoredIdentity.Seeded -> {
                                                         // The node starts for the wallet attached to this profile --
                                                         // its preferences, its metadata, the channel watcher -- and no
                                                         // longer for the key, which the identity reads from the
-                                                        // credential the node is handed to cross-check.
+                                                        // credential the node is handed to cross-check. A recovery
+                                                        // code's profile is its 24 words in seed.dat, so it starts the
+                                                        // same node a phrase's does (docs/giza-second-batch.md, 2c).
                                                         sovereignWalletStartupViewModel.startupNode(walletId = identity.id, words = identity.userWallet.words, onStartupSuccess = {
                                                             sovereignWalletViewModel.setActiveWallet(stored = identity, business = it)
                                                             onSuccessfulStartup.invoke()

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.composable.widgets.chat
 
+import com.machankura.dedun.compose.ui.composable.DisappearsIcon
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material.icons.filled.CallMade
@@ -57,6 +58,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.RemoveModerator
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.FactCheck
@@ -102,6 +105,7 @@ import com.machankura.dedun.compose.ui.view.state.ChatMessageListUIState
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.the_key_ceremony_for_needs_you
 import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.currently_no_messages_have_been_shared
 import dedun.composeapp.generated.resources.loading
@@ -115,6 +119,7 @@ import dedun.composeapp.generated.resources.proposals_are_waiting_for_your_signa
 import dedun.composeapp.generated.resources.reply_privately_to
 import dedun.composeapp.generated.resources.sent_a_private_message_to
 import com.machankura.dedun.compose.ui.composable.widgets.ErrorState
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * A chat room's transcript: its messages, the notices between them, and the standing ask
@@ -581,6 +586,7 @@ fun ChatTranscript(
                                                         text = localChatMessage.chatMessage.createdAt.toFormattedTimeAndDateString(),
                                                         style = MaterialTheme.typography.labelSmall
                                                     )
+                                                    localChatMessage.chatMessage.expiresAt?.let { DisappearsIcon(it) }
                                                     if (localChatMessage.chatMessage.isUserMessage) {
                                                         if (localChatMessage.chatMessageBroadcastNostrEventReceiptRelation != null) {
                                                             Icon(
@@ -699,7 +705,7 @@ fun ChatTranscript(
  * room exists.
  */
 @Composable
-private fun CeremoniesAwaitingYouNotice(
+internal fun CeremoniesAwaitingYouNotice(
     ceremonies: List<ChatMessageListViewModel.AwaitingCeremony>,
     onClick: (ChatMessageListViewModel.AwaitingCeremony) -> Unit,
 ) {
@@ -712,6 +718,9 @@ private fun CeremoniesAwaitingYouNotice(
         single.ask == ChatMessageListViewModel.Ask.LightningWalletOpening ->
             stringResource(Res.string.the_lightning_wallet_s_key_is_ready)
         isLightning -> stringResource(Res.string.the_lightning_wallet_s_key_ceremony_needs_you)
+        // Named by the group it makes: the same people may run more than one ceremony
+        // in a room (docs/nip17-multiple-ceremonies.md).
+        single.subject != null -> stringResource(Res.string.the_key_ceremony_for_needs_you, MarmotGroupName.display(single.subject))
         single.isSubgroup -> stringResource(Res.string.the_subgroups_key_ceremony_needs_you)
         else -> stringResource(Res.string.the_key_ceremony_needs_you)
     }
@@ -723,7 +732,10 @@ private fun CeremoniesAwaitingYouNotice(
     //
     // Joining is the only gate a ceremony has (docs/automatic-key-ceremony.md).
     // The two rounds after it are never asked for, so they say nothing here.
-    val detail = single?.let {
+    val detail = if (single == null) {
+        // Several: which ones, so a member knows what the count is of.
+        ceremonies.mapNotNull { it.subject?.let(MarmotGroupName::display) }.takeIf { it.isNotEmpty() }?.joinToString(", ")
+    } else single.let {
         when (val ask = it.ask) {
             is ChatMessageListViewModel.Ask.SharedKeyStep -> when (ask.step) {
                 DkgApprovalStep.HOST_KEY -> stringResource(Res.string.join_the_ceremony_by_publishing_your_key)
@@ -980,6 +992,10 @@ private fun RitualNotice(
         ChatMessage.TYPE_MEMBER_INVITE_SENT -> Icons.Default.Upload
         ChatMessage.TYPE_MEMBER_INVITE_FAILED -> Icons.Default.ErrorOutline
         ChatMessage.TYPE_CHANGE_REJECTED -> Icons.Default.ErrorOutline
+        ChatMessage.TYPE_ADMIN_ADDED -> Icons.Default.AdminPanelSettings
+        ChatMessage.TYPE_ADMIN_REMOVED -> Icons.Default.RemoveModerator
+        ChatMessage.TYPE_ADMIN_OFFERED -> Icons.Default.AdminPanelSettings
+        ChatMessage.TYPE_CHANGE_NOT_APPLIED -> Icons.Default.Block
 
         ChatMessage.TYPE_GROUP_LIGHTNING_WALLET_OPENED -> Icons.Default.Bolt
         ChatMessage.TYPE_GROUP_LIGHTNING_OPERATOR_ELECTED -> Icons.Default.Badge
@@ -1037,7 +1053,8 @@ private fun RitualNotice(
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_EQUIVOCATION ||
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEADLINE ||
             chatMessage.messageType == ChatMessage.TYPE_WAVELENGTH_DEVICES_QUIET ||
-            chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ->
+            chatMessage.messageType == ChatMessage.TYPE_CHANGE_REJECTED ||
+            chatMessage.messageType == ChatMessage.TYPE_CHANGE_NOT_APPLIED ->
             MaterialTheme.colorScheme.error
         isRequest -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant

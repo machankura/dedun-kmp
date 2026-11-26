@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import com.machankura.dedun.compose.nostr.subgroup.tags.GuardianDelayTag
 import com.machankura.dedun.compose.database.model.subgroupWalletPolicy
 import com.machankura.dedun.compose.nostr.subgroup.tags.WalletPolicyTag
@@ -33,7 +34,6 @@ import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.MarmotInnerEvent
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
-import com.machankura.dedun.compose.database.model.types.ChatRoomType
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.extensions.toHex
@@ -107,7 +107,7 @@ object ChillDkgRitualManager {
 
     /**
      * Smallest group a ritual can run in. A shared key held by one person is
-     * just a key, and [ChatRoomType.quorumRange] has nothing to offer below two.
+     * just a key, and [Quorum.range] has nothing to offer below two.
      */
     const val MINIMUM_PARTICIPANTS = 2
 
@@ -172,8 +172,12 @@ object ChillDkgRitualManager {
         session.participantPublicKeySet() ?: memberPublicKeys(localChatRoom)
 
     /**
-     * Opens a ritual, making this device the coordinator. A room already running
-     * one for the same purpose gets that one back rather than a second.
+     * Opens a ritual, making this device the coordinator. An ask repeated while the
+     * ceremony it opened is still running gets that one back rather than a second:
+     * for a group's own, a running one under the same name; for a subgroup's, one
+     * over the same admins. A finished ceremony never stands in the way of another
+     * -- the same people may make as many groups as they like, and each one is a
+     * ceremony of the room rather than the room (docs/nip17-multiple-ceremonies.md).
      *
      * [participantPublicKeys] is who the ceremony is with, and defaults to the
      * room's members -- which is the whole story for a group's own ceremony,
@@ -234,25 +238,35 @@ object ChillDkgRitualManager {
         // even if the room's own rows have drifted.
         val members = (participantPublicKeys ?: memberPublicKeys(localChatRoom)) + userPublicKey
 
-        // A room runs one ceremony at a time *for one purpose*, and this is
-        // reachable twice now that a robust group opens one as it is created: the
-        // room id is derived from its members, so making the same group again
-        // lands back in the same room and asks again. A second proposal for the
-        // same purpose is a second participant set for every member to reconcile,
-        // and the key the first one produced would be left with nothing pointing
-        // at it. A failed ritual is not running, and is there to be replaced.
+        // The room's own name, which names a group's own ceremony only when it is
+        // the room's first: a second group made by the same people lands in the
+        // same room, and naming it after the room would make two rooms called
+        // `&Ekklesia`. docs/nip17-multiple-ceremonies.md, D2.
+        val roomSubject = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
+        val requestedSubject = subject?.takeIf { it.isNotBlank() }
+
+        // An ask repeated is folded into the ceremony it already opened -- a double
+        // tap, a retried call, a user back on the creation screen while the first
+        // proposal is still out. A second proposal for the same thing is a second
+        // participant set for every member to reconcile.
         //
-        // What "the same purpose" means differs by which kind of ceremony this
-        // is, because a parent's room hosts every subgroup ceremony the group
-        // ever runs. Scoping a subgroup's on the room would refuse the parent's
-        // *second* subgroup on the strength of its first.
+        // What counts as "the same thing" differs by which kind of ceremony this
+        // is, because a parent's room hosts every subgroup ceremony the group ever
+        // runs, and a NIP-17 room every group its members ever make. A *finished*
+        // ceremony is never a reason to refuse either: it is a group that exists,
+        // and the same people are entitled to another. A failed one is not running,
+        // and is there to be replaced.
         //
         // Checked before the threshold is, because a running ritual makes the
         // requested threshold moot -- it settled that question when it opened.
         val running = if (parentChatRoomId == null) {
+            // Still running, under the name asked for. A different name is a
+            // different group (D1). A row from before `subject` existed is named
+            // by its room, which is what it was named by when it opened.
+            val asked = (requestedSubject ?: roomSubject)?.let(::sameName)
             database.dkgSessionDao()
-                .getLatestSessionFor(localChatRoom.chatRoom.id, null)
-                ?.takeIf { it.stage != DkgRitualStage.FAILED }
+                .getRunningOwnSessionsFor(localChatRoom.chatRoom.id)
+                .firstOrNull { (it.subject ?: roomSubject)?.let(::sameName) == asked }
         } else {
             // Same parent, same admins -- and still running. A *completed* one is
             // deliberately not a reason to refuse: it means that subgroup was
@@ -301,15 +315,29 @@ object ChillDkgRitualManager {
         require(members.size >= MINIMUM_PARTICIPANTS) {
             "A shared key needs at least $MINIMUM_PARTICIPANTS members, this ceremony has ${members.size}"
         }
-        require(threshold in ChatRoomType.quorumRange(members.size)) {
-            "Quorum $threshold is outside ${ChatRoomType.quorumRange(members.size)} for ${members.size} members"
+        require(threshold in Quorum.range(members.size)) {
+            "Quorum $threshold is outside ${Quorum.range(members.size)} for ${members.size} members"
         }
 
         // A subgroup is named by whoever is making it. Falling back to the room
         // there would name a child after its parent, which is the one name it
         // must not have -- the certificate the parent signs is over this string.
-        val ceremonySubject = subject?.takeIf { it.isNotBlank() }
-            ?: localChatRoom.chatRoom.subject?.takeIf { parentChatRoomId == null }
+        //
+        // A group's own ceremony falls back to the room's name only when the room
+        // holds no other group: the room keeps its first group's name (D3), so a
+        // second group named by it would be the first one's namesake, and the room
+        // its key makes would be another `&Ekklesia`. The screens that open one
+        // always name it; reaching this without a name is a bug in the caller.
+        val holdsAnotherGroup = parentChatRoomId == null && database.dkgSessionDao()
+            .getOwnSessionsForChatRoom(localChatRoom.chatRoom.id)
+            .any { it.stage != DkgRitualStage.FAILED }
+
+        require(parentChatRoomId != null || requestedSubject != null || !holdsAnotherGroup) {
+            "${localChatRoom.chatRoom.id} already holds a group of its own; another needs a name of its own"
+        }
+
+        val ceremonySubject = requestedSubject
+            ?: roomSubject?.takeIf { parentChatRoomId == null && !holdsAnotherGroup }
 
         val sessionId = RandomInstance.bytes(32).toHex()
 
@@ -376,6 +404,15 @@ object ChillDkgRitualManager {
 
         return session
     }
+
+    /**
+     * Whether two group names are the same name, as far as folding a repeated ask
+     * goes: bare, and without regard to case. Bare, so a room still stored under an old
+     * mark (`&Ekklesia`) is the same name as an ask for `Ekklesia`
+     * (docs/group-name-braces.md, D8). Names are not identities, so this decides
+     * nothing but whether an ask is a repeat.
+     */
+    private fun sameName(name: String): String = MarmotGroupName.bare(name).lowercase()
 
     /**
      * Feeds one inbound ritual message in and advances the ritual as far as it
@@ -539,10 +576,10 @@ object ChillDkgRitualManager {
         // A ritual is worth joining only at a quorum the group could have agreed
         // to. `t = 1` is a threshold key any single member can sign with, and
         // ChillDKG will happily generate one — the check has to be here.
-        if (threshold !in ChatRoomType.quorumRange(members.size)) {
+        if (threshold !in Quorum.range(members.size)) {
             logger.w(
                 "DKG proposal $sessionId asks for a $threshold-of-${members.size} key, " +
-                    "outside ${ChatRoomType.quorumRange(members.size)}; dropping"
+                    "outside ${Quorum.range(members.size)}; dropping"
             )
             return null
         }
@@ -963,8 +1000,8 @@ object ChillDkgRitualManager {
                 database = database,
                 session = session,
                 messageType = ChatMessage.TYPE_DKG_COMPLETE,
-                content = "The group has a shared key. It takes ${session.threshold} of " +
-                    "${session.participantCount} members to sign with it.",
+                content = "${session.subject ?: "The group"} has a shared key. It takes " +
+                    "${session.threshold} of ${session.participantCount} members to sign with it.",
                 actor = session.coordinatorPublicKey
             )
 
@@ -1184,7 +1221,7 @@ object ChillDkgRitualManager {
             // screen this line taps through to. "a participant is faulty
             // (participant 2)" is worth having, but not in the middle of a
             // sentence about who walked away.
-            content = "abandoned the shared key ceremony. No key was created, " +
+            content = "abandoned ${ceremonyPhrase(current)}. No key was created, " +
                 "and it is safe to run it again.",
             actor = culprit
         )
@@ -1208,6 +1245,15 @@ object ChillDkgRitualManager {
                 "this group. It will take ${session.threshold} of " +
                 "${session.participantCount} of its admins to sign with the subgroup's key, " +
                 "and it finishes once all of them have taken part."
+        } else if (session.subject != null) {
+            // Named, because the same people may make more than one group in one
+            // room (docs/nip17-multiple-ceremonies.md), and a line read days later
+            // cannot ask which ceremony it was about. Every named one says so, not
+            // only a second: the room may have one at the time and two by the time
+            // somebody reads this.
+            "started a key ceremony for ${session.subject}. It will take ${session.threshold} of " +
+                "${session.participantCount} members to sign with its key, and it finishes " +
+                "once everyone has taken part."
         } else {
             "started a shared key ceremony. It will take ${session.threshold} of " +
                 "${session.participantCount} members to sign with the key, and it finishes " +
@@ -1349,7 +1395,7 @@ object ChillDkgRitualManager {
 
         val (messageType, content) = when (step) {
             DkgApprovalStep.HOST_KEY -> ChatMessage.TYPE_DKG_APPROVAL_NEEDED_HOST_KEY to
-                "Your approval is needed to join the shared key ceremony. Nothing has been " +
+                "Your approval is needed to join ${ceremonyPhrase(session)}. Nothing has been " +
                     "published from this device yet."
 
             // Never reached: rounds 1 and 2 are no longer asked for. Kept because the
@@ -1400,7 +1446,7 @@ object ChillDkgRitualManager {
     ) {
         val (messageType, content) = when (kind) {
             DkgRitualEvents.HOST_KEY -> ChatMessage.TYPE_DKG_HOST_KEY to
-                "joined the shared key ceremony, publishing the key their device is " +
+                "joined ${ceremonyPhrase(session)}, publishing the key their device is " +
                     "identified by for the rest of it."
 
             DkgRitualEvents.ROUND_1 -> ChatMessage.TYPE_DKG_ROUND_1 to
@@ -1431,6 +1477,16 @@ object ChillDkgRitualManager {
             actor = actor
         )
     }
+
+    /**
+     * How a transcript line names its ceremony: by the group it makes when it has a
+     * name, which every ceremony Dedun opens now does. The same people may run more
+     * than one in a room (docs/nip17-multiple-ceremonies.md), and "the shared key
+     * ceremony" said beside a second one names neither. A ceremony from before names
+     * were carried keeps the words it always had.
+     */
+    private fun ceremonyPhrase(session: DkgSession): String =
+        session.subject?.let { "the key ceremony for $it" } ?: "the shared key ceremony"
 
     /** The stored session, for reading a column back before overwriting it. */
     private suspend fun current(database: DedunDatabase, session: DkgSession): DkgSession =
@@ -1573,7 +1629,7 @@ object ChillDkgRitualManager {
                 )
             }
 
-        val tags = receiverTags.toTypedArray() + DkgRitualEvents.assembleTags(
+        val baseTags = receiverTags.toTypedArray() + DkgRitualEvents.assembleTags(
             sessionId = session.id,
             threshold = if (includeThreshold) session.threshold else null,
             parentChatRoomId = if (includeParent) session.parentChatRoomId else null,
@@ -1584,6 +1640,15 @@ object ChillDkgRitualManager {
         )
 
         val createdAt = Clock.System.now().epochSeconds
+
+        // A NIP-17 round expires like everything else in a wrap, after at least the ceremony
+        // floor (docs/disappearing-messages.md, D2). The tag is part of the rumor, so it goes on
+        // before the id is hashed. A Marmot room's rounds follow the group's own retention.
+        val tags = if (localChatRoom.chatRoom.mlsGroupState == null) {
+            DisappearingSettingsStore(database).stamp(localChatRoom.chatRoom.id, session.userPublicKey, kind, createdAt, baseTags)
+        } else {
+            baseTags
+        }
 
         // The rumor id the outbound pipeline will recompute from these same
         // fields when it assembles the event to encrypt, on either transport.

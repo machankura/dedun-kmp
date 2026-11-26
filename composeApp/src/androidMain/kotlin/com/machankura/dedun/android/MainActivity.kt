@@ -8,11 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.rememberNavController
 import fr.acinq.phoenix.NFCActivity
-import com.machankura.dedun.compose.PlatformContext
+import com.machankura.dedun.android.background.StayConnectedService
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.DedunApp
-import com.machankura.dedun.compose.DedunGlobal
-import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.services.HceService
+import com.machankura.dedun.compose.notifications.NotificationTaps
 
 class MainActivity : ComponentActivity(), NFCActivity {
 
@@ -22,22 +22,24 @@ class MainActivity : ComponentActivity(), NFCActivity {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // The application's runtime, not one of our own: an activity recreated over a living
+        // process used to build a second set of repositories and a second PhoenixGlobal here.
+        val runtime = (application as DedunApplication).runtime
+
+        tapped(intent)
+
+        // From here, in front, because Android will not start a foreground service from the
+        // background: a reboot or a killed process brings it back on the next launch.
+        if (ExperimentalFeatures.backgroundSync && StayConnectedService.isOn(this)) {
+            StayConnectedService.start(this)
+        }
+
         setContent {
             val navController = rememberNavController()
 
             DedunApp(
                 navController = navController,
-                dedunGlobal = DedunGlobal(
-                    platformContext = PlatformContext(
-                        applicationContext = applicationContext
-                    )
-                ),
-                phoenixGlobal = PhoenixGlobal(
-                    ctx = fr.acinq.phoenix.utils.PlatformContext(
-                        applicationContext = applicationContext
-                    )
-                )
-
+                runtime = runtime,
             )
         }
     }
@@ -54,4 +56,16 @@ class MainActivity : ComponentActivity(), NFCActivity {
         nfcAdapter?.disableReaderMode(this@MainActivity)
     }
 
+    /** A notification tapped while this activity was already up (it is `singleTop`). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        tapped(intent)
+    }
+
+    /** Hands a tapped notification's room to the navigation host. Phase 6. */
+    private fun tapped(intent: Intent?) {
+        val userPublicKey = intent?.getStringExtra(NotificationTaps.EXTRA_USER_PUBLIC_KEY) ?: return
+        val chatRoomId = intent.getStringExtra(NotificationTaps.EXTRA_CHAT_ROOM_ID) ?: return
+        NotificationTaps.opened(userPublicKey, chatRoomId)
+    }
 }

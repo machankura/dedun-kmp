@@ -12,11 +12,21 @@ import com.machankura.dedun.compose.managers.GroupWavelengthWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningEvents
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents
 import com.machankura.dedun.compose.managers.IcebergRitualManager
+import com.machankura.dedun.compose.managers.DisappearingMessageSweeper
 import androidx.room3.Dao
 import androidx.room3.Transaction
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
+import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceSupport
+import com.machankura.dedun.compose.nostr.frost.GovernanceSupportEvent
+import com.machankura.dedun.compose.managers.MarmotGroupName
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
+import com.machankura.dedun.compose.nostr.frost.PromotionEvents
+import com.machankura.dedun.compose.nostr.frost.GovernanceCarrierEvent
+import com.machankura.dedun.compose.nostr.frost.OwnCommitEvent
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.currentMarmotData
 import com.vitorpamplona.marmot.groups.currentNostrGroupId
@@ -29,6 +39,7 @@ import com.vitorpamplona.quartz.marmot.mip00KeyPackages.KeyPackageRelayListEvent
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
@@ -72,6 +83,7 @@ import com.machankura.dedun.compose.exceptions.MarmotMissingKeyPackageBundleExce
 import com.machankura.dedun.compose.exceptions.MarmotMissingNostrGroupDataExtension
 import com.machankura.dedun.compose.exceptions.MarmotNotMemberOfChatGroupException
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.managers.AdminFlags
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
 import com.machankura.dedun.compose.managers.ShareRepairManager
@@ -89,8 +101,15 @@ import com.machankura.dedun.compose.managers.roomId
 import com.machankura.dedun.compose.managers.roomName
 import com.machankura.dedun.compose.managers.routingId
 import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.extensions.exporterSecret
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.managers.InboxKeyRitualManager
+import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
+import com.machankura.dedun.compose.nostr.groupdm.GroupEcdhEvents
+import com.machankura.dedun.compose.managers.GroupEcdhManager
+import com.machankura.dedun.compose.managers.GroupDmReceiver
+import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
@@ -234,6 +253,19 @@ abstract class NostrDao(
         level: Int,
         activeKeyPair: KeyPair
     ) {
+        // A wrap to a group whose mail this device reads goes to the group's own pipeline,
+        // and leaves no NostrEvent or GiftWrapMessage row: the personal inbox is built around
+        // one identity (docs/group-threshold-ecdh.md, D9).
+        if (nostrEvent.kind == GiftWrapEvent.KIND && ExperimentalFeatures.groupDirectMessages) {
+            val secret = activeKeyPair.privKey
+            if (secret != null && GroupDmReceiver.receive(database, nostrEvent.toEvent(), activeKeyPair.pubKey.toHex(), secret)) return
+        }
+
+        // A wrap this device already opened, found expired and deleted: the relay may serve it for
+        // up to two days more, and opening it again would only find it expired again
+        // (docs/disappearing-messages.md, D6).
+        if (nostrEvent.kind == GiftWrapEvent.KIND && database.disappearingDao().isTombstoned(nostrEvent.id)) return
+
         val storedNostrEvent = database.nostrEventDao().getNostrEventById(nostrEvent.id)
 
         if (storedNostrEvent == null) {
@@ -587,9 +619,23 @@ abstract class NostrDao(
                                 throw giftWrapImpersonation // Once this is thrown the database transaction fails and nothing gets saved to the DB...
                             }
 
+                            // NIP-40: a message already past its expiry is ignored -- not filed,
+                            // not notified, not handed to a ceremony. It can arrive because its
+                            // wrap outlives it on the relay by design, and because re-syncs happen
+                            // (docs/disappearing-messages.md, D6).
+                            val rumorExpiry = decryptedGiftWrapPayload.expiresAt
+                            if (rumorExpiry != null && rumorExpiry <= Clock.System.now()) {
+                                DisappearingMessageSweeper.dropOnArrival(
+                                    database, nostrEvent.id, nostrEvent.tags, nostrEvent.createdAt.epochSeconds, rumorExpiry,
+                                )
+                                return@let
+                            }
+
                             database.giftWrapPayloadDao().upsert(
                                 decryptedGiftWrapPayload
                             )
+                            // The wrap is deleted with what it carried, and not before (Phase 4).
+                            database.disappearingDao().linkWrap(giftWrapMessage.id, decryptedGiftWrapPayload.id, rumorExpiry)
 
                             if (decryptedGiftWrapPayload.kind == ChatMessageEvent.KIND) {
                                 logger.d("chatMessageEvent: $decryptedGiftWrapPayload")
@@ -833,7 +879,13 @@ abstract class NostrDao(
                                         ChatRoom(
                                             id = nostrGroupId,
                                             userPublicKey = userPublicKey,
-                                            subject = group.roomName(),
+                                            // Bare, as a room this device makes is, whoever
+                                            // made this one: an older Dedun wrote `&name`, a
+                                            // Dedun peer `#name`, another client a bare name.
+                                            // The braces are drawn, never stored, and the
+                                            // group's own state keeps what its creator wrote.
+                                            // docs/group-name-braces.md, D4.
+                                            subject = group.roomName()?.let(MarmotGroupName::bare),
                                             description = group.roomDescription(),
                                             initialGiftWrapPayloadId = decryptedGiftWrapPayload.id,
                                             createdAt = decryptedGiftWrapPayload.createdAt,
@@ -911,6 +963,26 @@ abstract class NostrDao(
                                     database.participantDao().upsert(
                                         participants
                                     )
+
+                                    // The admins, from the group context this device
+                                    // was welcomed into. Without it a joiner's rows
+                                    // flagged nobody until some later commit arrived,
+                                    // which in a robust group's admin room may be
+                                    // never -- docs/robust-group-admins.md, Phase 2.
+                                    AdminFlags.reconcile(
+                                        database = database,
+                                        chatRoomId = nostrGroupId,
+                                        mlsGroup = group,
+                                    )
+
+                                    // That this device follows signed commits, said on
+                                    // joining. It cannot read the others saying it -- that
+                                    // was before its epoch -- so it would never answer, and
+                                    // the room would wait on it until its screen was opened.
+                                    // docs/remove-convenient-groups.md, "After the build".
+                                    if (group.currentGroupState().isCurrentProfile) {
+                                        GovernanceSupport.announce(database, nostrGroupId, group, userPublicKey)
+                                    }
 
                                     // Save ChatRoom Relays...
                                     participants.filter { it.participantPublicKey != userPublicKey }.forEach { participant ->
@@ -1079,7 +1151,8 @@ abstract class NostrDao(
                                             content = decryptedGiftWrapPayload.content,
                                             sig = ""
                                         ),
-                                        userPublicKey = activeKeyPair.pubKey.toHex()
+                                        userPublicKey = activeKeyPair.pubKey.toHex(),
+                                        nostrPrivateKey = activeKeyPair.privKey,
                                     )
                                 }
                             } else {
@@ -1408,10 +1481,15 @@ abstract class NostrDao(
         }
     }
 
+    /**
+     * @param authorized true for a commit [GovernanceGate.admit] has let through out
+     *   of its envelope, which the bare-commit check below must not then drop.
+     */
     private suspend fun indexCurrentProfileGroupEvent(
         groupEvent: GroupEvent,
         localChatRoom: LocalChatRoom,
         activeKeyPair: KeyPair,
+        authorized: Boolean = false,
     ) {
         val chatRoomId = localChatRoom.chatRoom.id
         val routingId = groupEvent.groupId()
@@ -1424,7 +1502,26 @@ abstract class NostrDao(
             throw MarmotNotMemberOfChatGroupException("We are not a member of the chat room $chatRoomId")
         }
 
+        // In a room whose state says its changes need the group's signature, a
+        // commit sent bare is dropped before the engine sees it: only one that came
+        // out of a checked envelope is applied. docs/member-admin-promotion.md, R2.
+        if (!authorized && GovernanceGate.isGoverned(mlsGroup)) {
+            val outerKeys = listOf(mlsGroup.exporterSecret()) + engine.groupManager.retainedExporterSecrets(routingId)
+            if (GovernanceGate.isBareCommit(groupEvent, outerKeys)) {
+                logger.w("Dropped an unsigned commit ${groupEvent.id.take(8)}… into governed room ${chatRoomId.take(8)}…")
+                // Filed, so its line is replaced rather than repeated when a relay
+                // hands it over again.
+                upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
+                announceChangeNotApplied(chatRoomId, activeKeyPair, groupEvent.id, "A change arrived without the group's signature, so it was not applied")
+                return
+            }
+        }
+
         upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
+
+        // Who administered the room before this event, for the captions a commit's
+        // change to it earns. A copy, taken before the engine moves the group.
+        val priorAdmins = mlsGroup.currentAdminIdentities()
 
         // Through the engine, not the processor: an application message is the one
         // result that moves state the library writes nothing for, and the engine is
@@ -1440,6 +1537,7 @@ abstract class NostrDao(
             activeKeyPair = activeKeyPair,
             // The live group the manager holds, which the commit just moved.
             mlsGroup = engine.groupManager.getGroup(routingId) ?: mlsGroup,
+            priorAdmins = priorAdmins,
         )
 
         // A commit that forked the group opened a pass, and a quiet group has
@@ -1484,6 +1582,8 @@ abstract class NostrDao(
 
             if (memberPubkeys.contains(activeKeyPair.pubKey.toHex())) {
                 upsertMarmotGroupEvent(groupEvent, chatRoomId, activeKeyPair)
+                // Before processing moves this very instance.
+                val priorAdmins = mlsGroup.currentAdminIdentities()
                 MarmotInboundManager.processGroupEvent(
                     database = database,
                     activeKeyPair = activeKeyPair,
@@ -1499,6 +1599,7 @@ abstract class NostrDao(
                         groupEventResult = groupEventResult,
                         activeKeyPair = activeKeyPair,
                         mlsGroup = mlsGroup,
+                        priorAdmins = priorAdmins,
                     )
                 }
             } else {
@@ -1547,13 +1648,15 @@ abstract class NostrDao(
         groupEventResult: GroupEventResult,
         activeKeyPair: KeyPair,
         mlsGroup: MlsGroup,
+        priorAdmins: Set<HexKey>? = null,
     ) {
         when(groupEventResult) {
             is GroupEventResult.CommitProcessed -> {
                 MarmotInboundManager.processGroupMembershipChanges(
                     database = database,
                     mlsGroup = mlsGroup,
-                    localChatRoom = localChatRoom
+                    localChatRoom = localChatRoom,
+                    priorAdmins = priorAdmins,
                 )
             }
             // A member's standalone proposal -- their SelfRemove -- sits in the
@@ -1617,7 +1720,8 @@ abstract class NostrDao(
                                 database = database,
                                 localChatRoom = localChatRoom,
                                 innerEvent = innerEvent,
-                                userPublicKey = activeKeyPair.pubKey.toHex()
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey,
                             )
 
                         DkgRitualEvents.isDkgRitualKind(innerEvent.kind) ->
@@ -1649,6 +1753,46 @@ abstract class NostrDao(
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
                             )
+
+                        // The admins opening the group's direct messages together, in the
+                        // room the key derives (docs/group-threshold-ecdh.md, Phase 5).
+                        // Answered unasked, and only while the feature is on.
+                        innerEvent.kind in GroupEcdhEvents.ALL && ExperimentalFeatures.groupDirectMessages ->
+                            GroupEcdhManager.process(
+                                database = database,
+                                localChatRoom = localChatRoom,
+                                innerEvent = innerEvent,
+                                userPublicKey = activeKeyPair.pubKey.toHex(),
+                                nostrPrivateKey = activeKeyPair.privKey!!
+                            )
+
+                        // A change to a governed room, inside the group's signature or,
+                        // for a member's own leave, its committer's. Checked, and its
+                        // commit applied, only here (docs/member-admin-promotion.md).
+                        //
+                        // Before the Wavelength arms: until K3, 30371 and 30373 are also the
+                        // legacy numbers of the Wavelength operator statement and signing
+                        // request, and the envelope's shape is what tells them apart.
+                        // Another member says their device follows signed commits:
+                        // this one says so back, once, so that a member who never
+                        // opens the room's screen is still counted (Phase 4b).
+                        innerEvent.kind == GovernanceSupportEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
+                            if (localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) {
+                                database.marmotEngine.groupFor(localChatRoom.routingId)?.let { group ->
+                                    GovernanceSupport.announce(database, localChatRoom.chatRoom.id, group, activeKeyPair.pubKey.toHex())
+                                }
+                            }
+                        // A promotion's offer, acceptance and handover are filed with the
+                        // room's other protocol events, and GovernanceFollowThrough acts on
+                        // them from there; here they only have to stay out of the
+                        // Wavelength co-signer's arm, whose legacy numbers they share.
+                        innerEvent.kind in PromotionEvents.ALL && GovernanceEvents.isGovernance(innerEvent) -> Unit
+
+                        innerEvent.kind == OwnCommitEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
+                            admitEnvelopedCommit(localChatRoom, innerEvent, activeKeyPair)
+                        innerEvent.kind == GovernanceCarrierEvent.KIND && GovernanceEvents.isGovernance(innerEvent) ->
+                            GovernanceCarrierEvent.statementOf(innerEvent)
+                                ?.let { admitEnvelopedCommit(localChatRoom, it, activeKeyPair) }
 
                         // The Wavelength wallet's co-signing, as the Lightning wallet's above.
                         MovedKinds.current(innerEvent.kind) in GroupWavelengthEvents.CO_SIGNING ->
@@ -1729,6 +1873,21 @@ abstract class NostrDao(
                                 nostrPrivateKey = activeKeyPair.privKey!!
                             )
 
+                        // The group's inbox key, made by its admins in the group's own
+                        // room (docs/group-inbox.md, D3). Off with the feature: a release
+                        // build takes no part in a ceremony for a key it would not use.
+                        InboxKeyRitualEvents.isInboxKeyKind(innerEvent.kind) -> {
+                            if (ExperimentalFeatures.groupInbox) {
+                                InboxKeyRitualManager.process(
+                                    database = database,
+                                    localChatRoom = localChatRoom,
+                                    innerEvent = innerEvent,
+                                    userPublicKey = activeKeyPair.pubKey.toHex(),
+                                    nostrPrivateKey = activeKeyPair.privKey!!
+                                )
+                            }
+                        }
+
                         // And a repair, in the same room (Phase 10).
                         ShareRepairEvents.isShareRepairKind(innerEvent.kind) ->
                             ShareRepairManager.processRepairPayload(
@@ -1738,9 +1897,76 @@ abstract class NostrDao(
                                 userPublicKey = activeKeyPair.pubKey.toHex(),
                                 nostrPrivateKey = activeKeyPair.privKey!!
                             )
+
                     }
                 }
         }
+    }
+
+    /**
+     * Applies the commit [envelope] carries, if [GovernanceGate.admit] says the room
+     * may; otherwise says in the room why not. The commit is handed to the engine as
+     * the event it is -- the proposer's own kind:445, byte for byte -- so every device
+     * applies the same event with the same id.
+     *
+     * Nothing for an envelope around this device's own commit: the proposer installs
+     * its staged state when a relay accepts the envelope, and cannot process its own
+     * commit in any case.
+     */
+    private suspend fun admitEnvelopedCommit(localChatRoom: LocalChatRoom, envelope: Event, activeKeyPair: KeyPair) {
+        if (localChatRoom.chatRoom.marmotProfile() != MarmotProfile.CURRENT) return
+        val engine = database.marmotEngine
+        val group = engine.groupFor(localChatRoom.routingId) ?: return
+        if (!GovernanceGate.isGoverned(group)) return
+        val inner = GovernanceEvents.innerCommitOf(envelope)
+        // This device's own commit, or one already applied: the same envelope can
+        // arrive twice -- carried by two members, or repeated by a relay -- and the
+        // second is not news, nor a refusal.
+        if (inner != null && database.marmotCommitResultDao().getMarmotCommitRequestById(inner.id) != null) return
+        if (inner != null && database.marmotGroupEventDao().getMarmotGroupEventById(inner.id) != null) return
+
+        GovernanceGate.admit(group, localChatRoom.chatRoom.id, envelope).fold(
+            onSuccess = { commit ->
+                val fresh = database.chatRoomDao().findChatRoomById(localChatRoom.chatRoom.id) ?: return
+                // Stored as the event it is, as if a relay had handed it over: the
+                // room's group events are kept against their nostr rows.
+                database.nostrEventDao().upsert(
+                    NostrEvent(
+                        id = commit.id,
+                        createdAt = Instant.fromEpochSeconds(commit.createdAt),
+                        content = commit.content,
+                        sig = commit.sig,
+                        tags = commit.tags,
+                        kind = commit.kind,
+                        pubKey = commit.pubKey,
+                    )
+                )
+                indexCurrentProfileGroupEvent(commit, fresh, activeKeyPair, authorized = true)
+            },
+            onFailure = { refusal ->
+                logger.w("Refused envelope ${envelope.id.take(8)}…: ${refusal.message}")
+                announceChangeNotApplied(localChatRoom.chatRoom.id, activeKeyPair, null, "A change was not applied: ${refusal.message}")
+            },
+        )
+    }
+
+    /**
+     * A line saying a change to the room was refused -- once per group event, when
+     * [eventId] names the one that carried it.
+     */
+    private suspend fun announceChangeNotApplied(chatRoomId: String, activeKeyPair: KeyPair, eventId: HexKey?, content: String) {
+        persistMarmotChatMessage(
+            ChatMessage(
+                content = content,
+                messageType = ChatMessage.TYPE_CHANGE_NOT_APPLIED,
+                chatRoomId = chatRoomId,
+                senderPublicKey = activeKeyPair.pubKey.toHex(),
+                isUserMessage = true,
+                giftWrapPayloadId = null,
+                marmotGroupEventId = eventId,
+                marmotInnerEventId = null,
+            )
+        )
     }
 
     /**
@@ -1941,7 +2167,8 @@ abstract class NostrDao(
                 // The rumor's own timestamp, not the wrap's -- NIP-17 fuzzes the
                 // wrap and the seal by up to two days to frustrate correlation, and
                 // ordering the feed by that would shuffle the conversation.
-                createdAt = decryptedGiftWrapPayload.createdAt
+                createdAt = decryptedGiftWrapPayload.createdAt,
+                expiresAt = decryptedGiftWrapPayload.expiresAt,
             )
         )
     }

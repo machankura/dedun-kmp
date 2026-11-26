@@ -38,6 +38,9 @@ import com.machankura.dedun.compose.nostr.MemberProfileSync
 import com.machankura.dedun.compose.nostr.Nip17Filters
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.repository.ChatRepository
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.repository.GroupInboxRepository
+import com.machankura.dedun.compose.nostr.inbox.InboxWrap
 import com.machankura.dedun.compose.repository.NostrRepository
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.milliseconds
@@ -68,7 +71,19 @@ class LiveSubscriptionManager(
     private val relaysSocketManager: LiveSubscriptionTransport,
     private val nostrRepository: NostrRepository,
     private val chatRepository: ChatRepository,
-    private val isForeground: StateFlow<Boolean>,
+    /** `AppLifecycle.holdConnections`: open while true, closed while false. */
+    private val holdConnections: StateFlow<Boolean>,
+    /**
+     * Where gift wraps to a group this identity holds an inbox key for are filed
+     * (docs/group-inbox.md, D8), never as `NostrEvent` rows nor through the personal inbox.
+     * Null, or the feature off, and nothing is asked for.
+     */
+    private val groupInboxRepository: GroupInboxRepository? = null,
+    /**
+     * Where a group's mail goes, rather than the `NostrEvent` table (docs/group-threshold-ecdh.md,
+     * Phase 7). Null, or the feature off, and nothing is asked for.
+     */
+    private val groupDmRepository: com.machankura.dedun.compose.repository.GroupDmRepository? = null,
 ) {
     private val logger = Logger.withTag(TAG)
 
@@ -83,6 +98,52 @@ class LiveSubscriptionManager(
         const val GIFT_WRAP_SUB_ID = "live-giftwrap"
 
         const val GROUP_SUB_ID_PREFIX = "live-groups-"
+
+        /** Gift wraps to the groups this device reads for, on their 10050 relays (docs/group-threshold-ecdh.md, D9). */
+        const val GROUP_DM_SUB_ID = "live-group-dm"
+
+        /** NIP-59 back-dates a wrap by up to two days, so catch-up asks that far before the newest one seen. */
+        private const val WRAP_BACKDATE_SECONDS = 2L * 24 * 60 * 60
+
+        /**
+         * What `live-group-dm` asks each relay for: kind 1059 p-tagged to the groups that list
+         * that relay, or every group on the app's own DM relays. Keyed by relay.
+         */
+        internal fun groupDmFilters(inboxes: List<com.machankura.dedun.compose.managers.GroupDmInbox>): Map<String, List<Filter>> {
+            if (inboxes.isEmpty()) return emptyMap()
+            val byRelay = mutableMapOf<String, MutableList<com.machankura.dedun.compose.managers.GroupDmInbox>>()
+            inboxes.forEach { inbox ->
+                (inbox.relays + Relays.DefaultDMRelayList.map { it.url }).distinct().forEach { relay ->
+                    byRelay.getOrPut(relay) { mutableListOf() } += inbox
+                }
+            }
+            return byRelay.mapValues { (_, rooms) ->
+                val newest = rooms.mapNotNull { it.newestWrapAt }.minOrNull()
+                // The oldest of the rooms' watermarks, so no room on this relay misses a wrap.
+                val since = if (rooms.any { it.newestWrapAt == null }) null else newest?.let { it - WRAP_BACKDATE_SECONDS }
+                rooms.map { it.roomId }.sorted().chunked(MAX_INBOX_RECIPIENTS).map { chunk ->
+                    Filter(kinds = listOf(GiftWrapEvent.KIND), tags = mapOf("p" to chunk), since = since, limit = INITIAL_HISTORY_LIMIT)
+                }
+            }
+        }
+
+        /** Gift wraps to the groups whose inbox key this identity holds (docs/group-inbox.md, D8). */
+        const val GROUP_INBOX_SUB_ID = "live-group-inbox"
+
+        /** Recipients per `#p` filter of the group inbox subscription, for the reason [MAX_GROUPS_PER_SUBSCRIPTION] gives. */
+        private const val MAX_INBOX_RECIPIENTS = 100
+
+        /**
+         * Every gift wrap `p`-tagged to one of [recipients]: a group's npub, which is its room's
+         * id and where nostr-protocol/nips#2361 has a sender tag it, and the group's inbox keys,
+         * where an app that only encrypts to the announced key tags it instead. No `since`, as
+         * for our own inbox: a wrap's `created_at` is back-dated by up to two days, and a
+         * `since` that looks safe is how mail goes missing.
+         */
+        internal fun groupInboxFilters(recipients: List<HexKey>): List<Filter> =
+            recipients.distinct().sorted().chunked(MAX_INBOX_RECIPIENTS).map { chunk ->
+                Filter(kinds = listOf(InboxWrap.KIND), tags = mapOf("p" to chunk), limit = INITIAL_GROUP_HISTORY_LIMIT)
+            }
 
         /**
          * Group ids per `#h` filter. One subscription per group would be simpler, but every
@@ -204,7 +265,7 @@ class LiveSubscriptionManager(
 
         // collectLatest is the whole lifecycle mechanism: going to the background cancels the
         // block below, and every subscription's `finally` sends its CLOSE on the way out.
-        isForeground.collectLatest { foreground ->
+        holdConnections.collectLatest { foreground ->
             if (!foreground) {
                 logger.i("Backgrounded; live subscriptions closed")
                 return@collectLatest
@@ -244,6 +305,80 @@ class LiveSubscriptionManager(
         }
 
         launch { followGroupMembership(publicKey = publicKey, keyPair = keyPair) }
+
+        groupDmRepository?.takeIf { ExperimentalFeatures.groupDirectMessages }?.let { repository ->
+            launch { followGroupDirectMessages(publicKey = publicKey, keyPair = keyPair, repository = repository) }
+        }
+
+        groupInboxRepository?.takeIf { ExperimentalFeatures.groupInbox }?.let { repository ->
+            launch { followGroupInboxes(publicKey = publicKey, keyPair = keyPair, repository = repository) }
+        }
+    }
+
+    /**
+     * Keeps `live-group-dm` open on every relay a readable group names, re-sent as rooms gain or
+     * lose a 10050 or this device's member gains or loses admin. Wraps go to the group's own
+     * pipeline, never to the `NostrEvent` table (docs/group-threshold-ecdh.md, D9).
+     */
+    @OptIn(FlowPreview::class)
+    private suspend fun followGroupDirectMessages(publicKey: HexKey, keyPair: KeyPair, repository: com.machankura.dedun.compose.repository.GroupDmRepository) {
+        val secret = keyPair.privKey ?: return
+        repository.observeReadableRooms(publicKey)
+            .map { groupDmFilters(it) }
+            .distinctUntilChanged()
+            .debounce(GROUP_CHANGE_DEBOUNCE)
+            .collectLatest { byRelay ->
+                if (byRelay.isEmpty()) return@collectLatest
+                coroutineScope {
+                    byRelay.forEach { (relay, filters) ->
+                        launch {
+                            runLiveSubscription(
+                                subId = GROUP_DM_SUB_ID,
+                                relayUrl = relay,
+                                filters = { filters },
+                                keyPair = keyPair,
+                                onEvent = { nostrEvent, _ ->
+                                    runCatching { repository.receiveWrap(nostrEvent.toEvent(), publicKey, secret) }
+                                        .onFailure { logger.w(throwable = it) { "Could not take wrap ${nostrEvent.id} for a group" } }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+    }
+
+    /**
+     * Keeps one subscription per relay a group's mail is announced to arrive on, for every
+     * group this identity holds an inbox key for, re-sent when that set changes. What arrives
+     * goes to [repository] (docs/group-inbox.md, D8).
+     */
+    @OptIn(FlowPreview::class)
+    private suspend fun followGroupInboxes(publicKey: HexKey, keyPair: KeyPair, repository: GroupInboxRepository) {
+        repository.observeRoutes(publicKey)
+            .distinctUntilChanged()
+            .debounce(GROUP_CHANGE_DEBOUNCE)
+            .collectLatest { routes ->
+                if (routes.isEmpty()) return@collectLatest
+                val filters = groupInboxFilters(routes.flatMap { listOf(it.chatRoomId) + it.keys })
+                val relays = (routes.flatMap { it.relays } + Relays.DefaultDMRelayList).map { it.url }.distinct()
+                coroutineScope {
+                    relays.forEach { relay ->
+                        launch {
+                            runLiveSubscription(
+                                subId = GROUP_INBOX_SUB_ID,
+                                relayUrl = relay,
+                                filters = { filters },
+                                keyPair = keyPair,
+                                onEvent = { nostrEvent, _ ->
+                                    runCatching { repository.receive(nostrEvent.toEvent(), publicKey) }
+                                        .onFailure { logger.w(throwable = it) { "Could not file inbox wrap ${nostrEvent.id}" } }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
     }
 
     /**
@@ -415,6 +550,8 @@ class LiveSubscriptionManager(
         relayUrl: String,
         filters: () -> List<Filter>,
         keyPair: KeyPair,
+        /** Where each event goes instead of [save], for a subscription whose events are no `NostrEvent` rows. */
+        onEvent: (suspend (NostrEvent, String) -> Unit)? = null,
     ) {
         var reopenDelay = INITIAL_REOPEN_DELAY
 
@@ -434,6 +571,7 @@ class LiveSubscriptionManager(
                         relayUrl = relayUrl,
                         filters = currentFilters,
                         keyPair = keyPair,
+                        onEvent = onEvent,
                     )
                 } catch (error: CancellationException) {
                     throw error
@@ -480,7 +618,11 @@ class LiveSubscriptionManager(
         relayUrl: String,
         filters: List<Filter>,
         keyPair: KeyPair,
+        onEvent: (suspend (NostrEvent, String) -> Unit)? = null,
     ): SubscriptionEnd {
+        val handle: suspend (NostrEvent) -> Unit = { event ->
+            if (onEvent != null) onEvent(event, relayUrl) else save(event, relayUrl, keyPair)
+        }
         var reason: String? = null
         var reachedEose = false
 
@@ -493,11 +635,11 @@ class LiveSubscriptionManager(
         }.collect { message ->
             when (message) {
                 is NostrIncomingMessage.EventMessage -> {
-                    message.nostrEvent?.let { save(it, relayUrl, keyPair) }
+                    message.nostrEvent?.let { handle(it) }
                 }
 
                 is NostrIncomingMessage.EventsMessage -> {
-                    message.nostrEvents.forEach { save(it, relayUrl, keyPair) }
+                    message.nostrEvents.forEach { handle(it) }
                 }
 
                 is NostrIncomingMessage.EoseMessage -> {

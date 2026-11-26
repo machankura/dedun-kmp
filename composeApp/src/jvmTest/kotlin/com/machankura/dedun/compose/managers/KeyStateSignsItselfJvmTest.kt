@@ -9,8 +9,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.FrostSigningItem
 import com.machankura.dedun.compose.database.model.FrostSigningSession
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
@@ -32,15 +34,13 @@ class KeyStateSignsItselfJvmTest {
 
     private val chatRepository = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
         override suspend fun createMarmotGroup(
-            groupId: String,
-            name: String,
-            purpose: String,
-            adminPublicKeys: Set<HexKey>,
-            userPublicKey: HexKey,
+            ceremony: DkgSession,
+            ceremonyRoom: LocalChatRoom,
             keyPair: KeyPair,
-            path: List<Long>,
             parentChatRoomId: HexKey?,
         ): MarmotGroupCreation.Outcome {
+            val groupId = SharedKeyDerivation.marmotGroupId(ceremony.thresholdPublicKey!!)
+            val adminPublicKeys = ChillDkgRitualManager.participantsOf(ceremony, ceremonyRoom)
             created += groupId to adminPublicKeys
             return MarmotGroupCreation.Outcome.Failed("the room is MarmotGroupCreation's to test")
         }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
 import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.types.DkgApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
@@ -51,21 +52,22 @@ class CeremonyFollowThroughJvmTest {
     /** The room creations asked for, and what the next one answers. */
     private val created = mutableListOf<Pair<String, Set<HexKey>>>()
     private var outcome: (String) -> MarmotGroupCreation.Outcome = { MarmotGroupCreation.Outcome.Failed("unset") }
+    private var foundingInvite: MarmotGroupCreation.FoundingInvite = MarmotGroupCreation.FoundingInvite.NothingToDo
 
     private val chatRepository = object : ChatRepository by ChatRepository.NO_OP_CHAT_REPOSITORY {
         override suspend fun createMarmotGroup(
-            groupId: String,
-            name: String,
-            purpose: String,
-            adminPublicKeys: Set<HexKey>,
-            userPublicKey: HexKey,
+            ceremony: DkgSession,
+            ceremonyRoom: LocalChatRoom,
             keyPair: KeyPair,
-            path: List<Long>,
             parentChatRoomId: HexKey?,
         ): MarmotGroupCreation.Outcome {
+            val groupId = SharedKeyDerivation.marmotGroupId(ceremony.thresholdPublicKey!!)
+            val adminPublicKeys = ChillDkgRitualManager.participantsOf(ceremony, ceremonyRoom)
             created += groupId to adminPublicKeys
             return outcome(groupId)
         }
+
+        override suspend fun finishFoundingInvite(ceremony: DkgSession, ceremonyRoom: LocalChatRoom) = foundingInvite
     }
 
     private val material = keyMaterial("5eed0000000000000000000000000000000000000000000000000000000000e5")
@@ -204,6 +206,28 @@ class CeremonyFollowThroughJvmTest {
 
         assertEquals(CeremonyFollowThrough.Step.NothingToDo, next(session))
         assertTrue(created.isEmpty())
+    }
+
+    /** docs/robust-group-admins.md, Phase 4: a room that exists is asked whether its founding invite went out. */
+    @Test
+    fun `a room whose founding invite never went out has it finished`(): Unit = runBlocking {
+        val session = finishedCeremony()
+        signKeyState(session)
+        GroupFixtures.seedRoom(db, roomOf(material))
+        foundingInvite = MarmotGroupCreation.FoundingInvite.Sent(roomOf(material), invited = listOf(alice, bob), notAdded = listOf(bob))
+
+        assertEquals(CeremonyFollowThrough.Step.Invited(roomOf(material), listOf(bob)), next(session))
+        assertTrue(created.isEmpty(), "and no second room")
+    }
+
+    @Test
+    fun `a founding invite waiting on key packages says on whom`(): Unit = runBlocking {
+        val session = finishedCeremony()
+        signKeyState(session)
+        GroupFixtures.seedRoom(db, roomOf(material))
+        foundingInvite = MarmotGroupCreation.FoundingInvite.BlockedOn(listOf(alice))
+
+        assertEquals(CeremonyFollowThrough.Step.BlockedOn(listOf(alice)), next(session))
     }
 
     /**

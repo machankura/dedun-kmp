@@ -321,7 +321,7 @@ object DepositLedger {
     }
 
     /**
-     * The 30390 saying whose each of [assignments]' deposits is -- a member's, a contact's, or the
+     * The 30420 saying whose each of [assignments]' deposits is -- a member's, a contact's, or the
      * group's own when null -- with each amount as on record: sats onchain, msat over Lightning.
      */
     suspend fun attributionTemplate(

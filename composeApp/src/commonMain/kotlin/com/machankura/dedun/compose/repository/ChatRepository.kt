@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import com.machankura.dedun.compose.database.model.ChatRoom
+import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.GiftWrapPayload
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
@@ -26,14 +27,32 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
-import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.SubgroupManager
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.nostr.MarmotProfile
+import com.machankura.dedun.compose.managers.PromotionManager
+import com.machankura.dedun.compose.managers.MemberActionPolicy
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 
 interface ChatRepository {
     suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>>
+
+    /**
+     * Marks [chatRoomId] read up to its newest line. A no-op where nothing stores read state.
+     * docs/notifications-and-background-sync.md, D8.
+     */
+    suspend fun markChatRoomRead(chatRoomId: String) {}
+
+    /** Each of [publicKey]'s rooms that has unread lines, by room id. Empty where nothing stores them. */
+    fun observeUnreadCounts(publicKey: String): Flow<Map<String, com.machankura.dedun.compose.database.dao.RoomUnread>> =
+        kotlinx.coroutines.flow.flowOf(emptyMap())
+
+    /** Mutes or unmutes [chatRoomId]: [com.machankura.dedun.compose.database.model.ChatRoom.NOTIFICATIONS_ALL] or `…_MUTED`. */
+    suspend fun setChatRoomNotifications(chatRoomId: String, notifications: String) {}
 
     suspend fun getChatRoomListByPublicKey(publicKey: String): List<LocalChatRoom>
 
@@ -69,6 +88,47 @@ interface ChatRepository {
      * see or check what the group actually put its key to.
      */
     suspend fun signedGroupKeyStateEvent(chatRoomId: String): GroupSignedEvent?
+
+    /**
+     * The newest profile this group signed for itself, or null when it has signed
+     * none that this device holds.
+     *
+     * The group's identity on nostr is the room's own id, so it has one to
+     * describe whether or not it ever has. Read off the group's signed events and
+     * verified there -- see `GroupNostrProfile` -- so a room shows the profile its
+     * own key signed or shows that it has none. docs/group-nostr-profile-and-posts.md.
+     */
+    suspend fun groupNostrProfile(chatRoomId: String): GroupNostrProfile?
+
+    /**
+     * The kind:1s this group signed, newest first.
+     *
+     * The group speaking as itself, which is a different thing from a member
+     * speaking in the room -- the transcript is the second. Unlike the profile
+     * these accumulate rather than replace, so this is a list and an empty one
+     * means the group has said nothing publicly that this device holds.
+     */
+    suspend fun groupPosts(chatRoomId: String): List<GroupPost>
+
+    /**
+     * The group's inbox as its row on the group's screen shows it, or null where this device
+     * has nothing of it to show (docs/group-inbox.md, D9).
+     */
+    suspend fun inboxSummary(localChatRoom: LocalChatRoom): com.machankura.dedun.compose.ui.view.state.InboxRowSummary? = null
+
+    /** What [chatRoomId]'s screen says about its direct messages, to [userPublicKey]. docs/group-threshold-ecdh.md. */
+    suspend fun groupDmRow(chatRoomId: String, userPublicKey: HexKey): com.machankura.dedun.compose.ui.view.state.GroupDmRow? = null
+
+    /**
+     * One event the group signed, as the group signed it, or null when this
+     * device does not hold it or it was signed in some other room.
+     *
+     * Scoped to the room rather than looked up by id alone, because the id
+     * arrives as a navigation argument and the screen it opens names a room in
+     * its title: an event from one room shown under another room's name would
+     * be a lie the signature check cannot catch, since both rooms' events verify.
+     */
+    suspend fun groupSignedEvent(chatRoomId: String, id: HexKey): GroupSignedEvent?
 
     /**
      * Every subgroup this room has certified, as far as this device knows.
@@ -264,28 +324,78 @@ interface ChatRepository {
     ): List<HexKey>
 
     /**
-     * Creates a Marmot room at an id the group's key derives, with
-     * [adminPublicKeys] as its admins, and welcomes them into it.
+     * Creates the Marmot room [ceremony]'s key derives, with everyone the ceremony
+     * was run with as its admins, and welcomes them into it.
      *
      * Two flows want exactly this: the admin room a group opens after its
      * ceremony, and a subgroup. See `MarmotGroupCreation`, which holds the rules
      * -- every key package before anything exists, the admins baked into epoch 0,
      * and the key state filed before the members are added.
      *
+     * Takes the ceremony rather than a list of admins on purpose. The room's id
+     * is derived, so its epoch-0 admin list is fixed at that address for good, and
+     * the founding members of a robust group are exactly the ceremony's
+     * participants -- so the one place that set is read is the one place a room is
+     * made. [ceremonyRoom] is the room the ceremony ran in, read only for a
+     * ceremony that predates its own participant list. See
+     * docs/robust-group-admins.md, Phase 1.
+     *
      * Refuses rather than half-creates: the id is derived, so a partly created
      * room occupies that address permanently and there is no second id to retry
      * with.
      */
     suspend fun createMarmotGroup(
-        groupId: String,
-        name: String,
-        purpose: String,
-        adminPublicKeys: Set<HexKey>,
-        userPublicKey: HexKey,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
         keyPair: KeyPair,
-        path: List<Long> = SharedKeyDerivation.MARMOT_ADMIN_GROUP_PATH,
         parentChatRoomId: HexKey? = null,
     ): MarmotGroupCreation.Outcome
+
+    /**
+     * Invites the founding members [ceremony]'s room never reached, when its
+     * founding invite never went out. See `MarmotGroupCreation.finishFoundingInvite`
+     * and docs/robust-group-admins.md, Phase 4.
+     */
+    suspend fun finishFoundingInvite(ceremony: DkgSession, ceremonyRoom: LocalChatRoom): MarmotGroupCreation.FoundingInvite
+
+    /** [finishFoundingInvite] for the room [chatRoomId], through the ceremony its key state names. */
+    suspend fun finishFoundingInvite(chatRoomId: String): MarmotGroupCreation.FoundingInvite
+
+    /** The founders [localChatRoom]'s founding invite never reached; empty when there are none to reach. */
+    suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey>
+
+    /**
+     * The admin rooms [chatRoomId]'s own key ceremonies made that this device holds,
+     * newest first: where the members of a NIP-17 room are admins, one room per group
+     * they have made there. Empty for a room with no finished ceremony of its own.
+     *
+     * A list because the same people share one NIP-17 room however many groups they
+     * make; picking the newest used to hide every group but the last
+     * (docs/nip17-multiple-ceremonies.md).
+     */
+    suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom>
+
+    /**
+     * Every group the members of NIP-17 room [chatRoomId] have made in it, newest
+     * first, failed ones left out: each one's ceremony and, once it has a key, the
+     * room it makes. Empty for a room that has made none, and for a Marmot room,
+     * which holds no group's ceremony of its own.
+     */
+    suspend fun groupsMadeIn(chatRoomId: String): List<GroupMadeHere>
+
+    /**
+     * Brings every Marmot room's admin flags in line with its group's policy, for
+     * the rooms joined before the Welcome wrote any. Once per start. See
+     * `AdminFlags.reconcileAll` and docs/robust-group-admins.md, Phase 6.
+     */
+    suspend fun reconcileAdminFlags(): Int
+
+    /**
+     * Says, in every keyed room this device is in, that it follows signed commits,
+     * for the rooms joined before joining said it. Once per start. See
+     * `GovernanceSupport.announceAll`.
+     */
+    suspend fun announceGovernanceSupport(): Int
 
     /**
      * Takes every key ceremony [keyPair] coordinated from a key to a working room,
@@ -330,11 +440,75 @@ interface ChatRepository {
     )
 
     /**
+     * Brings the room's admin flags into line with its group's admin set, without a
+     * caption. Returns whether any changed. See docs/member-admin-promotion.md, Phase 1.
+     */
+    suspend fun reconcileAdmins(chatRoomId: String): Boolean
+
+    /**
+     * The fewest admins the room may be left with: one in a convenient room, at
+     * least three -- and never fewer than its quorum -- in a keyed one.
+     * docs/member-admin-promotion.md, R3.
+     */
+    suspend fun adminFloor(chatRoomId: String): Int
+
+    /**
+     * Where a keyed room stands on needing the group's signature, or null for any
+     * other room. Says, for this device, that it follows signed commits, if it has
+     * not yet. docs/member-admin-promotion.md, Phase 4b.
+     */
+    suspend fun governanceStatus(chatRoomId: String): GovernanceStatus?
+
+    /**
+     * What each member row of [localChatRoom] offers, and why an item is not open:
+     * [MemberActionPolicy] over the room's state and what only the database knows.
+     * Every room and every viewer gets an answer -- a member who is not an admin is
+     * told why, not shown nothing. The detail screen and the screen that explains a
+     * closed action both read it here, so they cannot disagree.
+     * docs/member-row-actions.md, Phase 2.
+     */
+    suspend fun memberActionOptions(localChatRoom: LocalChatRoom): Map<HexKey, List<MemberActionOption>>
+
+    /** Makes a keyed room's changes need the group's signature. Throws with words a person can act on. */
+    suspend fun requireSignatures(localChatRoom: LocalChatRoom)
+
+    /**
      * Removes [memberPublicKey] from a current-profile room this device administers:
      * a commit through the publish gate, applied when a relay accepts it. See
      * docs/marmot-v2.md, Phase 7.
      */
     suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey)
+
+    /**
+     * Makes [memberPublicKey] an admin of a convenient room this device
+     * administers: one commit through the publish gate, captioned when it is
+     * applied. Throws with words a person can act on when it cannot be done. See
+     * docs/member-admin-promotion.md, Phase 6.
+     */
+    suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey)
+
+    /**
+     * Makes [adminPublicKey] stop being an admin of a convenient room this device
+     * administers -- this device's own account included, which is stepping down.
+     * Throws with words a person can act on when it cannot be done.
+     */
+    suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey)
+
+    /**
+     * Leaves a convenient room this device administers: steps down -- making
+     * [heir] an admin first, when this device is the only one -- and leaves once
+     * that is accepted. docs/member-admin-promotion.md, Phase 10.
+     */
+    suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?)
+
+    /**
+     * An offer to this device's account to become an admin of a keyed room that it
+     * has not answered, or null. docs/member-admin-promotion.md, Phase 8.
+     */
+    suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer?
+
+    /** Accepts [offerId]. Returns null when the acceptance went out, or why it could not. */
+    suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String?
 
     /**
      * Whether [memberPublicKey] holds a live share of the room's key, and so
@@ -428,6 +602,12 @@ interface ChatRepository {
             override suspend fun signedGroupKeyStateEvent(
                 chatRoomId: String
             ): GroupSignedEvent? = null
+
+            override suspend fun groupNostrProfile(chatRoomId: String): GroupNostrProfile? = null
+
+            override suspend fun groupPosts(chatRoomId: String): List<GroupPost> = emptyList()
+
+            override suspend fun groupSignedEvent(chatRoomId: String, id: HexKey): GroupSignedEvent? = null
 
             override suspend fun subgroupsOf(chatRoomId: String): List<SubgroupManager.Subgroup> =
                 emptyList()
@@ -562,18 +742,30 @@ interface ChatRepository {
             ): List<HexKey> = peers.map { it.first }
 
             override suspend fun createMarmotGroup(
-                groupId: String,
-                name: String,
-                purpose: String,
-                adminPublicKeys: Set<HexKey>,
-                userPublicKey: HexKey,
+                ceremony: DkgSession,
+                ceremonyRoom: LocalChatRoom,
                 keyPair: KeyPair,
-                path: List<Long>,
                 parentChatRoomId: HexKey?,
             ): MarmotGroupCreation.Outcome =
                 MarmotGroupCreation.Outcome.Failed("No database")
 
             override suspend fun followThroughCeremonies(keyPair: KeyPair) = Unit
+
+            override suspend fun finishFoundingInvite(ceremony: DkgSession, ceremonyRoom: LocalChatRoom) =
+                MarmotGroupCreation.FoundingInvite.NothingToDo
+
+            override suspend fun finishFoundingInvite(chatRoomId: String) =
+                MarmotGroupCreation.FoundingInvite.NothingToDo
+
+            override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = emptySet()
+
+            override suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom> = emptyList()
+
+            override suspend fun groupsMadeIn(chatRoomId: String): List<GroupMadeHere> = emptyList()
+
+            override suspend fun reconcileAdminFlags(): Int = 0
+
+            override suspend fun announceGovernanceSupport(): Int = 0
 
 
             override suspend fun sendChatMessage(
@@ -606,6 +798,26 @@ interface ChatRepository {
             ) {
                 TODO("Not yet implemented")
             }
+
+            override suspend fun reconcileAdmins(chatRoomId: String): Boolean = false
+
+            override suspend fun adminFloor(chatRoomId: String): Int = 1
+
+            override suspend fun governanceStatus(chatRoomId: String): GovernanceStatus? = null
+
+            override suspend fun memberActionOptions(localChatRoom: LocalChatRoom): Map<HexKey, List<MemberActionOption>> = emptyMap()
+
+            override suspend fun requireSignatures(localChatRoom: LocalChatRoom) = Unit
+
+            override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
+
+            override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) = Unit
+
+            override suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) = Unit
+
+            override suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer? = null
+
+            override suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String? = null
 
             override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) = Unit
 

@@ -1,5 +1,10 @@
 package com.machankura.dedun.compose.database.repository
 
+import com.machankura.dedun.compose.repository.GroupMadeHere
+import com.machankura.dedun.compose.repository.AdminRoom
+import com.machankura.dedun.compose.nostr.DisappearingMessages
+import com.vitorpamplona.quartz.nip01Core.core.toHexKey
+import com.machankura.dedun.compose.wallet.GroupLightningRollout
 import com.machankura.dedun.compose.managers.GuardianDerivation
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import fr.acinq.bitcoin.Chain
@@ -22,6 +27,7 @@ import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.managers.ChronicleManager
 import com.machankura.dedun.compose.managers.FrostSigningManager
+import com.machankura.dedun.compose.managers.GroupEcdhManager
 import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.managers.SubgroupManager
@@ -34,6 +40,10 @@ import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
+import com.machankura.dedun.compose.nostr.GroupPost
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
+import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -44,6 +54,17 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import com.vitorpamplona.quartz.nip01Core.crypto.KeyPair
+import com.machankura.dedun.compose.managers.AdminGovernance
+import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.PromotionManager
+import com.machankura.dedun.compose.managers.GovernanceFollowThrough
+import com.machankura.dedun.compose.managers.GovernanceSupport
+import com.machankura.dedun.compose.managers.MemberActionContext
+import com.machankura.dedun.compose.managers.MemberActionPolicy
+import com.machankura.dedun.compose.managers.MemberActionRoom
+import com.machankura.dedun.compose.managers.MarmotInboundManager
+import com.machankura.dedun.compose.managers.AdminFlags
+import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.CeremonyFollowThrough
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
@@ -59,10 +80,18 @@ import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.WalletKeysHeld
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import com.machankura.dedun.compose.ui.view.state.MemberActionOption
 import com.machankura.dedun.compose.managers.RotationHold
+import com.machankura.dedun.compose.managers.RoomAdmins
+import com.machankura.dedun.compose.ui.view.state.MemberActionBlocker
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 import com.machankura.dedun.compose.database.model.types.ShareStanding
@@ -70,10 +99,13 @@ import com.machankura.dedun.compose.database.model.types.ShareRepairStage
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
-import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.managers.ShareGenerations
 import com.machankura.dedun.compose.managers.ShareRepairManager
 import com.machankura.dedun.compose.ExperimentalFeatures
+
+
+/** How often the group's direct-message rounds are swept while the app runs (docs/group-threshold-ecdh.md, Phase 5). */
+private val GROUP_DM_SWEEP_INTERVAL = kotlin.time.Duration.parse("20s")
 
 /**
  * @param activeIdentity the identity the app runs as. Read by the one write here that
@@ -89,32 +121,134 @@ class DatabaseChatRepository(
     val logger = Logger.withTag(TAG)
 
     override suspend fun createMarmotGroup(
-        groupId: String,
-        name: String,
-        purpose: String,
-        adminPublicKeys: Set<HexKey>,
-        userPublicKey: HexKey,
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
         keyPair: KeyPair,
-        path: List<Long>,
         parentChatRoomId: HexKey?,
-    ): MarmotGroupCreation.Outcome = MarmotGroupCreation.create(
+    ): MarmotGroupCreation.Outcome = MarmotGroupCreation.createFor(
         database = database,
         chatRepository = this,
-        groupId = groupId,
-        name = name,
-        purpose = purpose,
-        adminPublicKeys = adminPublicKeys,
-        userPublicKey = userPublicKey,
+        ceremony = ceremony,
+        ceremonyRoom = ceremonyRoom,
         keyPair = keyPair,
-        path = path,
         parentChatRoomId = parentChatRoomId,
     )
 
-    override suspend fun followThroughCeremonies(keyPair: KeyPair) =
-        CeremonyFollowThrough.observe(database = database, chatRepository = this, keyPair = keyPair)
+    override suspend fun finishFoundingInvite(
+        ceremony: DkgSession,
+        ceremonyRoom: LocalChatRoom,
+    ): MarmotGroupCreation.FoundingInvite = MarmotGroupCreation.finishFoundingInvite(
+        database = database,
+        chatRepository = this,
+        ceremony = ceremony,
+        ceremonyRoom = ceremonyRoom,
+    )
+
+    override suspend fun finishFoundingInvite(chatRoomId: String): MarmotGroupCreation.FoundingInvite {
+        val (ceremony, ceremonyRoom) = MarmotGroupCreation.ceremonyOf(database, chatRoomId)
+            ?: return MarmotGroupCreation.FoundingInvite.NothingToDo
+        return finishFoundingInvite(ceremony, ceremonyRoom)
+    }
+
+    override suspend fun uninvitedFounders(localChatRoom: LocalChatRoom): Set<HexKey> = try {
+        MarmotGroupCreation.ceremonyOf(database, localChatRoom.chatRoom.id)
+            ?.let { (ceremony, ceremonyRoom) ->
+                MarmotGroupCreation.uninvitedFounders(database, localChatRoom, ceremony, ceremonyRoom)
+            }
+            .orEmpty()
+    } catch (e: Throwable) {
+        logger.e("Error reading who ${localChatRoom.chatRoom.id}'s founding invite missed", e)
+        emptySet()
+    }
+
+    override suspend fun adminRoomsOf(chatRoomId: String): List<AdminRoom> = try {
+        // The room's own ceremonies, not a subgroup's it hosted: a subgroup's key
+        // makes the subgroup's room, which is not one of this room's groups. Every
+        // one that finished, since the same people may have made several groups here.
+        database.dkgSessionDao().getOwnSessionsForChatRoom(chatRoomId)
+            .filter { it.stage == DkgRitualStage.COMPLETE }
+            .mapNotNull { ceremony ->
+                val roomId = ceremony.thresholdPublicKey
+                    ?.let { SharedKeyDerivation.marmotGroupId(it) }
+                    ?.takeIf { it != chatRoomId }
+                    ?: return@mapNotNull null
+                val room = database.chatRoomDao().findChatRoomById(roomId) ?: return@mapNotNull null
+                AdminRoom(name = room.chatRoom.subject ?: ceremony.subject, chatRoomId = roomId)
+            }
+            .distinctBy { it.chatRoomId }
+    } catch (e: Throwable) {
+        logger.e("Error finding the admin rooms of $chatRoomId", e)
+        emptyList()
+    }
+
+    override suspend fun groupsMadeIn(chatRoomId: String): List<GroupMadeHere> = try {
+        val roomSubject = database.chatRoomDao().findChatRoomById(chatRoomId)?.chatRoom?.subject
+        database.dkgSessionDao().getOwnSessionsForChatRoom(chatRoomId)
+            .filter { it.stage != DkgRitualStage.FAILED }
+            .map { ceremony ->
+                val roomId = ceremony.thresholdPublicKey
+                    ?.takeIf { ceremony.stage == DkgRitualStage.COMPLETE }
+                    ?.let { SharedKeyDerivation.marmotGroupId(it) }
+                GroupMadeHere(
+                    dkgSessionId = ceremony.id,
+                    name = ceremony.subject ?: roomSubject,
+                    status = when {
+                        roomId == null -> GroupMadeHere.Status.KeyCeremonyRunning
+                        database.chatRoomDao().findChatRoomById(roomId) == null -> GroupMadeHere.Status.WaitingForRoom
+                        else -> GroupMadeHere.Status.Ready(roomId)
+                    },
+                )
+            }
+    } catch (e: Throwable) {
+        logger.e("Error listing the groups made in $chatRoomId", e)
+        emptyList()
+    }
+
+    override suspend fun reconcileAdminFlags(): Int = AdminFlags.reconcileAll(database)
+
+    override suspend fun announceGovernanceSupport(): Int = GovernanceSupport.announceAll(database)
+
+    override suspend fun followThroughCeremonies(keyPair: KeyPair) = kotlinx.coroutines.coroutineScope {
+        launch { CeremonyFollowThrough.observe(database = database, chatRepository = this@DatabaseChatRepository, keyPair = keyPair) }
+        // What a governed room's signed changes need after they land: a rotation
+        // without a demoted member, a promotion's next steps.
+        // docs/member-admin-promotion.md, Phases 8 and 9.
+        launch { GovernanceFollowThrough.observe(database = database, keyPair = keyPair) }
+        // The rounds that open and write a group's direct messages: restarted where a
+        // refresh overtook them, owed partials sent, ready ones combined. Messages move
+        // them as they arrive; this catches what a dead app or a missed message left.
+        // docs/group-threshold-ecdh.md, Phase 5.
+        if (ExperimentalFeatures.groupDirectMessages) {
+            keyPair.privKey?.let { secret ->
+                launch {
+                    while (true) {
+                        runCatching { GroupEcdhManager.sweep(database, keyPair.pubKey.toHexKey(), secret) }
+                            .onFailure {
+                                if (it is kotlinx.coroutines.CancellationException) throw it
+                                logger.e("Could not sweep the group's direct messages", it)
+                            }
+                        kotlinx.coroutines.delay(GROUP_DM_SWEEP_INTERVAL)
+                    }
+                }
+            }
+        }
+        Unit
+    }
 
     override suspend fun observeChatRoomListByPublicKey(publicKey: String): Flow<List<LocalChatRoom>> {
         return database.chatRoomDao().observeChatRoomListByUserPublicKey(publicKey)
+    }
+
+    override suspend fun markChatRoomRead(chatRoomId: String) {
+        database.notificationDao().markAllRead(chatRoomId)
+    }
+
+    override fun observeUnreadCounts(publicKey: String): Flow<Map<String, com.machankura.dedun.compose.database.dao.RoomUnread>> =
+        database.notificationDao().observeUnreadCounts(publicKey)
+            .map { counts -> counts.associateBy { it.chatRoomId } }
+
+    override suspend fun setChatRoomNotifications(chatRoomId: String, notifications: String) {
+        database.notificationDao().setNotifications(chatRoomId, notifications)
     }
 
     override suspend fun getChatRoomListByPublicKey(publicKey: String): List<LocalChatRoom> {
@@ -145,6 +279,67 @@ class DatabaseChatRepository(
         // not derive throws rather than answering. The screen wants to draw
         // either way -- what it loses is the copyable event, not the room.
         logger.e("Error reading the signed key state event for $chatRoomId", e)
+        null
+    }
+
+    override suspend fun groupNostrProfile(chatRoomId: String): GroupNostrProfile? = try {
+        GroupNostrProfile.newestAmong(
+            signedEvents = database.groupSignedEventDao()
+                .getByChatRoomIdAndKind(chatRoomId, MetadataEvent.KIND),
+            chatRoomId = chatRoomId,
+        )
+    } catch (e: Throwable) {
+        // Reading one parses content off the wire and checks a signature, and a
+        // room that shows no profile is wrong and survivable where one that will
+        // not open is neither -- the same trade the readings above make.
+        logger.e("Error reading the nostr profile of $chatRoomId", e)
+        null
+    }
+
+    override suspend fun groupDmRow(chatRoomId: String, userPublicKey: HexKey): com.machankura.dedun.compose.ui.view.state.GroupDmRow? {
+        if (!ExperimentalFeatures.groupDirectMessages) return null
+        val key = FrostSigningManager.completedKey(database, chatRoomId) ?: return null
+        val receives = com.machankura.dedun.compose.managers.GroupDmRelays.relaysOf(database, chatRoomId) != null
+        val admin = RoomAdmins.of(database, chatRoomId)?.admins?.contains(userPublicKey) == true &&
+            ShareGenerations.active(database, key).signerIds.containsKey(userPublicKey)
+        return when {
+            admin && receives -> com.machankura.dedun.compose.ui.view.state.GroupDmRow.Messages(
+                unread = database.groupDmDao().countUnread(chatRoomId)
+            )
+            admin -> com.machankura.dedun.compose.ui.view.state.GroupDmRow.OpenMessages
+            receives -> com.machankura.dedun.compose.ui.view.state.GroupDmRow.ReceivesMessages
+            else -> null
+        }
+    }
+
+    override suspend fun inboxSummary(localChatRoom: LocalChatRoom): com.machankura.dedun.compose.ui.view.state.InboxRowSummary? {
+        if (!com.machankura.dedun.compose.ExperimentalFeatures.groupInbox || localChatRoom.chatRoom.mlsGroupState == null) return null
+        val roomId = localChatRoom.chatRoom.id
+        val user = localChatRoom.chatRoom.userPublicKey
+        val holds = database.inboxKeyDao().getKeys(roomId, user).any { it.secretKey != null }
+        val running = database.inboxKeyDao().getRunningCeremoniesIn(roomId).any { it.userPublicKey == user && it.isParticipant() }
+        val canSetUp = !holds && !running &&
+            com.machankura.dedun.compose.managers.InboxKeyRitualManager.refusal(database, localChatRoom, user) == null
+        if (!holds && !running && !canSetUp) return null
+        val unread = if (holds) database.groupInboxDao().getMessages(roomId).count { !it.outgoing && it.readAt == null } else 0
+        return com.machankura.dedun.compose.ui.view.state.InboxRowSummary(holdsKey = holds, unread = unread, ceremonyRunning = running, canSetUp = canSetUp)
+    }
+
+    override suspend fun groupPosts(chatRoomId: String): List<GroupPost> = try {
+        GroupPost.newestFirstAmong(
+            signedEvents = database.groupSignedEventDao()
+                .getByChatRoomIdAndKind(chatRoomId, TextNoteEvent.KIND),
+            chatRoomId = chatRoomId,
+        )
+    } catch (e: Throwable) {
+        logger.e("Error reading the posts of $chatRoomId", e)
+        emptyList()
+    }
+
+    override suspend fun groupSignedEvent(chatRoomId: String, id: HexKey): GroupSignedEvent? = try {
+        database.groupSignedEventDao().getById(id)?.takeIf { it.chatRoomId == chatRoomId }
+    } catch (e: Throwable) {
+        logger.e("Error reading the signed event $id of $chatRoomId", e)
         null
     }
 
@@ -548,25 +743,33 @@ class DatabaseChatRepository(
             }
 
             val createdAt = Clock.System.now().epochSeconds
+            // The expiry is one of the rumor's tags, so it goes on before the id is hashed: the
+            // payload id is the id the recipient arrives at. docs/disappearing-messages.md, D4.
+            val tags = DisappearingSettingsStore(database).stamp(
+                chatRoomId = localChatRoom.chatRoom.id,
+                userPublicKey = localChatRoom.chatRoom.userPublicKey,
+                kind = messageType,
+                createdAt = createdAt,
+                tags = receiverTags.toTypedArray(),
+            )
             val giftWrapPayloadId = EventHasher.hashId(
                 pubKey = localChatRoom.chatRoom.userPublicKey,
                 createdAt = createdAt,
-                tags = receiverTags.toTypedArray(),
+                tags = tags,
                 content = text,
                 kind = messageType
             )
 
-            database.giftWrapPayloadDao().upsert(
-                GiftWrapPayload(
-                    id = giftWrapPayloadId,
-                    kind = messageType,
-                    tags = receiverTags.toTypedArray(),
-                    createdAt = Instant.fromEpochSeconds(createdAt),
-                    content = text,
-                    chatRoomId = localChatRoom.chatRoom.id,
-                    publicKey = localChatRoom.chatRoom.userPublicKey
-                )
+            val payload = GiftWrapPayload(
+                id = giftWrapPayloadId,
+                kind = messageType,
+                tags = tags,
+                createdAt = Instant.fromEpochSeconds(createdAt),
+                content = text,
+                chatRoomId = localChatRoom.chatRoom.id,
+                publicKey = localChatRoom.chatRoom.userPublicKey
             )
+            database.giftWrapPayloadDao().upsert(payload)
 
             database.chatMessageDao().upsert(
                 ChatMessage(
@@ -576,7 +779,8 @@ class DatabaseChatRepository(
                     isUserMessage = true,
                     giftWrapPayloadId = giftWrapPayloadId,
                     marmotGroupEventId = null,
-                    marmotInnerEventId = null
+                    marmotInnerEventId = null,
+                    expiresAt = payload.expiresAt,
                 )
             )
         }
@@ -626,6 +830,16 @@ class DatabaseChatRepository(
             }
         }
 
+        // Sending it late would publish something its own tag says should already be gone: a
+        // relay is meant to drop it on arrival and a recipient to ignore it. It stays unsealed and
+        // the sweeper deletes it -- a person's message at once, a ceremony's round once its
+        // session has finished with it. docs/disappearing-messages.md, Phase 3.
+        val rumorExpiry = DisappearingMessages.expirationOf(giftWrapPayload.tags, giftWrapPayload.createdAt.epochSeconds)
+        if (rumorExpiry != null && DisappearingMessages.isExpired(rumorExpiry, Clock.System.now().epochSeconds)) {
+            logger.w("Not sealing payload ${giftWrapPayload.id}: it expired before it could be sent")
+            return
+        }
+
         database.participantDao().findParticipantsByChatRoomId(giftWrapPayload.chatRoomId).forEach { participant ->
             if (giftWrapPayload.kind == WelcomeEvent.KIND) {
                 logger.i("Only giftWrap welcomeEvent payload (${giftWrapPayload.id}) to the participant who published the related keyPackage")
@@ -670,11 +884,14 @@ class DatabaseChatRepository(
                     content = giftWrapPayload.content
                 )
             )
-            logger.d("GiftWrap Payload Rumor: ${giftWrapPayloadRumor.toJson()}")
-
-            logger.d("Seal to $participant")
+            // The rumor is the plaintext of somebody's words, so it is not logged: a log line would
+            // outlive the message (docs/disappearing-messages.md, Phase 0, check 7).
+            logger.d("Seal ${giftWrapPayload.id} to ${participant.participantPublicKey}")
             val payload = giftWrapPayloadRumor.toJson()
 
+            // The seal stays untagged, as NIP-59 says it MUST: Dedun's group-seal refusals reject
+            // a tagged one, and quartz's `mergeWith` would append its tag to every rumor it opens
+            // (docs/disappearing-messages.md, D5).
             val sealedRumorEvent = nostrSignerSync.signNormal<SealEvent>(
                 createdAt = TimeUtils.randomWithTwoDays(),
                 kind = SealEvent.KIND,
@@ -684,14 +901,20 @@ class DatabaseChatRepository(
                     toPublicKey = participant.participantPublicKey
                 )
             )
-            logger.d("SealEvent: ${sealedRumorEvent.toJson()}")
+            logger.d("SealEvent: ${sealedRumorEvent.id}")
 
+            // The wrap asks relays to drop it, by quartz's formula: its own randomized
+            // `created_at` plus the rumor's lifetime plus two days, which lands after the rumor's
+            // expiry and never gives away when the rumor was written (D5).
+            val wrapCreatedAt = TimeUtils.randomWithTwoDays()
+            val wrapExpiry = DisappearingMessages.wrapExpiration(rumorExpiry, giftWrapPayload.createdAt.epochSeconds, wrapCreatedAt)
             val giftWrapEvent = wrapperSigner.signNormal<GiftWrapEvent>(
-                createdAt = TimeUtils.randomWithTwoDays(),
+                createdAt = wrapCreatedAt,
                 kind = GiftWrapEvent.KIND,
-                tags = arrayOf(
-                    PTag.assemble(participant.participantPublicKey, participant.relayHint?.let { NormalizedRelayUrl(it) })
-                ),
+                tags = listOfNotNull(
+                    PTag.assemble(participant.participantPublicKey, participant.relayHint?.let { NormalizedRelayUrl(it) }),
+                    wrapExpiry?.let { arrayOf(DisappearingMessages.TAG, it.toString()) },
+                ).toTypedArray(),
                 content = wrapperSigner.nip44Encrypt(
                     plaintext = sealedRumorEvent.toJson(),
                     toPublicKey = participant.participantPublicKey
@@ -739,6 +962,137 @@ class DatabaseChatRepository(
         )
 
         onCompletion.invoke()
+    }
+
+    override suspend fun reconcileAdmins(chatRoomId: String): Boolean {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return false
+        // A row whose state this build cannot read has no admin set to agree with.
+        val group = runCatching { room.chatRoom.toMlsGroup() }.getOrNull() ?: return false
+        return MarmotInboundManager.reconcileAdmins(database, chatRoomId, group)
+    }
+
+    override suspend fun adminFloor(chatRoomId: String): Int {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return 1
+        val group = runCatching { room.chatRoom.toMlsGroup() }.getOrNull() ?: return 1
+        return AdminGovernance.adminFloor(database, chatRoomId, group)
+    }
+
+    override suspend fun governanceStatus(chatRoomId: String): GovernanceStatus? {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return null
+        if (room.chatRoom.marmotProfile() != MarmotProfile.CURRENT) return null
+        val group = database.marmotEngine.groupFor(room.routingId) ?: return null
+        if (!AdminGovernance.isKeyedRoom(group)) return null
+        GovernanceGate.minimumAdmins(group)?.let { return GovernanceStatus.Governed(it) }
+        if (room.chatRoom.leftGroupAt == null) GovernanceSupport.announce(database, chatRoomId, group, room.chatRoom.userPublicKey)
+        val missing = GovernanceSupport.missing(database, chatRoomId, group)
+        return if (missing.isEmpty()) GovernanceStatus.Ready(AdminGovernance.adminFloor(database, chatRoomId, group), GovernanceSupport.switcherOf(group))
+        else GovernanceStatus.Waiting(missing)
+    }
+
+    override suspend fun memberActionOptions(localChatRoom: LocalChatRoom): Map<HexKey, List<MemberActionOption>> {
+        val chatRoom = localChatRoom.chatRoom
+        val me = chatRoom.userPublicKey
+        val rows = localChatRoom.localParticipants.map { it.participant.participantPublicKey }
+        val hasLeft = chatRoom.leftGroupAt != null
+        // Off the current profile there is no admin policy to read: the room's kind
+        // is the whole answer, and the participants' flags say which role to name.
+        val flaggedAdmins = localChatRoom.localParticipants
+            .filter { it.participant.adminAt != null }
+            .map { it.participant.participantPublicKey }
+            .toSet()
+        val context = when {
+            chatRoom.mlsGroupState == null ->
+                MemberActionContext(MemberActionRoom.NIP17, me, admins = flaggedAdmins, members = emptySet(), hasLeft = hasLeft)
+            chatRoom.marmotProfile() != MarmotProfile.CURRENT ->
+                MemberActionContext(MemberActionRoom.LEGACY, me, admins = flaggedAdmins, members = emptySet(), hasLeft = hasLeft)
+            else -> {
+                // A row whose state this build cannot read has no rules to read either.
+                val group = runCatching { chatRoom.toMlsGroup() }.getOrNull() ?: return emptyMap()
+                val context = AdminGovernance.context(group, me, AdminGovernance.adminFloor(database, chatRoom.id, group))
+                val engine = database.marmotEngine
+                val heldWallet = if (context.isKeyed) WalletKeysHeld.of(database, chatRoom.id) else null
+                context.copy(
+                    hasLeft = hasLeft,
+                    // Only asked when it is the answer: a keyed room not yet governed.
+                    waitingOn = if (context.isKeyed && !context.governed) GovernanceSupport.missing(database, chatRoom.id, group) else emptySet(),
+                    // Work in flight, which clears by itself: the gate holding an earlier
+                    // commit until a relay accepts it, and offers nobody has answered.
+                    // docs/member-row-actions.md, Phase 5.
+                    changePending = engine.groupFor(localChatRoom.routingId) != null &&
+                        !engine.gate.canPrepareLocalCommit(localChatRoom.routingId),
+                    offeredAdmin = if (context.isKeyed) PromotionManager.unansweredOfferTargets(database, chatRoom.id) else emptySet(),
+                    // Dedun's: no admin change in a room with a Lightning or Wavelength wallet (D4).
+                    hasLightningWallet = context.isKeyed && heldWallet == WalletKeysHeld.Wallet.LIGHTNING,
+                    hasWavelengthWallet = context.isKeyed && heldWallet == WalletKeysHeld.Wallet.WAVELENGTH,
+                ).let { if (it.isKeyed) withShares(localChatRoom, it) else it }
+            }
+        }
+        return MemberActionPolicy.options(context, rows)
+    }
+
+    override suspend fun requireSignatures(localChatRoom: LocalChatRoom) {
+        database.marmotOutboundDao().requireSignatures(localChatRoom)
+    }
+
+    /**
+     * [context] with what the room's shares say about its member rows: a rotation
+     * still under way, and whom it waits on, and who holds a live share.
+     * docs/admin-change-rotation.md, Phase 3.
+     */
+    private suspend fun withShares(localChatRoom: LocalChatRoom, context: MemberActionContext): MemberActionContext {
+        val key = AdminGovernance.keyOf(database, localChatRoom.chatRoom.id) ?: return context
+        val holders = ShareGenerations.active(database, key).roster
+            .filter { it.standing == ShareStanding.LIVE }
+            .map { it.memberPublicKey }
+            .toSet()
+        val pending = AdminGovernance.adminChangeHold(database, localChatRoom)?.let { hold ->
+            val waitingOn = (hold as? RotationHold.Running)
+                ?.let { database.shareRefreshDao().getSessionById(it.refreshId) }
+                ?.let { ShareRefreshManager.progress(database, it)?.waitingOn }
+                .orEmpty()
+            MemberActionBlocker.RotationPending(waitingOn.toSet())
+        }
+        return context.copy(rotationPending = pending, shareHolders = holders)
+    }
+
+    override suspend fun promoteMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
+        refuseAdminChangeOverWallets(localChatRoom)
+        // The key, for the rotation a first promotion starts (docs/admin-change-rotation.md, Phase 6).
+        database.marmotOutboundDao().promote(localChatRoom, memberPublicKey, privateKeyOrNull()?.second)
+    }
+
+    override suspend fun demoteMember(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
+        refuseAdminChangeOverWallets(localChatRoom)
+        database.marmotOutboundDao().demote(localChatRoom, adminPublicKey)
+    }
+
+    /**
+     * Dedun's: a keyed room with a Lightning or Wavelength wallet changes no admins (D4 in
+     * docs/giza-into-dedun.md, and [WalletKeysHeld]). The menu says so first
+     * (`MemberActionBlocker.LightningWalletHeld`, `WavelengthWalletHeld`), and
+     * `MarmotOutboundDao` holds to it where the change is made; this says it before
+     * anything is sent.
+     */
+    private suspend fun refuseAdminChangeOverWallets(localChatRoom: LocalChatRoom) {
+        if (AdminGovernance.keyOf(database, localChatRoom.chatRoom.id) == null) return
+        WalletKeysHeld.refuseAdminChange(database, localChatRoom.chatRoom.id)
+    }
+
+    override suspend fun pendingPromotion(chatRoomId: String): PromotionManager.Offer? {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return null
+        return PromotionManager.pendingOffer(database, chatRoomId, room.chatRoom.userPublicKey)
+    }
+
+    override suspend fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey): String? {
+        val identity = activeIdentity.value ?: return "No identity is signed in"
+        val nostrPrivateKey = identity.toKeyPair().privKey ?: return "This identity cannot sign"
+        return runCatching {
+            PromotionManager.accept(database, localChatRoom, identity.nostrPublicKey, nostrPrivateKey, offerId)
+        }.exceptionOrNull()?.let { it.message ?: it::class.simpleName ?: "Unknown error" }
+    }
+
+    override suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) {
+        database.marmotOutboundDao().stepDownAndLeave(localChatRoom, heir)
     }
 
     override suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
@@ -799,6 +1153,7 @@ class DatabaseChatRepository(
                     waitingOn = progress.waitingOn.map(::nameOf),
                     since = progress.since,
                     canAbandon = progress.canAbandon,
+                    takingAway = takingAway(localChatRoom, key, session).associateWith(::nameOf),
                 )
             }
         } ?: signingNewGeneration(localChatRoom, key, shares.generation, refreshes)
@@ -827,6 +1182,8 @@ class DatabaseChatRepository(
                     is RotationHold.Behind -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.BEHIND)
                     is RotationHold.SpendOpen -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.SPEND_OPEN)
                     is RotationHold.StatementOpen -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.STATEMENT_OPEN)
+                    is RotationHold.AdminChangeInFlight -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ADMIN_CHANGE)
+                    is RotationHold.Enrolling -> SharesSummary.Rotation.Held(SharesSummary.Rotation.Reason.ENROLLING, who = nameOf(hold.memberPublicKey))
                 }
             },
             canAskToBeRepaired = ExperimentalFeatures.shareRefresh && mine?.standing == ShareStanding.STALE && !repairing,
@@ -841,6 +1198,21 @@ class DatabaseChatRepository(
         database.frostSigningSessionDao().observeSessionsForChatRoom(chatRoomId),
         database.shareRefreshDao().observeSessionsForRoom(chatRoomId),
     ) { _, _, _ -> }
+
+    /**
+     * Whom [session] withholds for good because the group's signature took them out
+     * of the admins: the cause the running card names (docs/admin-change-rotation.md,
+     * Phase 7).
+     */
+    private suspend fun takingAway(localChatRoom: LocalChatRoom, key: DkgSession, session: ShareRefreshSession): List<HexKey> {
+        val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id) ?: return emptyList()
+        val roster = ShareGenerations.at(database, key, session.baseGeneration)?.roster.orEmpty()
+            .associate { it.participantId to it.memberPublicKey }
+        return session.withheldStandings()
+            .filterValues { it == ShareStanding.RETIRED }
+            .keys.mapNotNull { roster[it] }
+            .filter { admins.removedBySignature(it) }
+    }
 
     /**
      * The last step of a rotation: complete, and the group signing the new

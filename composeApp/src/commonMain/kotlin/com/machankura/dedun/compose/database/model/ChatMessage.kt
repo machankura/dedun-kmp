@@ -1,6 +1,8 @@
 package com.machankura.dedun.compose.database.model
 
 import com.machankura.dedun.compose.nostr.MovedKinds
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
@@ -20,6 +22,8 @@ import com.machankura.dedun.compose.nostr.GizaProtocolEvents
 import com.machankura.dedun.compose.text.describe
 import com.machankura.dedun.compose.text.BlockDuration
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
+import com.machankura.dedun.compose.nostr.inbox.InboxAnnouncement
+import com.machankura.dedun.compose.nostr.inbox.InboxKeyRitualEvents
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
@@ -73,12 +77,15 @@ import com.machankura.dedun.compose.managers.GroupKeyStateManager
 import com.machankura.dedun.compose.managers.GroupWalletManager
 import com.machankura.dedun.compose.managers.GuardianManager
 import com.machankura.dedun.compose.managers.SubgroupManager
+import com.machankura.dedun.compose.managers.MarmotGroupName
 import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleEvent
 import com.machankura.dedun.compose.nostr.chronicle.ChronicleRequestEvent
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRepairEvents
+import com.machankura.dedun.compose.nostr.groupdm.GroupEcdhEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
@@ -117,7 +124,7 @@ import com.machankura.dedun.compose.nostr.wallet.GuardedWalletNoticeEvent
     // room, and re-reads all of them each time a message lands anywhere. Without
     // this that is a scan of every message this device holds, per room, per
     // arrival -- work that grows with the whole history rather than with the room.
-    indices = [Index("chatRoomId")],
+    indices = [Index("chatRoomId"), Index("expiresAt")],
 )
 data class ChatMessage(
     @PrimaryKey(autoGenerate = true)
@@ -145,6 +152,13 @@ data class ChatMessage(
      * line everybody else gets. See docs/marmot-direct-messages.md.
      */
     val directMessageRecipientPublicKey: HexKey? = null,
+
+    /**
+     * When this line disappears, from its rumor's NIP-40 `expiration`, or null for never. The
+     * sweeper deletes it, and everything holding its words, from then on; a line that arrives
+     * already past it is never filed. docs/disappearing-messages.md, D6.
+     */
+    val expiresAt: Instant? = null,
 
     /**
      * The signing session a [FROST_TYPES] line belongs to, or null for anything else.
@@ -214,6 +228,9 @@ data class ChatMessage(
          * who can read it, because naming the recipient is the point of the line the
          * bystanders get. See docs/marmot-direct-messages.md.
          */
+        /** An ordinary line of conversation: the default [messageType]. */
+        const val TYPE_MESSAGE = "message"
+
         const val TYPE_DIRECT_MESSAGE = "directMessage"
 
         /**
@@ -295,6 +312,9 @@ data class ChatMessage(
         const val TYPE_SHARE_REFRESH_DEALT = "shareRefreshDealt"
         const val TYPE_SHARE_REFRESH_CONFIRMED = "shareRefreshConfirmed"
         const val TYPE_SHARE_REFRESH_APPROVAL_NEEDED = "shareRefreshApprovalNeeded"
+
+        /** Took part in a rotation with nothing to decide (docs/admin-change-rotation.md, Phase 5). */
+        const val TYPE_SHARE_REFRESH_TOOK_PART = "shareRefreshTookPart"
         const val TYPE_SHARE_REFRESH_COMPLETE = "shareRefreshComplete"
         const val TYPE_SHARE_REFRESH_FAILED = "shareRefreshFailed"
 
@@ -309,6 +329,7 @@ data class ChatMessage(
             TYPE_SHARE_REFRESH_DEALT,
             TYPE_SHARE_REFRESH_CONFIRMED,
             TYPE_SHARE_REFRESH_APPROVAL_NEEDED,
+            TYPE_SHARE_REFRESH_TOOK_PART,
             TYPE_SHARE_REFRESH_COMPLETE,
             TYPE_SHARE_REFRESH_FAILED,
             TYPE_SHARE_REPAIR_REQUESTED,
@@ -322,6 +343,7 @@ data class ChatMessage(
             TYPE_SHARE_REFRESH_STARTED,
             TYPE_SHARE_REFRESH_DEALT,
             TYPE_SHARE_REFRESH_CONFIRMED,
+            TYPE_SHARE_REFRESH_TOOK_PART,
             TYPE_SHARE_REPAIR_REQUESTED,
             TYPE_SHARE_REPAIRED,
         )
@@ -561,13 +583,22 @@ data class ChatMessage(
         private const val TYPE_LEGACY_GROUP_ENTRY_CURATED = "groupEntryCurated"
 
         /**
-         * Lines the group's nostr profile, relay lists and posts wrote. Those
-         * features are gone too, and these stay for the same reason: rows already
-         * in a transcript carry them and have to stay system lines.
+         * The group signed a new nostr profile for itself: a system line, written only for
+         * a profile the *room* signed. The stored string is the one an older build wrote,
+         * so a row it left reads as this type. docs/giza-second-batch.md, Phase 5, from
+         * Giza's group-nostr-profile.
          */
-        private const val TYPE_LEGACY_GROUP_PROFILE_SIGNED = "groupProfileSigned"
+        const val TYPE_GROUP_PROFILE_SIGNED = "groupProfileSigned"
+
+        /** The group signed something to say publicly, in its own name. */
+        const val TYPE_GROUP_POST_SIGNED = "groupPostSigned"
+
+        /**
+         * The line the group's relay lists wrote. That feature did not come back with the
+         * profile and posts, and this stays for the reason the other legacy types do: rows
+         * already in a transcript carry it and have to stay system lines.
+         */
         private const val TYPE_LEGACY_GROUP_RELAYS_SIGNED = "groupRelaysSigned"
-        private const val TYPE_LEGACY_GROUP_POST_SIGNED = "groupPostSigned"
 
         /**
          * The group opened a wallet.
@@ -669,14 +700,48 @@ data class ChatMessage(
         const val TYPE_MEMBER_TRANSFER_RECORDED = "memberTransferRecorded"
 
         /**
+         * This device forgot the group's direct messages on seeing its member removed as an
+         * admin. docs/group-threshold-ecdh.md, D14.
+         */
+        const val TYPE_GROUP_DM_FORGOTTEN = "groupDmForgotten"
+
+        /**
          * Every line the group signed, for the one check the transcript
          * dispatches on. A type missing from here renders as a chat bubble,
          * silently, looking exactly like somebody having said it.
          */
+        /**
+         * The group's inbox (docs/group-inbox.md): its key ceremony starting, finishing or
+         * failing, written by `InboxKeyRitualManager` on every device in the room. Three lines a
+         * ceremony rather than a ladder per step: nobody is asked anything in it, so there is
+         * nobody whose door the ladder would tell a member to knock on until it stalls, and the
+         * ceremony's screen names them then.
+         */
+        const val TYPE_INBOX_KEY_STARTED = "inboxKeyStarted"
+        const val TYPE_INBOX_KEY_COMPLETE = "inboxKeyComplete"
+        const val TYPE_INBOX_KEY_FAILED = "inboxKeyFailed"
+
+        /** The group signed an announcement of its inbox's key (10044) or relays (10050). */
+        const val TYPE_INBOX_ANNOUNCED = "inboxAnnounced"
+        const val TYPE_INBOX_RELAYS_ANNOUNCED = "inboxRelaysAnnounced"
+
+        /** This device wiped the group's inbox when its owner stopped being an admin (D14). */
+        const val TYPE_INBOX_FORGOTTEN = "inboxForgotten"
+
+        val INBOX_TYPES = setOf(
+            TYPE_INBOX_KEY_STARTED,
+            TYPE_INBOX_KEY_COMPLETE,
+            TYPE_INBOX_KEY_FAILED,
+            TYPE_INBOX_ANNOUNCED,
+            TYPE_INBOX_RELAYS_ANNOUNCED,
+            TYPE_INBOX_FORGOTTEN,
+        )
+
         val GROUP_IDENTITY_TYPES = setOf(
-            TYPE_LEGACY_GROUP_PROFILE_SIGNED,
+            TYPE_GROUP_PROFILE_SIGNED,
             TYPE_LEGACY_GROUP_RELAYS_SIGNED,
-            TYPE_LEGACY_GROUP_POST_SIGNED,
+            TYPE_GROUP_POST_SIGNED,
+            TYPE_GROUP_DM_FORGOTTEN,
             TYPE_LEGACY_GROUP_SCHEMA_SIGNED,
             TYPE_LEGACY_GROUP_ENTRY_CURATED,
             TYPE_GROUP_WALLET_OPENED,
@@ -704,7 +769,7 @@ data class ChatMessage(
             TYPE_CONTACT_PAYOUT_DESTINATION,
             TYPE_MEMBER_TRANSFER_ASKED,
             TYPE_MEMBER_TRANSFER_RECORDED,
-        )
+        ) + INBOX_TYPES
 
         /** The lines in [GROUP_IDENTITY_TYPES] about the Lightning wallet, which open its screen. */
         val GROUP_LIGHTNING_SIGNED_TYPES = setOf(
@@ -897,11 +962,46 @@ data class ChatMessage(
         const val TYPE_GROUP_DISBANDED = "groupDisbanded"
 
         /**
+         * A member became an admin, or stopped being one -- derived like the lines
+         * above, from the group's admin set before and after a commit, on every
+         * device that applies it. docs/member-admin-promotion.md, Phase 2.
+         */
+        const val TYPE_ADMIN_ADDED = "adminAdded"
+        const val TYPE_ADMIN_REMOVED = "adminRemoved"
+
+        /**
+         * An offer to make a member an admin of a keyed room, or their answer to one:
+         * this device's own account of what it asked or said, before the group signs
+         * anything. docs/member-admin-promotion.md, Phase 8.
+         */
+        const val TYPE_ADMIN_OFFERED = "adminOffered"
+
+        /**
+         * A change to a governed room that this device refused: a commit sent bare,
+         * or an envelope whose check failed. Every device refuses the same ones,
+         * so every device says so. docs/member-admin-promotion.md, Phase 4a.
+         */
+        const val TYPE_CHANGE_NOT_APPLIED = "changeNotApplied"
+
+        /**
          * A change this device asked for that every relay refused, so the line
          * written when it was asked for -- a removal, a disband -- did not come
          * true. The invite's own version is [TYPE_MEMBER_INVITE_FAILED].
          */
         const val TYPE_CHANGE_REJECTED = "changeRejected"
+
+        /**
+         * The admin room this device was welcomed into did not name every member
+         * of the ceremony that made its key as an admin. Derived at the Welcome
+         * from this device's own record of the ceremony, never received.
+         * docs/robust-group-admins.md, Phase 3.
+         *
+         * Retired: no longer written (docs/remove-founding-admins-card.md, D3).
+         * Kept, and kept in [MEMBERSHIP_TYPES], because rows written before are
+         * still on devices, as the user's own, and out of the set each would
+         * render as a bubble from the user.
+         */
+        const val TYPE_FOUNDING_ADMINS_MISSING = "foundingAdminsMissing"
 
         /**
          * Every membership line, for the one check the transcript dispatches on.
@@ -916,7 +1016,12 @@ data class ChatMessage(
             TYPE_MEMBER_ADDED,
             TYPE_MEMBER_LEFT,
             TYPE_GROUP_DISBANDED,
+            TYPE_ADMIN_ADDED,
+            TYPE_ADMIN_REMOVED,
+            TYPE_ADMIN_OFFERED,
+            TYPE_CHANGE_NOT_APPLIED,
             TYPE_CHANGE_REJECTED,
+            TYPE_FOUNDING_ADMINS_MISSING,
         )
 
         const val TYPE_UNDECRYPTABLE_OUTER_LAYER = "undecryptableOuterLayer"
@@ -1216,7 +1321,9 @@ data class ChatMessage(
                             event.kind in GroupLightningEvents.PROTOCOL ||
                             MovedKinds.current(event.kind) in GroupWavelengthEvents.PROTOCOL ||
                             ShareRefreshEvents.isShareRefresh(event) ||
-                            event.kind in ShareRepairEvents.ALL
+                            event.kind in ShareRepairEvents.ALL ||
+                            event.kind in GroupEcdhEvents.ALL ||
+                            GovernanceEvents.isGovernance(event)
                     )
 
                     database.marmotInnerEventDao().upsert(
@@ -1657,6 +1764,21 @@ data class ChatMessage(
                 // Re-enrolling a stale member: 30346-30349, which Dedun never used.
                 in ShareRepairEvents.ALL -> null
 
+                // The admins' partials for the group's mail: one message per pass, and
+                // a line each would bury the room (docs/group-threshold-ecdh.md, D11).
+                in GroupEcdhEvents.ALL -> null
+
+                // The inbox key ceremony's messages (docs/group-inbox.md).
+                // `InboxKeyRitualManager` files them and writes its own lines.
+                in InboxKeyRitualEvents.ALL -> null
+
+                // A reply's seals, signed by the group (docs/group-inbox.md, D10). The
+                // signing session's own lines say the group signed something; a line naming
+                // the reply would reach members who are not admins, who must learn nothing of
+                // the inbox (D9). The same for a message the group writes by threshold ECDH
+                // (docs/group-threshold-ecdh.md, D12).
+                com.vitorpamplona.quartz.nip59Giftwrap.seals.SealEvent.KIND -> null
+
                 ChatEvent.KIND -> {
                     ChatMessage(
                         giftWrapPayloadId = null,
@@ -1714,7 +1836,11 @@ data class ChatMessage(
                 // The name is the one the parent certified, which is the only one
                 // that was ever put to this room -- the child may since have been
                 // renamed, and this line is a record of what was agreed rather
-                // than a view of what is.
+                // than a view of what is. The name is drawn into the sentence
+                // in braces as it is written, whatever mark the certificate was
+                // signed under: it certified the name, not the punctuation. The
+                // one place braces reach the disk, inside a sentence and never in
+                // a name column (docs/group-name-braces.md, D6).
                 SubgroupBirthCertificateEvent.KIND -> {
                     SubgroupManager.record(
                         database = database,
@@ -1722,7 +1848,7 @@ data class ChatMessage(
                         innerEvent = event
                     ) ?: return null
 
-                    val name = SubgroupBirthCertificateEvent.parseName(event.tags)
+                    val name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::display)
                     val admins = SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags).size
 
                     ChatMessage(
@@ -2085,13 +2211,105 @@ data class ChatMessage(
                     )
                 }
 
-                // A profile or a relay list -- the group's or a member's own --
-                // travelling through the room. The app no longer reads either as
-                // the group's, and both are identity plumbing nobody sends into a
-                // room on purpose, so neither is a line nor a raw-JSON bubble: a
-                // signing session an older build opened for one ends in silence.
-                // A kind:1 is content, and keeps the bubble it always had.
-                MetadataEvent.KIND,
+                // The group's own profile: a kind:0 the room's key signed, filed
+                // as a `GroupSignedEvent` by `FrostSigningManager.complete` before
+                // it applies it, and read off those by `GroupNostrProfile`. A
+                // `Profile` row is not an option: it hangs off `NostrEvent` by
+                // foreign key, and a group-signed event is not one.
+                //
+                // A kind:0 anybody else authored is a member's own profile passing
+                // through the room -- identity plumbing nobody sends on purpose --
+                // and is neither a line nor a raw-JSON bubble.
+                // docs/group-nostr-profile-and-posts.md.
+                // The group announcing its inbox (docs/group-inbox.md, D5 and D6): a 10044
+                // naming the key its admins made, or a 10050 naming where mail should go.
+                // Verified, as a post is, so no member can put the announcement in the group's
+                // mouth; anything else of these kinds says nothing here.
+                InboxAnnouncement.KEY_KIND, InboxAnnouncement.RELAYS_KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    if (!event.pubKey.equals(groupId, ignoreCase = true) || !signed.verifies()) return null
+                    val content = if (event.kind == InboxAnnouncement.KEY_KIND) {
+                        val announced = database.groupSignedEventDao().getByChatRoomIdAndKind(groupId, InboxAnnouncement.KEY_KIND)
+                            .count { it.publicKey.equals(groupId, ignoreCase = true) }
+                        if (announced <= 1) {
+                            "The group has an inbox. Anyone on nostr can now write to it privately, and every admin can read what arrives."
+                        } else {
+                            "The group changed its inbox key. Mail sent to the old key can still be read by the admins who held it."
+                        }
+                    } else {
+                        "The group said where its private mail should arrive."
+                    }
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = if (event.kind == InboxAnnouncement.KEY_KIND) TYPE_INBOX_ANNOUNCED else TYPE_INBOX_RELAYS_ANNOUNCED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = content,
+                    )
+                }
+
+                MetadataEvent.KIND -> {
+                    if (!event.pubKey.equals(groupId, ignoreCase = true)) return null
+
+                    val profile = GroupNostrProfile.of(
+                        signedEvent = GroupSignedEvent.fromEvent(event, chatRoomId = groupId),
+                        chatRoomId = groupId,
+                    ) ?: return null
+
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_PROFILE_SIGNED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = profile.name()?.let { "The group is now called $it" }
+                            ?: "The group signed a new profile for itself"
+                    )
+                }
+
+                // The group saying something publicly, in its own name -- a
+                // different thing from a member saying something in the room. A
+                // room's messages are `ChatEvent`s; this is a kind:1 authored by
+                // the room's own key, so any reader can check the group said it
+                // and that no single member could have.
+                //
+                // Verified rather than checked by author alone: a rumor carries an
+                // empty signature and any pubkey its sender likes, so an author
+                // check would let one member put words in the group's mouth.
+                //
+                // A kind:1 that fails falls through to `unsupported` rather than
+                // vanishing. It is content, somebody meant it, and it has rendered
+                // as an unsupported event since before any of this existed.
+                TextNoteEvent.KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    if (!signed.verifies()) return unsupported()
+
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_POST_SIGNED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group posted in its own name"
+                    )
+                }
+
+                // A relay list -- the group's or a member's own -- travelling
+                // through the room. The group's relay lists were not brought back
+                // with its profile and posts (docs/group-nostr-profile-and-posts.md,
+                // D1), and a member's is identity plumbing nobody sends into a room
+                // on purpose, so neither is a line nor a raw-JSON bubble: a signing
+                // session a Curare member opened for one ends in silence.
                 AdvertisedRelayListEvent.KIND,
                 DmRelayListEvent.KIND,
                 SearchRelayListEvent.KIND,
@@ -2106,14 +2324,15 @@ data class ChatMessage(
                 // which is the only trace an unrecognised payload leaves.
                 MarmotAppEvent.KIND_SYSTEM, MarmotAppEvent.KIND_EDIT -> null
 
-                // Giza's share refresh and governed-room traffic, in a room a Giza or Bennu
-                // member shares. This build does not act on them yet, and a raw bubble per
-                // envelope is no account of anything. Last, after every arm of Dedun's own:
-                // until Dedun's kinds move (docs/giza-into-dedun.md, Phase K), 30340-30343
-                // and 30370-30377 are still Dedun's deposit, transfer and Wavelength kinds,
-                // and their arms above read them first -- and return null for an event of
-                // Giza's that does not parse as theirs.
+                // Giza's traffic this build does not act on, in a room a Giza or Bennu member
+                // shares: a raw bubble per envelope is no account of anything. And a governed
+                // room's envelopes and promotion steps, which NostrDao acts on and which say
+                // what they did in lines of their own. Last, after every arm of Dedun's own:
+                // until Dedun's kinds move (docs/giza-into-dedun.md, Phase K), 30370-30382
+                // are still Dedun's Wavelength kinds, and their arms above read them first --
+                // and return null for an event that does not parse as theirs.
                 in GizaProtocolEvents.ALL -> null
+                in GovernanceEvents.ALL -> null
 
                 else -> unsupported()
             }

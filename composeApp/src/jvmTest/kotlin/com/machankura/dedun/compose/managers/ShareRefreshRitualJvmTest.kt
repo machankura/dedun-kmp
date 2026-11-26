@@ -13,6 +13,8 @@ import fr.acinq.bitcoin.crypto.frost.Frost
 import fr.acinq.bitcoin.crypto.frost.KeyMaterial
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
@@ -65,6 +67,7 @@ class ShareRefreshRitualJvmTest {
     fun closeDatabases() {
         devices.forEach { it.db.close() }
         com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = null
+        RoomAdmins.override = null
     }
 
     private val ceremonyId = "ceremony".padEnd(64, '0')
@@ -101,7 +104,7 @@ class ShareRefreshRitualJvmTest {
             db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
         }
         val publicKey = group.members[index]
-        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
         db.chatRoomDao().upsert(chatRoom)
         val id = group.idOf[index]
         db.dkgSessionDao().upsert(
@@ -926,7 +929,9 @@ class ShareRefreshRitualJvmTest {
     fun `a session left at the old generation fails out loud when its shares go`() = runBlocking<Unit> {
         val group = Group(3, 2)
         val all = devicesFor(group)
-        val old = FrostSigningManager.proposeSigning(all[0].db, all[0].room, all[0].publicKey, kind = 1, tags = arrayOf(), content = "Before the rotation")
+        // Not a post: in Dedun a profile or post being signed holds the rotation back
+        // (RotationHold.StatementOpen), so the session left behind is of a kind nothing holds.
+        val old = FrostSigningManager.proposeSigning(all[0].db, all[0].room, all[0].publicKey, kind = 30078, tags = arrayOf(arrayOf("d", "note")), content = "Before the rotation")
         assertEquals(0, old.generation)
         pump(all)
 
@@ -1346,7 +1351,7 @@ class ShareRefreshRitualJvmTest {
             db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
             db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
         }
-        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "#Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
         db.chatRoomDao().upsert(chatRoom)
         val key = from.key()
         db.dkgSessionDao().upsert(key.copy(userPublicKey = publicKey, secretShare = null, round1Random = "", round2AuxRandom = "", hostPublicKey = ChillDkgRitualManager.deriveHostPublicKey(keyPair.privKey!!).value.toHex()))
@@ -1356,6 +1361,517 @@ class ShareRefreshRitualJvmTest {
             db.keyShareDao().upsert(from.db.keyShareDao().getMembers(ceremonyId, generation.generation))
         }
         return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
+    }
+
+    // ---- member-admin-promotion, Phase 8: enrollment at a new id -----------------------------------------------
+
+    /** A 3-member 2-of-3 group that has rotated once, everyone included, with its key state signed. */
+    private suspend fun rotatedOnce(): Pair<Group, List<Device>> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val refresh = propose(all[0])
+        pump(all)
+        approveAll(all, refresh.id)
+        approveSigning(all)
+        return group to all
+    }
+
+    /** A device for [keyPair] holding nothing of the key at all: the room, the members' profiles, no ceremony. */
+    private suspend fun stranger(group: Group, keyPair: KeyPair): Device {
+        val db = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
+        val publicKey = keyPair.pubKey.toHexKey()
+        (group.members + publicKey).forEach { member ->
+            val nostrEventId = "e$member".take(64)
+            db.nostrEventDao().upsert(NostrEvent(id = nostrEventId, pubKey = member, kind = 0, tags = emptyArray(), content = "{}", sig = "0".repeat(128)))
+            db.profileDao().upsert(Profile(publicKey = member, nostrEventId = nostrEventId))
+        }
+        val chatRoom = ChatRoom(id = group.roomId, userPublicKey = publicKey, subject = "Ekklesia", description = SharedKeyDerivation.describe("Admins."), mlsGroupState = "00")
+        db.chatRoomDao().upsert(chatRoom)
+        return Device(group, -1, db, LocalChatRoom(chatRoom = chatRoom), keyPair).also { devices += it }
+    }
+
+    /** The group signs the key state binding the next id to [member] under [host], with that id's public share added. */
+    private suspend fun bindNextId(all: List<Device>, member: HexKey, host: HexKey) {
+        val alice = all[0]
+        val table = alice.active().publicShares!!
+        val binding = com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent.MemberBinding(table.size, member, host)
+        val template = GroupKeyStateManager.generationTemplate(
+            alice.db, alice.room, alice.key(), refreshId = null, newBinding = binding,
+            publicShares = PromotionManager.extended(table, alice.key().threshold),
+        )
+        FrostSigningManager.proposeSigning(alice.db, alice.room, alice.publicKey, template.kind, template.tags, template.content, alice.key(), template.createdAt)
+        pump(all)
+        approveSigning(all)
+        pump(all)
+    }
+
+    /** The handover the proposer's device would send, as Erin's device receives it. */
+    private suspend fun handoverFrom(from: Device, to: HexKey): MarmotInnerEvent =
+        MarmotInnerEvent(
+            id = "f".repeat(64), publicKey = from.publicKey, kind = com.machankura.dedun.compose.nostr.frost.PromotionEvents.HANDOVER,
+            tags = com.machankura.dedun.compose.nostr.frost.PromotionEvents.handoverTags(from.group.roomId, to),
+            content = assertNotNull(PromotionManager.handoverContent(from.db, from.group.roomId)),
+            chatRoomId = from.group.roomId,
+        )
+
+    /**
+     * A member who never took part in the ceremony is enrolled at id 3 of a 2-of-3
+     * key: every device adds the id from the key state the group signed, the new
+     * member checks what they are handed against it, two holders run reduced
+     * enrollment with nobody asked, and the new share signs.
+     */
+    @Test
+    fun `a new member is enrolled at the next id, and signs with the group`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val (alice, bob, carol) = all
+        val erinKeys = KeyPair()
+        val erinHost = ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex()
+        val erin = stranger(all[0].group, erinKeys)
+
+        bindNextId(all, erin.publicKey, erinHost)
+        all.forEach { device ->
+            assertEquals(4, device.active().publicShares!!.size, "the table on device ${device.index}")
+            val entry = device.active().roster.single { it.participantId == 3 }
+            assertEquals(erin.publicKey, entry.memberPublicKey)
+            assertEquals(ShareStanding.STALE, entry.standing, "id 3 waits for its share")
+        }
+
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, handoverFrom(alice, erin.publicKey))
+        val everyone = all + erin
+        pump(everyone)
+
+        val share = assertNotNull(erin.active().secretShare, "Erin must hold a share of id 3")
+        assertEquals(alice.active().publicShares!![3], share.publicKey(), "a share on the group's polynomial")
+        everyone.forEach { device ->
+            assertEquals(ShareStanding.LIVE, device.active().roster.single { it.participantId == 3 }.standing, "id 3 on device ${device.index}")
+        }
+
+        // Erin signs, with Alice; Bob and Carol stay out.
+        val session = FrostSigningManager.proposeSigning(alice.db, alice.room, alice.publicKey, kind = 1, tags = arrayOf(), content = "Erin signs")
+        assertEquals(4, session.participantCount, "n is the table's, which grew")
+        pump(everyone)
+        FrostSigningManager.approve(erin.db, erin.room, session.id)
+        pump(everyone)
+        assertEquals(FrostSigningStage.COMPLETE, alice.db.frostSigningSessionDao().getSessionById(session.id)?.stage)
+        assertTrue(alice.db.frostSigningSessionDao().getSessionById(session.id)!!.signerIdList()!!.contains(3))
+        listOf(bob, carol).forEach { assertNull(it.db.frostSigningSessionDao().getSessionById(session.id)?.signApprovedAt) }
+    }
+
+    /** A handover that does not match what the group signed is refused, and nothing is asked for. */
+    @Test
+    fun `a handover whose table the group did not sign is refused`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val erinKeys = KeyPair()
+        val erin = stranger(all[0].group, erinKeys)
+        bindNextId(all, erin.publicKey, ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+
+        val honest = handoverFrom(all[0], erin.publicKey)
+        val json = kotlinx.serialization.json.Json.parseToJsonElement(honest.content).jsonObject
+        val shares = json["publicShares"]!!.jsonArray
+        val swapped = kotlinx.serialization.json.JsonArray(listOf(shares[1], shares[0]) + shares.drop(2))
+        val forged = honest.copy(content = kotlinx.serialization.json.JsonObject(json + ("publicShares" to swapped)).toString())
+
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, forged)
+
+        assertNull(erin.db.dkgSessionDao().getSessionById(ceremonyId), "a key was filed from a forged handover")
+        assertTrue(erin.db.shareRepairDao().getSessionsForKey(ceremonyId).isEmpty())
+    }
+
+    /** A binding of the next id whose table this device cannot extend to is not applied. */
+    @Test
+    fun `an id enrolled with a table that does not extend this one is not added`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val table = alice.active().publicShares!!
+        val state = assertNotNull(GroupKeyStateManager.keyStateFor(alice.db, alice.group.roomId))
+        // The next id, but a hash over some other fourth share.
+        val wrong = state.copy(publicSharesHash = ShareGenerations.publicSharesHash(table + table[0]))
+        PromotionManager.enrollNewId(alice.db, wrong, com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent.MemberBinding(3, "a".repeat(64), "02" + "b".repeat(64)))
+
+        assertEquals(3, alice.active().publicShares!!.size)
+        assertTrue(alice.active().roster.none { it.participantId == 3 })
+    }
+
+    // ---- docs/admin-change-rotation.md: today's behaviour, pinned ---------------------------------------------------
+
+    /** The room's live admins, as a governed room's policy would name them after the group signed a change. */
+    private fun admins(group: Group, vararg removed: HexKey, governed: Boolean = true) {
+        RoomAdmins.override = { RoomAdmins(group.members.toSet() - removed.toSet(), governed) }
+    }
+
+    private suspend fun approvalLines(device: Device) =
+        device.db.chatMessageDao().getChatMessagesByChatRoomId(device.group.roomId).map { it.chatMessage }
+            .filter { it.messageType == ChatMessage.TYPE_SHARE_REFRESH_APPROVAL_NEEDED }
+
+    /**
+     * The rotation a removal owes, as `GovernanceFollowThrough.rotateAway` opens it,
+     * runs with nobody asked: the group's signature on the removal decided who is
+     * withheld. The only taps in the whole flow were the signatures on the change.
+     */
+    @Test
+    fun `after a removal, the rotation it owes runs without asking anyone`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol, dave) = all
+        admins(group, dave.publicKey)
+        val refresh = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+        pump(all)
+
+        listOf(alice, bob, carol).forEach { device ->
+            assertEquals(ShareRefreshStage.COMPLETE, device.refresh(refresh.id)?.stage, "device ${device.index}")
+            assertEquals(1, device.active().generation, "device ${device.index}")
+            assertTrue(approvalLines(device).isEmpty(), "device ${device.index} was asked")
+            assertEquals(ShareStanding.RETIRED, device.active().roster.single { it.memberPublicKey == dave.publicKey }.standing)
+        }
+        listOf(bob, carol).forEach { device ->
+            val took = device.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).map { it.chatMessage }
+                .single { it.messageType == ChatMessage.TYPE_SHARE_REFRESH_TOOK_PART }
+            assertTrue("whom the group removed as admin" in took.content, took.content)
+        }
+        // The key state signed itself, and the old shares are gone.
+        assertEquals(1, GroupKeyStateManager.keyStateFor(alice.db, group.roomId)?.generation)
+        assertNull(alice.key().secretShare, "the ceremony's share is still here")
+    }
+
+    /** A2: a rotation that leaves out only who is stale already asks nobody either. */
+    @Test
+    fun `a rotation that leaves out only the stale is taken part in unasked`() = runBlocking<Unit> {
+        val (group, all) = rotatedWithout(2)
+        val (alice, bob, _) = all
+        admins(group)
+        val refresh = propose(alice)
+        assertEquals(mapOf(group.idOf[2] to ShareStanding.STALE), refresh.withheldStandings())
+        pump(all)
+        assertEquals(ShareRefreshStage.COMPLETE, bob.refresh(refresh.id)?.stage)
+        assertTrue(approvalLines(bob).none { it.createdAt > refresh.createdAt }, "Bob was asked")
+    }
+
+    /** Anything new on the withheld list is a decision, and is asked as it always was. */
+    @Test
+    fun `a rotation that withholds anyone the group has not decided about is still asked`() = runBlocking<Unit> {
+        suspend fun asksBob(arrange: (Group) -> Unit, open: suspend (List<Device>) -> com.machankura.dedun.compose.database.model.ShareRefreshSession) {
+            val group = Group(4, 2)
+            val all = devicesFor(group)
+            arrange(group)
+            val refresh = open(all)
+            pump(all)
+            assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(all[1].db, all[1].refresh(refresh.id)!!))
+            assertEquals(1, approvalLines(all[1]).size)
+        }
+        suspend fun without(all: List<Device>) = ShareRefreshManager.proposeWithout(all[0].db, all[0].room, all[0].publicKey, all[0].privateKey, all[3].publicKey)
+
+        // Withheld for good, and still an admin.
+        asksBob({ admins(it) }, ::without)
+        // Withheld until brought back, and live here.
+        asksBob({ admins(it) }) { all -> propose(all[0], mapOf(all[0].group.idOf[3] to ShareStanding.STALE)) }
+        // A room whose admins change without the group's signature.
+        asksBob({ admins(it, it.members[3], governed = false) }, ::without)
+    }
+
+    /** A3: every rotation retires the holders the group took out of the admins, not only the one a removal owes. */
+    @Test
+    fun `any rotation withholds for good whoever is no longer an admin`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val dave = group.members[3]
+        val daveId = group.idOf[3]
+
+        admins(group, dave, governed = false)
+        assertEquals(emptyMap(), ShareRefreshManager.preview(alice.db, alice.room, alice.publicKey)!!.withheld, "an ungoverned room's admins are not the group's word")
+
+        admins(group, dave)
+        assertEquals(mapOf(dave to ShareStanding.RETIRED), ShareRefreshManager.preview(alice.db, alice.room, alice.publicKey)!!.withheld)
+        assertEquals(mapOf(daveId to ShareStanding.RETIRED), propose(alice).withheldStandings())
+    }
+
+    /**
+     * A proposal read before the change that it follows has been applied here is
+     * asked; once the change applies, the sweep takes part with no tap -- and never
+     * over a person who has already abandoned.
+     */
+    @Test
+    fun `a rotation asked before its change applied is taken part in by the sweep, unless abandoned`() = runBlocking<Unit> {
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, bob, carol, dave) = all
+        admins(group)
+        val refresh = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+        pump(all)
+        assertEquals(ShareRefreshApprovalStep.DEAL, ShareRefreshManager.pendingApproval(bob.db, bob.refresh(refresh.id)!!))
+
+        // Carol abandons the copy she was asked about, on her device alone, before anything is delivered.
+        val carolsDb = carol.db
+        admins(group, dave.publicKey)
+        ShareRefreshManager.abandon(carolsDb, carol.room, refresh.id)
+        assertEquals(0, ShareRefreshManager.resumeRunning(carolsDb, carol.publicKey, carol.privateKey))
+        assertEquals(ShareRefreshStage.FAILED, carol.refresh(refresh.id)?.stage)
+
+        ShareRefreshManager.resumeRunning(bob.db, bob.publicKey, bob.privateKey)
+        assertNull(ShareRefreshManager.pendingApproval(bob.db, bob.refresh(refresh.id)!!), "the sweep still asked")
+        assertTrue(outbox(bob).any { it.kind == ShareRefreshEvents.ROUND_1 }, "Bob's part did not go out")
+    }
+
+    /**
+     * H1: a removal that lands while a rotation runs is handed the running one, which
+     * was proposed before the removal and deals to the removed member. The freeze
+     * keeps that removal from being proposed (Phase 3); if one lands anyway, the
+     * rotation it owes is not marked done as if the running one were it.
+     */
+    @Test
+    fun `a removal's rotation is not taken for one already running that deals to them`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, _, _, dave) = all
+        val running = propose(alice)
+        pump(all)
+
+        val owed = ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+        assertEquals(running.id, owed.id, "the owed rotation was handed the running one")
+
+        val proposal = com.machankura.dedun.compose.database.model.GovernanceProposal(
+            id = "d".repeat(64), chatRoomId = group.roomId, routingId = group.roomId, epoch = 1, frostSigningSessionId = "s",
+            commitEventId = "e".repeat(64), commitEventJson = "{}", priorStateHex = "", pendingStateHex = "",
+            stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.APPLIED, thenRotateWithout = dave.publicKey,
+        )
+        alice.db.governanceProposalDao().upsert(proposal)
+        GovernanceFollowThrough.pass(alice.db, alice.keyPair)
+
+        assertEquals(com.machankura.dedun.compose.database.model.GovernanceProposalStage.DONE, alice.db.governanceProposalDao().getById(proposal.id)!!.stage)
+        val said = alice.db.chatMessageDao().getChatMessagesByChatRoomId(group.roomId).map { it.chatMessage }
+            .filter { it.messageType == ChatMessage.TYPE_CHANGE_NOT_APPLIED }
+        assertTrue(said.any { "still deals to them" in it.content }, said.map { it.content }.toString())
+    }
+
+    /**
+     * H2: a promotion's key state signed while a rotation runs. The new id grows the
+     * base generation's table under a rotation dealt against the old one, and the
+     * rotation's own check refuses what it combines: the whole rotation fails.
+     */
+    @Test
+    fun `pinned -- a new admin bound during a rotation fails the rotation`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val running = propose(alice)
+        pump(all)
+
+        val erinKeys = KeyPair()
+        bindNextId(all, erinKeys.pubKey.toHexKey(), ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+        approveAll(all, running.id)
+
+        assertEquals(1, alice.active().generation)
+        all.forEach { device ->
+            val refresh = device.refresh(running.id)!!
+            assertEquals(ShareRefreshStage.FAILED, refresh.stage, "device ${device.index}")
+            assertTrue("does not match the commitments" in refresh.failureReason.orEmpty(), refresh.failureReason)
+        }
+    }
+
+    /**
+     * H4: a governance statement being signed at generation g when the rotation's
+     * key state at g+1 is signed. Its session is failed with the old shares.
+     */
+    @Test
+    fun `pinned -- a statement still being signed fails when a rotation lands`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val statement = FrostSigningManager.proposeSigning(
+            alice.db, alice.room, alice.publicKey,
+            kind = com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent.KIND, tags = arrayOf(), content = "{}",
+        )
+        val holdStatement = { event: MarmotInnerEvent -> event.tags.any { tag -> statement.id in tag } }
+        val refresh = propose(alice)
+        var asked = true
+        while (asked) {
+            asked = false
+            pump(all, hold = holdStatement)
+            all.forEach { device ->
+                val session = device.refresh(refresh.id) ?: return@forEach
+                if (ShareRefreshManager.pendingApproval(device.db, session) != null) {
+                    ShareRefreshManager.approve(device.db, device.room, refresh.id, device.privateKey)
+                    asked = true
+                }
+            }
+        }
+        pump(all, hold = holdStatement)
+
+        assertEquals(1, alice.active().generation)
+        assertEquals(FrostSigningStage.FAILED, alice.db.frostSigningSessionDao().getSessionById(statement.id)?.stage)
+    }
+
+    // ---- docs/admin-change-rotation.md, Phase 2: what waits on what -------------------------------------------------
+
+    /** A governance statement for [by]'s room that changes its admins to [admins], opened for the group's signature. */
+    private suspend fun statementOpened(by: Device, admins: Set<HexKey>) = FrostSigningManager.proposeSigning(
+        by.db, by.room, by.publicKey,
+        kind = com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent.KIND,
+        tags = com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent.assembleTags(
+            by.group.roomId, epoch = 1, change = com.machankura.dedun.compose.nostr.frost.GovernanceChange(admins = admins), proposer = by.publicKey,
+        ),
+        content = "{}",
+    )
+
+    @Test
+    fun `a rotation waits while a change to the admins is being signed, and an admin change does not wait on itself`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val statement = statementOpened(alice, admins = setOf(alice.publicKey, all[1].publicKey))
+
+        val hold = ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key())
+        assertEquals(RotationHold.AdminChangeInFlight(statement.id), hold)
+        assertFailsWith<IllegalStateException> { propose(alice) }
+        assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room), "an admin change waited on itself")
+
+        // The statement fails -- declined, or its epoch passed: nothing is in flight.
+        alice.db.frostSigningSessionDao().upsert(alice.db.frostSigningSessionDao().getSessionById(statement.id)!!.copy(stage = FrostSigningStage.FAILED))
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+    }
+
+    @Test
+    fun `this device's own change holds a rotation until it lands, and not after`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val statement = statementOpened(alice, admins = setOf(alice.publicKey))
+        // Signed and sent: the session is over, the proposal is not.
+        alice.db.frostSigningSessionDao().upsert(alice.db.frostSigningSessionDao().getSessionById(statement.id)!!.copy(stage = FrostSigningStage.COMPLETE))
+        val proposal = com.machankura.dedun.compose.database.model.GovernanceProposal(
+            id = "d".repeat(64), chatRoomId = group.roomId, routingId = group.roomId, epoch = 1, frostSigningSessionId = statement.id,
+            commitEventId = "e".repeat(64), commitEventJson = "{}", priorStateHex = "", pendingStateHex = "",
+            stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.PUBLISHED, thenRotateWithout = all[2].publicKey,
+        )
+        alice.db.governanceProposalDao().upsert(proposal)
+        assertEquals(RotationHold.AdminChangeInFlight(statement.id), ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+
+        // Landed, owing its rotation: that rotation is the change's next step.
+        alice.db.governanceProposalDao().upsert(proposal.copy(stage = com.machankura.dedun.compose.database.model.GovernanceProposalStage.APPLIED))
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+        ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, all[2].publicKey)
+    }
+
+    @Test
+    fun `a rotation waits for a new admin's enrollment, and not past its failure`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val erinKeys = KeyPair()
+        val erin = stranger(alice.group, erinKeys)
+        bindNextId(all, erin.publicKey, ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+
+        all.forEach { device ->
+            assertEquals(RotationHold.Enrolling(erin.publicKey), ShareRefreshManager.rotationHold(device.db, device.room, device.key()), "device ${device.index}")
+        }
+        assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room), "an admin change waited on an enrollment")
+
+        // A failed enrollment releases it.
+        val bob = all[1]
+        bob.db.shareRepairDao().upsert(
+            com.machankura.dedun.compose.database.model.ShareRepairSession(
+                id = "f".repeat(64), chatRoomId = bob.group.roomId, dkgSessionId = ceremonyId, generation = 1, targetId = 3,
+                targetPublicKey = erin.publicKey, targetHostPublicKey = "02" + "c".repeat(64), helperIds = "0,1",
+                userPublicKey = bob.publicKey, stage = com.machankura.dedun.compose.database.model.types.ShareRepairStage.FAILED,
+                sessionRandom = "5".repeat(64),
+            )
+        )
+        assertNull(ShareRefreshManager.rotationHold(bob.db, bob.room, bob.key()))
+
+        // A completed one too.
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, handoverFrom(alice, erin.publicKey))
+        pump(all + erin)
+        assertNull(ShareRefreshManager.rotationHold(alice.db, alice.room, alice.key()))
+    }
+
+    @Test
+    fun `an admin change waits on a rotation until its key state is signed`() = runBlocking<Unit> {
+        val group = Group(3, 2)
+        val all = devicesFor(group)
+        val alice = all[0]
+        val refresh = propose(alice)
+        assertEquals(RotationHold.Running(refresh.id), AdminGovernance.adminChangeHold(alice.db, alice.room))
+        pump(all)
+        approveAll(all, refresh.id)
+        // The key state signs itself as the rotation completes; then nothing is pending.
+        pump(all)
+        assertNull(AdminGovernance.adminChangeHold(alice.db, alice.room))
+    }
+
+    // ---- docs/admin-change-rotation.md, Phases 3 and 4 ---------------------------------------------------------------
+
+    /** H3: the rotation waits out a new admin's enrollment, and then deals to them. */
+    @Test
+    fun `a rotation after an enrollment deals to the new admin`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val (_, all) = rotatedOnce()
+        val alice = all[0]
+        val erinKeys = KeyPair()
+        val erin = stranger(alice.group, erinKeys)
+        bindNextId(all, erin.publicKey, ChillDkgRitualManager.deriveHostPublicKey(erinKeys.privKey!!).value.toHex())
+        assertFailsWith<IllegalStateException> { propose(alice) }
+
+        PromotionManager.takeHandover(erin.db, erin.room, erin.publicKey, erin.privateKey, handoverFrom(alice, erin.publicKey))
+        val everyone = all + erin
+        pump(everyone)
+
+        val refresh = propose(alice)
+        assertTrue(3 in refresh.recipientIdList(), "the new admin was left out")
+        pump(everyone)
+        approveAll(everyone, refresh.id)
+        everyone.forEach { device -> assertEquals(2, device.active().generation, "device ${device.index}") }
+        assertNotNull(erin.active().secretShare, "the new admin holds no share of the new generation")
+    }
+
+    /**
+     * A12: the admin floor counts admins, a rotation counts recipients against every
+     * id not yet retired. With one member stale and another's share left live by an
+     * abandoned rotation, retiring a third would leave no majority.
+     */
+    @Test
+    fun `a removal is refused when the rotation it owes could not run`() = runBlocking<Unit> {
+        val group = Group(6, 3)
+        val all = devicesFor(group)
+        val carol = all[2]
+        val first = propose(all[0], mapOf(group.idOf[carol.index] to ShareStanding.STALE))
+        pump(all)
+        approveAll(all, first.id)
+        pump(all)
+        val alice = all[0]
+        val shares = alice.active()
+        assertEquals(1, shares.generation)
+        val (eve, dave) = all[4] to all[3]
+
+        // Eve's share was left live when her rotation was abandoned; Dave is being removed.
+        val refused = ShareRefreshManager.owedRotationRefusal(alice.key(), shares, retire = setOf(eve.publicKey, dave.publicKey))
+        assertNotNull(refused)
+        assertTrue("majority" in refused, refused)
+        // Dave alone would be fine.
+        assertNull(ShareRefreshManager.owedRotationRefusal(alice.key(), shares, retire = setOf(dave.publicKey)))
+    }
+
+    // ---- docs/admin-change-rotation.md, Phase 7: what the Shares section says ----------------------------------------
+
+    /** The running card names whose share the rotation takes away, once taking part asks nothing more. */
+    @Test
+    fun `a rotation after a removal says whose share it takes away`() = runBlocking<Unit> {
+        com.machankura.dedun.compose.ExperimentalFeatures.shareRefreshOverride = true
+        val group = Group(4, 2)
+        val all = devicesFor(group)
+        val (alice, _, _, dave) = all
+        admins(group, dave.publicKey)
+        ShareRefreshManager.proposeWithout(alice.db, alice.room, alice.publicKey, alice.privateKey, dave.publicKey)
+
+        val running = assertNotNull(summaryOn(alice).running, "the proposer sees no rotation running")
+        assertEquals(setOf(dave.publicKey), running.takingAway.keys)
+
+        // A rotation with nobody removed as admin names no cause.
+        RoomAdmins.override = null
+        assertEquals(emptyMap(), summaryOn(alice).running?.takingAway.orEmpty())
     }
 
     // ---- Phase 12: restore ---------------------------------------------------------------------------------------

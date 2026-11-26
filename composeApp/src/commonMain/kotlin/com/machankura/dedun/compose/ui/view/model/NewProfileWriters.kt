@@ -2,33 +2,31 @@ package com.machankura.dedun.compose.ui.view.model
 
 import com.vitorpamplona.crypto.random.RandomInstance
 
-import fr.acinq.bitcoin.MnemonicCode
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.lightning.Lightning
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
-import fr.acinq.phoenix.utils.MnemonicLanguage
-import kotlinx.coroutines.CompletableDeferred
 import com.machankura.dedun.compose.identity.IdentityWriter
 import com.machankura.dedun.compose.identity.NewProfile
 import com.machankura.dedun.compose.identity.NewProfileWriter
 import com.machankura.dedun.compose.identity.StoredIdentity
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys
 
 /**
- * A profile with a wallet attached: twelve fresh words through the seed writer, which
- * since docs/multiple-profiles.md writes the derived key to the credentials file as
- * well. Callback-shaped underneath, awaited here: exactly one of the two callbacks
- * fires.
+ * A profile with a wallet attached, backed by a fresh nine-block recovery code: written with
+ * its 24 words and its key by [IdentityWriter.writeRecoveryCode], and its node started from
+ * those words like any phrase profile's. What Landing makes, since docs/giza-second-batch.md,
+ * Phase 2f (D9); before that it was twelve random words, and no profile's words are made
+ * from random bytes any more (`docs/scripts/phrase-audit.sh`).
  */
-fun SovereignWalletViewModel.seedProfileWriter(): NewProfileWriter = NewProfileWriter {
-    val words = MnemonicCode.toMnemonics(Lightning.randomBytes(16), MnemonicLanguage.English.wordlist())
-    val outcome = CompletableDeferred<Result<NewProfile>>()
-    writeSeed(
-        mnemonics = words,
-        isRestoringWallet = false,
-        onSeedWritten = { id -> outcome.complete(Result.success(NewProfile(StoredIdentity.nostrPublicKeyOf(words), id))) },
-        onSeedWriteError = { error -> outcome.complete(Result.failure(IllegalStateException("seed write failed: $error"))) },
-    )
-    outcome.await()
+fun SovereignWalletViewModel.recoveryCodeProfileWriter(): NewProfileWriter = NewProfileWriter {
+    val code = RecoveryCode.generate()
+    when (val result = writeRecoveryCode(code)) {
+        is IdentityWriter.WriteRecoveryCodeResult.Written ->
+            Result.success(NewProfile(StoredIdentity.nostrPublicKeyOf(RecoveryCodeKeys.words(code)), result.id))
+        is IdentityWriter.WriteRecoveryCodeResult.AlreadyExists -> Result.failure(IllegalStateException("a fresh code collided with one already here"))
+        is IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys -> Result.failure(IllegalStateException("the key files could not be read"))
+    }
 }
 
 /** A profile that is a key: thirty-two random bytes, written the way a pasted nsec is. */

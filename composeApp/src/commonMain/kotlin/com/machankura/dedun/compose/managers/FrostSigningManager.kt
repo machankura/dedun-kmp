@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.managers
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import com.machankura.dedun.compose.nostr.MovedKinds
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
 import com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthPaymentEvent
@@ -69,7 +70,10 @@ import com.machankura.dedun.compose.database.model.types.ShareGenerationState
 import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
+import com.machankura.dedun.compose.nostr.inbox.InboxReplyManifest
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 
 /**
  * Signs a nostr event with a group's FROST threshold key, in one of its rooms.
@@ -302,7 +306,8 @@ object FrostSigningManager {
         localChatRoom: LocalChatRoom,
         userPublicKey: HexKey,
         events: List<EventTemplate<*>>,
-        key: DkgSession? = null
+        key: DkgSession? = null,
+        proposalTags: Array<Array<String>> = emptyArray()
     ): FrostSigningSession = proposeSigningBatch(
         database = database,
         localChatRoom = localChatRoom,
@@ -310,6 +315,7 @@ object FrostSigningManager {
         lead = events.firstOrNull()
             ?: throw IllegalArgumentException("A signing session must be given something to sign"),
         dependents = { events.drop(1) },
+        proposalTags = proposalTags,
         key = key
     )
 
@@ -338,7 +344,13 @@ object FrostSigningManager {
         userPublicKey: HexKey,
         lead: EventTemplate<*>,
         dependents: (lead: Event) -> List<EventTemplate<*>>,
-        key: DkgSession? = null
+        key: DkgSession? = null,
+        /**
+         * Tags the proposal rumor carries beside the events, for what a signer needs to check
+         * them and the signed events must not show: the group inbox's reply manifest
+         * (docs/group-inbox.md, D11). Inside the group's encryption like the rest of it.
+         */
+        proposalTags: Array<Array<String>> = emptyArray()
     ): FrostSigningSession {
         val ceremony = key?.takeIf { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
             ?: completedKey(database, localChatRoom.chatRoom.id)
@@ -380,7 +392,9 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            // The table's size, not the ceremony's: an enrollment adds an id
+            // (docs/member-admin-promotion.md, Phase 8).
+            participantCount = shares.publicShares?.size ?: ceremony.participantCount,
             signerId = signerId,
             derivationPath = path?.let(SharedKeyDerivation::formatPath),
             generation = shares.generation,
@@ -402,7 +416,8 @@ object FrostSigningManager {
             session = session,
             kind = FrostSigningEvents.PROPOSAL,
             content = FrostSigningEvents.encodeProposal(unsignedEvents),
-            includeKey = true
+            includeKey = true,
+            extraTags = proposalTags
         )
 
         advance(database, localChatRoom, sessionId)
@@ -419,7 +434,13 @@ object FrostSigningManager {
         database: DedunDatabase,
         localChatRoom: LocalChatRoom,
         innerEvent: Event,
-        userPublicKey: HexKey
+        userPublicKey: HexKey,
+        /**
+         * This device's nostr key, for the one check that needs it: opening a message's
+         * manifest with the host key it derives (docs/group-threshold-ecdh.md, D13). Without
+         * it a batch of seals is held rather than asked about.
+         */
+        nostrPrivateKey: ByteArray? = null,
     ) {
         val sessionId = FrostSigningEvents.parseSessionId(innerEvent.tags)
         if (sessionId == null) {
@@ -433,7 +454,8 @@ object FrostSigningManager {
                 localChatRoom = localChatRoom,
                 innerEvent = innerEvent,
                 sessionId = sessionId,
-                userPublicKey = userPublicKey
+                userPublicKey = userPublicKey,
+                nostrPrivateKey = nostrPrivateKey,
             )
         } else if (innerEvent.kind == FrostSigningEvents.TRANSACTION_PROPOSAL && FrostSigningEvents.parseSweep(innerEvent.tags) != null) {
             acceptSweepProposal(
@@ -585,8 +607,19 @@ object FrostSigningManager {
     )
 
     /**
-     * One of Dedun's money statements still being signed with [dkgSessionId]: what a rotation
-     * also waits for (`RotationHold.StatementOpen`). Failing it would lose nothing -- nothing is
+     * What else the group may be part-way through saying, which a rotation waits for in the same
+     * way: its nostr profile and its posts (docs/giza-second-batch.md, Phase 5). A rotation under
+     * them would leave the signers holding shares of a generation the session no longer signs
+     * with, and the member who proposed the post would have to propose it again.
+     */
+    private val GROUP_STATEMENTS: Set<Int> = setOf(
+        com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent.KIND,
+        com.vitorpamplona.quartz.nip10Notes.TextNoteEvent.KIND,
+    )
+
+    /**
+     * One of Dedun's money statements, or the group's profile or a post, still being signed with
+     * [dkgSessionId]: what a rotation also waits for (`RotationHold.StatementOpen`). Failing it would lose nothing -- nothing is
      * paid until the statement is signed -- but a member's payout or transfer would quietly need
      * proposing again. docs/giza-into-dedun.md, Phase 7.
      */
@@ -596,7 +629,7 @@ object FrostSigningManager {
             .firstOrNull { session ->
                 database.frostSigningSessionDao().getItems(session.id)
                     .mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
-                    .any { MovedKinds.current(it.kind) in MONEY_STATEMENTS }
+                    .any { MovedKinds.current(it.kind) in MONEY_STATEMENTS || it.kind in GROUP_STATEMENTS }
             }
 
     /** A session for [innerEvent]'s proposal at [generation] of [key]'s shares. */
@@ -608,7 +641,8 @@ object FrostSigningManager {
         key: DkgSession,
         signerId: Int,
         path: List<Long>?,
-        generation: Int = 0
+        generation: Int = 0,
+        participantCount: Int = key.participantCount,
     ) = FrostSigningSession(
         id = sessionId,
         chatRoomId = localChatRoom.chatRoom.id,
@@ -619,7 +653,7 @@ object FrostSigningManager {
         userPublicKey = userPublicKey,
         dkgSessionId = key.id,
         threshold = key.threshold,
-        participantCount = key.participantCount,
+        participantCount = participantCount,
         signerId = signerId,
         derivationPath = path?.let(SharedKeyDerivation::formatPath),
         generation = generation
@@ -638,7 +672,8 @@ object FrostSigningManager {
         localChatRoom: LocalChatRoom,
         innerEvent: Event,
         sessionId: String,
-        userPublicKey: HexKey
+        userPublicKey: HexKey,
+        nostrPrivateKey: ByteArray? = null,
     ): FrostSigningSession? {
         database.frostSigningSessionDao().getSessionById(sessionId)?.let { existing ->
             // The events a session signs are fixed at creation. A second proposal
@@ -703,6 +738,9 @@ object FrostSigningManager {
         // could choose the key the group signs as, and every signer would put
         // their share behind an author none of them checked.
         val path = signingPath(database, localChatRoom, key)
+        // `n` is the generation's table, which an enrollment grows
+        // (docs/member-admin-promotion.md, Phase 8); the ceremony's count otherwise.
+        val n = generation?.let { ShareGenerations.at(database, key, it) }?.publicShares?.size ?: key.participantCount
         val unsignedEvents = proposed.map { event ->
             unsignedEventOf(
                 key = key,
@@ -741,6 +779,21 @@ object FrostSigningManager {
                 logger.w("Signing proposal $sessionId carries a birth certificate that $reason; dropping")
                 return null
             }
+        }
+
+        // A profile or a post that nothing would show once signed: a kind:0 that is
+        // not a profile, a kind:1 with nothing in it. Declined on arrival for the
+        // wallet's reason -- Dedun signs only what it can check -- and filed the same
+        // way, so the decline goes out through [advance].
+        // docs/group-nostr-profile-and-posts.md, D5.
+        GroupStatementRefusal.of(unsignedEvents)?.let { why ->
+            logger.w("Signing proposal $sessionId $why; declining")
+            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
+                .copy(signDeclinedAt = Clock.System.now())
+            database.frostSigningSessionDao().upsert(declined)
+            database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+            announceStarted(database, declined)
+            return declined
         }
 
         // A member wallet's certificate is this group agreeing to guard one
@@ -867,6 +920,67 @@ object FrostSigningManager {
             }
         }
 
+        // A message the group would send: every signer reads it first, and declines one
+        // it cannot read or that says different things to different people. One still
+        // waiting on a recipient's key is held, stored, and asked once the key is made.
+        // docs/group-threshold-ecdh.md, D13.
+        var groupDm: GroupDmRefusal.Verdict.Readable? = null
+        if (GroupDmRefusal.involves(unsignedEvents)) {
+            when (val verdict = GroupDmRefusal.check(database, localChatRoom, innerEvent.pubKey, unsignedEvents, innerEvent.tags, userPublicKey, nostrPrivateKey)) {
+                is GroupDmRefusal.Verdict.Declined -> {
+                    logger.w("Signing proposal $sessionId: a message from the group ${verdict.why}; declining")
+                    val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
+                        .copy(signDeclinedAt = Clock.System.now())
+                    database.frostSigningSessionDao().upsert(declined)
+                    database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+                    announceStarted(database, declined)
+                    return declined
+                }
+                GroupDmRefusal.Verdict.Waiting -> {
+                    logger.i("Signing proposal $sessionId: waiting on a recipient's key before asking")
+                    return null
+                }
+                is GroupDmRefusal.Verdict.Readable -> groupDm = verdict
+            }
+        }
+
+        // A change to a governed room whose commit does not say what its statement
+        // says -- or that the group's door would refuse anyway -- is declined before
+        // anybody is asked, for the wallet's reason: a device that signs what it
+        // cannot stand behind is a rubber stamp. docs/member-admin-promotion.md, Phase 5.
+        // By its shape, not its number alone: until K3 a Wavelength wallet statement is
+        // proposed at 30370 too, and is no change to the room.
+        unsignedEvents.firstOrNull { it.kind == GovernanceStatementEvent.KIND && GovernanceEvents.isGovernance(it) }?.let { statement ->
+            GovernanceManager.refusalOf(database, localChatRoom, statement)?.let { why ->
+                logger.w("Signing proposal $sessionId carries a change that is refused: $why; declining")
+                val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
+                    .copy(signDeclinedAt = Clock.System.now())
+                database.frostSigningSessionDao().upsert(declined)
+                database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+                announceStarted(database, declined)
+                return declined
+            }
+        }
+
+        // The group's inbox: an announcement of a key its admins did not make together, or
+        // of one since replaced, or relays a stranger could not reach, is declined before
+        // anybody is asked. docs/group-inbox.md, D5.
+        // A reply from the group's inbox carries its manifest beside the seals (D11), kept so
+        // approval can read the reply again and the signed seals can be sent.
+        val inboxManifest = InboxReplyManifest.sealedIn(innerEvent.tags)
+        if (InboxRefusal.involves(unsignedEvents)) {
+            InboxRefusal.of(database, localChatRoom, userPublicKey, unsignedEvents, inboxManifest)?.let { why ->
+                logger.w("Signing proposal $sessionId: $why")
+                val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
+                    .copy(signDeclinedAt = Clock.System.now())
+                database.frostSigningSessionDao().upsert(declined)
+                database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+                InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, why, inboxManifest)
+                announceStarted(database, declined)
+                return declined
+            }
+        }
+
         // A share of the generation the proposal names, or a refusal said out loud.
         // Signing with any other generation's share would put a partial signature
         // behind the wrong public share -- it cannot aggregate -- and staying
@@ -890,7 +1004,7 @@ object FrostSigningManager {
             )
             // An unreadable tag is filed as -1: no generation, so nothing reads it as a
             // share this device holds, and the decline says why.
-            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: -1)
+            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: -1, participantCount = n)
                 .copy(signDeclinedAt = Clock.System.now())
             database.frostSigningSessionDao().upsert(declined)
             database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
@@ -906,9 +1020,14 @@ object FrostSigningManager {
             }
         }
 
-        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
+        val session = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
         database.frostSigningSessionDao().upsert(session)
         database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+        // Read, so filed: every admin's device sees what the group is sending (D12).
+        groupDm?.let { GroupDmSender.record(database, session, localChatRoom.chatRoom.id, it.rumor, it.manifest) }
+        if (inboxManifest != null && InboxRefusal.involves(unsignedEvents)) {
+            InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, null, inboxManifest)
+        }
         announceStarted(database, session)
 
         logger.i(
@@ -955,6 +1074,8 @@ object FrostSigningManager {
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
         val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
+        // The generation's table, which an enrollment grows; the ceremony's count otherwise.
+        val n = ShareGenerations.active(database, ceremony).publicShares?.size ?: ceremony.participantCount
         val wallet = GroupWalletManager.walletFor(database, chatRoomId, thresholdPublicKey, chain, account)
             ?: throw IllegalStateException("This group has not opened a wallet on ${GroupWalletStatementEvent.chainName(chain)}")
 
@@ -971,7 +1092,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            participantCount = n,
             signerId = signerId,
             // A transaction does not sign as the room: each input has its own
             // derivation, and those are on the items.
@@ -1034,6 +1155,8 @@ object FrostSigningManager {
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
         val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
+        // The generation's table, which an enrollment grows; the ceremony's count otherwise.
+        val n = ShareGenerations.active(database, ceremony).publicShares?.size ?: ceremony.participantCount
         val guarded = GuardianManager.guardedWalletFor(database, chatRoomId, descendantChatRoomId, chain, account)
             ?: throw IllegalStateException("This group guards no wallet of $descendantChatRoomId on ${GroupWalletStatementEvent.chainName(chain)}")
 
@@ -1049,7 +1172,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
@@ -1136,6 +1259,7 @@ object FrostSigningManager {
         val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
         declineWithoutShare(database, localChatRoom, innerEvent, sessionId, userPublicKey, key, signerId, generation, FrostSigningSubject.TRANSACTION)
             ?.let { return it }
+        val n = generation?.let { ShareGenerations.at(database, key, it) }?.publicShares?.size ?: key.participantCount
 
         val (chainName, account) = FrostSigningEvents.parseWallet(innerEvent.tags) ?: run {
             logger.w("Spend proposal $sessionId names no wallet; dropping")
@@ -1193,7 +1317,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = key.id,
             threshold = key.threshold,
-            participantCount = key.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.TRANSACTION,
@@ -1354,6 +1478,8 @@ object FrostSigningManager {
         val thresholdPublicKey = ceremony.thresholdPublicKey
             ?: throw IllegalStateException("Ceremony ${ceremony.id} holds no threshold key")
         val (generation, signerId) = activeShareOf(database, ceremony, userPublicKey)
+        // The generation's table, which an enrollment grows; the ceremony's count otherwise.
+        val n = ShareGenerations.active(database, ceremony).publicShares?.size ?: ceremony.participantCount
         val checked = when (val result = checkSweep(database, chatRoomId, thresholdPublicKey, chain, account, sweep)) {
             is GroupSweep.Result.Ok -> result.checked
             is GroupSweep.Result.Refused -> throw IllegalArgumentException("This sweep ${result.reason}")
@@ -1366,7 +1492,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = ceremony.id,
             threshold = ceremony.threshold,
-            participantCount = ceremony.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.SWEEP,
@@ -1429,6 +1555,7 @@ object FrostSigningManager {
         val generation = FrostSigningEvents.parseGeneration(innerEvent.tags)
         declineWithoutShare(database, localChatRoom, innerEvent, sessionId, userPublicKey, key, signerId, generation, FrostSigningSubject.SWEEP)
             ?.let { return it }
+        val n = generation?.let { ShareGenerations.at(database, key, it) }?.publicShares?.size ?: key.participantCount
         val (chainName, account) = FrostSigningEvents.parseWallet(innerEvent.tags) ?: run {
             logger.w("Sweep proposal $sessionId names no wallet; dropping")
             return null
@@ -1452,7 +1579,7 @@ object FrostSigningManager {
             userPublicKey = userPublicKey,
             dkgSessionId = key.id,
             threshold = key.threshold,
-            participantCount = key.participantCount,
+            participantCount = n,
             signerId = signerId,
             derivationPath = null,
             subject = FrostSigningSubject.SWEEP,
@@ -2126,6 +2253,15 @@ object FrostSigningManager {
         )
     }
 
+    /**
+     * Events [GroupStatementRefusal] says nothing would show once signed: a profile
+     * no reader could parse, a post with nothing in it.
+     * docs/group-nostr-profile-and-posts.md, D5.
+     */
+    private fun isUnshowableSession(session: FrostSigningSession, items: List<FrostSigningItem>): Boolean =
+        session.subject == FrostSigningSubject.EVENTS &&
+            items.any { item -> Event.fromJsonOrNull(item.unsignedEventJson)?.let(GroupStatementRefusal::of) != null }
+
     private fun isFromCoordinator(
         session: FrostSigningSession,
         innerEvent: Event
@@ -2461,6 +2597,31 @@ object FrostSigningManager {
         // re-authors rumors as their sender and would strip the group's
         // signature off.
         signedEvents.forEach { applySignedEvent(database, session, it, recorded) }
+
+        // A change to a governed room this device proposed: now it can be sent.
+        // Swallowed like the rest -- the signature is made either way.
+        try {
+            GovernanceManager.onSigned(database, signedEvents)
+        } catch (e: Throwable) {
+            logger.e("Signed session ${session.id} but could not publish its change", e)
+        }
+
+        // The group's inbox announced: its key's state moves, and the device that
+        // proposed the announcement owes it to relays. docs/group-inbox.md, D7.
+        try {
+            InboxAnnouncements.onSigned(database, session, signedEvents)
+            InboxReplies.onSigned(database, session, signedEvents)
+        } catch (e: Throwable) {
+            logger.e("Signed session ${session.id} but could not file its inbox announcement", e)
+        }
+
+        // A message from the group: wrapped for each recipient by the device that
+        // proposed it, and owed to their relays. docs/group-threshold-ecdh.md, D10.
+        try {
+            GroupDmSender.onSigned(database, session, signedEvents)
+        } catch (e: Throwable) {
+            logger.e("Signed session ${session.id} but could not wrap its message", e)
+        }
 
         announce(
             database = database,
@@ -2861,6 +3022,14 @@ object FrostSigningManager {
      * naming a parent is never the room's own key, and that is all it takes to
      * tell them apart.
      *
+     * And it answers only when there is one answer. A NIP-17 room holds a ceremony
+     * for every group its members have made there -- the same people always share
+     * one, since its id is derived from them -- so with two finished keys "the key
+     * this room signs with" has none, and guessing the newest would sign as a group
+     * the proposer never meant. Nothing that runs today asks it of a NIP-17 room:
+     * the one signing there is the key state, which names its key
+     * (docs/nip17-multiple-ceremonies.md, P5). Anything that comes to must do the same.
+     *
      * They are not only for rooms that predate the table. A room's key state is
      * signed before the room exists and filed as the room is created, so a
      * device that missed that session -- a member invited later, a reinstall --
@@ -2887,9 +3056,13 @@ object FrostSigningManager {
                 ShareGenerations.canSign(database, session)
         }?.let { return it }
 
-        return database.dkgSessionDao()
-            .getLatestOwnSessionForChatRoom(chatRoomId)
-            ?.takeIf { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
+        val own = database.dkgSessionDao()
+            .getOwnSessionsForChatRoom(chatRoomId)
+            .filter { it.stage == DkgRitualStage.COMPLETE && ShareGenerations.canSign(database, it) }
+        if (own.size > 1) {
+            logger.w("$chatRoomId holds ${own.size} keys of its own; a signature there has to name one")
+        }
+        return own.singleOrNull()
     }
 
     /** Whether this group can sign at all, read by the UI so it offers nothing that would fail. */
@@ -3113,6 +3286,46 @@ object FrostSigningManager {
     }
 
     /**
+     * Takes another pass at every open session in [localChatRoom] once an inbox key ceremony has
+     * finished here (docs/group-inbox.md, D5): an announcement of the key it made, proposed
+     * before this device had made it, can now be vouched for or asked about.
+     */
+    suspend fun resumeInboxAnnouncements(database: DedunDatabase, localChatRoom: LocalChatRoom, userPublicKey: HexKey) {
+        database.frostSigningSessionDao().getOpenUnansweredSessionsFor(userPublicKey)
+            .filter { it.chatRoomId == localChatRoom.chatRoom.id }
+            .forEach { session ->
+                approveIfVouched(database, session)
+                advance(database, localChatRoom, session.id)
+            }
+    }
+
+    /**
+     * The one inbox question a device answers for its owner: the group's announcement of the
+     * key a rotation made, once the group has announced an inbox before and this device holds
+     * the new key. docs/group-inbox.md, D5.
+     */
+    private suspend fun announcesItsRotatedInbox(database: DedunDatabase, session: FrostSigningSession): Boolean {
+        val current = database.frostSigningSessionDao().getSessionById(session.id) ?: return false
+        if (current.signApprovedAt != null || current.signDeclinedAt != null) return false
+        if (current.stage == FrostSigningStage.COMPLETE || current.stage == FrostSigningStage.FAILED) return false
+        val room = database.chatRoomDao().findChatRoomById(current.chatRoomId) ?: return false
+        return InboxRefusal.vouchesFor(database, room, current, database.frostSigningSessionDao().getItems(current.id))
+    }
+
+    /** The inbox refusal that applies to [session] now. docs/group-inbox.md, D5. */
+    private suspend fun inboxRefusalNow(
+        database: DedunDatabase,
+        localChatRoom: LocalChatRoom,
+        session: FrostSigningSession,
+        items: List<FrostSigningItem>
+    ): String? {
+        if (session.subject != FrostSigningSubject.EVENTS) return null
+        val events = items.mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
+        if (!InboxRefusal.involves(events)) return null
+        return InboxRefusal.of(database, localChatRoom, session.userPublicKey, events, database.groupInboxDao().getSigning(session.id)?.manifest)
+    }
+
+    /**
      * Signs every open key state this user's device can now vouch for and has not
      * been answered about -- what a build that asked about them left waiting. Run
      * by the sweep beside the rituals' (docs/rotate-shares-single-approval.md,
@@ -3131,7 +3344,7 @@ object FrostSigningManager {
 
     /** Approves [session] on its owner's behalf when [signsAsItsOwnKeyState] says this device can. */
     private suspend fun approveIfVouched(database: DedunDatabase, session: FrostSigningSession): Boolean {
-        if (!signsAsItsOwnKeyState(database, session)) return false
+        if (!signsAsItsOwnKeyState(database, session) && !announcesItsRotatedInbox(database, session)) return false
         logger.i("Session ${session.id} is a key state this device can vouch for; signing")
         update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
         return true
@@ -3270,6 +3483,37 @@ object FrostSigningManager {
                 decline(database, localChatRoom, sessionId)
                 return
             }
+        }
+
+        // The same backstop for a profile or a post nothing would show, for a
+        // session an older build filed before it declined those on arrival.
+        if (isUnshowableSession(session, items)) {
+            logger.w("Session $sessionId signs a profile or a post nothing could show; declining")
+            update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
+            advance(database, localChatRoom, sessionId)
+            return
+        }
+
+        // A message from the group this device did not read on arrival -- filed by an
+        // older build, or reached here some other way -- is declined, never signed blind.
+        // Read means filed: GroupDmSender.record wrote it as outgoing. D13.
+        if (session.subject == FrostSigningSubject.EVENTS && GroupDmRefusal.involvesItems(items) &&
+            database.groupDmDao().getMessageBySigningSession(sessionId) == null
+        ) {
+            logger.w("Session $sessionId signs a message from the group this device has not read; declining")
+            update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
+            advance(database, localChatRoom, sessionId)
+            return
+        }
+
+        // And the inbox's, checked again: a newer key can be made, or the admins change,
+        // while a member decides. docs/group-inbox.md, D5.
+        inboxRefusalNow(database, localChatRoom, session, items)?.let { why ->
+            logger.w("Session $sessionId: $why")
+            InboxRefusal.remember(database, sessionId, localChatRoom.chatRoom.id, why)
+            update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
+            advance(database, localChatRoom, sessionId)
+            return
         }
 
         update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
@@ -3486,7 +3730,12 @@ object FrostSigningManager {
                     )
                     return false
                 }
-                Triple(FrostSigningEvents.PROPOSAL, FrostSigningEvents.encodeProposal(unsigned), emptyArray<Array<String>>())
+                Triple(
+                    FrostSigningEvents.PROPOSAL,
+                    FrostSigningEvents.encodeProposal(unsigned),
+                    // A reply's manifest goes again with it (docs/group-inbox.md, D11).
+                    InboxRefusal.carriedTagsFor(database, sessionId)
+                )
             }
 
             // Byte for byte the PSBT that was proposed -- it is what every item's
@@ -3773,7 +4022,13 @@ object FrostSigningManager {
         localChatRoom: LocalChatRoom,
         session: FrostSigningSession
     ) {
+        val items = database.frostSigningSessionDao().getItems(session.id)
+        val inboxReason = InboxRefusal.reasonFor(database, session.id)
         val reason = when {
+            inboxReason != null -> inboxReason
+            isUnshowableSession(session, items) -> GroupStatementRefusal.REASON
+            session.subject == FrostSigningSubject.EVENTS && GroupDmRefusal.involvesItems(items) ->
+                GroupDmRefusal.reasonFor(database, session.chatRoomId, session.userPublicKey)
             !holdsShareFor(database, session) -> GENERATION_REFUSAL
             else -> "Declined to sign"
         }
@@ -4076,11 +4331,21 @@ object FrostSigningManager {
         // the store is stepped past rather than written over. One second of drift
         // per collision is nothing a protocol message reads, and no caller
         // publishes faster than [MAX_ID_SEARCH] identical messages a second.
+        //
+        // On the NIP-17 transport the rumor also carries its expiry, after at least the signing
+        // floor (docs/disappearing-messages.md, D2). It is worked out from `created_at`, so it is
+        // stamped again each time the search steps the second on. A Marmot room's messages
+        // follow the group's own retention instead.
+        val store = DisappearingSettingsStore(database)
+        suspend fun stamped(at: Long): Array<Array<String>> =
+            if (isMarmotRoom) tags else store.stamp(localChatRoom.chatRoom.id, session.userPublicKey, kind, at, tags)
+
         var createdAt = Clock.System.now().epochSeconds
+        var rumorTags = stamped(createdAt)
         var id = EventHasher.hashId(
             pubKey = session.userPublicKey,
             createdAt = createdAt,
-            tags = tags,
+            tags = rumorTags,
             content = content,
             kind = kind
         )
@@ -4088,10 +4353,11 @@ object FrostSigningManager {
 
         while (attempts < MAX_ID_SEARCH && isQueued(database, isMarmotRoom, id)) {
             createdAt += 1
+            rumorTags = stamped(createdAt)
             id = EventHasher.hashId(
                 pubKey = session.userPublicKey,
                 createdAt = createdAt,
-                tags = tags,
+                tags = rumorTags,
                 content = content,
                 kind = kind
             )
@@ -4128,7 +4394,7 @@ object FrostSigningManager {
                     publicKey = session.userPublicKey,
                     kind = kind,
                     createdAt = Instant.fromEpochSeconds(createdAt),
-                    tags = tags,
+                    tags = rumorTags,
                     content = content,
                     chatRoomId = localChatRoom.chatRoom.id
                 )

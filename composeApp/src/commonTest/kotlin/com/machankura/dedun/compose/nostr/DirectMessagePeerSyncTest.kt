@@ -34,7 +34,9 @@ class DirectMessagePeerSyncTest {
             // Level 0: somebody is waiting on this one.
             assertEquals(0, request.level)
             assertEquals(
-                listOf(MetadataEvent.KIND, KeyPackageEvent.KIND, DmRelayListEvent.KIND, AdvertisedRelayListEvent.KIND),
+                // And the key they read encrypted mail with, if they announced one: what a
+                // group's reply to them is sealed to (docs/group-inbox.md, D10).
+                listOf(MetadataEvent.KIND, KeyPackageEvent.KIND, DmRelayListEvent.KIND, AdvertisedRelayListEvent.KIND, 10044),
                 request.synchronizationFilter.kinds?.toList(),
             )
             assertEquals(listOf(alice), request.synchronizationFilter.authors?.toList())

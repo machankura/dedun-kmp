@@ -33,6 +33,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.identity.Identity
 import com.machankura.dedun.compose.managers.MarmotGroupFactory
 import com.machankura.dedun.compose.managers.MarmotGroupName
+import com.machankura.dedun.compose.managers.Quorum
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.nostr.Relays
 import com.machankura.dedun.compose.repository.ChatRepository
@@ -94,29 +95,35 @@ class SelectChatRoomTypeViewModel(
     /**
      * Everyone who administers the group under [ChatRoomType.ROBUST]: the picked
      * members plus the creator.
+     *
+     * Counted here only to offer a quorum. The admins themselves are read off
+     * the ceremony this screen opens -- `ChillDkgRitualManager.proposeRitual`
+     * builds its participants by the same rule, the room's members plus the
+     * creator -- and `MarmotGroupCreation.createFor` makes the admin room from
+     * those. See docs/robust-group-admins.md, Phase 1.
      */
     val adminCount: Int = (memberPublicKeys + activeUserPublicKey).distinct().size
 
     /** Quorums this group can be run on, under [ChatRoomType.ROBUST]. */
-    val quorumRange: IntRange = ChatRoomType.quorumRange(adminCount)
+    val quorumRange: IntRange = Quorum.range(adminCount)
 
     /**
      * How many of [adminCount] admins have to approve a change, under
      * [ChatRoomType.ROBUST]. Starts on a simple majority and is the user's to move.
      */
-    val quorum: MutableState<Int> = mutableStateOf(ChatRoomType.defaultQuorum(adminCount))
+    val quorum: MutableState<Int> = mutableStateOf(Quorum.default(adminCount))
 
     /** Whether this group is big enough to be run as [ChatRoomType.ROBUST]. */
-    val isRobustAvailable: Boolean = ChatRoomType.isRobustAvailable(adminCount)
+    val isRobustAvailable: Boolean = Quorum.isPossible(adminCount)
 
     /** Why robust is off the table, or null when it is available. */
     val robustUnavailableReason: String? = if (isRobustAvailable) {
         null
     } else {
-        val shortfall = ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE - adminCount
+        val shortfall = Quorum.MINIMUM_GROUP_SIZE - adminCount
         val missing = if (shortfall == 1) "1 more person" else "$shortfall more people"
 
-        "Needs at least ${ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE} people in the group. Go back and add $missing."
+        "Needs at least ${Quorum.MINIMUM_GROUP_SIZE} people in the group. Go back and add $missing."
     }
 
     fun initiate() {
@@ -125,8 +132,21 @@ class SelectChatRoomTypeViewModel(
                 nostrRepository.getProfileWithPublicKey(publicKey)
             }
 
+            // The groups these people already have together, read from the room they
+            // share without making it. A row from before ceremonies carried a name is
+            // named by its room, which is what named it then.
+            val existingGroups = dkgRepository
+                .getOwnSessionsAmong((memberPublicKeys + activeUserPublicKey).toSet())
+                .map { session ->
+                    SelectChatRoomTypeUIState.ExistingGroup(
+                        name = session.subject
+                            ?: chatRepository.getChatRoomByIdentifier(session.chatRoomId)?.chatRoom?.subject
+                    )
+                }
+
             selectChatRoomTypeUIState = SelectChatRoomTypeUIState.Loaded(
-                members = members
+                members = members,
+                existingGroups = existingGroups,
             )
         }
     }
@@ -221,11 +241,12 @@ class SelectChatRoomTypeViewModel(
     ) {
         val gid = RandomInstance.bytes(32).toHexKey() // TODO: Generate GID through frost...
 
-        // Every Marmot room is a `#name`. This one does not go through
+        // Every Marmot room is stored and sent under its bare name and drawn in
+        // braces (docs/group-name-braces.md, D13). This one does not go through
         // `MarmotGroupCreation` -- its id is random rather than derived, so it has
         // no key state to adopt and no admin set to bake in -- which is why the
-        // convention is applied here as well as there.
-        val groupName = MarmotGroupName.of(name)
+        // name is made bare here as well as there.
+        val groupName = MarmotGroupName.bare(name)
 
         viewModelScope.launch(Dispatchers.IO) {
             // The group's initial state is baked into the epoch-0 GroupContext so later
@@ -257,6 +278,9 @@ class SelectChatRoomTypeViewModel(
             )
             if (localChatRoom != null) {
                 chatRepository.recordMarmotRouting(chatRoomId = gid, routingId = created.routingId)
+                // The creator administers the room from epoch 0, and this device learns
+                // that nowhere else. docs/member-admin-promotion.md, Phase 1.
+                chatRepository.reconcileAdmins(gid)
             }
 
             if (localChatRoom == null) {
@@ -341,14 +365,20 @@ class SelectChatRoomTypeViewModel(
 
             // The room's membership is the set this screen was opened for, so the
             // quorum picked against [adminCount] is the same t-of-n the ceremony is
-            // asked for. A room that already has a ceremony -- the id is derived from
-            // its members, so making the same group twice returns the same room --
-            // hands that one back instead of opening a second.
+            // asked for.
+            //
+            // Named outright, never left to the room. The room's id is derived from
+            // its members, so the same people making a second group get the first
+            // group's room back, still under the first group's name; the group being
+            // made here is called what the user typed, and so is the room its key
+            // makes. A ceremony still running under this name is handed back rather
+            // than opened twice. docs/nip17-multiple-ceremonies.md, Phase 2.
             val session = dkgRepository.proposeRitual(
                 localChatRoom = localChatRoom,
                 userPublicKey = keyPair.pubKey.toHexKey(),
                 nostrPrivateKey = nostrPrivateKey,
-                threshold = quorum.value
+                threshold = quorum.value,
+                subject = name.takeIf { it.isNotBlank() },
             )
 
             withContext(Dispatchers.Main) {

@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.dao
 
+import com.machankura.dedun.compose.database.repository.DisappearingSettingsStore
 import androidx.room3.Dao
 import androidx.room3.Transaction
 import com.machankura.dedun.compose.database.DedunDatabase
@@ -23,7 +24,7 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.exceptions.MarmotCommitPendingException
 import com.machankura.dedun.compose.exceptions.MarmotGovernedRoomException
-import com.machankura.dedun.compose.managers.refusesBareCommits
+import com.machankura.dedun.compose.managers.WalletKeysHeld
 import com.machankura.dedun.compose.exceptions.MarmotKeyPackageProfileException
 import com.machankura.dedun.compose.exceptions.MarmotMissingChatGroupException
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
@@ -36,7 +37,11 @@ import com.machankura.dedun.compose.nostr.MarmotDirectMessage
 import com.machankura.dedun.compose.nostr.Relays
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.crypto.random.RandomInstance
+import com.vitorpamplona.marmot.appComponents.AdminPolicyV1
 import com.vitorpamplona.marmot.appComponents.AppComponentIds
+import com.vitorpamplona.marmot.appComponents.GroupProfileV1
+import com.vitorpamplona.marmot.appComponents.GroupLifecycleV1
+import com.vitorpamplona.mls.components.ComponentsList
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
 import com.vitorpamplona.marmot.groups.MlsGroupManager
 import com.vitorpamplona.marmot.groups.currentAdminIdentities
@@ -66,6 +71,15 @@ import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 import kotlin.time.Instant
+import com.machankura.dedun.compose.managers.AdminGovernance
+import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.PromotionManager
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.managers.GovernanceGate
+import com.machankura.dedun.compose.managers.GovernanceManager
+import com.machankura.dedun.compose.managers.GovernanceMarker
+import com.machankura.dedun.compose.managers.GovernanceSupport
+import com.machankura.dedun.compose.managers.MarmotInboundManager
 
 @Dao
 abstract class MarmotOutboundDao(
@@ -139,6 +153,9 @@ abstract class MarmotOutboundDao(
                 )
             )
         )
+        // The creator administers the room from epoch 0, and this device learns that
+        // nowhere else. docs/member-admin-promotion.md, Phase 1.
+        MarmotInboundManager.reconcileAdmins(database, chatRoom.id, mlsGroup)
 
         // Invite peer. On the current profile the manager owns the group from the row
         // just written, and the invite moves that instance rather than the one the
@@ -195,7 +212,6 @@ abstract class MarmotOutboundDao(
             ?: throw MarmotMissingChatGroupException(
                 "No MLS group state for chat room ${localChatRoom.chatRoom.id}; cannot invite $peerPublicKey"
             )
-        if (mlsGroup.refusesBareCommits()) throw MarmotGovernedRoomException()
 
         val relays = Relays.DefaultDMRelayList.map { it.url }
 
@@ -632,6 +648,18 @@ abstract class MarmotOutboundDao(
                     "An earlier change to this room is still waiting for a relay to accept it; try again in a moment"
                 )
             }
+            // A governed room: proposed and signed by the group; the Welcome goes out
+            // once a relay accepts the carried commit, as it does for a bare one.
+            // docs/member-admin-promotion.md, Phase 5.
+            if (!isOneMemberInitialGroupCreation && GovernanceGate.isGoverned(mlsGroup)) {
+                val room = database.chatRoomDao().findChatRoomById(chatRoomId)
+                    ?: throw MarmotMissingChatGroupException("No room $chatRoomId")
+                GovernanceManager.propose(
+                    database, room, userPublicKey, peerKeyPackageEventId = peerKeyPackage.id,
+                    propose = GovernanceManager.addition(peerKeyPackage.tlsEncodedMarmotKeyPackage),
+                )
+                return
+            }
             engine.awaitSettled(routingId)
             val staged = engine.groupManager.stageAddMember(routingId, peerKeyPackage.tlsEncodedMarmotKeyPackage)
             if (isOneMemberInitialGroupCreation) {
@@ -838,10 +866,14 @@ abstract class MarmotOutboundDao(
         val routingId = localChatRoom.routingId
         val group = engine.groupFor(routingId) ?: return
         if (!group.isLocalAdmin() || !engine.groupManager.hasPendingProposals(routingId)) return
-        // A governed room's admins commit a leave inside the group's signature; a bare
-        // one from here would fork it. A Giza admin commits it instead.
-        if (group.refusesBareCommits()) return
         if (!engine.gate.canPrepareLocalCommit(routingId)) return
+
+        // In a governed room a member's leave is committed inside this account's own
+        // envelope, not bare (docs/member-admin-promotion.md, D6).
+        if (GovernanceGate.isGoverned(group)) {
+            GovernanceManager.publishOwnCommit(database, localChatRoom)
+            return
+        }
 
         publishGatedCommit(localChatRoom) { manager, id -> manager.stageCommit(id) }
     }
@@ -854,19 +886,250 @@ abstract class MarmotOutboundDao(
      * every other from the commit -- so every device says the same thing at the
      * same point. The library's admin-depletion guard refuses a commit that would
      * leave no admin in the tree.
+     *
+     * An admin is taken off the admin list first, by a commit of its own, and
+     * removed once that one is confirmed. A bare `Remove` left their key on the
+     * list, so inviting them back made them an admin again with nobody having
+     * said so -- and `AdminPolicyV1` says a commit removing an account's last leaf
+     * must drop its key. Two commits until the library can stage both proposals
+     * in one (docs/member-admin-promotion.md, Phase 0, step 5); if the second is
+     * lost to a restart, the member is left demoted, and removing them again is
+     * one commit.
      */
     @Transaction
     open suspend fun removeMember(localChatRoom: LocalChatRoom, memberPublicKey: HexKey) {
         require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room can remove a member" }
-        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+        val engine = database.marmotEngine
+        val group = engine.groupFor(localChatRoom.routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
-        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
         val leafIndex = group.members()
             .firstOrNull { (_, leaf) -> (leaf.credential as? Credential.Basic)?.identity?.toHexKey() == memberPublicKey }
             ?.first
             ?: throw IllegalArgumentException("$memberPublicKey is not in the group")
 
+        // A robust group keeps at least three admins, and never fewer than its
+        // quorum: they are its share holders. docs/member-admin-promotion.md, R3.
+        val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
+        if (!AdminGovernance.keepsFloor(group, memberPublicKey, floor)) {
+            throw IllegalStateException("A group with a shared key needs at least $floor admins, so ${memberName(memberPublicKey)} can't be removed")
+        }
+
+        // A governed room: one change, proposed and signed by the group -- the
+        // removal and, for an admin, their admin entry in the same commit, which a
+        // copy of the group can build where the manager cannot.
+        // docs/member-admin-promotion.md, Phase 5.
+        if (GovernanceGate.isGoverned(group)) {
+            val admins = group.currentAdminIdentities()
+            GovernanceManager.propose(
+                database, localChatRoom, localChatRoom.chatRoom.userPublicKey,
+                thenRotateWithout = memberPublicKey.takeIf { holdsLiveShare(localChatRoom, it) },
+                propose = GovernanceManager.removal(leafIndex, memberPublicKey, admins),
+            )
+            return
+        }
+
+        if (memberPublicKey in group.currentAdminIdentities()) {
+            thenAfterConfirmed(localChatRoom, publish = { publishAdmins(localChatRoom) { admins -> admins - memberPublicKey } }) {
+                database.chatRoomDao().findChatRoomById(localChatRoom.chatRoom.id)
+                    ?.let { removeMember(it, memberPublicKey) }
+            }
+            return
+        }
+
         publishGatedCommit(localChatRoom) { manager, id -> manager.stageRemoveMember(id, leafIndex) }
+    }
+
+    /**
+     * Makes [memberPublicKey] an admin of a room this device administers, by one
+     * commit through the publish gate. Nothing happens for someone who already is.
+     *
+     * Refused in a keyed room, whose admins change only with the group's signature
+     * and a share of its key (docs/member-admin-promotion.md, R1 and R2), and for
+     * someone who is not in the tree: an admin with no leaf is not valid state.
+     * The line saying so is written when the commit is applied, on every device.
+     * docs/member-admin-promotion.md, Phase 6.
+     */
+    @Transaction
+    open suspend fun promote(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, nostrPrivateKey: ByteArray? = null) {
+        val group = governedGroup(localChatRoom)
+        if (memberPublicKey in group.currentAdminIdentities()) return
+        // A keyed room: an offer the member accepts, then the group signs the change
+        // and the key state that gives them a share (docs/member-admin-promotion.md,
+        // Phase 8).
+        if (AdminGovernance.isKeyedRoom(group)) {
+            check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
+            // Dedun's D4: a group wallet's Iceberg key follows no admin change.
+            WalletKeysHeld.refuseAdminChange(database, localChatRoom.chatRoom.id)
+            PromotionManager.offer(database, localChatRoom, localChatRoom.chatRoom.userPublicKey, memberPublicKey, nostrPrivateKey)
+            return
+        }
+        if (memberPublicKey !in AdminGovernance.members(group)) {
+            throw IllegalArgumentException("${memberName(memberPublicKey)} is not in the group any more")
+        }
+
+        publishAdmins(localChatRoom) { admins -> admins + memberPublicKey }
+    }
+
+    /**
+     * Makes [adminPublicKey] stop being an admin of a room this device administers,
+     * by one commit through the publish gate. Nothing happens for someone who is not
+     * one. [adminPublicKey] may be this device's own account, which is stepping down.
+     *
+     * Refused in a keyed room, as [promote] is, and where it would leave no admin
+     * among the members -- the commit every peer refuses as admin depletion, said
+     * here in words that name the fix. docs/member-admin-promotion.md, Phase 6.
+     */
+    @Transaction
+    open suspend fun demote(localChatRoom: LocalChatRoom, adminPublicKey: HexKey) {
+        val group = governedGroup(localChatRoom)
+        if (adminPublicKey !in group.currentAdminIdentities()) return
+
+        // A keyed room: proposed for the group's signature, and their share rotated
+        // away once it lands (docs/member-admin-promotion.md, Phase 9).
+        if (AdminGovernance.isKeyedRoom(group)) {
+            check(AdminGovernance.keyedChangesAllowed(group)) { KEYED_ROOM_REFUSAL }
+            // Dedun's D4, here as well as at the menu: a step-down reaches this from
+            // another admin's device (`PromotionManager.followStepDowns`), past any menu.
+            WalletKeysHeld.refuseAdminChange(database, localChatRoom.chatRoom.id)
+            val floor = AdminGovernance.adminFloor(database, localChatRoom.chatRoom.id, group)
+            if (!AdminGovernance.keepsFloor(group, adminPublicKey, floor)) {
+                throw IllegalStateException("A group with a shared key needs at least $floor admins. Make someone else an admin first")
+            }
+            // Your own: asked of another admin, whose device proposes it and then
+            // rotates your share away -- a rotation's proposer has to keep a share.
+            if (adminPublicKey == localChatRoom.chatRoom.userPublicKey) {
+                PromotionManager.requestStepDown(database, localChatRoom, adminPublicKey)
+                return
+            }
+            val admins = group.currentAdminIdentities()
+            GovernanceManager.propose(
+                database, localChatRoom, localChatRoom.chatRoom.userPublicKey,
+                thenRotateWithout = adminPublicKey.takeIf { holdsLiveShare(localChatRoom, it) },
+            ) { copy ->
+                copy.proposeAppDataUpdate(AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(admins - adminPublicKey).encode())
+            }
+            return
+        }
+        if (!AdminGovernance.canDemote(group, localChatRoom.chatRoom.userPublicKey, adminPublicKey)) {
+            throw IllegalStateException(
+                if (adminPublicKey == localChatRoom.chatRoom.userPublicKey) "You're the only admin. Make someone else an admin first"
+                else "${memberName(adminPublicKey)} is the only admin. Make someone else an admin first"
+            )
+        }
+
+        publishAdmins(localChatRoom) { admins -> admins - adminPublicKey }
+    }
+
+    /**
+     * Leaves a convenient room this device administers, which an admin cannot do
+     * directly: the library refuses an admin's SelfRemove. Steps down first and
+     * leaves once that commit is accepted -- and, for the only admin, makes [heir]
+     * an admin before that, so the room is never left with nobody to govern it.
+     *
+     * The chain is held in memory ([MarmotEngine.afterConfirmed]). A restart part
+     * way through leaves this device a member that has not left, possibly no
+     * longer an admin, and **Leave group** finishes it. See
+     * docs/member-admin-promotion.md, Phase 10.
+     */
+    @Transaction
+    open suspend fun stepDownAndLeave(localChatRoom: LocalChatRoom, heir: HexKey?) {
+        val me = localChatRoom.chatRoom.userPublicKey
+        val roomId = localChatRoom.chatRoom.id
+        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+            ?: throw MarmotMissingChatGroupException("No live group for $roomId")
+        suspend fun fresh() = database.chatRoomDao().findChatRoomById(roomId)
+        val leaveOnceAccepted: suspend () -> Unit = { fresh()?.let { leave(it) } }
+        val admins = group.currentAdminIdentities()
+
+        when {
+            // Nothing to step down from: leave as any member does.
+            me !in admins -> leave(localChatRoom)
+
+            heir == null || heir in admins ->
+                thenAfterConfirmed(localChatRoom, publish = { demote(localChatRoom, me) }, step = leaveOnceAccepted)
+
+            else -> thenAfterConfirmed(localChatRoom, publish = { promote(localChatRoom, heir) }) {
+                fresh()?.let { room -> thenAfterConfirmed(room, publish = { demote(room, me) }, step = leaveOnceAccepted) }
+            }
+        }
+    }
+
+    /**
+     * Publishes a commit with [publish] and runs [step] once a relay accepts it. The
+     * step is registered first, so the acceptance cannot overtake it, and taken back
+     * if [publish] throws, so a refused change leaves nothing waiting.
+     */
+    private suspend fun thenAfterConfirmed(localChatRoom: LocalChatRoom, publish: suspend () -> Unit, step: suspend () -> Unit) {
+        val engine = database.marmotEngine
+        engine.afterConfirmed(localChatRoom.routingId, step)
+        try {
+            publish()
+        } catch (e: Throwable) {
+            engine.cancelFollowUp(localChatRoom.routingId)
+            throw e
+        }
+    }
+
+    /**
+     * Makes a keyed room's changes need the group's signature from the next epoch:
+     * one ordinary commit adding [GovernanceMarker]'s line to the profile
+     * description, with the floor the room's quorum sets. It is the room's last bare
+     * commit, and every device that applies it enforces the rule from the state it
+     * just applied. docs/member-admin-promotion.md, D4 and Phase 4b.
+     *
+     * Refused while any member has not said their device can follow signed commits
+     * -- they would be left in a different group by the first change -- and while
+     * the room has fewer admins than the floor it would set.
+     */
+    @Transaction
+    open suspend fun requireSignatures(localChatRoom: LocalChatRoom) {
+        val group = governedGroup(localChatRoom)
+        val roomId = localChatRoom.chatRoom.id
+        check(AdminGovernance.isKeyedRoom(group)) { "Only a group with a shared key can require its signature" }
+        if (GovernanceGate.isGoverned(group)) return
+        val missing = GovernanceSupport.missing(database, roomId, group)
+        if (missing.isNotEmpty()) {
+            throw IllegalStateException("Waiting for ${missing.map { memberName(it) }.sorted().joinToString()} to open an up-to-date Dedun")
+        }
+        val floor = AdminGovernance.adminFloor(database, roomId, group)
+        val admins = group.currentAdminIdentities() intersect AdminGovernance.members(group)
+        check(admins.size >= floor) { "A group with a shared key needs at least $floor admins first" }
+
+        publishGatedCommit(localChatRoom) { manager, id ->
+            val live = manager.getGroup(id) ?: throw MarmotMissingChatGroupException("No live group for $id")
+            val profile = live.currentGroupState().profile ?: throw IllegalStateException("The group has no profile to record the rule in")
+            manager.stageAppDataUpdate(
+                id,
+                GroupProfileV1.COMPONENT_ID,
+                GroupProfileV1(profile.name, GovernanceMarker.describe(profile.description, floor)).encode(),
+            )
+        }
+    }
+
+    /** Whether [memberPublicKey] holds a live share of the room's key, with rotation on. */
+    private suspend fun holdsLiveShare(localChatRoom: LocalChatRoom, memberPublicKey: HexKey): Boolean =
+        ExperimentalFeatures.shareRefresh &&
+            runCatching { ShareRefreshManager.liveIdOf(database, localChatRoom, memberPublicKey) != null }.getOrDefault(false)
+
+    /** The room's live group, when this device may change who administers it. */
+    private suspend fun governedGroup(localChatRoom: LocalChatRoom): MlsGroup {
+        require(localChatRoom.chatRoom.marmotProfile() == MarmotProfile.CURRENT) { "Only a current-profile room has admins to change" }
+        val group = database.marmotEngine.groupFor(localChatRoom.routingId)
+            ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
+        check(group.isLocalAdmin()) { "Only an admin can change who the admins are" }
+        return group
+    }
+
+    /**
+     * Commits the room's admin list as [change] makes it from the list the group
+     * holds at the moment the commit is staged -- after any convergence pass has
+     * settled -- rather than from one read before the wait.
+     */
+    private suspend fun publishAdmins(localChatRoom: LocalChatRoom, change: (Set<HexKey>) -> Set<HexKey>) {
+        publishGatedCommit(localChatRoom) { manager, id ->
+            val live = manager.getGroup(id) ?: throw MarmotMissingChatGroupException("No live group for $id")
+            manager.stageAppDataUpdate(id, AdminPolicyV1.COMPONENT_ID, AdminPolicyV1.ofHex(change(live.currentAdminIdentities())).encode())
+        }
     }
 
     /**
@@ -886,7 +1149,19 @@ abstract class MarmotOutboundDao(
         val group = engine.groupFor(routingId)
             ?: throw MarmotMissingChatGroupException("No live group for ${localChatRoom.chatRoom.id}")
         require(group.isLocalAdmin()) { "Only an admin can disband the group" }
-        if (group.refusesBareCommits()) throw MarmotGovernedRoomException()
+
+        // A governed room ends only with the group's signature. One that has not yet
+        // agreed it can be disbanded agrees to that first, as its own signed change.
+        if (GovernanceGate.isGoverned(group)) {
+            val me = localChatRoom.chatRoom.userPublicKey
+            if (group.currentGroupState().requires(AppComponentIds.GROUP_LIFECYCLE_V1)) {
+                GovernanceManager.propose(database, localChatRoom, me, propose = GovernanceManager.disbanding)
+                return
+            }
+            GovernanceManager.propose(database, localChatRoom, me, propose = GovernanceManager.enablingDisbanding)
+            throw IllegalStateException("The group first has to agree it can be disbanded, and that has been proposed. Disband again once the group has signed it")
+        }
+
         if (!engine.gate.canPrepareLocalCommit(routingId)) {
             throw MarmotCommitPendingException(
                 "An earlier change to this room is still waiting for a relay to accept it; try again in a moment"
@@ -907,7 +1182,6 @@ abstract class MarmotOutboundDao(
         val group = engine.groupFor(routingId) ?: return
         if (engine.gate.outboundGate(routingId) != LocalOutboundGate.DISBANDING) return
         if (group.currentGroupState().isDisbanded) return
-        if (group.refusesBareCommits()) return
         // The gate this device raised is the one it is acting under, so it is the
         // one exception to "no commit while gated".
         if (!engine.gate.canPrepareLocalCommit(routingId, ignoringGate = LocalOutboundGate.DISBANDING)) return
@@ -1043,11 +1317,17 @@ abstract class MarmotOutboundDao(
                 // the room's address, not its id.
                 nostrGroupId = database.marmotRoutingDao().activeRoutingIdFor(chatRoomId),
             )
+            // A Welcome travels as a NIP-17 wrap, and expires like one: after at least the
+            // ceremony floor, since the invitee may not open the app for days
+            // (docs/disappearing-messages.md, D2). Stamped before the id is hashed.
+            val welcomeTags = DisappearingSettingsStore(database).stamp(
+                chatRoomId, userPublicKey, welcomeEvent.kind, welcomeEvent.createdAt, welcomeEvent.tags,
+            )
             // Compute welcomeEventId
             val welcomeEventId = EventHasher.hashId(
                 pubKey = userPublicKey,
                 kind = welcomeEvent.kind,
-                tags = welcomeEvent.tags,
+                tags = welcomeTags,
                 createdAt = welcomeEvent.createdAt,
                 content = welcomeEvent.content
             )
@@ -1061,7 +1341,7 @@ abstract class MarmotOutboundDao(
                     publicKey = userPublicKey,
                     chatRoomId = chatRoomId,
                     kind = welcomeEvent.kind,
-                    tags = welcomeEvent.tags,
+                    tags = welcomeTags,
                     content = welcomeEvent.content,
                     createdAt = Instant.fromEpochSeconds(welcomeEvent.createdAt)
                 )
@@ -1344,5 +1624,9 @@ abstract class MarmotOutboundDao(
 
     companion object {
         const val TAG = "MarmotOutboundDao"
+
+        /** Why a keyed room's admins cannot be changed by one admin's commit yet. */
+        const val KEYED_ROOM_REFUSAL =
+            "This group's admins hold shares of its key, so changing them needs the group's signature. That isn't built yet"
     }
 }

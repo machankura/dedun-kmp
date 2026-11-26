@@ -26,7 +26,7 @@ class ProposalFilterTest {
         chatRoom = ChatRoom(
             id = roomId,
             userPublicKey = bob,
-            subject = "#Ekklesia",
+            subject = "Ekklesia",
             description = null,
             mlsGroupState = null,
         )

@@ -7,7 +7,6 @@ import com.machankura.dedun.compose.database.model.MarmotKeyPackage
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
-import com.machankura.dedun.compose.exceptions.MarmotGovernedRoomException
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.vitorpamplona.quartz.marmot.mip02Welcome.WelcomeEvent
 import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
@@ -25,18 +24,24 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
- * A room carrying Giza's governance marker takes no bare commit from this build:
- * docs/giza-into-dedun.md, Phase 1.
+ * A room carrying the governance marker takes no bare commit from this build.
+ *
+ * Phase 1 of docs/giza-into-dedun.md refused every change in such a room; since
+ * Phase 8 they go through the group's signature instead (`GovernanceManager`). This
+ * pins what both have in common: nothing reaches the wire as a bare commit. A device
+ * with no share of the room's key cannot propose a signed change either, so here a
+ * removal, an invite and a disband are refused; a member's leave is committed inside
+ * this admin's own envelope (kind 30371), which a Giza device applies.
  *
  * The room is the app's own, made with the marker in its purpose so the description
  * reads as a Giza-made keyed room's does, with the stand-in invited by the founding
  * Add -- the one commit Giza makes bare too, while the creator is the only member.
- * After that, every change a Giza device would drop is refused here.
  */
 class GovernedRoomStopgapJvmTest {
 
@@ -124,25 +129,26 @@ class GovernedRoomStopgapJvmTest {
     }
 
     @Test
-    fun `removing a member from a governed room is refused, and nothing goes on the wire`() = runBlocking<Unit> {
+    fun `removing a member from a governed room puts no bare commit on the wire`() = runBlocking<Unit> {
         roomWithMember(governed = true)
         val before = db.marmotPublishObligationDao().getAll().size
 
-        assertIs<MarmotGovernedRoomException>(runCatching { chatRepository.removeMember(room(), member.hex) }.exceptionOrNull())
+        // No share of the room's key here, so no signed proposal either.
+        assertNotNull(runCatching { chatRepository.removeMember(room(), member.hex) }.exceptionOrNull())
         assertEquals(before, db.marmotPublishObligationDao().getAll().size)
     }
 
     @Test
-    fun `disbanding a governed room is refused`() = runBlocking<Unit> {
+    fun `disbanding a governed room puts no bare commit on the wire`() = runBlocking<Unit> {
         roomWithMember(governed = true)
         val before = db.marmotPublishObligationDao().getAll().size
 
-        assertIs<MarmotGovernedRoomException>(runCatching { chatRepository.disbandChatRoom(room()) }.exceptionOrNull())
+        assertNotNull(runCatching { chatRepository.disbandChatRoom(room()) }.exceptionOrNull())
         assertEquals(before, db.marmotPublishObligationDao().getAll().size)
     }
 
     @Test
-    fun `inviting into a governed room with members is refused`() = runBlocking<Unit> {
+    fun `inviting into a governed room with members puts no bare commit on the wire`() = runBlocking<Unit> {
         roomWithMember(governed = true)
         val third = MarmotStandIn().apply { makeBundle() }
         seedProfile(third.hex)
@@ -151,13 +157,13 @@ class GovernedRoomStopgapJvmTest {
             tlsEncodedMarmotKeyPackage = third.bundle.keyPackage.toTlsBytes(), profile = MarmotProfile.CURRENT.wireName,
         )
 
-        assertIs<MarmotGovernedRoomException>(
-            runCatching { chatRepository.inviteMember(room(), third.hex, thirdPackage) }.exceptionOrNull()
-        )
+        val before = db.marmotPublishObligationDao().getAll().size
+        assertNotNull(runCatching { chatRepository.inviteMember(room(), third.hex, thirdPackage) }.exceptionOrNull())
+        assertEquals(before, db.marmotPublishObligationDao().getAll().size)
     }
 
     @Test
-    fun `a member's leave from a governed room is not committed by this device`() = runBlocking<Unit> {
+    fun `a member's leave from a governed room is committed inside this admin's own envelope`() = runBlocking<Unit> {
         val routingId = roomWithMember(governed = true)
         val before = db.marmotPublishObligationDao().getAll().size
 
@@ -168,7 +174,14 @@ class GovernedRoomStopgapJvmTest {
             )
         )
 
-        assertEquals(before, db.marmotPublishObligationDao().getAll().size, "a bare commit of the leave went on the wire")
-        assertEquals(1L, db.marmotEngine.groupManager.getGroup(routingId)!!.epoch)
+        // The commit and the envelope carrying it are both on file; only the envelope
+        // is on its way to a relay. A bare commit would be broadcast itself.
+        val commits = db.nostrEventDao().getMLSGroupEvents(since = Instant.fromEpochSeconds(0), limit = 50)
+            .filter { it.kind == GroupEvent.KIND && db.marmotCommitResultDao().getMarmotCommitRequestById(it.id) != null }
+        val broadcast = commits.filter { db.broadcastNostrEventRequestDao().getFirstBroadcastNostrEventRequestByNostrEventId(it.id) != null }
+        val held = commits - broadcast.toSet()
+        assertTrue(held.isNotEmpty(), "no commit of the leave was made")
+        assertTrue(broadcast.none { it.id in held.map { h -> h.id } })
+        assertEquals(1, db.marmotPublishObligationDao().getAll().size - before, "the envelope is one change on its way")
     }
 }

@@ -1,5 +1,11 @@
 # Deposits for someone outside the group: attributed to a phone number or an email address
 
+> **The numbers moved.** This plan allocated the contact kinds 30394–30399 and refers to the
+> deposit attribution as 30390. Giza took both ranges for confederations, so in November 2026
+> every one moved up by 30 before any release carried it: the attribution is 30420, and the six
+> contact kinds are 30424–30429 ([giza-second-batch.md](./giza-second-batch.md), Phase 4, and
+> [kinds.md](./kinds.md)). The text below keeps the numbers it was written with.
+
 A group saves together, but not everyone whose money goes into it is a member. A
 mother saves through her son's group. A cousin with no smartphone hands over cash, and
 somebody in the group deposits it for them. A neighbour pays the group's invoice for a
@@ -762,7 +768,7 @@ What it found, in this feature, and what fixed it. The fixes are checked by `jvm
 compiling, and weren't run on the emulators again:
 
 1. **A device doesn't announce that it reads contacts when it joins or updates.** `Contacts.announceIfNeeded` runs from `MarmotInboundManager.processGroupMembershipChanges`, on a commit, and from `contactsWaitingFor`, when the member opens the sheet. A member who joined from a Welcome with no commit since, or who just updated, never announces until they open *Someone outside the group…* themselves, so D5 holds every proposal for a member who never does. **Fixed:** a device announces when it processes a Welcome, and `Contacts.announceInEveryRoom` runs once per activation from `SynchronizationViewModel`, after the inbox reopens, for every Marmot room it hasn't left.
-2. The sheet reads who it waits for once, when the Deposits screen loads, and doesn't see an announcement that arrives while it is open. **Fixed:** `DepositsViewModel` watches the room's 30398 count and reads the list again when it moves.
+2. The sheet reads who it waits for once, when the Deposits screen loads, and doesn't see an announcement that arrives while it is open. **Fixed:** `DepositsViewModel` watches the room's count of contact requests (`ContactRequestEvent`, 30428 since [giza-second-batch.md](./giza-second-batch.md), Phase 4) and reads the list again when it moves.
 3. The group wallet's *Coins* list still said *From @alice* for the coin the group had attributed to Mum, while every Deposits screen counted it as Mum's. **Fixed:** the coin list names each coin's owner from the deposit ledger, as the Deposits screen does, and falls back to the branch only for a coin the ledger has no owner for.
 4. On the Payouts screen a contact with only an onchain destination reads *Hasn't said where to be paid* directly above that address: `GroupPayoutsScreen.kt:415` showed the Lightning address or that line. **Fixed:** that line is for no destination at all; a destination without a Lightning address says *No Lightning address*.
 5. A spend's signing screen and its transcript line name a contact by its id, *Pay out @4a6e9c71* and *The group signed a payout of 74572 sats to @4a6e9c71*, where everything else says *Mum*. The *Assign coins* screen for a legacy coin offers members only; the Deposits screen's *Attribute* offers contacts. **Fixed:** the spend screen and both transcript lines name a contact as the group recorded them. *Assign coins* still offers members only, because a signer refuses a 30391 share for anybody without a 30339, and letting contacts in would change what every signer accepts; in a group with contacts, the screen says to use *Attribute* instead.

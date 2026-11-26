@@ -22,7 +22,15 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
+import com.vitorpamplona.marmot.appComponents.CurrentProfileGroupFactory
+import com.vitorpamplona.quartz.nip01Core.signers.NostrSignerInternal
+import com.machankura.dedun.compose.database.model.ChatRoom
+import com.machankura.dedun.compose.database.model.DkgSession
+import com.machankura.dedun.compose.database.model.MarmotKeyPackage
+import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.types.DkgRitualStage
 import com.machankura.dedun.compose.database.model.NostrEvent
+import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.extensions.toHex
@@ -71,7 +79,7 @@ class MarmotGroupCreationJvmTest {
             database = db,
             chatRepository = repository,
             groupId = groupId,
-            name = "#Ekklesia",
+            name = "Ekklesia",
             purpose = "Admins of Ekklesia.",
             // A group of one, so nothing has to be invited and no key package has
             // to be found. The flag is the whole of what is being tested.
@@ -102,7 +110,7 @@ class MarmotGroupCreationJvmTest {
             database = db,
             chatRepository = repository,
             groupId = groupId,
-            name = "#Ekklesia",
+            name = "Ekklesia",
             purpose = "Admins of Ekklesia.",
             adminPublicKeys = setOf(user),
             userPublicKey = user,
@@ -147,15 +155,152 @@ class MarmotGroupCreationJvmTest {
         val room = assertNotNull(db.chatRoomDao().findChatRoomById(groupId))
         val data = assertNotNull(room.chatRoom.toMlsGroup()?.currentMarmotData())
 
-        // Both, and the same string in each: the row is what this device draws in
-        // its room list, and the group data is what every other member reads.
-        assertEquals("#Ekklesia", room.chatRoom.subject)
-        assertEquals("#Ekklesia", data.name)
+        // Both, and the same bare string in each: the row is what this device draws
+        // in its room list, and the group's own name is what every other member
+        // reads. The braces are drawn, never stored (docs/group-name-braces.md).
+        assertEquals("Ekklesia", room.chatRoom.subject)
+        assertEquals("Ekklesia", data.name)
     }
 
-    private suspend fun seedProfile(publicKey: String) {
+    /**
+     * One writer for the flags, from the group's policy, both ways: a row the
+     * policy names is flagged, and a row it does not name loses a flag it had.
+     * docs/robust-group-admins.md, Phase 2.
+     */
+    @Test
+    fun `admin flags follow the group's policy, both ways`(): Unit = runBlocking {
+        seedProfile(user)
+        MarmotGroupCreation.create(
+            database = db,
+            chatRepository = repository,
+            groupId = groupId,
+            name = "Ekklesia",
+            purpose = "Admins of Ekklesia.",
+            adminPublicKeys = setOf(user),
+            userPublicKey = user,
+            keyPair = keyPair,
+        )
+
+        val stranger = KeyPair().pubKey.toHexKey()
+        seedProfile(stranger)
+        val creatorRow = db.chatRoomDao().findChatRoomById(groupId)!!.localParticipants
+            .single { it.participant.participantPublicKey == user }.participant
+        db.participantDao().upsert(
+            listOf(
+                creatorRow.copy(adminAt = null),
+                Participant(participantPublicKey = stranger, chatRoomId = groupId, relayHint = null, adminAt = Clock.System.now()),
+            )
+        )
+
+        val group = assertNotNull(db.chatRoomDao().findChatRoomById(groupId)!!.chatRoom.toMlsGroup())
+        assertEquals(2, AdminFlags.reconcile(db, groupId, group))
+
+        val rows = db.chatRoomDao().findChatRoomById(groupId)!!.localParticipants.associate {
+            it.participant.participantPublicKey to it.participant.adminAt
+        }
+        assertNotNull(rows[user], "the policy names the creator")
+        assertNull(rows[stranger], "the policy does not name the stranger")
+        assertEquals(0, AdminFlags.reconcile(db, groupId, group), "and a second pass changes nothing")
+    }
+
+    // ---- From a ceremony: docs/robust-group-admins.md, Phase 1 ----------------
+
+    private val alice = KeyPair()
+    private val bob = KeyPair()
+    private val ceremonyRoomId = "ce1e".repeat(16)
+
+    /** A finished ceremony over [user], alice and bob, as [owner]'s device holds it. */
+    private suspend fun ceremonyOn(database: DedunDatabase, owner: KeyPair): Pair<DkgSession, LocalChatRoom> {
+        val everyone = listOf(keyPair, alice, bob)
+        everyone.forEach { seedProfile(it.pubKey.toHexKey(), database) }
+
+        // Everybody but the device's own owner, as that device would have synced them.
+        everyone.filter { it !== owner }.forEach { peer ->
+            val bundle = CurrentProfileGroupFactory.createKeyPackage(NostrSignerInternal(peer))
+            database.marmotKeyPackageDao().upsert(
+                MarmotKeyPackage(
+                    id = peer.pubKey.toHexKey().take(60) + "0000",
+                    publicKey = peer.pubKey.toHexKey(),
+                    tlsEncodedMarmotKeyPackage = bundle.keyPackage.toTlsBytes(),
+                    profile = MarmotProfile.CURRENT.wireName,
+                )
+            )
+        }
+
+        database.chatRoomDao().upsert(
+            ChatRoom(id = ceremonyRoomId, userPublicKey = owner.pubKey.toHexKey(), subject = "Ekklesia", description = null, mlsGroupState = null)
+        )
+        val session = DkgSession(
+            id = "the-ceremony",
+            chatRoomId = ceremonyRoomId,
+            coordinatorPublicKey = user,
+            userPublicKey = owner.pubKey.toHexKey(),
+            threshold = 2,
+            participantCount = 3,
+            participantPublicKeys = DkgSession.formatParticipants(everyone.map { it.pubKey.toHexKey() }.toSet()),
+            subject = "Ekklesia",
+            stage = DkgRitualStage.COMPLETE,
+            hostPublicKey = owner.pubKey.toHexKey(),
+            round1Random = "aa".repeat(32),
+            round2AuxRandom = "bb".repeat(32),
+            thresholdPublicKey = "02" + "ab".repeat(32),
+            secretShare = "cc".repeat(32),
+        )
+        database.dkgSessionDao().upsert(session)
+        return session to assertNotNull(database.chatRoomDao().findChatRoomById(ceremonyRoomId))
+    }
+
+    @Test
+    fun `the room's admins are the ceremony's participants, whoever creates it`(): Unit = runBlocking {
+        val founders = setOf(user, alice.pubKey.toHexKey(), bob.pubKey.toHexKey())
+        val alicesDb = getRoomDatabase(Room.inMemoryDatabaseBuilder<DedunDatabase>())
+
+        try {
+            // The coordinator's device, and a member's -- the two ways the room gets made.
+            listOf(db to keyPair, alicesDb to alice).forEach { (database, owner) ->
+                val (session, ceremonyRoom) = ceremonyOn(database, owner)
+
+                val outcome = MarmotGroupCreation.createFor(
+                    database = database,
+                    chatRepository = DatabaseChatRepository(database, CoroutineScope(Dispatchers.IO)),
+                    ceremony = session,
+                    ceremonyRoom = ceremonyRoom,
+                    keyPair = owner,
+                    keyPackageLookupTimeout = 2_000L,
+                )
+                val created = assertIs<MarmotGroupCreation.Outcome.Created>(outcome)
+                assertEquals(groupId, created.room.chatRoom.id, "the room is not the one the key derives")
+                assertEquals("Ekklesia", created.room.chatRoom.subject)
+
+                val group = assertNotNull(created.room.chatRoom.toMlsGroup())
+                assertEquals(founders, group.currentAdminIdentities(), "${owner.pubKey.toHexKey().take(8)}'s room")
+            }
+        } finally {
+            alicesDb.close()
+        }
+    }
+
+    @Test
+    fun `a device that was not in the ceremony cannot create its room`(): Unit = runBlocking {
+        val (session, ceremonyRoom) = ceremonyOn(db, keyPair)
+        val outsider = session.copy(userPublicKey = KeyPair().pubKey.toHexKey())
+
+        val outcome = MarmotGroupCreation.createFor(
+            database = db,
+            chatRepository = repository,
+            ceremony = outsider,
+            ceremonyRoom = ceremonyRoom,
+            keyPair = KeyPair(),
+        )
+
+        assertIs<MarmotGroupCreation.Outcome.Failed>(outcome)
+        assertNull(db.chatRoomDao().findChatRoomById(groupId), "a room was made anyway")
+    }
+
+    private suspend fun seedProfile(publicKey: String, database: DedunDatabase = db) {
+        if (database.profileDao().getProfileByPublicKey(publicKey) != null) return
         val nostrEventId = publicKey.take(63) + "f"
-        db.nostrEventDao().upsert(
+        database.nostrEventDao().upsert(
             NostrEvent(
                 id = nostrEventId,
                 pubKey = publicKey,
@@ -165,7 +310,7 @@ class MarmotGroupCreationJvmTest {
                 sig = "0".repeat(128),
             )
         )
-        db.profileDao().upsert(
+        database.profileDao().upsert(
             Profile(publicKey = publicKey, userName = "member", nostrEventId = nostrEventId)
         )
     }
@@ -185,7 +330,7 @@ class MarmotGroupCreationJvmTest {
             database = db,
             chatRepository = repository,
             groupId = groupId,
-            name = "#Ekklesia",
+            name = "Ekklesia",
             purpose = "Admins of Ekklesia.",
             adminPublicKeys = setOf(user),
             userPublicKey = user,
@@ -221,7 +366,7 @@ class MarmotGroupCreationJvmTest {
             database = db,
             chatRepository = repository,
             groupId = groupId,
-            name = "#Ekklesia",
+            name = "Ekklesia",
             purpose = "Admins of Ekklesia.",
             adminPublicKeys = setOf(user),
             userPublicKey = user,
@@ -249,7 +394,7 @@ class MarmotGroupCreationJvmTest {
             database = db,
             chatRepository = repository,
             groupId = groupId,
-            name = "#Ekklesia",
+            name = "Ekklesia",
             purpose = "Admins of Ekklesia.",
             adminPublicKeys = setOf(user),
             userPublicKey = user,

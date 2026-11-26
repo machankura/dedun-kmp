@@ -35,6 +35,10 @@ abstract class ShareRefreshDao {
     @Query("SELECT * FROM ShareRefreshSession WHERE userPublicKey = :userPublicKey AND stage NOT IN ('COMPLETE', 'FAILED') ORDER BY createdAt ASC")
     abstract suspend fun getRunningSessionsFor(userPublicKey: HexKey): List<ShareRefreshSession>
 
+    /** How many refreshes are running on this device: what an admin change waits on. */
+    @Query("SELECT COUNT(*) FROM ShareRefreshSession WHERE stage NOT IN ('COMPLETE', 'FAILED')")
+    abstract fun observeRunningCount(): Flow<Int>
+
     @Query("SELECT * FROM ShareRefreshSession WHERE chatRoomId = :chatRoomId ORDER BY createdAt DESC")
     abstract fun observeSessionsForRoom(chatRoomId: String): Flow<List<ShareRefreshSession>>
 

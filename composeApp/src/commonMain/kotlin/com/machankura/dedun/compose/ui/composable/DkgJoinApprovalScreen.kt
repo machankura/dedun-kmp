@@ -8,6 +8,7 @@ import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.the_subgroup_s_wallet_will_not_be_guarded
 import dedun.composeapp.generated.resources.the_subgroup_s_wallet_will_be_guarded
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.you_already_share_with_these_people_this_makes_a_separate_group
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import dedun.composeapp.generated.resources.you
 import dedun.composeapp.generated.resources.your_device_publishes_the_key_it_will_be
 import dedun.composeapp.generated.resources.your_share_of_the_key_never_leaves_this
 import com.machankura.dedun.compose.ui.theme.spacing
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
  * Asks whether to join a shared key ceremony somebody else opened.
@@ -76,7 +78,12 @@ fun DkgJoinApprovalScreen(
         onDone = onDone
     ) { state ->
         val session = state.session
-        val group = state.localChatRoom.chatRoom.subject ?: stringResource(Res.string.this_group)
+        // The group the ceremony makes, not the room it is held in: the same people
+        // share one NIP-17 room however many groups they make, and the room keeps
+        // the first one's name (docs/nip17-multiple-ceremonies.md).
+        val group = (session.subject ?: state.localChatRoom.chatRoom.subject)
+            ?.let(MarmotGroupName::display)
+            ?: stringResource(Res.string.this_group)
 
         Text(
             text = stringResource(
@@ -87,6 +94,18 @@ fun DkgJoinApprovalScreen(
             ),
             style = MaterialTheme.typography.bodyLarge
         )
+
+        // Joining is the one decision a member makes, so they should know it is not
+        // the group they already have with these people.
+        if (state.otherGroups.isNotEmpty()) {
+            Text(
+                text = stringResource(
+                    Res.string.you_already_share_with_these_people_this_makes_a_separate_group,
+                    state.otherGroups.joinToString(", ", transform = MarmotGroupName::display)
+                ),
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
 
         // What the subgroup's wallet will be, as the coordinator chose it and the
         // parent's quorum will sign it -- the one place an admin is told before

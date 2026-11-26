@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.database.repository
 
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import com.machankura.dedun.compose.database.DedunDatabase
+import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
@@ -46,17 +47,24 @@ class DatabaseDkgRepository(
         return roomId.takeIf { database.chatRoomDao().findChatRoomById(it) == null }
     }
 
-    override fun observeLatestSessionForChatRoom(
-        chatRoomId: String,
-        parentChatRoomId: String?,
-    ): Flow<DkgSession?> =
-        database.dkgSessionDao().observeLatestSessionFor(chatRoomId, parentChatRoomId)
 
     override fun observeMessages(sessionId: String): Flow<List<DkgParticipantMessage>> =
         database.dkgSessionDao().observeMessages(sessionId)
 
-    override suspend fun getLatestSessionForChatRoom(chatRoomId: String): DkgSession? =
-        database.dkgSessionDao().getLatestSessionForChatRoom(chatRoomId)
+    override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
+        database.dkgSessionDao().observeOwnSessionsForChatRoom(chatRoomId)
+            .map { sessions -> sessions.filter { it.stage != DkgRitualStage.FAILED } }
+
+    override suspend fun getOwnSessionsAmong(memberPublicKeys: Set<HexKey>): List<DkgSession> = try {
+        // The id `NostrNip17Dao.createNip17ChatRoom` gives these people's room,
+        // derived without making it.
+        database.dkgSessionDao()
+            .getOwnSessionsForChatRoom(ChatRoom.deriveChatRoomId(memberPublicKeys))
+            .filter { it.stage != DkgRitualStage.FAILED }
+    } catch (e: Throwable) {
+        logger.e("Error reading the groups ${memberPublicKeys.size} people already share", e)
+        emptyList()
+    }
 
     override suspend fun proposeRitual(
         localChatRoom: LocalChatRoom,

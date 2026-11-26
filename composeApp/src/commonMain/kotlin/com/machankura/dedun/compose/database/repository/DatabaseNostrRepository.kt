@@ -62,6 +62,8 @@ import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.managers.ChillDkgRitualManager
 import com.machankura.dedun.compose.managers.FrostSigningManager
 import com.machankura.dedun.compose.managers.ShareRefreshManager
+import com.machankura.dedun.compose.managers.InboxKeyRitualManager
+import com.machankura.dedun.compose.managers.InboxRotation
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
 import com.machankura.dedun.compose.identity.Identity
 
@@ -159,6 +161,14 @@ class DatabaseNostrRepository(
             ) + FrostSigningManager.resumeVouched(
                 database = database,
                 userPublicKey = userPublicKey,
+            ) + InboxKeyRitualManager.resumeRunning(
+                database = database,
+                userPublicKey = userPublicKey,
+                nostrPrivateKey = privateKey
+            ) + InboxRotation.pass(
+                database = database,
+                userPublicKey = userPublicKey,
+                nostrPrivateKey = privateKey
             )
         }
     }

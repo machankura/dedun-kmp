@@ -451,7 +451,7 @@ open class GroupWavelengthWalletJvmTest {
 
     @Test
     fun `its kinds stand apart from the Lightning wallet's and each other's`() {
-        assertEquals((30400..30412).toSet(), GroupWavelengthEvents.ALL)
+        assertEquals((30430..30442).toSet(), GroupWavelengthEvents.ALL)
         assertTrue(GroupWavelengthEvents.ALL.intersect(GroupLightningEvents.ALL).isEmpty())
         assertTrue(GroupWavelengthEvents.ALL.min() > GroupLightningEvents.ALL.max())
     }

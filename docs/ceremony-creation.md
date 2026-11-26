@@ -25,7 +25,7 @@ build chose differently it did so these times:
 | only `DkgRitualRoute.dkgSessionId` becomes required | the three approval routes' too, and `DkgRitualUIState.Loaded.session` is non-null. Every approval was already named by the ceremony screen that opened it |
 | the subgroup picker's quorum stepper and the shared-key one are one component | two. The picker's asks a different question ("how many admins have to approve a change"), so the shared-key one is `SharedKeyQuorumStepper`, private to the creation screen |
 | `requestIfEmpty` keeps its "holds work" check | it had to change: the check read the dialect and artifact tables. A room now holds work if it holds a `GroupSignedEvent` of a chroniclable kind, and with none chroniclable it never asks |
-| the chronicle's tests re-fixture | three of four did, with `TEST_KINDS` (a relay list, a profile, a post -- group-signed kinds whose arrival writes no row of its own, so the `GroupSignedEvent` rows are the observable). `ChronicleRoundTripTest` was entirely the rebuild through document rows and is deleted. The positive invite push could not take a test set -- `deliveryWelcome` calls `sendTo` with the app's kinds -- and became the "sends nothing" case |
+| the chronicle's tests re-fixture | three of four did, with `TEST_KINDS` (a relay list, a profile, a post -- group-signed kinds whose arrival writes no `GroupSignedEvent` of its own, so those rows are the observable; since [group-nostr-profile-and-posts.md](./group-nostr-profile-and-posts.md) a room-signed profile or post writes a transcript line, which changes nothing here). `ChronicleRoundTripTest` was entirely the rebuild through document rows and is deleted. The positive invite push could not take a test set -- `deliveryWelcome` calls `sendTo` with the app's kinds -- and became the "sends nothing" case |
 | `SignedGroupKeyStateTest` and `GroupSignedEventDaoJvmTest` re-fixture in Phase 8 | Phase 7: they failed at runtime the moment document arms stopped writing rows. They sign posts now, and "the row a signed event becomes points back at it" is deleted -- no kept kind writes a row |
 | a migration test with tables copied from `26.json` | built from the exported `26.json` at run time and compared with `27.json`, so it cannot drift from what Room expects |
 | `CLAUDE.md`'s literal count goes to 20 | 19, after Phase 5 took another |
@@ -441,7 +441,9 @@ with a grep.
     deletes any rows of them.
 - **`text/ProposedEvent.kt`**: the seven nip30303 arms of `summaryOf`. The rest
   (key state, subgroup certificate, metadata, text note, relay lists, wallet)
-  stays.
+  stays. *(Later: metadata, text note and relay lists went with the group's nostr
+  profile in `b21f4c4d`; metadata and text note came back with
+  [group-nostr-profile-and-posts.md](./group-nostr-profile-and-posts.md).)*
 - **`MarmotInnerEventDao.deleteByPayloadEventId`**: deleted; it has no callers.
   The `payloadEventId` column goes in Phase 8.
 - **`strings.xml`**: the 61 keys only the deleted files use (59, plus

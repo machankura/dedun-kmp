@@ -93,11 +93,13 @@ class CeremonyNetwork private constructor(
         participants: Set<HexKey>? = null,
         parentChatRoomId: HexKey? = null,
         subject: String? = null,
+        /** Who opens it. Any member can; the first device is only the default. */
+        from: Device = coordinator,
     ): DkgSession = ChillDkgRitualManager.proposeRitual(
-        database = coordinator.db,
-        localChatRoom = room(coordinator),
-        userPublicKey = coordinator.publicKey,
-        nostrPrivateKey = coordinator.privateKey,
+        database = from.db,
+        localChatRoom = room(from),
+        userPublicKey = from.publicKey,
+        nostrPrivateKey = from.privateKey,
         threshold = threshold,
         parentChatRoomId = parentChatRoomId,
         participantPublicKeys = participants,

@@ -9,8 +9,14 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
  * Dedun's deposit attribution, coin assignment and two transfer kinds were 30340-30343, and
  * its Wavelength wallet's thirteen were 30370-30382. Giza and Bennu use 30340-30349 for a
  * share refresh and 30370-30377 for governed rooms. Each Dedun kind's `KIND` constant is now
- * its new number -- 30390-30393 and 30400-30412 -- and the old one is its **legacy** number,
+ * its new number -- 30420-30423 and 30430-30442 -- and the old one is its **legacy** number,
  * kept here.
+ *
+ * The new numbers were first 30390-30393 and 30400-30412. Giza then took 30379-30416 for
+ * confederations, a group's inbox and its direct messages, and since no release had written
+ * them, the targets moved up by 30 before K2 (docs/giza-second-batch.md, Phase 4). Those
+ * interim numbers are not legacy numbers: no device holds an event signed under them, and
+ * they are Giza's now (`GizaProtocolEvents`).
  *
  * The legacy number cannot simply be forgotten. A group-signed event's id hashes its kind,
  * so a deposit attribution signed at 30340 stays 30340 for good, and the member chronicle
@@ -26,7 +32,7 @@ import com.vitorpamplona.quartz.nip01Core.core.Kind
 object MovedKinds {
     /** Legacy number to new number. */
     val LEGACY_TO_NEW: Map<Kind, Kind> =
-        (30340..30343).associateWith { it + 50 } + (30370..30382).associateWith { it + 30 }
+        (30340..30343).associateWith { it + 80 } + (30370..30382).associateWith { it + 60 }
 
     /** New number to legacy number. */
     val NEW_TO_LEGACY: Map<Kind, Kind> = LEGACY_TO_NEW.entries.associate { (legacy, new) -> new to legacy }

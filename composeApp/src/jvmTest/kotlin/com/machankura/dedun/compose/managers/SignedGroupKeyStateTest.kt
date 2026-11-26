@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.managers
 
 import androidx.room3.Room
 import com.vitorpamplona.quartz.nip01Core.core.Event
+import com.vitorpamplona.quartz.nip01Core.signers.EventTemplate
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
@@ -238,7 +239,7 @@ class SignedGroupKeyStateTest {
         val chatRoom = ChatRoom(
             id = roomId,
             userPublicKey = publicKey,
-            subject = "#Ekklesia",
+            subject = "Ekklesia",
             description = description,
             mlsGroupState = mlsGroupState
         )
@@ -621,7 +622,7 @@ class SignedGroupKeyStateTest {
             ChatRoom(
                 id = adminRoomId,
                 userPublicKey = device.publicKey,
-                subject = "#Ekklesia",
+                subject = "Ekklesia",
                 description = adminRoomDescription,
                 mlsGroupState = "00"
             )
@@ -1250,6 +1251,66 @@ class SignedGroupKeyStateTest {
                     pubKey = adminRoomId.hexToByteArray()
                 )
             )
+        }
+    }
+
+    /**
+     * The premise docs/group-nostr-profile-and-posts.md rests on: what a keyed room
+     * signs passes `GroupSignedEvent.verifies`, the one gate every reader of the
+     * group's profile and posts puts an event through. If this fails, the group has
+     * no nostr identity a reader would accept, whatever screens sit on top.
+     */
+    @Test
+    fun `a post the group signs verifies as the room's own statement`() = runBlocking {
+        val creator = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+
+        val template = TextNoteEvent.build(note = "Sepedi")
+        val session = FrostSigningManager.proposeSigning(
+            database = creator.db,
+            localChatRoom = creator.room,
+            userPublicKey = creator.publicKey,
+            kind = template.kind,
+            tags = template.tags,
+            content = template.content
+        )
+        pump(creator, other)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(creator, other)
+
+        listOf(creator, other).forEach { device ->
+            val post = assertNotNull(device.db.groupSignedEventDao().getById(device.item(session.id).eventId))
+            assertTrue(post.verifies(), "the room's reader would refuse its own post")
+            assertEquals(device.room.chatRoom.id, post.chatRoomId)
+        }
+    }
+
+    /**
+     * docs/group-inbox.md's replies (Phase 0, check 4, as Phase 8 left it). The premise -- that
+     * a batch of kind 13 seals the quorum signs verifies as the room -- held when Phase 0 checked
+     * it here, and `InboxReplyJvmTest` now checks it end to end with real seals. What this
+     * harness can still say is what changed since: a seal no signer can read, with no manifest
+     * and no inbox key behind it, is declined rather than signed, which is D12's rule.
+     */
+    @Test
+    fun `a batch of seals nobody can read is declined, not signed`() = runBlocking {
+        val creator = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+
+        val seals = listOf("first", "second").map { ciphertext ->
+            EventTemplate<Event>(createdAt = 1_700_000_000L, kind = 13, tags = arrayOf(arrayOf("n", "a".repeat(64))), content = ciphertext)
+        }
+        val session = FrostSigningManager.proposeSigningBatch(
+            database = creator.db,
+            localChatRoom = creator.room,
+            userPublicKey = creator.publicKey,
+            events = seals,
+        )
+        pump(creator, other)
+
+        assertNotNull(other.session(session.id)?.signDeclinedAt, "the second signer declines what it cannot read")
+        listOf(creator, other).forEach { device ->
+            assertTrue(device.items(session.id).all { it.signature == null }, "nothing was signed")
         }
     }
 

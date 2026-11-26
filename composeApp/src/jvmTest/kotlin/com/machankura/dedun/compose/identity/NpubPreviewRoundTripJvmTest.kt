@@ -120,6 +120,7 @@ class NpubPreviewRoundTripJvmTest {
         writeNostrKey = { key -> IdentityWriter.writeNostrKey(log, phoenixGlobal, globalPrefs, key, isTorEnabled = false, customElectrumServer = null) },
         writeNostrPublicKey = { pubkey -> IdentityWriter.writeNostrPublicKey(log, phoenixGlobal, globalPrefs, pubkey, isTorEnabled = false, customElectrumServer = null) },
         writeRecoveryPhrase = { _, _, onError -> onError(com.machankura.dedun.compose.ui.view.model.WritingSeedState.Error.CannotLoadSeedMap) },
+        writeRecoveryCode = { com.machankura.dedun.compose.identity.IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys },
     )
 
     private fun listed() = StoredIdentity.merge(

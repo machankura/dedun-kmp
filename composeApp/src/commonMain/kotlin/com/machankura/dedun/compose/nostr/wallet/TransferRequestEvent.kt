@@ -45,16 +45,16 @@ import kotlin.time.Clock
  * carries an inner event of this kind whose content is the signed request, whole: [carried], as
  * [GroupPayoutDestinationEvent] does.
  *
- * ### Why 30392, and 30342 before it
+ * ### Why 30422, and 30342 before it
  *
  * After the coin assignment, 30341. Nothing used 30342 to 30348.
  *
  * It was 30342 until Giza and Bennu took that number for a share refresh round. It moved to
- * 30392 (docs/giza-into-dedun.md, Phase K), and 30342 is its legacy number: an event signed
+ * 30422 (docs/giza-into-dedun.md, Phase K, then docs/giza-second-batch.md, Phase 4), and 30342 is its legacy number: an event signed
  * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object TransferRequestEvent {
-    val KIND: Kind = 30392
+    val KIND: Kind = 30422
 
     private const val D_TAG = "d"
     private const val ROOM_TAG = "h"

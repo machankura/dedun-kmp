@@ -50,6 +50,10 @@ interface GiftWrapPayloadDao {
     )
     suspend fun getByChatRoomAndKinds(chatRoomId: String, kinds: List<Kind>): List<GiftWrapPayload>
 
+    /** Every stored NIP-17 payload of [kinds], oldest first, whatever its room. */
+    @Query("SELECT * FROM GiftWrapPayload WHERE kind IN (:kinds) ORDER BY createdAt ASC")
+    suspend fun getByKinds(kinds: List<Kind>): List<GiftWrapPayload>
+
     @Upsert
     suspend fun upsert(giftWrapPayload: GiftWrapPayload)
 

@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import co.touchlab.kermit.Logger
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.groups.isLocalAdmin
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -26,10 +27,10 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MemberWalletManager
-import com.machankura.dedun.compose.managers.isGoverned
 import com.machankura.dedun.compose.repository.MemberWalletRepository
 import com.machankura.dedun.compose.repository.PayoutDestinationRepository
 import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestination
@@ -39,11 +40,14 @@ import com.machankura.dedun.compose.network.LightningAddressResolver
 import fr.acinq.lightning.MilliSatoshi
 import kotlinx.coroutines.withContext
 import com.machankura.dedun.compose.database.model.types.ShareStanding
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.managers.AdminGovernance
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.HomeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
 
@@ -95,6 +99,11 @@ class ChatRoomDetailViewModel(
         logger.d("compressed (most likely chat room): $chatRoomId")
         // Get ChatRoomById
         viewModelScope.launch(Dispatchers.IO) {
+            // A room made before its creator's flag was written at creation reads as
+            // having no admins until a commit arrives; caught up here, silently, before
+            // anything reads it. docs/member-admin-promotion.md, Phase 1.
+            runCatching { chatRepository.reconcileAdmins(chatRoomId) }
+                .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't reconcile $chatRoomId's admins" } }
             val localChatRoom = chatRepository.getChatRoomByIdentifier(chatRoomId)
 
             logger.d("localChatRoom: $localChatRoom")
@@ -102,7 +111,7 @@ class ChatRoomDetailViewModel(
                 // Initiate new chat... and navigate to new chat...
                 ChatRoomDetailUIState.Error("Missing chat room")
             } else {
-                // One read of the capability for the two things that need it. It
+                // One read of the capability for the things that need it. It
                 // walks the room's ceremonies looking for a share, so asking twice
                 // would do the same walk twice for one answer.
                 val canSign = localChatRoom.chatRoom.mlsGroupState != null &&
@@ -112,10 +121,7 @@ class ChatRoomDetailViewModel(
                 // names, in a room still open. Read off the stored state once.
                 val group = localChatRoom.chatRoom.takeIf { it.marmotProfile() == MarmotProfile.CURRENT }?.toMlsGroup()
                 val isDisbanded = group?.currentGroupState()?.isDisbanded == true
-                // A room whose changes need the group's signature takes none from this
-                // build: a bare commit would fork it. docs/giza-into-dedun.md, Phase 1.
-                val isGoverned = group?.isGoverned() == true
-                val canGovern = group != null && group.isLocalAdmin() && !isDisbanded && !isGoverned && localChatRoom.chatRoom.leftGroupAt == null
+                val canGovern = group != null && group.isLocalAdmin() && !isDisbanded && localChatRoom.chatRoom.leftGroupAt == null
 
                 // A direct chat is a Marmot room of two with no key, and not a group
                 // that guards anybody's wallet: no section, no button.
@@ -125,12 +131,26 @@ class ChatRoomDetailViewModel(
                 // docs/group-payout-destination.md: a group still going has a Payouts
                 // section, and every member row says where that member is paid.
                 val payouts = payoutDestinationRepository.standing(chatRoomId, NodeParamsManager.chain)?.takeIf { it.isGroup }
+                // The founding members, against what the ceremony that made the
+                // room's key said: who the founding invite never reached.
+                // docs/robust-group-admins.md, Phase 4.
+                val uninvitedFounders = chatRepository.uninvitedFounders(localChatRoom)
+
+                val shares = chatRepository.sharesSummary(localChatRoom)
+                // Who governs, and what this device may do about it, from the group's
+                // state through the same rules the commits are made by.
+                // docs/member-admin-promotion.md, Phase 11.
+                val me = localChatRoom.chatRoom.userPublicKey
+                val roomIsOpen = !isDisbanded && localChatRoom.chatRoom.leftGroupAt == null
 
                 ChatRoomDetailUIState.Loaded(
                     localChatRoom = localChatRoom,
                     groupKeyState = chatRepository.groupKeyState(chatRoomId),
                     signedGroupKeyStateEvent = chatRepository.signedGroupKeyStateEvent(chatRoomId),
                     subgroups = chatRepository.subgroupsOf(chatRoomId),
+                    groupNostrProfile = chatRepository.groupNostrProfile(chatRoomId),
+                    groupPosts = chatRepository.groupPosts(chatRoomId),
+                    canProposeAsGroup = canSign && roomIsOpen,
                     parentChatRoomId = chatRepository.parentOf(chatRoomId),
                     walletPolicy = chatRepository.walletPolicyOf(chatRoomId),
                     guardianDelay = chatRepository.guardiansOf(chatRoomId)?.firstOrNull()?.delay,
@@ -146,7 +166,6 @@ class ChatRoomDetailViewModel(
                     wavelengthParticipants = chatRepository.wavelengthParticipants(chatRoomId),
                     canAddSubgroup = canSign,
                     canGovern = canGovern,
-                    isGoverned = isGoverned,
                     isDisbanded = isDisbanded,
                     memberWallets = memberWalletRepository.memberWalletsOf(chatRoomId),
                     // Offered wherever the new-wallet screen could get somewhere:
@@ -169,7 +188,38 @@ class ChatRoomDetailViewModel(
                             .filter { depositRepository.canBeOpened(chatRoomId, NodeParamsManager.chain, it) }
                             .toSet()
                     } else emptySet(),
-                    shares = chatRepository.sharesSummary(localChatRoom),
+                    shares = shares,
+                    adminPublicKeys = group?.currentAdminIdentities().orEmpty(),
+                    shareHolders = if (ExperimentalFeatures.shareRefresh) {
+                        shares?.members.orEmpty().filter { it.standing == ShareStanding.LIVE }.map { it.publicKey }.toSet()
+                    } else {
+                        emptySet()
+                    },
+                    // For every viewer, not only an admin: what cannot be done says why.
+                    // docs/member-row-actions.md, Phase 2.
+                    memberActions = runCatching { chatRepository.memberActionOptions(localChatRoom) }
+                        .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't read $chatRoomId's member actions" } }
+                        .getOrElse { emptyMap() },
+                    adminLeave = group?.takeIf { roomIsOpen }?.let { AdminGovernance.adminLeave(it, me) },
+                    groupDmRow = runCatching { chatRepository.groupDmRow(chatRoomId, localChatRoom.chatRoom.userPublicKey) }
+                        .onFailure { if (it is CancellationException) throw it else logger.w(throwable = it) { "Couldn't read $chatRoomId's messages row" } }
+                        .getOrNull(),
+                    inbox = runCatching { chatRepository.inboxSummary(localChatRoom) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull(),
+                    governance = runCatching { chatRepository.governanceStatus(chatRoomId) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull(),
+                    promotionOffer = runCatching { chatRepository.pendingPromotion(chatRoomId) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrNull()
+                        ?.let { it.id to it.from },
+                    uninvitedFounders = uninvitedFounders,
+                    founderNames = uninvitedFounders.associateWith { publicKey ->
+                        nostrRepository.getProfileWithPublicKey(publicKey)?.humanReadableNameOrPubkey()
+                            ?: publicKey.take(SHORTENED_PUBLIC_KEY_LENGTH)
+                    },
+                    groups = if (localChatRoom.chatRoom.mlsGroupState == null) chatRepository.groupsMadeIn(chatRoomId) else emptyList(),
                 )
             }
             localChatRoom?.let { observeShares(it.chatRoom.id) }
@@ -278,7 +328,78 @@ class ChatRoomDetailViewModel(
                 // can still help sign until the shares are rotated without them.
                 // A second act, offered rather than folded in -- it needs every
                 // remaining holder (docs/frost-share-refresh.md, Phase 9).
-                if (rotation == SharesSummary.Rotation.Available) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, preview, heldLightningShare)
+                // Not for a removal the group has yet to sign: they are still in the
+                // room, and the offer would come before the fact it is about.
+                val proposed = (chatRoomDetailUIState as? ChatRoomDetailUIState.Loaded)?.governance is GovernanceStatus.Governed
+                if (rotation == SharesSummary.Rotation.Available && !proposed) rotationOffer = RotationOffer(localChatRoom, memberPublicKey, preview, heldLightningShare)
+            }
+        }
+    }
+
+    /**
+     * Finishes the room's founding invite, and reloads the screen. Reports null
+     * when it went out, or why not -- naming the founders still without a key
+     * package, since only they can publish one. docs/robust-group-admins.md,
+     * Phase 4.
+     */
+    fun inviteFounders(chatRoomId: String, onDone: (MarmotGroupCreation.FoundingInvite) -> Unit = {}) {
+        // Waits on relays for key packages, so a second tap would ask twice.
+        if (isActionPending.value) return
+        isActionPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val invite = runCatching { chatRepository.finishFoundingInvite(chatRoomId) }
+                .getOrElse { MarmotGroupCreation.FoundingInvite.Failed(it.message ?: "Couldn't invite them. Please try again.") }
+            initiateChatRoomDetail()
+            viewModelScope.launch(Dispatchers.Main) {
+                isActionPending.value = false
+                onDone(invite)
+            }
+        }
+    }
+
+    /**
+     * Runs one change to who administers the room, reloads the screen, and
+     * reports: null when the commit went out, or why it could not. The change
+     * itself lands when a relay accepts it, and the room says so then.
+     * docs/member-admin-promotion.md, Phase 11.
+     */
+    private fun adminAction(onDone: (String?) -> Unit, action: suspend () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = runCatching { action() }.exceptionOrNull()
+            if (failure is CancellationException) throw failure
+            initiateChatRoomDetail()
+            viewModelScope.launch(Dispatchers.Main) { onDone(failure?.let { it.message ?: "Couldn't make that change" }) }
+        }
+    }
+
+    /** Accepts becoming an admin of a keyed room. docs/member-admin-promotion.md, Phase 8. */
+    fun acceptPromotion(localChatRoom: LocalChatRoom, offerId: HexKey, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.acceptPromotion(localChatRoom, offerId)?.let { throw IllegalStateException(it) } }
+
+    fun makeAdmin(localChatRoom: LocalChatRoom, memberPublicKey: HexKey, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.promoteMember(localChatRoom, memberPublicKey) }
+
+    /** Removes [adminPublicKey] as an admin; this device's own account is stepping down. */
+    fun removeAsAdmin(localChatRoom: LocalChatRoom, adminPublicKey: HexKey, onDone: (String?) -> Unit) =
+        adminAction(onDone) { chatRepository.demoteMember(localChatRoom, adminPublicKey) }
+
+    /**
+     * Leaves as an admin: steps down, after making [heir] an admin when this device
+     * is the only one, and leaves once that is accepted. Leaves the screen as soon
+     * as the first step is sent; a refusal stays on it and goes to [onFailed].
+     */
+    fun stepDownAndLeave(
+        localChatRoom: LocalChatRoom,
+        heir: HexKey?,
+        onPopBackToRoute: (Route) -> Unit,
+        onFailed: (String?) -> Unit,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val failure = runCatching { chatRepository.stepDownAndLeave(localChatRoom, heir) }.exceptionOrNull()
+            if (failure is CancellationException) throw failure
+            viewModelScope.launch(Dispatchers.Main) {
+                if (failure == null) onPopBackToRoute(HomeRoute(activeUserPublicKey = activeUserPublicKey))
+                else onFailed(failure.message)
             }
         }
     }
@@ -481,6 +602,8 @@ class ChatRoomDetailViewModel(
 
         /** How long the Shares section's inputs have to be still before it is read again. */
         internal const val SHARES_SETTLE_MILLIS = 250L
+        /** Enough of a key to tell two founders apart when no profile is stored. */
+        private const val SHORTENED_PUBLIC_KEY_LENGTH = 12
 
         fun factory(
             activeUserPublicKey: HexKey,

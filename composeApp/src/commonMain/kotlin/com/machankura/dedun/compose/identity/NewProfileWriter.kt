@@ -10,8 +10,9 @@ data class NewProfile(val nostrPublicKey: HexKey, val id: WalletId)
  * Makes the secret a new profile signs with and puts it on disk.
  *
  * Two live in the app, and the create screen does not know which it was given. One
- * generates twelve words and writes a seed -- for Landing, where the first profile on a
- * device is the one the wallet will belong to. The other generates a bare key and
+ * generates a nine-block recovery code and writes it with its 24 words -- for Landing, where
+ * the first profile on a device is the one the wallet will belong to, and the code backs both
+ * (docs/giza-second-batch.md, Phase 2f). The other generates a bare key and
  * writes a credential -- for the switcher, where a user who wants another profile has
  * not asked for another Lightning node, another set of channels, or a second phrase
  * with funds behind it. Under docs/multiple-profiles.md the two differ by exactly one

@@ -47,7 +47,7 @@ class FrostSigningResendStateTest {
         chatRoom = ChatRoom(
             id = roomId,
             userPublicKey = owner,
-            subject = "#Ekklesia",
+            subject = "Ekklesia",
             description = null,
             mlsGroupState = null,
         ),

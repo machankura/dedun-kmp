@@ -23,6 +23,8 @@ import fr.acinq.phoenix.data.UserWallet
 import fr.acinq.phoenix.data.WalletId
 import fr.acinq.phoenix.managers.DataStoreManager
 import fr.acinq.phoenix.managers.NostrCredentialManager
+import fr.acinq.phoenix.managers.RecoveryCodeManager
+import fr.acinq.phoenix.data.DecryptRecoveryCodesResult
 import fr.acinq.phoenix.security.NostrCredential
 import fr.acinq.phoenix.managers.nostrPrivateKey
 import fr.acinq.phoenix.utils.preferences.GlobalPrefs
@@ -45,6 +47,7 @@ import com.machankura.dedun.compose.identity.IdentityKind
 import com.machankura.dedun.compose.identity.IdentityWriter
 import com.machankura.dedun.compose.identity.SeedCredentials
 import com.machankura.dedun.compose.identity.StoredIdentity
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
 
 sealed class WritingSeedState {
     data object Init : WritingSeedState()
@@ -85,6 +88,11 @@ class SovereignWalletViewModel(
     // We might end up only using the machankuraWalletRepository in the future where we send the walletId in each request.
     /** Injected so that a switch can be pinned in a test without a node to stop. */
     private val stopBusiness: (WalletId) -> Unit = ::stopPlatformBusiness,
+    /**
+     * Where [activeIdentity] is kept. The process's `DedunRuntime` passes its own, so the engines
+     * that outlive this view model follow the identity it sets; a test passes nothing.
+     */
+    activeIdentityState: MutableStateFlow<Identity?> = MutableStateFlow(null),
 ): ViewModel() {
     private val log = Logger.withTag("SovereignWalletViewModel")
 
@@ -119,7 +127,7 @@ class SovereignWalletViewModel(
      * carries the key directly, so a reader no longer needs a node to exist, and an
      * identity that never has one (a bare nsec) reads the same as one that does.
      */
-    private val _activeIdentity = MutableStateFlow<Identity?>(null)
+    private val _activeIdentity = activeIdentityState
     val activeIdentity = _activeIdentity.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -148,6 +156,11 @@ class SovereignWalletViewModel(
 
 
     init {
+        // A new view model is a new start: the selector or the default profile, chosen again.
+        // The flow it writes now outlives it (it is the runtime's), so an activity recreated
+        // over a living process would otherwise begin with the last activity's identity set
+        // and skip the startup that decides it. Null first is what every start did before.
+        _activeIdentity.value = null
         listIdentities(onDone = {})
     }
 
@@ -205,7 +218,7 @@ class SovereignWalletViewModel(
      * error. It cannot happen for a file the repair wrote, since that derived the key
      * from the same seed.
      */
-    fun setActiveWallet(stored: StoredIdentity.Mnemonic, business: PhoenixBusiness) {
+    fun setActiveWallet(stored: StoredIdentity.Seeded, business: PhoenixBusiness) {
         val walletId = stored.id
         val keyManager = business.walletManager.keyManager.value
         if (keyManager == null) {
@@ -223,7 +236,7 @@ class SovereignWalletViewModel(
         setActiveIdentity(
             Identity.signing(
                 id = walletId,
-                kind = IdentityKind.Mnemonic,
+                kind = stored.kind,
                 nostrPrivateKey = stored.privateKey,
                 userPrefs = dataStoreManager.loadUserPrefsForWallet(walletId = walletId),
                 internalPrefs = dataStoreManager.loadInternalPrefsForWallet(walletId = walletId),
@@ -342,7 +355,20 @@ class SovereignWalletViewModel(
                 }
             }
 
-            val identities = StoredIdentity.merge(wallets, credentials)
+            // Read, never written, and never fatal: every profile with a code is also the
+            // phrase in seed.dat, so a codes file that cannot be read loses nothing but the
+            // code itself, which the backup screen reports when it is asked for. See
+            // docs/recovery-code-v3.md, Phase 4.
+            val codes = when (val result = RecoveryCodeManager.loadAndDecrypt(phoenixGlobal)) {
+                is DecryptRecoveryCodesResult.Success -> StoredIdentity.parseCodes(result.codes)
+                is DecryptRecoveryCodesResult.Failure.FileNotFound -> emptyMap()
+                is DecryptRecoveryCodesResult.Failure -> {
+                    log.e { "cannot read the recovery codes file: $result; listing those profiles as their phrases" }
+                    emptyMap()
+                }
+            }
+
+            val identities = StoredIdentity.merge(wallets, credentials, codes)
 
             val metadataMap = getAvailableWalletsMeta(phoenixGlobal).first()
             identities.keys.forEach { walletId ->
@@ -493,6 +519,17 @@ class SovereignWalletViewModel(
             customElectrumServer = customElectrumServer.value,
         )
 
+    /** Writes a recovery code, its words and its key, with the same options. See [IdentityWriter.writeRecoveryCode]. */
+    suspend fun writeRecoveryCode(code: RecoveryCode): IdentityWriter.WriteRecoveryCodeResult =
+        IdentityWriter.writeRecoveryCode(
+            log = log,
+            phoenixGlobal = phoenixGlobal,
+            globalPrefs = getGlobalPrefs(),
+            code = code,
+            isTorEnabled = isTorEnabled.value,
+            customElectrumServer = customElectrumServer.value,
+        )
+
     /** Writes a public key as a read-only identity, with the same options. */
     suspend fun writeNostrPublicKey(nostrPublicKey: HexKey): IdentityWriter.WriteNostrCredentialResult =
         IdentityWriter.writeNostrPublicKey(
@@ -532,10 +569,12 @@ class SovereignWalletViewModel(
         private const val TAG = "SovereignWalletViewModel"
         fun factory(
             phoenixGlobal: PhoenixGlobal,
+            activeIdentityState: MutableStateFlow<Identity?> = MutableStateFlow(null),
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SovereignWalletViewModel(
                     phoenixGlobal = phoenixGlobal,
+                    activeIdentityState = activeIdentityState,
                 )
             }
         }

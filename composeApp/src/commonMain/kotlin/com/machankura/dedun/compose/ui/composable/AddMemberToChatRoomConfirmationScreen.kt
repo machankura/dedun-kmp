@@ -53,6 +53,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.composable.widgets.buttons.ExtendedFab
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
+import com.machankura.dedun.compose.database.model.title
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -150,7 +151,7 @@ fun AddMemberToChatRoomConfirmationScreen(
                             )
 
                             Text(
-                                text = stringResource(Res.string.to_join_the_chat_room, addMemberToChatRoomConfirmationUIState.localChatRoom.chatRoom.subject ?: "")
+                                text = stringResource(Res.string.to_join_the_chat_room, addMemberToChatRoomConfirmationUIState.localChatRoom.chatRoom.title ?: "")
                             )
 
                             Text(

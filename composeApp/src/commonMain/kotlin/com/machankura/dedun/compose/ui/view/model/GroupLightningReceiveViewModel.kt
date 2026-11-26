@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.ui.view.model
 
+import com.machankura.dedun.compose.database.model.title
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration
 import kotlinx.coroutines.withTimeoutOrNull
@@ -79,7 +80,7 @@ class GroupLightningReceiveViewModel(
                     uiState = GroupLightningReceiveUIState.Error("The group hasn't opened deposits for them")
                     return@launch
                 }
-                val group = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
+                val group = localChatRoom.chatRoom.title?.takeIf { it.isNotBlank() }
                 withContext(Dispatchers.Main) {
                     // The name and never the number: an invoice reaches the payer and the LSP.
                     if (descriptionField.text.isEmpty()) {
@@ -97,7 +98,7 @@ class GroupLightningReceiveViewModel(
             }
             // Whose deposit it is, where the payer will read it: on their own wallet's screen.
             val me = nameOf(localChatRoom, activeUserPublicKey)
-            val group = localChatRoom.chatRoom.subject?.takeIf { it.isNotBlank() }
+            val group = localChatRoom.chatRoom.title?.takeIf { it.isNotBlank() }
             withContext(Dispatchers.Main) {
                 if (descriptionField.text.isEmpty()) {
                     descriptionField.setTextAndPlaceCursorAtEnd(if (group != null) "Deposit from @$me to $group" else "Deposit from @$me")

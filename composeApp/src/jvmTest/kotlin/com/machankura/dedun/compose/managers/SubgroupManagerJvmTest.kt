@@ -7,10 +7,12 @@ import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupWalletPolicy
 import androidx.room3.Room
 import com.vitorpamplona.crypto.curve25519.Ed25519
+import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.groups.MarmotGroupPolicy
 import com.vitorpamplona.marmot.groups.currentMarmotData
 import com.vitorpamplona.marmot.mip01Groups.MarmotGroupData
 import com.vitorpamplona.mls.group.MlsGroup
+import com.vitorpamplona.quartz.marmot.mip03GroupMessages.GroupEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.hexToByteArray
 import com.vitorpamplona.quartz.nip01Core.core.toHexKey
@@ -36,12 +38,14 @@ import kotlin.time.Instant
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.DedunDatabase
 import com.machankura.dedun.compose.database.builder.getRoomDatabase
+import com.machankura.dedun.compose.database.model.ChatMessage
 import com.machankura.dedun.compose.database.model.ChatRoom
 import com.machankura.dedun.compose.database.model.DkgParticipantMessage
 import com.machankura.dedun.compose.database.model.DkgSession
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.nostr.subgroup.tags.GuardianTag
+import com.machankura.dedun.compose.database.model.MarmotGroupEvent
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.Profile
@@ -137,6 +141,70 @@ class SubgroupManagerJvmTest {
         assertNull(subgroup.room)
         assertFalse(subgroup.isJoined)
         assertNull(subgroup.keyState)
+    }
+
+    /**
+     * A certificate signed before docs/group-name-prefix.md says `#name`, and can never say
+     * anything else. Where the app says what the subgroup is called -- the parent's list and
+     * the line in its room -- that is the room's name under today's mark. `#` on purpose.
+     */
+    @Test
+    fun `a certificate signed under the old mark is listed and announced under the new one`(): Unit = runBlocking {
+        seedRoom(parentRoomId)
+        val signed = certificate(name = "#Translation team")
+        record(signed)
+
+        assertEquals("Translation team", SubgroupManager.subgroupsOf(db, parentRoomId).single().name)
+
+        // The kind:445 it arrived in, stored as sync stores one, so the inner event the line
+        // is written from has a group event to hang off.
+        val groupEventId = "ab".repeat(32)
+        db.nostrEventDao().upsert(
+            NostrEvent(
+                id = groupEventId,
+                pubKey = alice,
+                kind = GroupEvent.KIND,
+                tags = arrayOf(arrayOf("h", parentRoomId)),
+                content = "ciphertext",
+                sig = "0".repeat(128),
+            )
+        )
+        db.marmotGroupEventDao().upsert(
+            MarmotGroupEvent(
+                id = groupEventId,
+                userPublicKey = user,
+                publicKey = alice,
+                chatRoomId = parentRoomId,
+                signature = "0".repeat(128),
+                encryptedContent = "ciphertext",
+                expiresAt = null,
+                createdAt = Instant.fromEpochSeconds(signed.createdAt),
+            )
+        )
+
+        val line = assertNotNull(
+            ChatMessage.fromGroupEventResult(
+                database = db,
+                activeKeyPair = KeyPair(),
+                groupEvent = GroupEvent(
+                    id = groupEventId,
+                    pubKey = alice,
+                    createdAt = signed.createdAt,
+                    tags = arrayOf(arrayOf("h", parentRoomId)),
+                    content = "ciphertext",
+                    sig = "0".repeat(128),
+                ),
+                groupEventResult = GroupEventResult.ApplicationMessage(
+                    groupId = parentRoomId,
+                    innerEventJson = signed.toJson(),
+                    senderLeafIndex = 1,
+                    epoch = 1,
+                ),
+                senderIdentity = alice,
+            )
+        )
+        assertEquals(ChatMessage.TYPE_SUBGROUP_CERTIFIED, line.messageType)
+        assertEquals("The group made {Translation team} a subgroup, run by 3 of its members", line.content)
     }
 
     @Test
@@ -500,10 +568,10 @@ class SubgroupManagerJvmTest {
 
             // A quorum is being asked to sign a name, and `MarmotGroupCreation`
             // will name the room by the same rule from the same subject. If only
-            // one of the two applied it, the parent would certify "Translation
-            // team" and the room would be called "#Translation team".
+            // one of the two applied it, the parent could certify "{Translation
+            // team}" and the room be called "Translation team".
             assertEquals(
-                MarmotGroupName.of("Translation team"),
+                MarmotGroupName.bare("Translation team"),
                 SubgroupBirthCertificateEvent.parseName(proposed.tags)
             )
         }

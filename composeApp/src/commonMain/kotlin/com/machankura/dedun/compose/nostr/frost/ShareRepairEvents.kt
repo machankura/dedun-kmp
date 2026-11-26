@@ -37,6 +37,13 @@ object ShareRepairEvents {
     const val KEY_TAG = "frost_key"
     const val GENERATION_TAG = "frost_generation"
 
+    /**
+     * The `n` an enrollment at a new id runs with: that id, since the table held n
+     * entries before it (docs/member-admin-promotion.md, Phase 8). Absent on a
+     * repair, which uses the table it has.
+     */
+    const val N_TAG = "repair_n"
+
     fun value(tags: Array<Array<String>>, name: String): String? = tags.firstOrNull { it.size >= 2 && it[0] == name }?.get(1)
 
     fun parseSessionId(tags: Array<Array<String>>): String? = value(tags, SESSION_TAG)?.takeIf { it.length == 64 }

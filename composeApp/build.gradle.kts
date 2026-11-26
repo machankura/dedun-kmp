@@ -63,6 +63,11 @@ kotlin {
             implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.24.0")
 
             implementation(libs.androidx.activity.compose)
+
+            // The periodic background sync (docs/notifications-and-background-sync.md, Phase 10):
+            // WorkManager reschedules itself across reboots and respects Doze, which a hand-made
+            // alarm would have to relearn.
+            implementation(libs.androidx.work.runtime)
             implementation(libs.compose.uiToolingPreview)
 
             // The daemon itself, for Android. A separate line from core and engine below: this
@@ -498,6 +503,37 @@ val magpieLockAudit = tasks.register("magpieLockAudit") {
 
 tasks.named("check") { dependsOn(magpieLockAudit) }
 
+/**
+ * No profile's phrase is made from random bytes: a new profile is backed by a recovery code,
+ * whose 24 words come from RecoveryCodeKeys alone. docs/giza-second-batch.md, Phase 2f.
+ */
+val phraseAudit = tasks.register("phraseAudit") {
+    group = "verification"
+    description = "Checks that no profile phrase is made from random bytes outside RecoveryCodeKeys."
+
+    val script = rootProject.layout.projectDirectory.file("docs/scripts/phrase-audit.sh").asFile
+    val projectDirectory = rootProject.layout.projectDirectory.asFile
+
+    doLast {
+        val bash = listOf("/bin/bash", "/usr/bin/bash").firstOrNull { File(it).canExecute() }
+        if (bash == null) {
+            logger.warn("phraseAudit: no bash found, skipping. Run docs/scripts/phrase-audit.sh --check by hand.")
+            return@doLast
+        }
+        val result = providers.exec {
+            commandLine(bash, script.absolutePath, "--check")
+            workingDir = projectDirectory
+            isIgnoreExitValue = true
+        }
+        logger.lifecycle(result.standardOutput.asText.get())
+        if (result.result.get().exitValue != 0) {
+            throw GradleException("A profile phrase is made from random bytes. See the report above, and docs/giza-second-batch.md, Phase 2f.")
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(phraseAudit) }
+
 compose.desktop {
     application {
         mainClass = "com.machankura.dedun.desktop.MainKt"
@@ -506,6 +542,14 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.machankura.dedun.desktop"
             packageVersion = "1.0.0"
+            // The packaged app runs on a jlinked runtime holding only the modules named here
+            // and the plugin's defaults, and nothing fails at build time when one is missing.
+            // Without jdk.unsupported, protobuf-lite (under DataStore) cannot reach
+            // sun.misc.Unsafe and every preference write throws, so creating a profile fails.
+            // The rest are what `./gradlew :composeApp:suggestRuntimeModules` reports; rerun it
+            // after adding a JVM dependency, and check a profile can be created in
+            // `createDistributable`'s build, which is the only place a gap shows.
+            modules("java.instrument", "java.management", "java.naming", "java.sql", "jdk.unsupported")
         }
     }
 }

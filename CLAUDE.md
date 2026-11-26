@@ -188,6 +188,34 @@ tween(300)                                                   // no
 `MaterialTheme.motionScheme` is the public surface. Honour `MaterialTheme.reducedMotion`
 — it means drop the movement, not the transition.
 
+## A recovery code backs the profile and its wallet
+
+A new profile from Landing is backed by a nine-block recovery code
+([docs/giza-second-batch.md](docs/giza-second-batch.md), Phase 2). The code's key is BIP39
+entropy, so `RecoveryCodeKeys.words` turns it into 24 words. Those words go in `seed.dat` as a
+phrase does, and derive the npub, the profile id and the Lightning node through
+`LocalKeyManager`, as typed words do. So a code restores money, and the copy says so.
+
+The derivation is pinned in `RecoveryCodeKeysTest`, including the node id. A change there is
+a different person, and a different wallet, behind the same piece of paper.
+
+## Everything sent in a NIP-17 wrap expires
+
+[docs/disappearing-messages.md](docs/disappearing-messages.md). What a person writes expires
+after their policy, a day by default; a protocol round expires after the longer of that and its
+protocol's floor, and always does. The rumor's `expiration` is part of its id, so a producer of a
+`GiftWrapPayload` stamps it before hashing:
+
+```kotlin
+val tags = DisappearingSettingsStore(database).stamp(chatRoomId, userPublicKey, kind, createdAt, baseTags)   // yes
+val id = EventHasher.hashId(userPublicKey, createdAt, kind, tags, content)
+```
+
+A new kind gets a class in `DisappearingMessages.classOf`, with the reason for its floor;
+`DisappearingMessagesTest` fails on a kind the app sends that fell through to the unclassified
+week. A session that reads its rounds back from `GiftWrapPayload` answers in `ProtocolRetention`,
+or the sweeper will delete them once they expire. Seals stay untagged.
+
 ## Checking your work
 
 ```bash

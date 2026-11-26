@@ -2,6 +2,7 @@ package com.machankura.dedun.compose.ui.composable
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -20,6 +21,12 @@ import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.activeUserPublicKey
 import com.machankura.dedun.compose.ui.composable.GroupSignedWorkFixtures.chatRoomId
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupLightningWalletRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.machankura.dedun.compose.nostr.GroupPost
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
+import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupWavelengthWalletRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
@@ -43,8 +50,9 @@ import kotlin.time.Instant
  * The row on the group's screen that stands for its signed work, and what it
  * opens.
  *
- * The group's nostr profile, relay lists and posts had rows here, and a paste
- * for proposing any of them; they are gone, and the wallet is what is left.
+ * The group's wallets, and what the group says as itself on nostr: its profile and its posts
+ * (docs/group-nostr-profile-and-posts.md). The relay lists were not brought back
+ * with it (D1), so their row stays absent.
  */
 @OptIn(ExperimentalTestApi::class)
 class GroupSignedWorkRowsJvmTest {
@@ -155,14 +163,95 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     @Test
-    fun `the group's screen has no nostr profile, relays, posts or paste`() = render(state()) {
-        onNodeWithText("Nostr profile").assertDoesNotExist()
-        onNodeWithText("Relays").assertDoesNotExist()
-        onNodeWithText("Posts").assertDoesNotExist()
-        onNodeWithText("Propose event").assertDoesNotExist()
+    fun `a Marmot room names its profile, and the row opens it`() {
+        var opened: Route? = null
 
-        // The rest of the screen is there, so the rows' absence is an absence
-        // rather than a screen that failed to draw.
+        render(state(groupNostrProfile = GroupSignedWorkFixtures.profile), onNavigateToRoute = { opened = it }) {
+            onNodeWithText("Nostr profile").assertIsDisplayed()
+            onNodeWithText("Translation collective · group@example.com").assertIsDisplayed()
+                .performClick()
+        }
+
+        assertEquals(GroupNostrProfileRoute(activeUserPublicKey, chatRoomId, relayHint = null), opened)
+    }
+
+    @Test
+    fun `a room whose profile this device does not hold says it is not described`() = render(state()) {
+        onNodeWithText("Nostr profile").assertIsDisplayed()
+        onNodeWithText("Not described yet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a NIP-17 room has no nostr identity of its own to show`() = render(
+        state(groupNostrProfile = GroupSignedWorkFixtures.profile, mlsGroupState = null)
+    ) {
+        onNodeWithText("Nostr profile").assertDoesNotExist()
+        onNodeWithText("Subgroups").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the posts row counts them, and opens them`() {
+        var opened: Route? = null
+
+        render(
+            state(
+                groupNostrProfile = GroupSignedWorkFixtures.profile,
+                groupPosts = listOf(GroupSignedWorkFixtures.post("One", 1_700_000_000), GroupSignedWorkFixtures.post("Two", 1_700_000_100)),
+            ),
+            onNavigateToRoute = { opened = it },
+        ) {
+            onNodeWithText("Posts").assertIsDisplayed()
+            onNodeWithText("2 posts").assertIsDisplayed().performClick()
+        }
+
+        assertEquals(GroupPostsRoute(activeUserPublicKey, chatRoomId, relayHint = null), opened)
+    }
+
+    @Test
+    fun `the posts row says when there are none, or one`() {
+        render(state()) {
+            onNodeWithText("No posts yet").assertIsDisplayed()
+        }
+        render(state(groupPosts = listOf(GroupSignedWorkFixtures.post("One", 1_700_000_000)))) {
+            onNodeWithText("1 post").assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun `a NIP-17 room has no posts row either`() = render(state(mlsGroupState = null)) {
+        onNodeWithText("Posts").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a member who can propose is offered the paste, and it opens`() {
+        var opened: Route? = null
+
+        render(state(groupNostrProfile = GroupSignedWorkFixtures.profile), onNavigateToRoute = { opened = it }) {
+            onNodeWithText("Propose event").assertIsDisplayed().performClick()
+        }
+
+        assertEquals(ProposeGroupEventRoute(activeUserPublicKey, chatRoomId, relayHint = null), opened)
+    }
+
+    @Test
+    fun `a member who cannot propose is not offered the paste`() = render(
+        state(groupNostrProfile = GroupSignedWorkFixtures.profile, canProposeAsGroup = false)
+    ) {
+        onNodeWithText("Nostr profile").assertIsDisplayed()
+        onNodeWithText("Propose event").assertDoesNotExist()
+    }
+
+    @Test
+    fun `an identity that cannot sign is not offered the paste`() = render(
+        state(groupNostrProfile = GroupSignedWorkFixtures.profile),
+        identityCanSign = false,
+    ) {
+        onNodeWithText("Propose event").assertDoesNotExist()
+    }
+
+    @Test
+    fun `there is no relays row`() = render(state(groupNostrProfile = GroupSignedWorkFixtures.profile)) {
+        onNodeWithText("Relays").assertDoesNotExist()
         onNodeWithText("Subgroups").assertIsDisplayed()
     }
 
@@ -175,7 +264,7 @@ class GroupSignedWorkRowsJvmTest {
     }
 
     /** The wallet row is named for its room: the fixture's subject. */
-    private val WALLET_ROW = "Translation room onchain wallet"
+    private val WALLET_ROW = "{Translation room} onchain wallet"
 
     /** What a Wavelength row says while there is no onchain wallet on its network. */
     private val WAVELENGTH_WAITS = "A Wavelength wallet is only available once the group has an onchain wallet."
@@ -184,11 +273,17 @@ class GroupSignedWorkRowsJvmTest {
         mlsGroupState: String? = "state",
         groupWallet: GroupWallet? = null,
         wavelengthOnchainChains: Set<Chain> = emptySet(),
+        groupNostrProfile: GroupNostrProfile? = null,
+        groupPosts: List<GroupPost> = emptyList(),
+        canProposeAsGroup: Boolean = true,
     ) = ChatRoomDetailUIState.Loaded(
         localChatRoom = GroupSignedWorkFixtures.localChatRoom(mlsGroupState),
         groupKeyState = GroupSignedWorkFixtures.groupKeyState,
         groupWallet = groupWallet,
         wavelengthOnchainChains = wavelengthOnchainChains,
+        groupNostrProfile = groupNostrProfile,
+        groupPosts = groupPosts,
+        canProposeAsGroup = canProposeAsGroup,
     )
 
     /** An onchain wallet on the Lightning wallet's network; only its presence matters to these rows. */
@@ -223,11 +318,13 @@ class GroupSignedWorkRowsJvmTest {
     private fun render(
         uiState: ChatRoomDetailUIState,
         onNavigateToRoute: (Route) -> Unit = {},
+        identityCanSign: Boolean = true,
         assertions: ComposeUiTest.() -> Unit
     ) = runDesktopComposeUiTest(width = 400, height = 4000) {
         setContent {
             DedunTheme {
                 ProvideSnackbarHost {
+                    CompositionLocalProvider(LocalCanSign provides identityCanSign) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         ChatRoomDetailScreen(
                             activeUserPublicKey = activeUserPublicKey,
@@ -240,6 +337,7 @@ class GroupSignedWorkRowsJvmTest {
                             onPopBackToRoute = {},
                             onNavigateBack = {},
                         )
+                    }
                     }
                 }
             }

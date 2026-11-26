@@ -252,7 +252,11 @@ abstract class NostrNip17Dao(
                 publicKey = giftWrapEvent.pubKey,
                 kind = giftWrapEvent.kind,
                 receiverPublicKey = receiverPublicKey.pubKey,
-                receiverRelayHit = receiverPublicKey.relayHint?.url
+                receiverRelayHit = receiverPublicKey.relayHint?.url,
+                // Linked to what it carries, so the sweeper deletes this wrap with its payload and
+                // never before it; dropped here when the payload is (docs/disappearing-messages.md, D6).
+                giftWrapPayloadId = giftWrapPayload.id,
+                expiresAt = giftWrapPayload.expiresAt,
             )
         )
 

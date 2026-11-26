@@ -14,7 +14,7 @@ import kotlin.time.Clock
  * `docs/non-member-deposits.md`, D4.
  *
  * ```
- * kind:    30395
+ * kind:    30425
  * pubkey:  <the room>
  * content: ""
  * tags:
@@ -29,7 +29,7 @@ import kotlin.time.Clock
  * leaves the contact closed. [stateOf] is the fold.
  */
 object ContactAmendmentEvent {
-    val KIND: Kind = 30395
+    val KIND: Kind = 30425
 
     private const val D_TAG = "d"
     private const val NAME_TAG = "name"

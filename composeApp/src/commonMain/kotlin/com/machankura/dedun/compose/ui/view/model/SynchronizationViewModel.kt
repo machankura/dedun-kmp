@@ -59,6 +59,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import com.machankura.dedun.compose.nostr.SignInSync
 import kotlinx.coroutines.sync.withPermit
+import com.machankura.dedun.compose.ExperimentalFeatures
+import com.machankura.dedun.compose.managers.GroupInboxPublisher
+import com.machankura.dedun.compose.repository.GroupInboxRepository
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -68,6 +71,8 @@ class SynchronizationViewModel(
     val chatRepository: ChatRepository,
     val relayRepository: RelayRepository,
     val scope: CoroutineScope,
+    val groupInboxRepository: GroupInboxRepository? = null,
+    val groupDmRepository: com.machankura.dedun.compose.repository.GroupDmRepository? = null,
 ): ViewModel() {
 
     val relaysSocketManager = RelaysSocketManager(
@@ -86,8 +91,20 @@ class SynchronizationViewModel(
         relaysSocketManager = relaysSocketManager,
         nostrRepository = nostrRepository,
         chatRepository = chatRepository,
-        isForeground = AppLifecycle.isForeground,
+        holdConnections = AppLifecycle.holdConnections,
+        groupInboxRepository = groupInboxRepository,
+        groupDmRepository = groupDmRepository,
     )
+
+    /** Sends the group's signed 10050s and message wraps (docs/group-threshold-ecdh.md, D8 and D10). */
+    private val groupDmPublisher = groupDmRepository?.let {
+        com.machankura.dedun.compose.managers.GroupDmPublisher(repository = it, transport = relaysSocketManager)
+    }
+
+    /** Sends what this device owes relays for its groups' inboxes (docs/group-inbox.md, D7). */
+    private val groupInboxPublisher = groupInboxRepository?.let {
+        GroupInboxPublisher(repository = it, transport = relaysSocketManager)
+    }
 
     companion object {
         private const val TAG = "SynchronizationViewModel"
@@ -139,6 +156,8 @@ class SynchronizationViewModel(
             chatRepository: ChatRepository,
             relayRepository: RelayRepository,
             scope: CoroutineScope,
+            groupInboxRepository: GroupInboxRepository? = null,
+            groupDmRepository: com.machankura.dedun.compose.repository.GroupDmRepository? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SynchronizationViewModel(
@@ -146,7 +165,9 @@ class SynchronizationViewModel(
                     nostrRepository = nostrRepository,
                     chatRepository = chatRepository,
                     relayRepository = relayRepository,
-                    scope = scope
+                    scope = scope,
+                    groupInboxRepository = groupInboxRepository,
+                    groupDmRepository = groupDmRepository,
                 )
             }
         }
@@ -248,6 +269,19 @@ class SynchronizationViewModel(
                             // (docs/rotate-shares-single-approval.md, Phase 3).
                             runCatching { nostrRepository.resumeRunningCeremonies(keyPair) }
                                 .onFailure { logger.e("Could not resume running key ceremonies", it) }
+                            // The rooms joined before the Welcome wrote admin flags
+                            // flag nobody until some commit arrives, and a robust
+                            // group's admin room may never get one. Caught up here,
+                            // once a start; a room already right is read, not
+                            // written. docs/robust-group-admins.md, Phase 6.
+                            runCatching { chatRepository.reconcileAdminFlags() }
+                                .onFailure { logger.e("Could not bring admin flags in line", it) }
+                            // A member who joined a keyed room before joining said it
+                            // follows signed commits, and never opened its screen, holds
+                            // the room back from requiring them -- and so from making
+                            // anyone an admin. docs/remove-convenient-groups.md.
+                            runCatching { chatRepository.announceGovernanceSupport() }
+                                .onFailure { logger.e("Could not say which rooms this device follows", it) }
                             // A device that updated, or joined a room from a Welcome, hasn't
                             // said it reads contacts there, and every contact proposal in the
                             // room waits until it has. docs/non-member-deposits.md, D5.
@@ -259,6 +293,28 @@ class SynchronizationViewModel(
                             // belongs here for the same reason the pumps do: it needs the
                             // active wallet's key pair, and a wallet switch must tear it down.
                             launch(Dispatchers.IO) { liveSubscriptionManager.observe(keyPair) }
+                            // What the group's direct messages owe relays.
+                            // docs/group-threshold-ecdh.md, D8 and D10.
+                            groupDmPublisher?.takeIf { ExperimentalFeatures.groupDirectMessages }?.let { publisher ->
+                                launch(Dispatchers.IO) {
+                                    runCatching { publisher.run() }
+                                        .onFailure {
+                                            if (it is CancellationException) throw it
+                                            logger.e("Publishing the group's direct messages stopped", it)
+                                        }
+                                }
+                            }
+                            // The group inbox's announcements and replies this device
+                            // owes relays. docs/group-inbox.md, D7 and D10.
+                            groupInboxPublisher?.takeIf { ExperimentalFeatures.groupInbox }?.let { publisher ->
+                                launch(Dispatchers.IO) {
+                                    runCatching { publisher.run() }
+                                        .onFailure {
+                                            if (it is CancellationException) throw it
+                                            logger.e("Publishing inbox events stopped", it)
+                                        }
+                                }
+                            }
                             // A key ceremony this profile opened, taken from a key to a
                             // working room without anybody pressing a button: the key
                             // state proposed, a subgroup's certificate asked for, the

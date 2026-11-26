@@ -275,7 +275,7 @@ class LiveSubscriptionReconcileTest {
     fun `backgrounding closes the subscriptions and foregrounding rebuilds them`() = runTest {
         val transport = FakeTransport()
         val foreground = MutableStateFlow(true)
-        val running = start(transport, MutableStateFlow(emptyList()), isForeground = foreground)
+        val running = start(transport, MutableStateFlow(emptyList()), holdConnections = foreground)
         settle()
 
         val openedWhileForeground = transport.opened.size
@@ -332,13 +332,13 @@ class LiveSubscriptionReconcileTest {
         transport: FakeTransport,
         rooms: MutableStateFlow<List<LocalChatRoom>>,
         nostr: RecordingNostrRepository = RecordingNostrRepository(),
-        isForeground: MutableStateFlow<Boolean> = MutableStateFlow(true),
+        holdConnections: MutableStateFlow<Boolean> = MutableStateFlow(true),
     ) = launch {
         LiveSubscriptionManager(
             relaysSocketManager = transport,
             nostrRepository = nostr,
             chatRepository = FakeChatRepository(rooms),
-            isForeground = isForeground,
+            holdConnections = holdConnections,
         ).observe(keyPair)
     }
 

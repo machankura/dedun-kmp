@@ -32,7 +32,7 @@ class RelaysSocketManager(
     private val relayRepository: com.machankura.dedun.compose.repository.RelayRepository,
     /** Injectable so that a test can drive the identity observer on a dispatcher it controls. */
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
-) : LiveSubscriptionTransport {
+) : LiveSubscriptionTransport, EventPublishTransport {
     val logger = Logger.withTag("RelaysSocketManager")
     private val relayPoolsMutex = Mutex()
 
@@ -116,7 +116,7 @@ class RelaysSocketManager(
     }
 
     @Throws(com.machankura.dedun.compose.exceptions.NostrPublishException::class, kotlin.coroutines.cancellation.CancellationException::class)
-    suspend fun publishEvent(nostrEvent: com.machankura.dedun.compose.database.model.NostrEvent, relays: Set<com.machankura.dedun.compose.network.dto.RelayDTO>): Flow<NostrPublishResult> {
+    override suspend fun publishEvent(nostrEvent: com.machankura.dedun.compose.database.model.NostrEvent, relays: Set<com.machankura.dedun.compose.network.dto.RelayDTO>): Flow<NostrPublishResult> {
         logger.d("publishEvent: $nostrEvent")
         return relayPool.publishEvent(
             nostrEvent = nostrEvent,

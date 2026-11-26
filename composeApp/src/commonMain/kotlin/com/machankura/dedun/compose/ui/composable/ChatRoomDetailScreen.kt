@@ -1,6 +1,58 @@
 package com.machankura.dedun.compose.ui.composable
 
+import com.machankura.dedun.compose.database.model.title
+import com.machankura.dedun.compose.ui.composable.widgets.EmptyState
+import dedun.composeapp.generated.resources.new_group_with_these_members
+import dedun.composeapp.generated.resources.waiting_for_its_room
+import dedun.composeapp.generated.resources.key_ceremony_in_progress
+import dedun.composeapp.generated.resources.an_unnamed_group
+import dedun.composeapp.generated.resources.no_groups_have_been_made_in_this_conversation_yet
+import dedun.composeapp.generated.resources.groups
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DkgRitualRoute
+import com.machankura.dedun.compose.repository.GroupMadeHere
+import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
+import dedun.composeapp.generated.resources.propose_event
+import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposeGroupEventRoute
+import androidx.compose.material.icons.filled.DataObject
+import dedun.composeapp.generated.resources.n_posts
+import dedun.composeapp.generated.resources.one_post
+import dedun.composeapp.generated.resources.no_posts_yet
+import dedun.composeapp.generated.resources.posts
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPostsRoute
+import androidx.compose.material.icons.filled.Campaign
+import dedun.composeapp.generated.resources.not_described_yet
+import dedun.composeapp.generated.resources.no_name_on_this_profile
+import dedun.composeapp.generated.resources.nostr_profile
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupNostrProfileRoute
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import androidx.compose.material.icons.filled.Badge
+import com.machankura.dedun.compose.ui.composable.navigation.routes.DisappearingMessagesRoute
+import dedun.composeapp.generated.resources.disappearing_messages
+import dedun.composeapp.generated.resources.disappearing_messages_room_supporting
+import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.minimumInteractiveComponentSize
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ContactRoute
+import dedun.composeapp.generated.resources.inbox
+import dedun.composeapp.generated.resources.set_up_an_inbox
+import dedun.composeapp.generated.resources.no_new_messages
+import dedun.composeapp.generated.resources.one_new_message
+import dedun.composeapp.generated.resources.n_new_messages
+import dedun.composeapp.generated.resources.the_admins_are_making_the_inbox_key
+import dedun.composeapp.generated.resources.let_anyone_on_nostr_write_to_the_group_privately
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupInboxSettingsRoute
+import com.machankura.dedun.compose.ui.view.state.InboxRowSummary
+import androidx.compose.material.icons.filled.Mail
+import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmSetupRoute
+import com.machankura.dedun.compose.ui.view.state.GroupDmRow
+import dedun.composeapp.generated.resources.open_the_groups_messages
+import dedun.composeapp.generated.resources.group_messages
+import dedun.composeapp.generated.resources.this_group_receives_direct_messages
+import dedun.composeapp.generated.resources.nobody_can_write_to_the_group_yet
+import dedun.composeapp.generated.resources.nothing_unread
+import dedun.composeapp.generated.resources.n_unread
+import dedun.composeapp.generated.resources.only_its_admins_read_them
 import dedun.composeapp.generated.resources.members_balances_and_payouts
 import com.machankura.dedun.compose.ui.composable.navigation.routes.GroupPayoutsRoute
 import dedun.composeapp.generated.resources.you_ve_put_in_s_sats
@@ -80,6 +132,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import com.machankura.dedun.compose.managers.MarmotGroupCreation
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Autorenew
@@ -155,6 +210,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -168,6 +224,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.database.model.ChatRoom
+import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.Participant
@@ -177,6 +234,9 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalParticipant
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.NostrRepository
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilePreviewRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.MemberActionUnavailableRoute
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.navigation.routes.CreateSharedKeyRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProposalListRoute
@@ -194,6 +254,26 @@ import com.machankura.dedun.compose.ui.view.state.ChatRoomDetailUIState
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.couldn_t_leave_the_group
+import dedun.composeapp.generated.resources.admin_change_requested
+import dedun.composeapp.generated.resources.stepping_down_to_leave
+import dedun.composeapp.generated.resources.change_proposed
+import dedun.composeapp.generated.resources.step_down_requested
+import dedun.composeapp.generated.resources.admin_offer_sent
+import dedun.composeapp.generated.resources.promotion_accepted
+import com.machankura.dedun.compose.ui.view.state.GovernanceStatus
+import dedun.composeapp.generated.resources.holds_a_share
+import com.machankura.dedun.compose.ui.view.state.AdminLeave
+import com.machankura.dedun.compose.ui.view.state.MemberAction
+import dedun.composeapp.generated.resources.every_member_of_this_group_administers_it_there
+import dedun.composeapp.generated.resources.admin_room
+import dedun.composeapp.generated.resources.founding_members_have_no_key_package
+import dedun.composeapp.generated.resources.founding_members_invited
+import dedun.composeapp.generated.resources.invite_them
+import dedun.composeapp.generated.resources.s_took_part_in_the_key_ceremony_but_were_not_invited
+import dedun.composeapp.generated.resources.not_every_founding_member_was_invited
+import dedun.composeapp.generated.resources.admin
+import dedun.composeapp.generated.resources.admin_badge
+import dedun.composeapp.generated.resources.view_profile
 import dedun.composeapp.generated.resources.run_by_members
 import dedun.composeapp.generated.resources.parent_group
 import dedun.composeapp.generated.resources.a_subgroup
@@ -207,6 +287,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrEventDe
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomDetailRoute
 import com.machankura.dedun.compose.managers.SubgroupManager
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.mute_notifications
+import dedun.composeapp.generated.resources.mute_notifications_supporting
 import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.delete_group
 import dedun.composeapp.generated.resources.direct_message_detail
@@ -241,6 +323,8 @@ import dedun.composeapp.generated.resources.rotation_held_awaiting_signatures
 import dedun.composeapp.generated.resources.rotation_held_behind
 import dedun.composeapp.generated.resources.rotation_held_spend_open
 import dedun.composeapp.generated.resources.rotation_held_statement_open
+import dedun.composeapp.generated.resources.rotation_held_admin_change
+import dedun.composeapp.generated.resources.rotation_held_enrolling
 import dedun.composeapp.generated.resources.rotation_held_after_removal
 import dedun.composeapp.generated.resources.ask_the_group_to_sign_the_new_shares
 import dedun.composeapp.generated.resources.key_state_requested
@@ -255,8 +339,6 @@ import dedun.composeapp.generated.resources.rotation_proposing_is_taking_part
 import dedun.composeapp.generated.resources.rotation_taking_part
 import dedun.composeapp.generated.resources.rotation_no_key
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
-import androidx.compose.runtime.remember
-import androidx.compose.material3.CardDefaults
 import dedun.composeapp.generated.resources.waiting_on_s_since_s
 import dedun.composeapp.generated.resources.rotation_ended
 import dedun.composeapp.generated.resources.abandon_rotation_body
@@ -276,7 +358,6 @@ import androidx.compose.material3.AlertDialog
 import dedun.composeapp.generated.resources.disband_group
 import dedun.composeapp.generated.resources.disband_group_explainer
 import dedun.composeapp.generated.resources.group_disbanded
-import dedun.composeapp.generated.resources.group_governed_elsewhere
 import dedun.composeapp.generated.resources.member_removal_requested
 import dedun.composeapp.generated.resources.members_2
 import dedun.composeapp.generated.resources.proposals
@@ -296,6 +377,8 @@ import dedun.composeapp.generated.resources.this_device_does_not_hold_the_event
 import dedun.composeapp.generated.resources.event_s_still_unreadable
 import dedun.composeapp.generated.resources.recovered_of_event_s
 import dedun.composeapp.generated.resources.recovered_of_still_unreadable
+import dedun.composeapp.generated.resources.rotation_taking_away
+import dedun.composeapp.generated.resources.share_being_rotated_away
 import androidx.compose.material3.SnackbarHost
 import com.machankura.dedun.compose.ui.composable.widgets.LocalSnackbarHostState
 import com.machankura.dedun.compose.ui.composable.widgets.NavigateBackButton
@@ -303,6 +386,7 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.composable.widgets.ScreenStateTransition
 import com.machankura.dedun.compose.ui.theme.ConformancePreviews
 import kotlin.time.Instant
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -338,16 +422,32 @@ fun ChatRoomDetailScreen(
 
     // Read outside the click handlers: stringResource and rememberNotifier are both
     // composable, and a lambda passed to onClick is not.
+    // Read here rather than in the list's DSL, which is not composable: whether the
+    // identity can sign at all, for the one write entrance below that is not its own
+    // screen. docs/npub-sign-in.md.
+    val identityCanSign = LocalCanSign.current
     val notify = rememberNotifier(rememberCoroutineScope())
     val removalRequested = stringResource(Res.string.member_removal_requested)
     val removalLeavesLightningShare = stringResource(Res.string.member_removal_requested_lightning)
     val removalLeavesWavelengthShare = stringResource(Res.string.member_removal_requested_wavelength)
     val couldNotLeave = stringResource(Res.string.couldn_t_leave_the_group)
+    val adminChangeRequested = stringResource(Res.string.admin_change_requested)
+    val steppingDownToLeave = stringResource(Res.string.stepping_down_to_leave)
+    val changeProposed = stringResource(Res.string.change_proposed)
+    val stepDownRequested = stringResource(Res.string.step_down_requested)
+    val adminOfferSent = stringResource(Res.string.admin_offer_sent)
+    val promotionAccepted = stringResource(Res.string.promotion_accepted)
+    val adminLabel = stringResource(Res.string.admin_badge)
+    val viewProfile = stringResource(Res.string.view_profile)
+    val shareLabel = stringResource(Res.string.holds_a_share)
+    val shareBeingRotatedAwayLabel = stringResource(Res.string.share_being_rotated_away)
     val rotationRequested = stringResource(Res.string.share_rotation_requested)
     val sharesActionSent = stringResource(Res.string.shares_action_sent)
     val keyStateRequested = stringResource(Res.string.key_state_requested)
     val rotationHeldAfterRemoval = stringResource(Res.string.rotation_held_after_removal)
     val noKeyToRotate = stringResource(Res.string.rotation_no_key)
+    val foundersInvited = stringResource(Res.string.founding_members_invited)
+    val foundersHaveNoKeyPackage = stringResource(Res.string.founding_members_have_no_key_package)
 
     // Offered after removing a member who still holds a share of the room's key:
     // the removal took them out of the room, not out of the key
@@ -460,6 +560,78 @@ fun ChatRoomDetailScreen(
                 }
             }
             is ChatRoomDetailUIState.Loaded -> {
+                // The change a member row's menu asked for, while its dialog asks first.
+                var confirmingAdminChange by remember { mutableStateOf<Pair<MemberAction, HexKey>?>(null) }
+                var isLeavingAsAdmin by remember { mutableStateOf(false) }
+                val nameOf = { publicKey: HexKey ->
+                    chatRoomDetailUIState.localChatRoom.localParticipants
+                        .firstOrNull { it.participant.participantPublicKey == publicKey }
+                        ?.profile?.humanReadableNameOrPubkey()
+                        ?: publicKey.take(8)
+                }
+
+                confirmingAdminChange?.let { (action, memberPublicKey) ->
+                    ConfirmAdminChangeDialog(
+                        action = action,
+                        memberName = nameOf(memberPublicKey),
+                        keyed = chatRoomDetailUIState.governance is GovernanceStatus.Governed,
+                        rotatesFirst = chatRoomDetailUIState.shares?.generation == 0,
+                        onDismiss = { confirmingAdminChange = null },
+                        onConfirm = {
+                            confirmingAdminChange = null
+                            val room = chatRoomDetailUIState.localChatRoom
+                            val governed = chatRoomDetailUIState.governance is GovernanceStatus.Governed
+                            val onDone = { failure: String? ->
+                                notify(
+                                    failure ?: when {
+                                        governed && action == MemberAction.MAKE_ADMIN -> adminOfferSent
+                                        governed && action == MemberAction.STEP_DOWN -> stepDownRequested
+                                        governed -> changeProposed
+                                        else -> adminChangeRequested
+                                    }
+                                )
+                            }
+                            when (action) {
+                                MemberAction.MAKE_ADMIN -> chatRoomDetailViewModel.makeAdmin(room, memberPublicKey, onDone)
+                                MemberAction.REMOVE_AS_ADMIN, MemberAction.STEP_DOWN ->
+                                    chatRoomDetailViewModel.removeAsAdmin(room, memberPublicKey, onDone)
+                                MemberAction.REMOVE_FROM_GROUP -> Unit
+                            }
+                        },
+                    )
+                }
+
+                chatRoomDetailUIState.adminLeave?.takeIf { isLeavingAsAdmin }?.let { adminLeave ->
+                    LeaveAsAdminDialog(
+                        adminLeave = adminLeave,
+                        candidates = chatRoomDetailUIState.localChatRoom.localParticipants
+                            .map { it.participant.participantPublicKey }
+                            .filter { it != chatRoomDetailUIState.localChatRoom.chatRoom.userPublicKey }
+                            .map { it to nameOf(it) },
+                        onDismiss = { isLeavingAsAdmin = false },
+                        onDisband = {
+                            isLeavingAsAdmin = false
+                            chatRoomDetailViewModel.disbandGroup(
+                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                onPopBackToRoute = onPopBackToRoute,
+                                onFailed = { failure -> notify(failure ?: couldNotLeave) },
+                            )
+                        },
+                        onStepDownAndLeave = { heir ->
+                            isLeavingAsAdmin = false
+                            chatRoomDetailViewModel.stepDownAndLeave(
+                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                heir = heir,
+                                onPopBackToRoute = { route ->
+                                    notify(steppingDownToLeave)
+                                    onPopBackToRoute(route)
+                                },
+                                onFailed = { failure -> notify(failure ?: couldNotLeave) },
+                            )
+                        },
+                    )
+                }
+
                 Scaffold(
                     snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
                     topBar = {
@@ -533,6 +705,51 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
+                            // Muting is about this device and this person, not about the
+                            // group, so it sits apart from everything the group signed.
+                            // docs/notifications-and-background-sync.md, Phase 7.
+                            item(key = "mute") {
+                                val room = chatRoomDetailUIState.localChatRoom.chatRoom
+                                val muteScope = rememberCoroutineScope()
+                                // Held here as well as stored: this screen reads the room once,
+                                // so the stored value would not come back to the switch.
+                                var isMuted by rememberSaveable(room.id) {
+                                    mutableStateOf(room.notifications == ChatRoom.NOTIFICATIONS_MUTED)
+                                }
+                                SwitchRow(
+                                    headline = stringResource(Res.string.mute_notifications),
+                                    supporting = stringResource(Res.string.mute_notifications_supporting),
+                                    checked = isMuted,
+                                    enabled = true,
+                                ) { muted ->
+                                    isMuted = muted
+                                    muteScope.launch {
+                                        chatRepository.setChatRoomNotifications(
+                                            room.id,
+                                            if (muted) ChatRoom.NOTIFICATIONS_MUTED else ChatRoom.NOTIFICATIONS_ALL,
+                                        )
+                                    }
+                                }
+                            }
+
+                            // How long what the user writes here lasts. Local, like muting, and only in
+                            // a NIP-17 room: an MLS room follows the group's own retention.
+                            // docs/disappearing-messages.md, D4.
+                            if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) item(key = "disappearing") {
+                                val room = chatRoomDetailUIState.localChatRoom.chatRoom
+                                ListItem(
+                                    modifier = Modifier.minimumInteractiveComponentSize().clickable {
+                                        onNavigateToRoute.invoke(DisappearingMessagesRoute(activeUserPublicKey, room.id))
+                                    },
+                                    leadingContent = { Icon(Icons.Default.HourglassBottom, contentDescription = Decorative) },
+                                    headlineContent = { Text(stringResource(Res.string.disappearing_messages)) },
+                                    // The fixed description, not the current length: this screen reads the
+                                    // room once, so a length shown here would be stale after a change.
+                                    supportingContent = { Text(stringResource(Res.string.disappearing_messages_room_supporting)) },
+                                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = Decorative) },
+                                )
+                            }
+
                             // Directly under the signing key, because between them
                             // they are what the room *is*: the identity it signs as
                             // and whose child it is. Absent on a group that is
@@ -591,6 +808,66 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
+                            // The founding members the founding invite never
+                            // reached. Under the key and the parent, because it is
+                            // about the same thing -- who the group that made this
+                            // room is. docs/robust-group-admins.md, Phase 5.
+                            if (chatRoomDetailUIState.uninvitedFounders.isNotEmpty()) {
+                                item {
+                                    FoundingMembersCard(
+                                        title = stringResource(Res.string.not_every_founding_member_was_invited),
+                                        body = stringResource(
+                                            Res.string.s_took_part_in_the_key_ceremony_but_were_not_invited,
+                                            chatRoomDetailUIState.founderNamesFor(chatRoomDetailUIState.uninvitedFounders),
+                                        ),
+                                        actionLabel = stringResource(Res.string.invite_them),
+                                        isActionPending = chatRoomDetailViewModel.isActionPending.value,
+                                        onAction = {
+                                            chatRoomDetailViewModel.inviteFounders(chatRoomId) { invite ->
+                                                notify(
+                                                    when (invite) {
+                                                        is MarmotGroupCreation.FoundingInvite.BlockedOn -> foundersHaveNoKeyPackage
+                                                        is MarmotGroupCreation.FoundingInvite.Failed -> invite.reason
+                                                        else -> foundersInvited
+                                                    }
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+
+                            // A NIP-17 room has no admins of its own, and it is not a
+                            // group either: it is where the groups its members have
+                            // made had their ceremonies, and the same people share one
+                            // however many they make. Each group is listed with where
+                            // it stands; one with a room opens it, where its members
+                            // are admins. docs/nip17-multiple-ceremonies.md, Phase 5.
+                            if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) {
+                                item(key = "groups-made-here") {
+                                    GroupsMadeHere(
+                                        groups = chatRoomDetailUIState.groups,
+                                        onOpen = { group ->
+                                            onNavigateToRoute.invoke(
+                                                when (val status = group.status) {
+                                                    is GroupMadeHere.Status.Ready -> ChatRoomDetailRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = status.chatRoomId,
+                                                        relayHint = relayHint
+                                                    )
+                                                    // The ladder says what a group without
+                                                    // its room is still waiting on.
+                                                    else -> DkgRitualRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = chatRoomId,
+                                                        dkgSessionId = group.dkgSessionId
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            }
                             item {
                                 chatRoomDetailUIState.localChatRoom.chatRoom.description?.let {
                                     Text(
@@ -621,7 +898,7 @@ fun ChatRoomDetailScreen(
                                 item {
                                     SignedWorkRow(
                                         icon = Icons.Default.AccountBalanceWallet,
-                                        headline = chatRoomDetailUIState.localChatRoom.chatRoom.subject
+                                        headline = chatRoomDetailUIState.localChatRoom.chatRoom.title
                                             ?.let { stringResource(Res.string.s_onchain_wallet, it) }
                                             ?: stringResource(Res.string.group_wallet),
                                         supporting = chatRoomDetailUIState.groupWallet?.let { wallet ->
@@ -670,6 +947,52 @@ fun ChatRoomDetailScreen(
                                     )
                                 }
 
+                                // The group's inbox (docs/group-inbox.md, D9): on a device that
+                                // holds its key, or whose identity could set one up. A member
+                                // who is not an admin sees no row at all.
+                                chatRoomDetailUIState.inbox?.let { inbox ->
+                                    item {
+                                        GroupInboxRow(
+                                            inbox = inbox,
+                                            onClick = {
+                                                onNavigateToRoute.invoke(
+                                                    if (inbox.holdsKey) {
+                                                        GroupInboxRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = relayHint)
+                                                    } else {
+                                                        GroupInboxSettingsRoute(activeUserPublicKey = activeUserPublicKey, chatRoomId = chatRoomId, relayHint = relayHint)
+                                                    }
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+
+                                // The group's direct messages: the way to open them for an
+                                // admin, the way in once open, and for anyone else only that
+                                // the group receives them. docs/group-threshold-ecdh.md.
+                                chatRoomDetailUIState.groupDmRow?.let { row ->
+                                    item {
+                                        GroupDmRowCard(
+                                            row = row,
+                                            onClick = {
+                                                onNavigateToRoute.invoke(
+                                                    if (row is GroupDmRow.Messages) {
+                                                        com.machankura.dedun.compose.ui.composable.navigation.routes.GroupDmListRoute(
+                                                            activeUserPublicKey = activeUserPublicKey,
+                                                            chatRoomId = chatRoomId,
+                                                        )
+                                                    } else {
+                                                        GroupDmSetupRoute(
+                                                            activeUserPublicKey = activeUserPublicKey,
+                                                            chatRoomId = chatRoomId,
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+
                                 // The group's Wavelength wallet, a row per network. Its coins leave to the
                                 // group's onchain wallet on the same network, so until the group has opened
                                 // one there is nothing behind the row: it stays, disabled, and says what it
@@ -688,6 +1011,85 @@ fun ChatRoomDetailScreen(
                                                     chain = GroupWalletStatementEvent.chainName(chain),
                                                 )
                                             )
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    HorizontalDivider()
+                                }
+                            }
+
+                            // What the group says about itself on nostr and what it has
+                            // posted, as the group signed them
+                            // (docs/group-nostr-profile-and-posts.md). A
+                            // Marmot room only: the room's id is the key it signs as,
+                            // and a NIP-17 room has no key of its own to describe.
+                            // Shown to every member -- the profile is worth reading
+                            // without a share -- and the screen behind it is where a
+                            // member who holds one finds the editor.
+                            if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState != null) {
+                                item {
+                                    GroupNostrProfileRow(
+                                        groupNostrProfile = chatRoomDetailUIState.groupNostrProfile,
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                GroupNostrProfileRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    relayHint = relayHint
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
+
+                                // What the group has said publicly, as itself.
+                                item {
+                                    GroupPostsRow(
+                                        postCount = chatRoomDetailUIState.groupPosts.size,
+                                        onClick = {
+                                            onNavigateToRoute.invoke(
+                                                GroupPostsRoute(
+                                                    activeUserPublicKey = activeUserPublicKey,
+                                                    chatRoomId = chatRoomId,
+                                                    relayHint = relayHint
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
+
+                                // The untyped way in: an unsigned event, pasted. It
+                                // lands on its kind's screen above once the quorum
+                                // signs. Behind the same gate as the editors, and the
+                                // identity's: an npub-only profile cannot propose.
+                                // docs/group-nostr-profile-and-posts.md, D9.
+                                if (chatRoomDetailUIState.canProposeAsGroup && identityCanSign) {
+                                    item {
+                                        TextButton(
+                                            onClick = {
+                                                onNavigateToRoute.invoke(
+                                                    ProposeGroupEventRoute(
+                                                        activeUserPublicKey = activeUserPublicKey,
+                                                        chatRoomId = chatRoomId,
+                                                        relayHint = relayHint
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Default.DataObject,
+                                                contentDescription = Decorative
+                                            )
+
+                                            Spacer(
+                                                modifier = Modifier.width(
+                                                    MaterialTheme.spacing.space125
+                                                )
+                                            )
+
+                                            Text(stringResource(Res.string.propose_event))
                                         }
                                     }
                                 }
@@ -828,15 +1230,15 @@ fun ChatRoomDetailScreen(
                                             }
                                             if (rotation is SharesSummary.Rotation.Held) {
                                                 Text(
-                                                    text = stringResource(
-                                                        when (rotation.reason) {
-                                                            SharesSummary.Rotation.Reason.ROTATION_RUNNING -> Res.string.rotation_held_running
-                                                            SharesSummary.Rotation.Reason.AWAITING_SIGNATURES -> Res.string.rotation_held_awaiting_signatures
-                                                            SharesSummary.Rotation.Reason.BEHIND -> Res.string.rotation_held_behind
-                                                            SharesSummary.Rotation.Reason.SPEND_OPEN -> Res.string.rotation_held_spend_open
-                                                            SharesSummary.Rotation.Reason.STATEMENT_OPEN -> Res.string.rotation_held_statement_open
-                                                        }
-                                                    ),
+                                                    text = when (rotation.reason) {
+                                                        SharesSummary.Rotation.Reason.ROTATION_RUNNING -> stringResource(Res.string.rotation_held_running)
+                                                        SharesSummary.Rotation.Reason.AWAITING_SIGNATURES -> stringResource(Res.string.rotation_held_awaiting_signatures)
+                                                        SharesSummary.Rotation.Reason.BEHIND -> stringResource(Res.string.rotation_held_behind)
+                                                        SharesSummary.Rotation.Reason.ADMIN_CHANGE -> stringResource(Res.string.rotation_held_admin_change)
+                                                        SharesSummary.Rotation.Reason.ENROLLING -> stringResource(Res.string.rotation_held_enrolling, rotation.who.orEmpty())
+                                                        SharesSummary.Rotation.Reason.SPEND_OPEN -> stringResource(Res.string.rotation_held_spend_open)
+                                                        SharesSummary.Rotation.Reason.STATEMENT_OPEN -> stringResource(Res.string.rotation_held_statement_open)
+                                                    },
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -1126,10 +1528,11 @@ fun ChatRoomDetailScreen(
                             // names the ceremony they are about, never from here,
                             // which has no way to say which.
                             //
-                            // To the creation screen, which hands over to the group's
-                            // ceremony if it already has one: the ceremony screen only
-                            // shows a ceremony it is named, and this button has none
-                            // to name. See docs/ceremony-creation.md.
+                            // To the creation screen: the room's first group, or another
+                            // made by the same people beside the ones listed above
+                            // (docs/nip17-multiple-ceremonies.md). The ceremony screen
+                            // only shows a ceremony it is named, and this button has
+                            // none to name. See docs/ceremony-creation.md.
                             if (chatRoomDetailUIState.localChatRoom.chatRoom.mlsGroupState == null) {
                                 item {
                                     TextButton(
@@ -1144,14 +1547,20 @@ fun ChatRoomDetailScreen(
                                     ) {
                                         Icon(
                                             Icons.Default.Key,
-                                            contentDescription = "Shared key"
+                                            contentDescription = Decorative
                                         )
 
                                         Spacer(
                                             modifier = Modifier.width(MaterialTheme.spacing.space125)
                                         )
 
-                                        Text(stringResource(Res.string.shared_key))
+                                        Text(
+                                            if (chatRoomDetailUIState.groups.isEmpty()) {
+                                                stringResource(Res.string.shared_key)
+                                            } else {
+                                                stringResource(Res.string.new_group_with_these_members)
+                                            }
+                                        )
                                     }
                                 }
                             }
@@ -1188,7 +1597,7 @@ fun ChatRoomDetailScreen(
                                 }
                             }
 
-                            if (!chatRoomDetailUIState.isGoverned) item {
+                            item {
                                 TextButton(
                                     onClick = {
                                         // Navigate to the invite user screen...
@@ -1227,15 +1636,22 @@ fun ChatRoomDetailScreen(
                                 // keyed by the public key, which is the one thing
                                 // every row here has, and it shows the cached
                                 // profile at once while the relays refresh it.
-                                Card(
-                                    onClick = {
-                                        onNavigateToRoute.invoke(
-                                            ProfilePreviewRoute(
-                                                activeUserPublicKey = activeUserPublicKey,
-                                                profilePublicKey = localParticipant.participant.participantPublicKey
-                                            )
+                                val openProfile = {
+                                    onNavigateToRoute.invoke(
+                                        ProfilePreviewRoute(
+                                            activeUserPublicKey = activeUserPublicKey,
+                                            profilePublicKey = localParticipant.participant.participantPublicKey
                                         )
-                                    }
+                                    )
+                                }
+                                Card(
+                                    // The chevron that said so is gone from every other
+                                    // member's row; the label keeps saying it to anyone
+                                    // who cannot see the row. docs/member-row-actions.md, D7.
+                                    modifier = Modifier.semantics {
+                                        onClick(label = viewProfile) { openProfile(); true }
+                                    },
+                                    onClick = openProfile,
                                 ) {
                                     ListItem(
                                         leadingContent = {
@@ -1246,22 +1662,44 @@ fun ChatRoomDetailScreen(
                                         },
                                         trailingContent = {
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
-                                            if (chatRoomDetailUIState.canGovern && memberPublicKey != activeUserPublicKey) {
-                                                // An admin's removal of a member: a commit through the
-                                                // publish gate, applied when a relay accepts it, which is
-                                                // why the row stays until then. See docs/marmot-v2.md, Phase 7.
-                                                IconButton(
-                                                    onClick = {
+                                            val options = chatRoomDetailUIState.memberActions[memberPublicKey].orEmpty()
+                                            if (options.isNotEmpty()) {
+                                                // Every action that fits this member, open or not, decided by
+                                                // the view model from the group's state: every other member's
+                                                // row has the menu whoever is looking, and this device's own
+                                                // only when stepping down is open. An open action is a commit
+                                                // through the publish gate, applied when a relay accepts it,
+                                                // which is why the row stays as it is until then; one that is
+                                                // not opens the screen that says why. See
+                                                // docs/member-row-actions.md, D1 to D3.
+                                                MemberActionsMenu(
+                                                    options = options,
+                                                    onExplain = { action ->
+                                                        onNavigateToRoute.invoke(
+                                                            MemberActionUnavailableRoute(
+                                                                activeUserPublicKey = activeUserPublicKey,
+                                                                chatRoomId = chatRoomId,
+                                                                memberPublicKey = memberPublicKey,
+                                                                action = action,
+                                                            )
+                                                        )
+                                                    },
+                                                ) { action ->
+                                                    if (action == MemberAction.REMOVE_FROM_GROUP) {
                                                         chatRoomDetailViewModel.removeMember(
                                                             localChatRoom = chatRoomDetailUIState.localChatRoom,
                                                             memberPublicKey = memberPublicKey,
                                                         ) { failure, rotationHeld ->
-                                                            // They keep a share of the Lightning wallet's key and its seed: say so,
+                                                            // In a governed room the removal is a proposal
+                                                            // the group still has to sign. They keep a share of
+                                                            // the Lightning wallet's key and its seed: say so,
                                                             // since only a new wallet takes it from them (Phase 14).
+                                                            val governed = chatRoomDetailUIState.governance is GovernanceStatus.Governed
                                                             val holdsShare = memberPublicKey.lowercase() in chatRoomDetailUIState.lightningParticipants
                                                             val holdsWavelengthShare = memberPublicKey.lowercase() in chatRoomDetailUIState.wavelengthParticipants
                                                             notify(
                                                                 failure ?: when {
+                                                                    governed -> changeProposed
                                                                     holdsWavelengthShare -> removalLeavesWavelengthShare
                                                                     holdsShare -> removalLeavesLightningShare
                                                                     rotationHeld -> rotationHeldAfterRemoval
@@ -1269,17 +1707,15 @@ fun ChatRoomDetailScreen(
                                                                 }
                                                             )
                                                         }
+                                                    } else {
+                                                        confirmingAdminChange = action to memberPublicKey
                                                     }
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.PersonRemove,
-                                                        contentDescription = stringResource(Res.string.remove_from_group)
-                                                    )
                                                 }
                                             } else {
+                                                // This device's own row, with nothing open on it.
                                                 Icon(
                                                     Icons.Default.ChevronRight,
-                                                    contentDescription = "View profile"
+                                                    contentDescription = viewProfile
                                                 )
                                             }
                                         },
@@ -1289,8 +1725,27 @@ fun ChatRoomDetailScreen(
                                             )
                                         },
                                         supportingContent = {
+                                            // Two facts, shown apart: when they disagree, a share is
+                                            // still owed or still to be rotated away.
+                                            // docs/member-admin-promotion.md, D2.
                                             val memberPublicKey = localParticipant.participant.participantPublicKey
+                                            // A share a running rotation is taking away says so, so the
+                                            // window D10 names reads as closing, not only open
+                                            // (docs/admin-change-rotation.md, Phase 7).
+                                            val beingRotatedAway = chatRoomDetailUIState.shares?.running?.takingAway?.containsKey(memberPublicKey) == true
+                                            val roles = listOfNotNull(
+                                                adminLabel.takeIf { localParticipant.participant.adminAt != null },
+                                                (if (beingRotatedAway) shareBeingRotatedAwayLabel else shareLabel)
+                                                    .takeIf { memberPublicKey in chatRoomDetailUIState.shareHolders },
+                                            )
                                             Column {
+                                                if (roles.isNotEmpty()) {
+                                                    Text(
+                                                        text = roles.joinToString(" · "),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                }
                                                 localParticipant.profile?.about?.let {
                                                     Text(
                                                         text = it
@@ -1348,16 +1803,27 @@ fun ChatRoomDetailScreen(
                                 HorizontalDivider()
                             }
 
-                            if (chatRoomDetailUIState.isGoverned && !chatRoomDetailUIState.isDisbanded) {
+                            // Whether the room's changes need the group's signature, and the
+                            // switch that makes them. docs/member-admin-promotion.md, Phase 4b.
+                            // An offer to this account to become an admin, with its one
+                            // decision. docs/member-admin-promotion.md, Phase 8.
+                            chatRoomDetailUIState.promotionOffer?.let { (offerId, from) ->
                                 item {
-                                    Text(
-                                        text = stringResource(Res.string.group_governed_elsewhere),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(
-                                            horizontal = MaterialTheme.spacing.containerPadding,
-                                            vertical = MaterialTheme.spacing.compactPadding,
-                                        )
+                                    PromotionOfferCard(fromName = nameOf(from)) {
+                                        chatRoomDetailViewModel.acceptPromotion(chatRoomDetailUIState.localChatRoom, offerId) { failure ->
+                                            notify(failure ?: promotionAccepted)
+                                        }
+                                    }
+                                }
+                            }
+
+                            chatRoomDetailUIState.governance?.let { governance ->
+                                item {
+                                    GovernanceSection(
+                                        governance = governance,
+                                        canGovern = chatRoomDetailUIState.canGovern,
+                                        nameOf = nameOf,
+                                        me = chatRoomDetailUIState.localChatRoom.chatRoom.userPublicKey,
                                     )
                                 }
                             }
@@ -1424,11 +1890,17 @@ fun ChatRoomDetailScreen(
                                     // Disabled after we leave, and after the group ends.
                                     enabled = chatRoomDetailUIState.localChatRoom.chatRoom.leftGroupAt == null && !chatRoomDetailUIState.isDisbanded,
                                     onClick = {
-                                        chatRoomDetailViewModel.leaveGroup(
-                                            localChatRoom = chatRoomDetailUIState.localChatRoom,
-                                            onPopBackToRoute = onPopBackToRoute,
-                                            onFailed = { failure -> notify(failure ?: couldNotLeave) },
-                                        )
+                                        // An admin cannot simply leave; they step down first, and
+                                        // the only admin hands over. A keyed room's admin has no way
+                                        // to yet, and is told so by the refusal leaveGroup reports.
+                                        when (chatRoomDetailUIState.adminLeave) {
+                                            AdminLeave.STEP_DOWN_FIRST, AdminLeave.PICK_HEIR -> isLeavingAsAdmin = true
+                                            else -> chatRoomDetailViewModel.leaveGroup(
+                                                localChatRoom = chatRoomDetailUIState.localChatRoom,
+                                                onPopBackToRoute = onPopBackToRoute,
+                                                onFailed = { failure -> notify(failure ?: couldNotLeave) },
+                                            )
+                                        }
                                     }
                                 ) {
                                     Icon(
@@ -1898,8 +2370,8 @@ private fun SubgroupCard(
             },
             headlineContent = {
                 Text(
-                    text = subgroup.room?.chatRoom?.subject
-                        ?: subgroup.name
+                    text = (subgroup.room?.chatRoom?.subject ?: subgroup.name)
+                        ?.let(MarmotGroupName::display)
                         ?: stringResource(Res.string.a_subgroup)
                 )
             },
@@ -1918,6 +2390,7 @@ private fun SubgroupCard(
                             else -> stringResource(Res.string.created_you_are_not_a_member)
                         }
                     )
+
                     // What the parent decided about its wallet, from the certificate:
                     // founding history, like the name the row falls back to.
                     walletPolicyLabel(subgroup.walletPolicy, subgroup.guardianDelay)?.let { Text(it) }
@@ -2385,6 +2858,12 @@ private fun RotationRunningCard(running: SharesSummary.Running, onAbandon: () ->
                 ),
                 style = MaterialTheme.typography.bodyMedium
             )
+            if (running.takingAway.isNotEmpty()) {
+                Text(
+                    stringResource(Res.string.rotation_taking_away, running.takingAway.values.sorted().joinToString(", ")),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
             if (running.waitingOn.isNotEmpty()) {
                 Text(
                     stringResource(Res.string.waiting_on_s_since_s, running.waitingOn.joinToString(", "), running.since.toFormattedTimeAndDateString()),
@@ -2400,6 +2879,285 @@ private fun RotationRunningCard(running: SharesSummary.Running, onAbandon: () ->
                 ) {
                     Text(stringResource(Res.string.abandon_rotation))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Something about this room's founding members that is not as the ceremony
+ * left it -- founders its invite never reached -- and, where this device can,
+ * the one action that repairs it.
+ *
+ * On the error container: the room works, but not as the group that made it
+ * agreed, and that is worth more than a supporting line. docs/robust-group-admins.md,
+ * Phase 5.
+ */
+@Composable
+private fun FoundingMembersCard(
+    title: String,
+    body: String,
+    actionLabel: String?,
+    isActionPending: Boolean,
+    onAction: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.containerPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap),
+            ) {
+                Icon(Icons.Default.AdminPanelSettings, contentDescription = Decorative)
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+            }
+
+            Text(text = body, style = MaterialTheme.typography.bodyMedium)
+
+            actionLabel?.let { label ->
+                TextButton(
+                    onClick = onAction,
+                    enabled = !isActionPending,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ),
+                ) {
+                    Text(label)
+                }
+            }
+        }
+    }
+}
+
+/** The founders [publicKeys] names, as the screen calls them, in a stable order. */
+private fun ChatRoomDetailUIState.Loaded.founderNamesFor(publicKeys: Set<HexKey>): String =
+    publicKeys.map { founderNames[it] ?: it }.sorted().joinToString(", ")
+
+/**
+ * The row that opens the group's inbox, with how much is unread; or, where this device holds no
+ * key yet, the way to set one up or the ceremony making it. docs/group-inbox.md.
+ */
+@Composable
+private fun GroupInboxRow(
+    inbox: InboxRowSummary,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            leadingContent = {
+                Icon(Icons.Default.Mail, contentDescription = Decorative)
+            },
+            trailingContent = {
+                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+            },
+            headlineContent = {
+                Text(text = stringResource(if (inbox.holdsKey || inbox.ceremonyRunning) Res.string.inbox else Res.string.set_up_an_inbox))
+            },
+            supportingContent = {
+                Text(
+                    text = when {
+                        inbox.holdsKey -> when (inbox.unread) {
+                            0 -> stringResource(Res.string.no_new_messages)
+                            1 -> stringResource(Res.string.one_new_message)
+                            else -> stringResource(Res.string.n_new_messages, inbox.unread)
+                        }
+                        inbox.ceremonyRunning -> stringResource(Res.string.the_admins_are_making_the_inbox_key)
+                        else -> stringResource(Res.string.let_anyone_on_nostr_write_to_the_group_privately)
+                    }
+                )
+            }
+        )
+    }
+}
+
+/** A group's direct messages, on its screen (docs/group-threshold-ecdh.md, Phases 6 and 8). */
+@Composable
+private fun GroupDmRowCard(
+    row: GroupDmRow,
+    onClick: () -> Unit,
+) {
+    val headline = when (row) {
+        GroupDmRow.OpenMessages -> stringResource(Res.string.open_the_groups_messages)
+        is GroupDmRow.Messages -> stringResource(Res.string.group_messages)
+        GroupDmRow.ReceivesMessages -> stringResource(Res.string.this_group_receives_direct_messages)
+    }
+    val supporting = when (row) {
+        GroupDmRow.OpenMessages -> stringResource(Res.string.nobody_can_write_to_the_group_yet)
+        is GroupDmRow.Messages ->
+            if (row.unread == 0) stringResource(Res.string.nothing_unread) else stringResource(Res.string.n_unread, row.unread)
+        GroupDmRow.ReceivesMessages -> stringResource(Res.string.only_its_admins_read_them)
+    }
+    val content: @Composable () -> Unit = {
+        ListItem(
+            leadingContent = { Icon(Icons.Default.Mail, contentDescription = Decorative) },
+            trailingContent = if (row == GroupDmRow.ReceivesMessages) null else {
+                { Icon(Icons.Default.ChevronRight, contentDescription = Decorative) }
+            },
+            headlineContent = { Text(text = headline) },
+            supportingContent = { Text(text = supporting) },
+        )
+    }
+    if (row == GroupDmRow.ReceivesMessages) {
+        Card(modifier = Modifier.fillMaxWidth()) { content() }
+    } else {
+        Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) { content() }
+    }
+}
+
+/**
+ * The row on the group's screen that leads to its nostr profile: what the group is
+ * called and its nostr address, or that this device holds no profile for it. The
+ * signing-key card's shape, since both are the group's identity rather than its
+ * members' business.
+ */
+@Composable
+private fun GroupNostrProfileRow(
+    groupNostrProfile: GroupNostrProfile?,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            leadingContent = {
+                Icon(Icons.Default.Badge, contentDescription = Decorative)
+            },
+            trailingContent = {
+                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+            },
+            headlineContent = {
+                Text(text = stringResource(Res.string.nostr_profile))
+            },
+            supportingContent = {
+                Text(
+                    text = groupNostrProfile?.let { profile ->
+                        listOfNotNull(
+                            profile.name() ?: stringResource(Res.string.no_name_on_this_profile),
+                            profile.nip05()
+                        ).joinToString(" · ")
+                    } ?: stringResource(Res.string.not_described_yet),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        )
+    }
+}
+
+/**
+ * The row on the group's screen that leads to its posts, counting them. A count
+ * rather than the newest post: the posts screen is where they are read whole, and
+ * a quote here would be the words twice with the second copy cut short.
+ */
+@Composable
+private fun GroupPostsRow(
+    postCount: Int,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
+    ) {
+        ListItem(
+            leadingContent = {
+                Icon(Icons.Default.Campaign, contentDescription = Decorative)
+            },
+            trailingContent = {
+                Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+            },
+            headlineContent = {
+                Text(text = stringResource(Res.string.posts))
+            },
+            supportingContent = {
+                Text(
+                    text = when (postCount) {
+                        0 -> stringResource(Res.string.no_posts_yet)
+                        1 -> stringResource(Res.string.one_post)
+                        else -> stringResource(Res.string.n_posts, postCount)
+                    }
+                )
+            }
+        )
+    }
+}
+
+/**
+ * The groups a NIP-17 room's members have made in it, each with where it stands.
+ *
+ * The same people share one NIP-17 room however many groups they make, so the room
+ * is not the group: each group is a ceremony held here and, once it has a key, a
+ * room of its own. This used to be one admin-room card, which showed the newest
+ * group and hid the rest (docs/nip17-multiple-ceremonies.md, Phase 5).
+ */
+@Composable
+internal fun GroupsMadeHere(
+    groups: List<GroupMadeHere>,
+    onOpen: (GroupMadeHere) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.relatedGap)
+    ) {
+        Text(
+            text = stringResource(Res.string.groups),
+            style = MaterialTheme.typography.labelMedium
+        )
+
+        if (groups.isEmpty()) {
+            EmptyState(
+                message = stringResource(Res.string.no_groups_have_been_made_in_this_conversation_yet),
+                icon = Icons.Default.AdminPanelSettings,
+            )
+        }
+
+        val unnamed = stringResource(Res.string.an_unnamed_group)
+        groups.forEach { group ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpen(group) }
+            ) {
+                ListItem(
+                    leadingContent = {
+                        // The status is said beside it, so the icon only echoes it.
+                        Icon(
+                            imageVector = when (group.status) {
+                                is GroupMadeHere.Status.Ready -> Icons.Default.AdminPanelSettings
+                                else -> Icons.Default.Key
+                            },
+                            contentDescription = Decorative
+                        )
+                    },
+                    trailingContent = {
+                        Icon(Icons.Default.ChevronRight, contentDescription = Decorative)
+                    },
+                    headlineContent = {
+                        Text(text = group.name?.takeIf { it.isNotBlank() }?.let(MarmotGroupName::display) ?: unnamed)
+                    },
+                    supportingContent = {
+                        Text(
+                            text = when (group.status) {
+                                GroupMadeHere.Status.KeyCeremonyRunning ->
+                                    stringResource(Res.string.key_ceremony_in_progress)
+                                GroupMadeHere.Status.WaitingForRoom ->
+                                    stringResource(Res.string.waiting_for_its_room)
+                                is GroupMadeHere.Status.Ready ->
+                                    stringResource(Res.string.every_member_of_this_group_administers_it_there)
+                            }
+                        )
+                    }
+                )
             }
         }
     }

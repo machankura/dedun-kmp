@@ -89,6 +89,12 @@ interface FrostSigningRepository {
     suspend fun canSign(chatRoomId: String): Boolean
 
     /**
+     * What the signing screen says beside a proposal: for a reply from the group's inbox, its
+     * words, who it goes to and what could not be checked (docs/group-inbox.md, D12).
+     */
+    suspend fun proposalNotes(chatRoomId: String, sessionId: String, events: List<Event>): List<String> = emptyList()
+
+    /**
      * Opens a session asking the group to sign an event with these fields. The
      * author is the room's own key, not the proposer's, and is filled in here --
      * the room's id, since signing runs at the path the room was derived at.

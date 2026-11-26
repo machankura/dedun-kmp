@@ -30,7 +30,7 @@ class FrostSigningMembersTest {
         chatRoom = ChatRoom(
             id = "11".repeat(32),
             userPublicKey = alice,
-            subject = "#Ekklesia",
+            subject = "Ekklesia",
             description = null,
             mlsGroupState = null,
         ),

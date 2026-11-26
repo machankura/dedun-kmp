@@ -14,6 +14,8 @@ import fr.acinq.phoenix.managers.NodeParamsManager
 import fr.acinq.phoenix.managers.nostrPrivateKey
 import fr.acinq.phoenix.managers.nostrPublicKeyHex
 import fr.acinq.phoenix.security.NostrCredential
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCodeKeys
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode as Code
 
 /**
  * A profile this device holds something for, as listed before any of them is started.
@@ -39,6 +41,16 @@ sealed interface StoredIdentity {
     val nostrPublicKey: HexKey
 
     /**
+     * A profile with words in `seed.dat`, and so a Lightning node: a typed [Mnemonic], or a
+     * [RecoveryCode] whose code derives the words. Starting one starts its node, whichever it
+     * is (docs/giza-second-batch.md, Phase 2c).
+     */
+    sealed interface Seeded : StoredIdentity {
+        val userWallet: UserWallet
+        val privateKey: PrivateKey
+    }
+
+    /**
      * A key the device also holds a seed for. The key is the credential's, so that
      * activating this profile does not depend on the node to learn who it is; the seed
      * is the wallet attached to it, and its id is the wallet's -- `hash160(nodeId)`, as
@@ -46,13 +58,30 @@ sealed interface StoredIdentity {
      * metadata by that id and nothing has to move.
      */
     data class Mnemonic(
-        val userWallet: UserWallet,
-        val privateKey: PrivateKey,
-    ) : StoredIdentity {
+        override val userWallet: UserWallet,
+        override val privateKey: PrivateKey,
+    ) : Seeded {
         override val id: WalletId get() = userWallet.walletId
         override val kind: IdentityKind get() = IdentityKind.Mnemonic
         override val nostrPublicKey: HexKey = privateKey.nostrPublicKeyHex()
         override fun toString(): String = "StoredIdentity.Mnemonic(id=$id, npub=$nostrPublicKey, key=<redacted>)"
+    }
+
+    /**
+     * A [Mnemonic] whose 24 words a recovery code derives, and the code. Everything a
+     * phrase profile is, this is too -- same id, same key, same seed -- and the code is the
+     * one thing more: what the person wrote down, which the words cannot give back. Listed
+     * only when [code] derives [userWallet]'s words; see [merge].
+     */
+    data class RecoveryCode(
+        override val userWallet: UserWallet,
+        val code: Code,
+        override val privateKey: PrivateKey,
+    ) : Seeded {
+        override val id: WalletId get() = userWallet.walletId
+        override val kind: IdentityKind get() = IdentityKind.RecoveryCode
+        override val nostrPublicKey: HexKey = privateKey.nostrPublicKeyHex()
+        override fun toString(): String = "StoredIdentity.RecoveryCode(id=$id, npub=$nostrPublicKey, key=<redacted>)"
     }
 
     data class NostrSecret(
@@ -125,10 +154,18 @@ sealed interface StoredIdentity {
          * A seed with no credential at all -- the repair failed to write, or a crash fell
          * between the seed writer's two files -- is listed as it always was, with its key
          * derived from the words. A failed write must never hide a wallet.
+         *
+         * Last, [codes] are attached. A [Mnemonic] whose id has a code that derives its words
+         * becomes a [RecoveryCode]; a code that derives other words than the ones beside it
+         * is dropped with a log line, and the profile stays the phrase every build reads it
+         * as -- two files that disagree mean one is wrong, and `seed.dat` is the one every
+         * build trusts. A code with no seed at all attaches to nothing. See
+         * docs/recovery-code-v3.md, Phase 3.
          */
         fun merge(
             wallets: Map<WalletId, UserWallet>,
             credentials: Map<HexKey, NostrCredential>,
+            codes: Map<WalletId, Code> = emptyMap(),
         ): Map<WalletId, StoredIdentity> {
             val walletsByPublicKey = wallets.values.associateBy { nostrPublicKeyOf(it.words) }
             val merged = LinkedHashMap<WalletId, StoredIdentity>()
@@ -155,8 +192,32 @@ sealed interface StoredIdentity {
                     merged[wallet.walletId] = mnemonic(wallet)
                 }
             }
+            codes.forEach { (id, code) ->
+                val phrase = merged[id] as? Mnemonic ?: return@forEach
+                if (RecoveryCodeKeys.words(code) == phrase.userWallet.words) {
+                    merged[id] = RecoveryCode(phrase.userWallet, code, phrase.privateKey)
+                } else {
+                    log.w { "the recovery code for wallet=$id does not derive its words; listing it as its phrase" }
+                }
+            }
             return merged
         }
+
+        /**
+         * The codes `recovery-codes.dat` holds, parsed. A stored code that does not parse as a
+         * valid code -- a file edited by hand, a bug -- is dropped with a log line: it derives
+         * nothing, and its profile is still the phrase in `seed.dat`.
+         */
+        fun parseCodes(stored: Map<WalletId, String>): Map<WalletId, Code> =
+            stored.mapNotNull { (id, text) ->
+                when (val parsed = Code.parse(text)) {
+                    is Code.Parse.Valid -> id to parsed.code
+                    else -> {
+                        log.w { "the stored recovery code for wallet=$id does not parse; ignoring it" }
+                        null
+                    }
+                }
+            }.toMap()
 
         private val log = Logger.withTag("StoredIdentity")
     }

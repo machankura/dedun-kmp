@@ -29,6 +29,7 @@
 
         <activity
             android:exported="true"
+            android:launchMode="singleTop"
             android:name="com.machankura.dedun.android.MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -36,6 +37,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver
+            android:name="com.machankura.dedun.compose.notifications.NotificationActionReceiver"
+            android:exported="false" />
+
+        <service
+            android:name="com.machankura.dedun.android.background.StayConnectedService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Holds the connections to the user's Nostr relays open so that end-to-end encrypted messages arrive while the app is closed, at the user's request." />
+        </service>
     </application>
 
 </manifest>

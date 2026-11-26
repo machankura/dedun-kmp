@@ -13,7 +13,6 @@ import com.machankura.dedun.compose.network.platformHttpClientEngineFactory
 import com.machankura.dedun.compose.ui.composable.navigation.DedunNavHost
 import com.machankura.dedun.compose.ui.composable.widgets.ProvideSnackbarHost
 import com.machankura.dedun.compose.ui.theme.DedunTheme
-import fr.acinq.phoenix.PhoenixGlobal
 
 /**
  * Coil's default ktor fetcher builds a bare `HttpClient()`, whose engine is whichever the
@@ -26,8 +25,7 @@ private val imageHttpClient by lazy { HttpClient(platformHttpClientEngineFactory
 @Composable
 fun DedunApp(
     navController: NavHostController,
-    dedunGlobal: DedunGlobal,
-    phoenixGlobal: PhoenixGlobal
+    runtime: DedunRuntime,
 ) {
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
@@ -48,8 +46,7 @@ fun DedunApp(
             // every composable between it and the Scaffold.
             ProvideSnackbarHost {
                 DedunNavHost(
-                    dedunGlobal = dedunGlobal,
-                    phoenixGlobal = phoenixGlobal,
+                    runtime = runtime,
                     navController = navController
                 )
             }

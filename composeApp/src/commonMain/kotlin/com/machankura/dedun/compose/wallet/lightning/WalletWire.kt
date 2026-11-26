@@ -136,7 +136,7 @@ object WalletWire {
     @Serializable
     /**
      * [depositor] is the id of the depositor statement the invoice is issued against: the asking member's
-     * 30339, or -- with [contact] -- the contact's 30396, asked for by any member (`docs/non-member-deposits.md`, D10).
+     * 30339, or -- with [contact] -- the contact's 30426, asked for by any member (`docs/non-member-deposits.md`, D10).
      */
     data class InvoiceRequest(val wallet: String, val requestId: String, val amountMsat: Long? = null, val description: String, val depositor: String? = null, val contact: String? = null)
 

@@ -95,6 +95,14 @@ sealed interface DkgRitualUIState {
          */
         val isRoomCreated: Boolean = false,
         /**
+         * The other groups the same people have made in this room, by name, when
+         * this ceremony is a group's own. The room's id is derived from its members,
+         * so a second group they make is held where the first was; joining one is
+         * not joining the other, and the join screen says so
+         * (docs/nip17-multiple-ceremonies.md).
+         */
+        val otherGroups: List<String> = emptyList(),
+        /**
          * The session asking the parent to certify, while it is running.
          *
          * Runs in the *parent's* room rather than this one, so it is watched

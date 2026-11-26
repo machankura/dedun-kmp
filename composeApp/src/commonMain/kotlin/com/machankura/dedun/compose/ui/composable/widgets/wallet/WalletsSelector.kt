@@ -194,7 +194,7 @@ private fun AvailableWalletView(
                         Text(text = npub, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.displayMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp))
                     }
                     val held = when (identity) {
-                        is StoredIdentity.Mnemonic -> Res.string.wallet
+                        is StoredIdentity.Seeded -> Res.string.wallet
                         is StoredIdentity.NostrPublic -> Res.string.read_only
                         is StoredIdentity.NostrSecret -> null
                     }

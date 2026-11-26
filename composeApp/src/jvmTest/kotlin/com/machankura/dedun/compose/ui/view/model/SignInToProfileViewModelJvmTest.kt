@@ -10,6 +10,10 @@ import com.machankura.dedun.compose.identity.IdentityWriter
 import com.machankura.dedun.compose.identity.SignInCredential
 import com.machankura.dedun.compose.identity.StoredIdentity
 import com.machankura.dedun.compose.repository.NostrRepository
+import com.machankura.dedun.compose.identity.recoverycode.RecoveryCode
+import com.machankura.dedun.compose.ui.view.state.SignInToProfileUIState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import kotlin.test.assertIs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -49,11 +53,13 @@ class SignInToProfileViewModelJvmTest {
         nostrKeyOutcome: () -> IdentityWriter.WriteNostrCredentialResult = { IdentityWriter.WriteNostrCredentialResult.Written(id) },
         publicKeyOutcome: () -> IdentityWriter.WriteNostrCredentialResult = { IdentityWriter.WriteNostrCredentialResult.Written(id) },
         seedOutcome: ((WalletId) -> Unit, (WritingSeedState.Error) -> Unit) -> Unit = { onWritten, _ -> onWritten(id) },
+        codeOutcome: () -> IdentityWriter.WriteRecoveryCodeResult = { IdentityWriter.WriteRecoveryCodeResult.Written(id, isNew = true) },
     ) = SignInToProfileViewModel(
         nostrRepository = recorder,
         writeNostrKey = { recorder.effects += "writeNostrKey"; nostrKeyOutcome() },
         writeNostrPublicKey = { recorder.effects += "writeNostrPublicKey"; publicKeyOutcome() },
         writeRecoveryPhrase = { _, onWritten, onError -> recorder.effects += "writeRecoveryPhrase"; seedOutcome(onWritten, onError) },
+        writeRecoveryCode = { recorder.effects += "writeRecoveryCode"; codeOutcome() },
     )
 
     @Test
@@ -141,5 +147,58 @@ class SignInToProfileViewModelJvmTest {
     @Test
     fun `both credentials of one key plant the same account`() {
         assertEquals(StoredIdentity.nostrPublicKeyOf(words), nostrSecret.nostrPublicKey)
+    }
+
+    // --- recovery codes (docs/recovery-code-v3.md, Phase 5) ---
+
+    private val code = (RecoveryCode.parse("LBZC-MYTK-E9P3-7C7B-AHJN-KX79-22CY-WAY7-K7QZ") as RecoveryCode.Parse.Valid).code
+    private val recoveryCode = SignInCredential.RecoveryCode(code, publicKey)
+
+    @Test
+    fun `a recovery code goes through the code writer and plants the same account`() = runBlocking {
+        val recorder = Recorder()
+
+        val outcome = viewModel(recorder).commit(recoveryCode)
+
+        assertEquals(SignInToProfileViewModel.Outcome.SignedIn(id), outcome)
+        assertEquals(listOf("writeRecoveryCode", "signInToProfile:$publicKey"), recorder.effects)
+    }
+
+    @Test
+    fun `a code already on the device is the same refusal`() = runBlocking {
+        val recorder = Recorder()
+
+        val outcome = viewModel(recorder, codeOutcome = { IdentityWriter.WriteRecoveryCodeResult.AlreadyExists(alreadyHere) }).commit(recoveryCode)
+
+        assertEquals(SignInToProfileViewModel.Outcome.Failed(CredentialProblem.AlreadyOnThisDevice, alreadyHere), outcome)
+        assertEquals(listOf("writeRecoveryCode"), recorder.effects)
+    }
+
+    /**
+     * A typo is offered and not applied: the field keeps what was typed and the screen stays
+     * on the field until the suggestion is accepted, and accepting it goes to the confirm
+     * step -- where the npub is shown -- rather than straight to a write.
+     */
+    @Test
+    fun `a located typo waits for a press, and the press goes to the confirm step`() {
+        val recorder = Recorder()
+        val viewModel = viewModel(recorder)
+        val field = viewModel.signInToProfileFormState.textFieldForm.textFieldState
+        val typed = "LBTP-WJRN-FXBT-U8KT-ZP5P-AQN9-XK3J-K3CV-2TB5"
+        field.setTextAndPlaceCursorAtEnd(typed)
+
+        viewModel.recognise()
+
+        assertEquals(CredentialProblem.RecoveryCodeTypo, viewModel.inputProblem.value)
+        assertEquals(typed, field.text.toString())
+        assertIs<SignInToProfileUIState.InputPrompt>(viewModel.uiState.value)
+
+        viewModel.acceptSuggestion()
+
+        assertEquals("LBTP-WJRN-FXBT-U8KT-Z45P-AQN9-XK3J-K3CV-2TB5", field.text.toString())
+        val confirm = assertIs<SignInToProfileUIState.Confirm>(viewModel.uiState.value)
+        assertIs<SignInCredential.RecoveryCode>(confirm.credential)
+        assertEquals(null, viewModel.typoSuggestion.value)
+        assertEquals(emptyList(), recorder.effects, "nothing written by accepting a suggestion")
     }
 }

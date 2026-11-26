@@ -1,9 +1,9 @@
 package com.machankura.dedun.compose.managers
 
+import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import co.touchlab.kermit.Logger
 import com.vitorpamplona.marmot.GroupEventResult
 import com.vitorpamplona.marmot.foundation.appEvents.MarmotAppEvent
-import com.vitorpamplona.marmot.groups.currentAdminIdentities
 import com.vitorpamplona.marmot.groups.currentGroupState
 import com.vitorpamplona.marmot.mip03GroupMessages.GroupEventEncryption
 import com.vitorpamplona.mls.codec.TlsReader
@@ -128,15 +128,20 @@ object MarmotInboundManager {
      * the room out. Both are a terminal state on the other side too -- a removed
      * member cannot decrypt the next epoch, and a disbanded group refuses every
      * later event -- so nothing is lost by closing here.
+     *
+     * [priorAdmins] is the group's admin set before the commit, read off the
+     * group's state by the caller. With it, promotions and demotions are captioned
+     * too; without it, the flags are corrected and nothing is said about them. See
+     * docs/member-admin-promotion.md, Phase 2.
      */
     suspend fun processGroupMembershipChanges(
         database: DedunDatabase,
         localChatRoom: LocalChatRoom,
         mlsGroup: MlsGroup,
         announceAdditions: Boolean = true,
+        priorAdmins: Set<HexKey>? = null,
     ) {
         logger.d("processGroupMembershipChanges")
-        val adminPublicKeys = mlsGroup.currentAdminIdentities()
 
         val commitedGroupMembers = Participant.fromMlsGroup(
             mlsGroup = mlsGroup,
@@ -153,35 +158,13 @@ object MarmotInboundManager {
         }
         logger.d("excludedParticipants: $excludedParticipants")
         val existingParticipantPublicKeys = localChatRoom.localParticipants.map { it.participant.participantPublicKey }
+        // Admin flags are not written here: `AdminFlags.reconcile` below reads the
+        // rows this function leaves and flags them from the group's policy, the
+        // same call the Welcome and the room's creation make.
         val newParticipants = commitedGroupMembers.filter { committedGroupMember ->
             existingParticipantPublicKeys.contains(committedGroupMember.participantPublicKey).not()
-        }.map { newParticipant ->
-            newParticipant.copy(
-                adminAt = if (adminPublicKeys.contains(newParticipant.participantPublicKey)) {
-                    Clock.System.now()
-                } else {
-                    null
-                }
-            )
         }
         logger.d("newParticipants: $newParticipants")
-        val removedAdmins = localChatRoom.localParticipants.filter { localParticipant ->
-            localParticipant.participant.adminAt != null && !adminPublicKeys.contains(localParticipant.participant.participantPublicKey)
-        }.map { localParticipant ->
-            localParticipant.participant.copy(
-                adminAt = null
-            )
-        }
-        logger.d("removedAdmins: $removedAdmins")
-
-        val graduatedAdmins = localChatRoom.localParticipants.filter { localParticipant ->
-            localParticipant.participant.adminAt == null && adminPublicKeys.contains(localParticipant.participant.participantPublicKey)
-        }.map { localParticipant ->
-            localParticipant.participant.copy(
-                adminAt = Clock.System.now()
-            )
-        }
-        logger.d("graduatedAdmins: $graduatedAdmins")
 
         // Placeholder profiles for new participants...
         newParticipants.forEach { newParticipant ->
@@ -246,10 +229,9 @@ object MarmotInboundManager {
             )
         }
         // Handle membership changes...
-        database.participantDao().upsert(removedAdmins)
         database.participantDao().delete(excludedParticipants)
         database.participantDao().upsert(newParticipants)
-        database.participantDao().upsert(graduatedAdmins)
+        AdminFlags.reconcile(database, localChatRoom.chatRoom.id, mlsGroup)
 
         val userPublicKey = localChatRoom.chatRoom.userPublicKey
         val disbanded = mlsGroup.currentGroupState().isDisbanded
@@ -270,6 +252,25 @@ object MarmotInboundManager {
                     "${memberName(database, participant.participantPublicKey)} left the group")
             }
 
+        // Who governs the room, from the group's admin set before and after this
+        // commit -- never from the `adminAt` flags, which a room made before
+        // Phase 1 could have wrong. Only for accounts still in the tree: one that
+        // left took its admin rights with it, and "left the group" says so already.
+        if (priorAdmins != null && !disbanded && !removedUs) {
+            val adminPublicKeys = mlsGroup.currentAdminIdentities()
+            val members = committedGroupMembersPublicKeys.toSet()
+            (priorAdmins - adminPublicKeys).filter { it in members }.sorted().forEach { demoted ->
+                announceLine(database, localChatRoom, ChatMessage.TYPE_ADMIN_REMOVED,
+                    if (demoted == userPublicKey) "You are no longer an admin"
+                    else "${memberName(database, demoted)} is no longer an admin")
+            }
+            (adminPublicKeys - priorAdmins).filter { it in members }.sorted().forEach { promoted ->
+                announceLine(database, localChatRoom, ChatMessage.TYPE_ADMIN_ADDED,
+                    if (promoted == userPublicKey) "You are now an admin"
+                    else "${memberName(database, promoted)} is now an admin")
+            }
+        }
+
         when {
             disbanded -> announceLine(database, localChatRoom, ChatMessage.TYPE_GROUP_DISBANDED, "The group was disbanded")
             removedUs -> announceLine(database, localChatRoom, ChatMessage.TYPE_MEMBER_LEFT, "You were removed from the group")
@@ -277,6 +278,14 @@ object MarmotInboundManager {
         if ((disbanded || removedUs) && localChatRoom.chatRoom.leftGroupAt == null) {
             database.chatRoomDao().upsert(localChatRoom.chatRoom.copy(leftGroupAt = Clock.System.now()))
         }
+
+        // An admin no longer: this device lets go of the group's inbox (docs/group-inbox.md, D14).
+        GroupInboxManager.forgetIfNotAdmin(
+            database = database,
+            chatRoomId = localChatRoom.chatRoom.id,
+            userPublicKey = userPublicKey,
+            stillAdmin = !disbanded && !removedUs && userPublicKey in mlsGroup.currentAdminIdentities(),
+        )
 
         // A member added since this profile said where the group pays it has never seen
         // that: send it again, after the commit, so it goes out at the epoch they can read.
@@ -296,6 +305,45 @@ object MarmotInboundManager {
                 else Contacts.announceIfNeeded(database, localChatRoom.chatRoom.id, userPublicKey)
             }.onFailure { logger.e("Couldn't say this device reads contacts", it) }
         }
+    }
+
+    /**
+     * The participant rows whose `adminAt` disagrees with [adminPublicKeys], each
+     * corrected: flagged now if the group names them, cleared if it does not. Rows
+     * that already agree are left out, so a flag keeps the moment it was first set.
+     */
+    internal fun adminFlagChanges(participants: List<Participant>, adminPublicKeys: Set<HexKey>): List<Participant> {
+        val now = Clock.System.now()
+        return participants.mapNotNull { participant ->
+            val named = participant.participantPublicKey in adminPublicKeys
+            when {
+                named && participant.adminAt == null -> participant.copy(adminAt = now)
+                !named && participant.adminAt != null -> participant.copy(adminAt = null)
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * Brings the room's `adminAt` flags into line with [mlsGroup]'s admin set, and
+     * says nothing about it.
+     *
+     * The flag is a cache of the group's state, and until this existed it was written
+     * only when a commit arrived -- so on the device that created a convenient room or
+     * a direct message, nobody was an admin until somebody else committed. Run where
+     * rooms are made and when a room is opened, it makes the cache true before
+     * anything reads it as news. Only flags move: membership is
+     * [processGroupMembershipChanges]'s, which also captions what it changes. Returns
+     * whether any row changed. See docs/member-admin-promotion.md, Phase 1.
+     */
+    suspend fun reconcileAdmins(database: DedunDatabase, chatRoomId: String, mlsGroup: MlsGroup): Boolean {
+        val room = database.chatRoomDao().findChatRoomById(chatRoomId) ?: return false
+        val changes = adminFlagChanges(
+            participants = room.localParticipants.map { it.participant },
+            adminPublicKeys = mlsGroup.currentAdminIdentities(),
+        )
+        if (changes.isNotEmpty()) database.participantDao().upsert(changes)
+        return changes.isNotEmpty()
     }
 
     private suspend fun memberName(database: DedunDatabase, publicKey: HexKey): String =

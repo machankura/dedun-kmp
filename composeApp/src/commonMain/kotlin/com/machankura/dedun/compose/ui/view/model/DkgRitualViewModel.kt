@@ -53,7 +53,6 @@ import com.machankura.dedun.compose.database.model.intermdiate.LocalFrostSigning
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Instant
-import com.machankura.dedun.compose.managers.CeremonyFollowThrough
 
 /**
  * Watches one ChillDKG ritual, and the steps that follow it.
@@ -190,6 +189,17 @@ class DkgRitualViewModel(
                     ?: return@mapLatest DkgRitualUIState.Error("Couldn't find this key ceremony")
                 val ceremony = snapshot.ceremony
 
+                // The other groups held in this room, for a group's own ceremony:
+                // the same people may have made more than one here. A subgroup's
+                // runs in its parent's room, whose own groups are not its business.
+                val otherGroups = if (session.parentChatRoomId == null) {
+                    dkgRepository.observeOwnSessionsForChatRoom(chatRoomId).first()
+                        .filter { it.id != session.id }
+                        .mapNotNull { it.subject ?: localChatRoom.chatRoom.subject }
+                } else {
+                    emptyList()
+                }
+
                 DkgRitualUIState.Loaded(
                     localChatRoom = localChatRoom,
                     session = session,
@@ -209,6 +219,7 @@ class DkgRitualViewModel(
                     isRoomCreated = session.thresholdPublicKey
                         ?.let { runCatching { SharedKeyDerivation.marmotGroupId(it) }.getOrNull() }
                         ?.let { it in snapshot.roomIds } == true,
+                    otherGroups = otherGroups,
                 )
             }
     }
@@ -522,7 +533,7 @@ class DkgRitualViewModel(
 
         val loaded = dkgRitualUIState as? DkgRitualUIState.Loaded ?: return
         val session = loaded.session
-        val thresholdPublicKey = session.thresholdPublicKey ?: return
+        if (session.thresholdPublicKey == null) return
 
         // The screen offers nothing until the group has signed, so this is a
         // guard rather than a path anybody takes.
@@ -535,43 +546,24 @@ class DkgRitualViewModel(
         }
 
         val keyPair = KeyPair(privKey = nostrPrivateKey.value.toByteArray())
-        val groupId = SharedKeyDerivation.marmotGroupId(thresholdPublicKey)
-
-        // Everyone the ceremony was run with, this device included. These are the
-        // admins: the whole point of the room is that the members who hold shares of
-        // the key can all act in it.
-        //
-        // Off the ceremony rather than off the room, because for a subgroup the
-        // room is the parent's and its roster is the wrong set entirely.
-        val members = ChillDkgRitualManager.participantsOf(session, loaded.localChatRoom)
-
-        // A subgroup is called what the coordinator called it; an admin room is
-        // called after the group it administers, because it has no name of its
-        // own to be given. Either way the bare name goes down and
-        // `MarmotGroupCreation` puts it under `MarmotGroupName`, so a NIP-17 room
-        // called `Ekklesia` stands up a Marmot room called `#Ekklesia`.
-        // The same name and description the coordinator's device uses when it
-        // creates the room on its own -- see `CeremonyFollowThrough` -- so the two
-        // ways of making it cannot make two different rooms.
-        val subgroupParent = loaded.parentChatRoomId
-
-        val name = CeremonyFollowThrough.roomName(session)
 
         isActionPending.value = true
         adminGroupBlockedOn.value = emptyList()
 
         viewModelScope.launch(Dispatchers.IO) {
+            // The room, its name and its admins all come off the ceremony, inside
+            // `MarmotGroupCreation.createFor` -- the same call the coordinator's
+            // device makes on its own in `CeremonyFollowThrough`, so the two ways of
+            // making it cannot make two different rooms. Nothing here names an
+            // admin: docs/robust-group-admins.md, Phase 1.
             val outcome = chatRepository.createMarmotGroup(
-                groupId = groupId,
-                name = name,
-                purpose = CeremonyFollowThrough.roomPurpose(session),
-                adminPublicKeys = members,
-                userPublicKey = activeUserPublicKey,
+                ceremony = session,
+                ceremonyRoom = loaded.localChatRoom,
                 keyPair = keyPair,
                 // Verified by the time it is written: the key state this room was
                 // gated on carries the certificate, and `stateFrom` refused it
                 // otherwise.
-                parentChatRoomId = subgroupParent
+                parentChatRoomId = loaded.parentChatRoomId
             )
 
             isActionPending.value = false

@@ -34,6 +34,8 @@ import com.machankura.dedun.compose.identity.toWalletId
 import com.machankura.dedun.compose.repository.ChatRepository
 import com.machankura.dedun.compose.repository.DkgRepository
 import com.machankura.dedun.compose.ui.view.state.CreateSharedKeyUIState
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -42,12 +44,14 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
- * The one screen that starts a group's own key ceremony.
+ * The one screen that starts a group's key ceremony in a NIP-17 room.
  *
  * What it must decide before it draws a button: whether the room can hold a
- * ceremony of its own at all, and whether it already has one. A Marmot room
- * cannot, and the ceremony screen offering it one anyway is how a second
- * ceremony opened beside a subgroup's -- see docs/ceremony-creation.md.
+ * ceremony of its own at all, and what the group is to be called. A Marmot room
+ * cannot hold one, and the ceremony screen offering it one anyway is how a second
+ * ceremony opened beside a subgroup's -- see docs/ceremony-creation.md. A NIP-17
+ * room that already has a group can hold another, which has to be named:
+ * docs/nip17-multiple-ceremonies.md.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CreateSharedKeyViewModelJvmTest {
@@ -87,14 +91,15 @@ class CreateSharedKeyViewModelJvmTest {
         },
     )
 
-    private fun session(id: String, stage: DkgRitualStage) = DkgSession(
+    private fun session(id: String, stage: DkgRitualStage, subject: String? = null, threshold: Int = 2) = DkgSession(
         id = id,
         chatRoomId = chatRoomId,
         coordinatorPublicKey = bob,
         userPublicKey = ada,
-        threshold = 2,
+        threshold = threshold,
         participantCount = 3,
         stage = stage,
+        subject = subject,
         hostPublicKey = ada,
         round1Random = "aa".repeat(32),
         round2AuxRandom = "bb".repeat(32),
@@ -103,12 +108,19 @@ class CreateSharedKeyViewModelJvmTest {
     /** What `proposeRitual` was asked for, one entry per call. */
     private val proposed = mutableListOf<Int>()
 
-    private fun dkgRepository(own: DkgSession? = null) =
+    /** And under what name. */
+    private val subjects = mutableListOf<String?>()
+
+    /** What `proposeRitual` hands back: a new ceremony unless a test says otherwise. */
+    private var answer: DkgSession = session("new".padEnd(64, '0'), DkgRitualStage.COLLECTING_HOST_KEYS)
+
+    private fun dkgRepository(groups: List<DkgSession> = emptyList(), byId: List<DkgSession> = emptyList()) =
         object : DkgRepository by DkgRepository.NO_OP_DKG_REPOSITORY {
-            override fun observeLatestSessionForChatRoom(
-                chatRoomId: String,
-                parentChatRoomId: String?,
-            ): Flow<DkgSession?> = flowOf(own.takeIf { parentChatRoomId == null })
+            override fun observeOwnSessionsForChatRoom(chatRoomId: String): Flow<List<DkgSession>> =
+                flowOf(groups)
+
+            override fun observeSessionById(sessionId: String): Flow<DkgSession?> =
+                flowOf(byId.firstOrNull { it.id == sessionId })
 
             override suspend fun proposeRitual(
                 localChatRoom: LocalChatRoom,
@@ -122,7 +134,8 @@ class CreateSharedKeyViewModelJvmTest {
                 guardianDelay: Long?
             ): DkgSession? {
                 proposed += threshold
-                return session("new".padEnd(64, '0'), DkgRitualStage.COLLECTING_HOST_KEYS)
+                subjects += subject
+                return answer
             }
         }
 
@@ -136,7 +149,11 @@ class CreateSharedKeyViewModelJvmTest {
         temporaryFolder.newFolder().resolve("$name.preferences_pb").path.toPath()
     }
 
-    private fun viewModel(room: LocalChatRoom?, own: DkgSession? = null) = CreateSharedKeyViewModel(
+    private fun viewModel(
+        room: LocalChatRoom?,
+        groups: List<DkgSession> = emptyList(),
+        retrying: DkgSession? = null,
+    ) = CreateSharedKeyViewModel(
         chatRoomId = chatRoomId,
         activeUserPublicKey = ada,
         initialUIState = CreateSharedKeyUIState.Loading,
@@ -151,7 +168,8 @@ class CreateSharedKeyViewModelJvmTest {
             )
         ),
         chatRepository = chatRepository(room),
-        dkgRepository = dkgRepository(own),
+        dkgRepository = dkgRepository(groups, listOfNotNull(retrying)),
+        retrying = retrying?.id,
     )
 
     private suspend fun CreateSharedKeyViewModel.awaitSettled(): CreateSharedKeyUIState =
@@ -174,25 +192,77 @@ class CreateSharedKeyViewModelJvmTest {
 
         assertEquals("new".padEnd(64, '0'), withTimeout(5_000) { opened.await() })
         assertEquals(listOf(2), proposed)
+        assertEquals(listOf<String?>("Checkers"), subjects, "the room's first group is named for the room")
     }
 
+    /**
+     * The same people may make another group. It is not handed over to the first,
+     * as it was, and it has to be named: the room keeps its first group's name.
+     */
     @Test
-    fun `a group with a ceremony already is handed to it`(): Unit = runBlocking {
-        val running = session("run".padEnd(64, '0'), DkgRitualStage.COLLECTING_ROUND_1)
-        val viewModel = viewModel(room(), own = running)
+    fun `a room that already has a group is offered another, under a name of its own`(): Unit = runBlocking {
+        val made = session("one".padEnd(64, '0'), DkgRitualStage.COMPLETE, subject = "Checkers")
+        val viewModel = viewModel(room(), groups = listOf(made))
         viewModel.initiate()
 
-        assertEquals(CreateSharedKeyUIState.Existing(running.id), viewModel.awaitSettled())
-        assertEquals(emptyList(), proposed, "and nothing is proposed")
+        val loaded = assertIs<CreateSharedKeyUIState.Loaded>(viewModel.awaitSettled())
+        assertEquals(listOf(made), loaded.groups)
+        assertTrue(loaded.needsName)
+        assertEquals("", viewModel.name.value, "not the room's name, which is the first group's")
+        assertFalse(viewModel.canCreate(), "nothing opens without a name")
+
+        viewModel.create { error("an unnamed second group opens nothing") }
+        delay(50)
+        assertEquals(emptyList(), proposed)
+
+        viewModel.setName("  Chess ")
+        assertTrue(viewModel.canCreate())
+
+        val opened = CompletableDeferred<String>()
+        viewModel.create { opened.complete(it) }
+        assertEquals(answer.id, withTimeout(5_000) { opened.await() })
+        assertEquals(listOf<String?>("Chess"), subjects)
+    }
+
+    /** A name already running is the same ask, and the screen hands over to it. */
+    @Test
+    fun `asking under a running group's name opens that group`(): Unit = runBlocking {
+        val running = session("run".padEnd(64, '0'), DkgRitualStage.COLLECTING_ROUND_1, subject = "Chess")
+        answer = running
+        val viewModel = viewModel(room(), groups = listOf(running))
+        viewModel.initiate()
+        viewModel.awaitSettled()
+        viewModel.setName("Chess")
+
+        val opened = CompletableDeferred<String>()
+        viewModel.create { opened.complete(it) }
+        assertEquals(running.id, withTimeout(5_000) { opened.await() })
     }
 
     @Test
     fun `a failed ceremony is there to be replaced`(): Unit = runBlocking {
-        val failed = session("bad".padEnd(64, '0'), DkgRitualStage.FAILED)
-        val viewModel = viewModel(room(), own = failed)
+        // The repository leaves failed ceremonies out of a room's groups.
+        val viewModel = viewModel(room(), groups = emptyList())
         viewModel.initiate()
 
         assertIs<CreateSharedKeyUIState.Loaded>(viewModel.awaitSettled())
+        assertEquals("Checkers", viewModel.name.value)
+    }
+
+    /**
+     * A retry of a room's second group comes back as that group, not as the room's
+     * first: the room's name is the first group's.
+     */
+    @Test
+    fun `a retry starts from the name and quorum of the ceremony that failed`(): Unit = runBlocking {
+        val made = session("one".padEnd(64, '0'), DkgRitualStage.COMPLETE, subject = "Checkers")
+        val failed = session("bad".padEnd(64, '0'), DkgRitualStage.FAILED, subject = "Chess", threshold = 3)
+        val viewModel = viewModel(room(), groups = listOf(made), retrying = failed)
+        viewModel.initiate()
+
+        assertIs<CreateSharedKeyUIState.Loaded>(viewModel.awaitSettled())
+        assertEquals("Chess", viewModel.name.value)
+        assertEquals(3, viewModel.threshold.value)
     }
 
     @Test

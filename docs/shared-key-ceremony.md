@@ -157,8 +157,14 @@ protocol checks this, so `ChillDkgRitualOrderingTest` does.
 A ceremony is started in exactly three places, each of which knows what it is
 for: group creation (`SelectChatRoomTypeViewModel`) for a new group's own key,
 the subgroup picker (`SelectSubgroupAdminsViewModel`) for a subgroup's, and
-`CreateSharedKeyScreen` for an existing NIP-17 group that has no key yet.
-`CeremonyEntryPointsJvmTest` counts them. `DkgRitualScreen` shows one ceremony,
+`CreateSharedKeyScreen` for a new group made from the members of an existing
+NIP-17 room. `CeremonyEntryPointsJvmTest` counts them.
+
+The same people always share one NIP-17 room, since its id is derived from
+them, so a second group they make is a second ceremony in that room. The room
+is where each group's ceremony is held, not the group, and every ceremony after
+the room's first carries a name of its own. The room's details list the groups
+made in it. See [nip17-multiple-ceremonies.md](./nip17-multiple-ceremonies.md). `DkgRitualScreen` shows one ceremony,
 named by its route, and never starts one: it used to, from the same button slot
 its approvals used, and a member coming back from approving a subgroup's
 ceremony opened a second, whole-room one in the parent's room. A Marmot room
@@ -193,15 +199,18 @@ room is a Marmot group whose id is derived from the shared key. See
 [shared-key-derivation.md](./shared-key-derivation.md) for how, and
 [marmot-membership.md](./marmot-membership.md) for how members are added to it.
 
-It is named `#` and then the group's name — `#Ekklesia` for a group called
-Ekklesia. Every Marmot room on a device carries that mark and no NIP-17 room does,
-which is the only thing on a room list that says which of the two a row is. The
-rule is one function, `MarmotGroupName.of`, applied where a room is minted rather
-than where it is drawn: the name is baked into the epoch-0 `MarmotGroupData` every
-member is welcomed with, so a name added at display time would be a name this
-device alone could see. It replaces `Ekklesia (#admins)`, which marked only the
-admin room, left every subgroup unmarked, and sorted nowhere near the group it
-belonged to.
+It is called by the group's name, `Ekklesia` for a group called Ekklesia, and drawn
+in braces: `{Ekklesia}`. Every Marmot room on a device is drawn that way and no
+NIP-17 room is, which is the only thing on a room list that says which of the two a
+row is. The braces are drawn, never stored: `MarmotGroupName.bare` is applied where a
+room is minted and where a Welcome is joined, so the epoch-0 `MarmotGroupData` every
+member is welcomed with, and every device's `ChatRoom.subject`, carry the bare name,
+and `MarmotGroupName.display` (through `ChatRoom.title`) is the only place the braces
+go on. It replaces `Ekklesia (#admins)`, which marked only the admin room, left every
+subgroup unmarked, and sorted nowhere near the group it belonged to. The mark was a
+stored `#` until `#` turned out to read as a hashtag, then a stored `&`
+([group-name-prefix.md](./group-name-prefix.md)), and is now drawn
+([group-name-braces.md](./group-name-braces.md)), which has the rooms it renamed.
 
 ## Known gaps
 

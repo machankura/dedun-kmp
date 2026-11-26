@@ -275,8 +275,11 @@ object GuardianManager {
         // docs/member-wallet-guarding-group.md gives, so the card agrees with a
         // subgroup row in the same list naming the same room.
         suspend fun nameOf(position: Int, certificate: Event?): String? =
-            certificate?.let { SubgroupBirthCertificateEvent.parseName(it.tags) }
-                ?: database.chatRoomDao().findChatRoomById(guardians[position].chatRoomId)?.chatRoom?.subject?.takeIf { it.isNotBlank() }
+            // A guarding group, drawn as one: `{name}`, from a certificate signed under any old
+            // mark or the room's bare name (docs/giza-second-batch.md, Phase 8).
+            (certificate?.let { SubgroupBirthCertificateEvent.parseName(it.tags) }
+                ?: database.chatRoomDao().findChatRoomById(guardians[position].chatRoomId)?.chatRoom?.subject?.takeIf { it.isNotBlank() })
+                ?.let(MarmotGroupName::display)
 
         val guardianCertificate = certificateOf(0)
         return wallet.copy(

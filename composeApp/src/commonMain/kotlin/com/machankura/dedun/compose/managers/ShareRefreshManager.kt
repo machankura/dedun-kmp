@@ -30,13 +30,16 @@ import com.machankura.dedun.compose.database.model.ShareRefreshConfirmation
 import com.machankura.dedun.compose.database.model.ShareRefreshMessage
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
+import com.machankura.dedun.compose.database.model.GovernanceProposalStage
 import com.machankura.dedun.compose.database.model.types.DkgRitualStage
+import com.machankura.dedun.compose.database.model.types.ShareRepairStage
 import com.machankura.dedun.compose.database.model.types.ShareGenerationState
 import com.machankura.dedun.compose.database.model.types.ShareRefreshApprovalStep
 import com.machankura.dedun.compose.database.model.types.ShareRefreshStage
 import com.machankura.dedun.compose.database.model.types.ShareStanding
 import com.machankura.dedun.compose.ExperimentalFeatures
 import com.machankura.dedun.compose.extensions.toHex
+import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
 
@@ -140,6 +143,82 @@ object ShareRefreshManager {
 
     private data class Plan(val recipients: List<Int>, val withheld: Map<Int, ShareStanding>, val refusal: String?)
 
+    /**
+     * Every live holder of [shares] whom the group's signature has taken out of
+     * [localChatRoom]'s admins, withheld for good (docs/admin-change-rotation.md,
+     * A3 and A4): every admin holds a share (R1), so no rotation deals a new one
+     * to somebody who is no longer an admin -- whichever rotation runs first after
+     * a demotion takes their share away, the one it owes or anybody's. Only in a
+     * governed room, whose admins change only by a signed commit.
+     */
+    private suspend fun removedBySignature(database: DedunDatabase, localChatRoom: LocalChatRoom, shares: ShareGenerations.Shares): Map<Int, ShareStanding> {
+        val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id) ?: return emptyMap()
+        return shares.roster
+            .filter { it.standing == ShareStanding.LIVE && admins.removedBySignature(it.memberPublicKey) }
+            .associate { it.participantId to ShareStanding.RETIRED }
+    }
+
+    /**
+     * Whether [session] withholds nobody the group has not already decided about,
+     * so that taking part is not a decision (docs/admin-change-rotation.md,
+     * Phase 5): every member it leaves out until brought back is stale in
+     * [base] already, and every member it leaves out for good is one the
+     * group's signature took out of the admins of a governed room. Taking part
+     * only ever decided the withheld list (rotate-shares-single-approval, R1);
+     * with nothing new on it, there is nothing for a person to add.
+     */
+    suspend fun withholdsNothingNew(database: DedunDatabase, session: ShareRefreshSession, base: ShareGenerations.Shares): Boolean {
+        val admins = RoomAdmins.of(database, session.chatRoomId)?.takeIf { it.governed } ?: return false
+        return session.withheldStandings().all { (id, standing) ->
+            val entry = base.roster.firstOrNull { it.participantId == id } ?: return@all false
+            when (standing) {
+                ShareStanding.STALE -> entry.standing == ShareStanding.STALE
+                ShareStanding.RETIRED -> entry.standing == ShareStanding.LIVE && admins.removedBySignature(entry.memberPublicKey)
+                else -> false
+            }
+        }
+    }
+
+    /**
+     * Takes part in [session] on its owner's behalf when [withholdsNothingNew] says
+     * there is nothing to decide, and says so in the room in place of asking. Run
+     * at the one gate in [advance], so arrival, a replay and the sweep all meet it.
+     */
+    private suspend fun takePartIfNothingNew(database: DedunDatabase, session: ShareRefreshSession, base: ShareGenerations.Shares): Boolean {
+        if (!withholdsNothingNew(database, session, base)) return false
+        update(database, session) { it.copy(dealApprovedAt = Clock.System.now()) }
+        val withheld = session.withheldStandings()
+        val retired = withheld.filterValues { it == ShareStanding.RETIRED }.keys
+            .mapNotNull { id -> base.roster.firstOrNull { it.participantId == id }?.memberPublicKey }
+        val line = if (retired.isEmpty()) {
+            "took part in rotating the shares without being asked: it leaves out nobody new."
+        } else {
+            val names = retired.map { member ->
+                database.profileDao().getProfileByPublicKey(member)?.humanReadableNameOrPubkey() ?: member.take(8)
+            }.sorted().joinToString(", ")
+            "took part in rotating the shares without being asked: it leaves out only $names, whom the group removed as admin."
+        }
+        logger.i("Taking part in refresh ${session.id} unasked: it withholds nobody new")
+        announce(database, session, ChatMessage.TYPE_SHARE_REFRESH_TOOK_PART, line, session.userPublicKey)
+        return true
+    }
+
+    /**
+     * Why the rotation a change would owe could not run, or null when it could
+     * (docs/admin-change-rotation.md, A12): every live holder of [shares] in
+     * [retire] withheld for good, every stale one withheld again, and the rest
+     * dealt to -- checked by the same [refusal] the rotation itself will meet. The
+     * admin floor counts admins; this counts recipients against every id not yet
+     * retired, so a share left live by an abandoned rotation makes the two differ.
+     */
+    fun owedRotationRefusal(key: DkgSession, shares: ShareGenerations.Shares, retire: Set<HexKey>): String? {
+        val withheld = shares.roster
+            .filter { it.standing == ShareStanding.LIVE && it.memberPublicKey in retire }
+            .associate { it.participantId to ShareStanding.RETIRED }
+        val plan = plan(key, shares, userPublicKey = "", withheld)
+        return refusal(key, shares, plan.recipients, plan.withheld)
+    }
+
     /** A refresh as it would be proposed, by member rather than by id. */
     data class Preview(
         val takingPart: List<HexKey>,
@@ -163,7 +242,7 @@ object ShareRefreshManager {
             val id = shares.signerIds[member] ?: return Preview(emptyList(), emptyMap(), "they hold no share of the group's key")
             mapOf(id to ShareStanding.RETIRED)
         } ?: emptyMap()
-        val plan = plan(key, shares, userPublicKey, withheld)
+        val plan = plan(key, shares, userPublicKey, removedBySignature(database, localChatRoom, shares) + withheld)
         val memberOf = shares.roster.associate { it.participantId to it.memberPublicKey }
         return Preview(
             takingPart = plan.recipients.mapNotNull { memberOf[it] },
@@ -205,7 +284,7 @@ object ShareRefreshManager {
         rotationHold(database, localChatRoom, key)?.let { throw IllegalStateException("Cannot rotate yet: ${it.reason}") }
 
         val shares = ShareGenerations.active(database, key)
-        val (recipients, allWithheld, refused) = plan(key, shares, userPublicKey, withheld)
+        val (recipients, allWithheld, refused) = plan(key, shares, userPublicKey, removedBySignature(database, localChatRoom, shares) + withheld)
         refused?.let { throw IllegalStateException("Cannot refresh: $it") }
 
         val session = ShareRefreshSession(
@@ -283,7 +362,19 @@ object ShareRefreshManager {
      * Checked on the proposer's device only. A recipient a few seconds behind on
      * the signature would refuse out loud and end a rotation that was fine.
      */
-    suspend fun rotationHold(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+    suspend fun rotationHold(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? =
+        rotationPending(database, localChatRoom, key)
+            ?: adminChangeInFlight(database, localChatRoom, key)
+            ?: enrolling(database, localChatRoom, key)
+
+    /**
+     * Whether a rotation of [key] is still under way: running, or done but with its
+     * new generation's key state not yet signed -- the moment the old shares are
+     * wiped -- or this device behind the group. The part of [rotationHold] that
+     * admin changes wait on too (docs/admin-change-rotation.md, A5): neither
+     * direction may start while the other has not finished.
+     */
+    suspend fun rotationPending(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
         running(database, key)?.let { return RotationHold.Running(it.id) }
         FrostSigningManager.openWalletSession(database, key.id)?.let { return RotationHold.SpendOpen(it.id) }
         FrostSigningManager.openMoneyStatementSession(database, key.id)?.let { return RotationHold.StatementOpen(it.id) }
@@ -297,6 +388,71 @@ object ShareRefreshManager {
         val open = openKeyStateSession(database, key)
         if (signed < active || open != null) return RotationHold.AwaitingKeyState(active, open?.id)
         return null
+    }
+
+    /**
+     * A signed change to the room that moves who holds a share, not yet landed
+     * (docs/admin-change-rotation.md, Phase 2): a governance statement of
+     * [key] still being signed that changes the admins or removes a holder --
+     * every signer holds that session -- or one of this device's own that is
+     * signed and on its way to a relay, which nobody else holds a session for
+     * any more. One that has landed and owes a rotation is not counted: that
+     * rotation is the change's next step, and must not wait on the change.
+     */
+    private suspend fun adminChangeInFlight(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+        val holders = ShareGenerations.active(database, key).roster
+            .filter { it.standing == ShareStanding.LIVE }
+            .map { it.memberPublicKey }
+            .toSet()
+        val dao = database.frostSigningSessionDao()
+        suspend fun movesShares(sessionId: String): Boolean = dao.getItems(sessionId).any { item ->
+            val statement = Event.fromJsonOrNull(item.unsignedEventJson)?.let(GovernanceStatementEvent::parse) ?: return@any false
+            statement.change.admins != null || statement.change.removes.any { it in holders }
+        }
+
+        dao.getOpenSessionsForKey(key.id)
+            .filter { it.chatRoomId == localChatRoom.chatRoom.id && it.signDeclinedAt == null }
+            .firstOrNull { movesShares(it.id) }
+            ?.let { return RotationHold.AdminChangeInFlight(it.id) }
+
+        database.governanceProposalDao().getAll()
+            .filter { it.chatRoomId == localChatRoom.chatRoom.id }
+            .filter { it.stage == GovernanceProposalStage.SIGNING || it.stage == GovernanceProposalStage.PUBLISHED }
+            .filter { proposal ->
+                // Landed while this device was not watching: the group is past its epoch.
+                val epoch = runCatching { database.marmotEngine.groupFor(proposal.routingId) }.getOrNull()?.epoch
+                epoch == null || epoch <= proposal.epoch
+            }
+            .firstOrNull { movesShares(it.frostSigningSessionId) }
+            ?.let { return RotationHold.AdminChangeInFlight(it.frostSigningSessionId) }
+        return null
+    }
+
+    /**
+     * A new admin whose id the group's key state binds at the active generation
+     * and who holds no share of it yet (docs/admin-change-rotation.md, A8). Not
+     * once their enrollment has failed -- a repair brings that id back at any
+     * generation -- and not for someone the live group does not name an admin,
+     * whose promotion never landed: nothing will enroll them, and they must not
+     * hold every rotation for good.
+     */
+    private suspend fun enrolling(database: DedunDatabase, localChatRoom: LocalChatRoom, key: DkgSession): RotationHold? {
+        val active = ShareGenerations.active(database, key)
+        val state = GroupKeyStateManager.keyStateFor(database, localChatRoom.chatRoom.id)
+            ?.takeIf { it.dkgSessionId == key.id && it.generation == active.generation }
+            ?: return null
+        val bindings = GroupKeyStateEvent.MemberBinding.decodeAll(state.memberBindings)
+        if (bindings.isEmpty()) return null
+        val admins = RoomAdmins.of(database, localChatRoom.chatRoom.id)?.admins
+        val repairs = database.shareRepairDao().getSessionsForKey(key.id)
+        return bindings.firstOrNull { binding ->
+            val entry = active.roster.firstOrNull { it.participantId == binding.participantId } ?: return@firstOrNull false
+            entry.standing == ShareStanding.STALE &&
+                (admins == null || binding.memberPublicKey in admins) &&
+                repairs.none {
+                    it.targetId == binding.participantId && it.generation == active.generation && it.stage == ShareRepairStage.FAILED
+                }
+        }?.let { RotationHold.Enrolling(it.memberPublicKey) }
     }
 
     /**
@@ -559,8 +715,14 @@ object ShareRefreshManager {
                 // The one gate: taking part, with these members withheld. Every
                 // step after it follows from that decision and asks nothing more.
                 if (session.dealApprovedAt == null) {
-                    announceApprovalNeeded(database, session, ShareRefreshApprovalStep.DEAL)
-                    return
+                    // Unless there is nothing to decide: a rotation that withholds
+                    // nobody new, such as the one an admin change owes
+                    // (docs/admin-change-rotation.md, Phase 5).
+                    if (!takePartIfNothingNew(database, session, base)) {
+                        announceApprovalNeeded(database, session, ShareRefreshApprovalStep.DEAL)
+                        return
+                    }
+                    session = current(database, session)
                 }
                 if (ownMessage(database, session, ShareRefreshEvents.ROUND_1) == null) {
                     val pmsg1 = FrostRefresh.participantStep1(hostSecretKey, params, myId.toUInt(), ByteVector32(session.round1Random)).right

@@ -84,7 +84,14 @@ object SharedKeyDerivation {
      */
     data class Derived(
         val cache: TweakCache,
-        val publicKey: XonlyPublicKey
+        val publicKey: XonlyPublicKey,
+        /**
+         * The x-only scalars [cache] applied, in order. A key held some other way -- a group's
+         * conversation key, whose threshold ECDH replays them on a plain point -- reaches the same
+         * derived key by applying exactly these, and nothing else may recompute them: the scalar
+         * for each step commits to the key before it. (docs/group-threshold-ecdh.md, D2.)
+         */
+        val tweaks: List<ByteVector32> = emptyList()
     ) {
         /** The x-only key as 32-byte hex — the form nostr and Marmot both use. */
         val hex: HexKey get() = publicKey.value.toHex()
@@ -193,9 +200,11 @@ object SharedKeyDerivation {
         // derived -- returns exactly what a session created from this cache would
         // produce a signature against.
         var current = cache.tweakedPublicKey
+        val tweaks = mutableListOf<ByteVector32>()
 
         path.forEach { index ->
             val scalar = tweakScalar(current, index)
+            tweaks += scalar
 
             when (val tweaked = cache.tweak(scalar, isXonly = true)) {
                 is Either.Left -> throw IllegalArgumentException(
@@ -210,7 +219,7 @@ object SharedKeyDerivation {
             }
         }
 
-        return Derived(cache = cache, publicKey = current)
+        return Derived(cache = cache, publicKey = current, tweaks = tweaks)
     }
 
     /**

@@ -161,7 +161,7 @@ class GroupSignedEventDaoJvmTest {
             ChatRoom(
                 id = chatRoomId,
                 userPublicKey = member,
-                subject = "#Ekklesia",
+                subject = "Ekklesia",
                 description = SharedKeyDerivation.describe("Admins"),
                 mlsGroupState = null,
             )

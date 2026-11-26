@@ -1,5 +1,7 @@
 package com.machankura.dedun.compose.managers
 
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+
 /**
  * Why this device must not propose a share rotation now
  * (docs/rotation-waits-for-key-state.md). [ShareRefreshManager.rotationHold]
@@ -34,15 +36,35 @@ sealed interface RotationHold {
 
     /**
      * Dedun's: one of its money statements -- a deposit attribution, a coin assignment, a
-     * transfer, or a payout from the Wavelength or the Lightning wallet -- is still being
-     * signed with this key. docs/giza-into-dedun.md, Phase 7.
+     * transfer, or a payout from the Wavelength or the Lightning wallet -- or the group's nostr
+     * profile or a post is still being signed with this key. docs/giza-into-dedun.md, Phase 7,
+     * and docs/giza-second-batch.md, Phase 5.
      */
     data class StatementOpen(val signingSessionId: String) : RotationHold {
-        override val reason get() = "a payout, transfer or attribution is still being signed"
+        override val reason get() = "a payout, transfer, attribution or something the group says on nostr is still being signed"
     }
 
     /** The group signs at a generation this device has not reached: it missed a certificate. */
     data class Behind(val groupGeneration: Int, val localGeneration: Int) : RotationHold {
         override val reason get() = "the group is at generation $groupGeneration and this device at $localGeneration"
+    }
+
+    /**
+     * A change to who is an admin, or a removal of a member who holds a share, is
+     * being signed or has not landed yet ([signingSessionId] is its signature's
+     * session). A rotation proposed now is fixed against a roster that change is
+     * about to move (docs/admin-change-rotation.md, Phase 2).
+     */
+    data class AdminChangeInFlight(val signingSessionId: String) : RotationHold {
+        override val reason get() = "a change to the group's admins is on its way"
+    }
+
+    /**
+     * A new admin's id is bound by the key state the group signed, and has no
+     * share yet. A rotation now would leave them stale, and fails outright if
+     * the binding lands while it deals (docs/admin-change-rotation.md, H2 and H3).
+     */
+    data class Enrolling(val memberPublicKey: HexKey) : RotationHold {
+        override val reason get() = "a new admin is still receiving their share"
     }
 }

@@ -89,6 +89,9 @@ class FrostSigningViewModel(
                 shareHolders
             ) { session, messages, items, holders -> Observed(session, messages, items, holders) }
                 .collect { (session, messages, items, holders) ->
+                    if (notes == null && items.isNotEmpty()) {
+                        notes = frostSigningRepository.proposalNotes(chatRoomId, sessionId, proposedEvents(items))
+                    }
                     // Read per emission rather than derived from `messages`: who
                     // the session is waiting on is the manager's rule, and it is
                     // not the same rule at every stage. See
@@ -128,6 +131,7 @@ class FrostSigningViewModel(
                             .map { it.signerPublicKey }
                             .toSet(),
                         silent = owed,
+                        proposalNotes = notes.orEmpty(),
                         spend = checkedSpend,
                         sweep = checkedSweep,
                         payees = payees,
@@ -142,6 +146,9 @@ class FrostSigningViewModel(
                 }
         }
     }
+
+    /** Read once, when the items first land: a proposal's events are fixed. */
+    private var notes: List<String>? = null
 
     private var checkedSpend: GroupSpend.Checked? = null
     private var payees: Map<String, String> = emptyMap()

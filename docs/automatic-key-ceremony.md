@@ -388,6 +388,11 @@ on a COMPLETE ceremony this device coordinated:
   room does not exist                                     -> create it
 ```
 
+> **Since [robust-group-admins.md](./robust-group-admins.md), Phase 4:** a fifth line, after
+> the room exists -- a room still at epoch 0 without its founders, whose founding invite never
+> went out, has it finished. And the room's admins are no longer the caller's to pass: the
+> repository takes the ceremony and reads them off it.
+
 - **What it calls:** the code behind `DkgRitualViewModel.proposeBirthCertificate`,
   `proposeKeyState` and `createAdminGroup`. That code moves from the view model
   into the manager (and `DkgRepository`), along with each one's "already asked"
@@ -482,9 +487,9 @@ decline. It means the device cannot vouch for the statement, so a person has to.
 **On the three emulators** (Bob, Charlie, Medium):
 
 1. A NIP-17 group of three, 2-of-3. Bob opens it, Charlie and Medium each tap
-   **Join** once. Nobody touches anything else, and the `#` room should appear
+   **Join** once. Nobody touches anything else, and the `{…}` room should appear
    on all three.
-2. A subgroup of two in `#Checkers`. The only taps should be the join and the
+2. A subgroup of two in `{Checkers}`. The only taps should be the join and the
    parent quorum's signature on the certificate.
 3. **The upgrade:** on the current build, stop a ceremony at round 1 on all
    three, install this build over it, and open the app. It should finish from

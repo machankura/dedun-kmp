@@ -1,10 +1,13 @@
 package com.machankura.dedun.compose.ui.view.state
 
+import com.machankura.dedun.compose.repository.GroupMadeHere
 import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletPolicyEvent
 import com.machankura.dedun.compose.managers.MemberWalletManager
 import com.machankura.dedun.compose.nostr.subgroup.WalletPolicyReading
 import com.machankura.dedun.compose.nostr.wallet.GroupWallet
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.wallet.wavelength.group.GroupWavelengthRollout
 import fr.acinq.bitcoin.Chain
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
@@ -104,18 +107,31 @@ sealed interface ChatRoomDetailUIState {
          */
         val canAddSubgroup: Boolean = false,
         /**
+         * The kind:0 the group signed about itself, or null while this device holds
+         * none. docs/group-nostr-profile-and-posts.md.
+         */
+        val groupNostrProfile: GroupNostrProfile? = null,
+        /**
+         * The kind:1s the group signed as itself, newest first, as many as this
+         * device holds. docs/group-nostr-profile-and-posts.md.
+         */
+        val groupPosts: List<GroupPost> = emptyList(),
+        /**
+         * Whether this device could put a profile or a post to the group's quorum:
+         * a Marmot room it has not left, not disbanded, where it holds a share of
+         * the key (D4 of docs/group-nostr-profile-and-posts.md). Capability, not
+         * permission -- any member with a share may propose, and the quorum is what
+         * decides. The identity's own capability, an npub that cannot sign at all,
+         * is the screen's to add: it is a composition local, not room state.
+         */
+        val canProposeAsGroup: Boolean = false,
+        /**
          * Whether this device administers a current-profile room: it may remove a
          * member and disband the group, both commits through the publish gate. A
          * legacy room has neither action, and a member who is not an admin has
          * neither either. See docs/marmot-v2.md, Phase 7.
          */
         val canGovern: Boolean = false,
-        /**
-         * The room carries Giza's marker: its member changes need the group's
-         * signature, which this build cannot ask for. Invite, remove and disband
-         * are hidden and the room says why. See `GovernanceMarker`.
-         */
-        val isGoverned: Boolean = false,
         /**
          * The group's lifecycle says it is over. Absorbing: nothing is sent into it
          * and nobody rejoins, so every write entrance is hidden and the room says so.
@@ -161,6 +177,60 @@ sealed interface ChatRoomDetailUIState {
          * room has no key (docs/frost-share-refresh.md, Phase 11).
          */
         val shares: SharesSummary? = null,
+        /**
+         * An offer to this device's account to become an admin of this keyed room,
+         * by public key of the offer and of who made it; null when there is none.
+         * docs/member-admin-promotion.md, Phase 8.
+         */
+        val promotionOffer: Pair<HexKey, HexKey>? = null,
+        /**
+         * Founding members this room's founding invite never reached -- only ever
+         * non-empty on the device that made the room, while it is still at epoch 0.
+         * See `MarmotGroupCreation.uninvitedFounders`; docs/robust-group-admins.md,
+         * Phase 4.
+         */
+        val uninvitedFounders: Set<HexKey> = emptySet(),
+        /**
+         * What to call the founders [uninvitedFounders] names. They are not in this
+         * room, by definition, so the room's own rows cannot be asked.
+         */
+        val founderNames: Map<HexKey, String> = emptyMap(),
+        /**
+         * The groups this room's members have made in it, when this is a NIP-17
+         * room: each one's ceremony, and the room its key makes once it has one. A
+         * NIP-17 room has no admins of its own; those rooms are where its members
+         * are admins, one per group. docs/robust-group-admins.md, Phase 5, and
+         * docs/nip17-multiple-ceremonies.md, Phase 5.
+         */
+        val groups: List<GroupMadeHere> = emptyList(),
+        /**
+         * Who administers the room, read off the group's state rather than the
+         * participants' `adminAt` flags. Labels each member row **Admin**.
+         * docs/member-admin-promotion.md, D1 and Phase 11.
+         */
+        val adminPublicKeys: Set<HexKey> = emptySet(),
+        /**
+         * Who holds a live share of the room's key, for the **Holds a share**
+         * label. Shown apart from [adminPublicKeys] on purpose: when the two
+         * disagree, an enrollment or a rotation is still owed. Empty while share
+         * rotation is behind its flag.
+         */
+        val shareHolders: Set<HexKey> = emptySet(),
+        /**
+         * What each member row's menu offers, by public key, open or not, with the
+         * reasons an item is not; absent means no menu. Every other member has an
+         * entry whatever the viewer's role, and this device's own row has one only
+         * when stepping down is open. docs/member-row-actions.md, D1 and D2.
+         */
+        val memberActions: Map<HexKey, List<MemberActionOption>> = emptyMap(),
+        /** How **Leave group** goes when this device is an admin; null when it is not. */
+        val adminLeave: AdminLeave? = null,
+        /** Where a keyed room stands on needing the group's signature; null for any other room. */
+        val governance: GovernanceStatus? = null,
+        /** The group's inbox, for its row; null where this device has nothing of it to show. */
+        val inbox: InboxRowSummary? = null,
+        /** What the group's direct messages show here, or nothing. docs/group-threshold-ecdh.md. */
+        val groupDmRow: GroupDmRow? = null,
     ): ChatRoomDetailUIState
 
     data class Error(

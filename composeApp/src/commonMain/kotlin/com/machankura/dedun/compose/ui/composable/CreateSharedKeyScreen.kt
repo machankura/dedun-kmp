@@ -19,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
@@ -32,6 +33,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.new_group_with_these_members
+import dedun.composeapp.generated.resources.an_unnamed_group
+import dedun.composeapp.generated.resources.you_already_have_a_group_with_these_people
+import dedun.composeapp.generated.resources.you_already_have_groups_with_these_people
+import dedun.composeapp.generated.resources.name
+import dedun.composeapp.generated.resources.the_new_group_and_its_room_are_called_this
 import dedun.composeapp.generated.resources.a_shared_key_needs_at_least_members
 import dedun.composeapp.generated.resources.couldn_t_load_this_group
 import dedun.composeapp.generated.resources.couldn_t_read_your_keys
@@ -68,9 +75,12 @@ import com.machankura.dedun.compose.ui.theme.readableContent
 import com.machankura.dedun.compose.ui.theme.spacing
 import com.machankura.dedun.compose.ui.view.model.CreateSharedKeyViewModel
 import com.machankura.dedun.compose.ui.view.state.CreateSharedKeyUIState
+import com.machankura.dedun.compose.managers.MarmotGroupName
 
 /**
- * Starts a NIP-17 group's own key ceremony: the quorum, and one button.
+ * Starts a group's key ceremony in a NIP-17 room: its name, the quorum, and one
+ * button. The room's first group, or another made by the same people beside the
+ * ones they have (docs/nip17-multiple-ceremonies.md).
  *
  * The only screen that does. The ceremony screen it hands over to shows a
  * ceremony and never offers to start one, because doing both from one button
@@ -78,8 +88,9 @@ import com.machankura.dedun.compose.ui.view.state.CreateSharedKeyUIState
  * one in the parent's room. See docs/ceremony-creation.md.
  *
  * [onCeremonyOpened] is called with the ceremony to show, whether this screen
- * opened it or found one already there. The caller replaces this screen with it,
- * so back from the ceremony goes wherever the member came from.
+ * opened it or a repeated ask was folded into one already running under the same
+ * name. The caller replaces this screen with it, so back from the ceremony goes
+ * wherever the member came from.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +103,7 @@ fun CreateSharedKeyScreen(
     dkgRepository: DkgRepository,
     onCeremonyOpened: (dkgSessionId: String) -> Unit,
     onNavigateBack: () -> Unit,
+    retrying: String? = null,
 ) {
     val viewModel: CreateSharedKeyViewModel = viewModel(
         factory = CreateSharedKeyViewModel.factory(
@@ -101,6 +113,7 @@ fun CreateSharedKeyScreen(
             activeIdentityStateFlow = activeIdentityStateFlow,
             chatRepository = chatRepository,
             dkgRepository = dkgRepository,
+            retrying = retrying,
         )
     )
 
@@ -112,23 +125,24 @@ fun CreateSharedKeyScreen(
 
     val state = viewModel.uiState
 
-    LaunchedEffect(state) {
-        if (state is CreateSharedKeyUIState.Existing) onCeremonyOpened(state.dkgSessionId)
-    }
-
     Scaffold(
         snackbarHost = { SnackbarHost(LocalSnackbarHostState.current) },
         topBar = {
             TopAppBar(
                 title = {
-                    // The room's name only once it is loaded; before that, and on a
-                    // refusal, the plain title rather than "Shared key for " and
-                    // nothing.
-                    val subject = (state as? CreateSharedKeyUIState.Loaded)?.localChatRoom?.chatRoom?.subject
+                    // The room's name only once it is loaded and only for its first
+                    // group, which it was named for; before that, and on a refusal,
+                    // the plain title rather than "Shared key for " and nothing. A
+                    // room that already has a group is making another, and its name
+                    // is the first group's, not this one's.
+                    val loaded = state as? CreateSharedKeyUIState.Loaded
+                    val subject = loaded?.takeIf { !it.needsName }?.localChatRoom?.chatRoom?.subject?.let(MarmotGroupName::display)
                     Text(
-                        text = subject
-                            ?.let { stringResource(Res.string.shared_key_for, it) }
-                            ?: stringResource(Res.string.shared_key),
+                        text = when {
+                            loaded?.needsName == true -> stringResource(Res.string.new_group_with_these_members)
+                            subject != null -> stringResource(Res.string.shared_key_for, subject)
+                            else -> stringResource(Res.string.shared_key)
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -139,9 +153,7 @@ fun CreateSharedKeyScreen(
     ) { innerPadding ->
         ScreenStateTransition(state) { uiState ->
             when (uiState) {
-                // Existing is a hand-over in flight: nothing to draw but the wait.
-                CreateSharedKeyUIState.Loading,
-                is CreateSharedKeyUIState.Existing -> LoadingDataIndicator(
+                CreateSharedKeyUIState.Loading -> LoadingDataIndicator(
                     modifier = Modifier.padding(innerPadding).fillMaxSize()
                 )
 
@@ -184,9 +196,43 @@ fun CreateSharedKeyScreen(
                             .padding(MaterialTheme.spacing.containerPadding),
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.itemGap)
                     ) {
+                        if (uiState.groups.isNotEmpty()) {
+                            val unnamed = stringResource(Res.string.an_unnamed_group)
+                            val roomSubject = uiState.localChatRoom.chatRoom.subject
+                            val names = uiState.groups.joinToString(", ") {
+                                (it.subject ?: roomSubject)?.let(MarmotGroupName::display) ?: unnamed
+                            }
+                            Text(
+                                text = if (uiState.groups.size == 1) {
+                                    stringResource(Res.string.you_already_have_a_group_with_these_people, names)
+                                } else {
+                                    stringResource(Res.string.you_already_have_groups_with_these_people, names)
+                                },
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+
                         Text(
                             text = stringResource(Res.string.the_group_can_hold_one_key_together_split_so),
                             style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        // The name the group's room will carry. A room that already
+                        // has a group has to name this one: the room keeps its first
+                        // group's name, and falling back to it would make that
+                        // group's namesake. docs/nip17-multiple-ceremonies.md, D2.
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = viewModel.name.value,
+                            onValueChange = viewModel::setName,
+                            enabled = !isActionPending,
+                            singleLine = true,
+                            label = { Text(stringResource(Res.string.name)) },
+                            supportingText = if (uiState.needsName) {
+                                { Text(stringResource(Res.string.the_new_group_and_its_room_are_called_this)) }
+                            } else {
+                                null
+                            },
                         )
 
                         Text(
@@ -206,7 +252,7 @@ fun CreateSharedKeyScreen(
 
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = !isActionPending,
+                            enabled = !isActionPending && viewModel.canCreate(),
                             onClick = { viewModel.create(onCreated = onCeremonyOpened) }
                         ) {
                             if (isActionPending) {

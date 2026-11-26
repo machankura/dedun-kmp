@@ -41,16 +41,16 @@ import kotlin.time.Clock
  * disagree about three balances. The group's signature puts them in an order, and each signer refuses the second, as it
  * refuses a second payout.
  *
- * ### Why 30393, and 30343 before it
+ * ### Why 30423, and 30343 before it
  *
  * After the giver's request, 30342.
  *
  * It was 30343 until Giza and Bennu took that number for a share refresh round. It moved to
- * 30393 (docs/giza-into-dedun.md, Phase K), and 30343 is its legacy number: an event signed
+ * 30423 (docs/giza-into-dedun.md, Phase K, then docs/giza-second-batch.md, Phase 4), and 30343 is its legacy number: an event signed
  * under it keeps it, and every reader takes either through [com.machankura.dedun.compose.nostr.MovedKinds].
  */
 object MemberTransferEvent {
-    val KIND: Kind = 30393
+    val KIND: Kind = 30423
 
     private const val D_TAG = "d"
     private const val D_PREFIX = "transfer:"

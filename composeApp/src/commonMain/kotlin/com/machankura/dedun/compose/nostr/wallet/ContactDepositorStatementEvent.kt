@@ -16,7 +16,7 @@ import kotlin.time.Clock
  * is theirs, as a member's 30339 is. `docs/non-member-deposits.md`, D10.
  *
  * ```
- * kind:    30396
+ * kind:    30426
  * pubkey:  <the room>
  * content: ""
  * tags:
@@ -32,7 +32,7 @@ import kotlin.time.Clock
  * visible kind of ignorance. Write-once per contact per network, as 30339 is.
  */
 object ContactDepositorStatementEvent {
-    val KIND: Kind = 30396
+    val KIND: Kind = 30426
 
     private const val D_TAG = "d"
     private const val CONTACT_TAG = "contact"

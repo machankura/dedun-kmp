@@ -66,16 +66,14 @@ object SubgroupManager {
     /**
      * The fewest admins a subgroup can be run by, the coordinator included.
      *
-     * The same floor [com.machankura.dedun.compose.database.model.types.ChatRoomType.MINIMUM_ROBUST_GROUP_SIZE]
-     * states and for the same reason: below three a quorum is not a check, since
-     * two admins means every decision needs both of them and one means the
-     * coordinator is deciding alone.
+     * [Quorum.MINIMUM_GROUP_SIZE], which says why: a subgroup is a group, and the
+     * floor is the same one.
      *
      * The coordinator counts. They are a ChillDKG participant by construction and
      * hold a share whether or not anybody ticked their name, so a picker that
      * asked for three *others* would be quietly building a group of four.
      */
-    const val MINIMUM_ADMINS: Int = 3
+    const val MINIMUM_ADMINS: Int = Quorum.MINIMUM_GROUP_SIZE
 
     /**
      * Why these admins cannot hold a ceremony together, or null when they can.
@@ -235,10 +233,10 @@ object SubgroupManager {
         require(name.isNotBlank()) { "A subgroup has to be called something" }
 
         // The certificate is a signature over the name, so it has to be the name
-        // the room ends up with. `MarmotGroupCreation` normalises again on the
-        // way in and `MarmotGroupName.of` is idempotent, so the two agree by
+        // the room ends up with. `MarmotGroupCreation` makes it bare again on the
+        // way in and `MarmotGroupName.bare` is idempotent, so the two agree by
         // construction rather than by both callers remembering.
-        val subgroupName = MarmotGroupName.of(name)
+        val subgroupName = MarmotGroupName.bare(name)
 
         // One certificate per child. A second is a `d`-tag replacement of the
         // first rather than a second subgroup, and spending a quorum's attention
@@ -632,7 +630,11 @@ object SubgroupManager {
                     chatRoomId = chatRoomId,
                     parentChatRoomId = parentChatRoomId,
                     certificate = signed,
-                    name = SubgroupBirthCertificateEvent.parseName(event.tags),
+                    // Bare, as every stored name is: a certificate signed before
+                    // docs/group-name-braces.md says `&name`, or `#name` before
+                    // that. What was agreed is the name, not the punctuation, and
+                    // the screen that lists it draws the braces.
+                    name = SubgroupBirthCertificateEvent.parseName(event.tags)?.let(MarmotGroupName::bare),
                     adminPublicKeys = SubgroupBirthCertificateEvent.parseAdminPublicKeys(event.tags),
                     room = database.chatRoomDao().findChatRoomById(chatRoomId),
                     keyState = database.groupKeyStateDao().getByChatRoomId(chatRoomId),

@@ -1,46 +1,69 @@
 package com.machankura.dedun.compose.managers
 
 /**
- * What a Marmot room is called: a `#`, then the name.
+ * What a Marmot room is called, and how it is drawn: `Ekklesia`, drawn `{Ekklesia}`.
  *
  * A device's room list holds two unrelated kinds of room. A NIP-17 room is a
  * conversation between the people in it; a Marmot room is a *group* -- it has an
  * id its key derives, a membership baked into an MLS tree, admins who can act for
  * it, and a signature anyone can check. Nothing on a row says which one is which,
- * and the two behave differently enough that guessing is a mistake. The `#` says
- * it, in the one place a user always reads.
+ * and the two behave differently enough that guessing is a mistake. The braces say
+ * it, at the front of the row, where a truncated row still shows the `{`.
  *
- * This replaces naming a group's Marmot room `"Ekklesia (#admins)"`. That form
- * said the same thing in more words and only for the *admin* room -- a subgroup
- * got no marker at all, so half the Marmot rooms on a device were unmarked, and
- * "Ekklesia (#admins)" sorted nowhere near "Ekklesia". `#Ekklesia` marks both
- * kinds, and marks them at the front where a truncated row still shows it.
+ * The mark is drawn, not stored. It says what kind of room a row is, which is not
+ * part of what the group is called, and storing it meant every reader had to strip
+ * it before comparing, every change of character needed a migration, and the mark
+ * ended up signed into certificates that can never change. So the database, the
+ * wire and every certificate carry the bare name, [bare] is what makes a name so,
+ * and [display] is the only place the braces go on. docs/group-name-braces.md.
  *
- * Applied where a Marmot room is minted rather than where it is drawn, because
- * the name is baked into the epoch-0 `MarmotGroupData` every member is welcomed
- * with: a name that only existed at the point of display would be a name this
- * device alone could see.
+ * The mark has been spelled four ways. First `"Ekklesia (#admins)"`, only for the
+ * admin room. Then `#Ekklesia`, stored. Then `&Ekklesia`, stored, because `#word`
+ * is a hashtag (docs/group-name-prefix.md). Now `{Ekklesia}`, drawn. The two stored
+ * marks are still in rooms minted before, in Dedun's rooms, and in old birth
+ * certificates, which is why [bare] takes them off.
+ *
+ * Giza draws a confederation `{{name}}` by a rule of its own; Dedun takes no
+ * confederations (docs/giza-second-batch.md, D12).
  */
 object MarmotGroupName {
-    /** Shown in a name field so the user reads the name they are about to get. */
-    const val PREFIX = "#"
+    /** Drawn before the name, and shown in a name field before what is typed. */
+    const val PREFIX = "{"
+
+    /** Drawn after the name, and shown at the trailing edge of a name field. */
+    const val SUFFIX = "}"
 
     /**
-     * [name] under the convention, and [name] again if it is already there.
-     *
-     * Idempotent on purpose. A subgroup's name is normalised twice from the same
-     * bare subject and by two unrelated callers -- once into the birth
-     * certificate the parent's quorum signs, once onto the room itself -- and
-     * those two have to be the same string, or the room is not called what its
-     * parent certified.
-     *
-     * A blank name is handed back untouched rather than turned into a bare `#`.
-     * No caller passes one -- each has a fallback for the room whose subject is
-     * missing -- and inventing a name here would hide that if one ever did.
+     * Every mark a Marmot room's name has been stored with: the `&` of
+     * docs/group-name-prefix.md and the `#` before it. Rooms minted under them still
+     * carry them in their MLS state, and certificates signed under them in their tags.
      */
-    fun of(name: String): String {
-        val bare = name.trim().trimStart('#').trim()
+    private val LEGACY_MARKS = charArrayOf('&', '#')
 
-        return if (bare.isEmpty()) name.trim() else PREFIX + bare
+    /**
+     * [name] as it is stored: no mark, no braces, no surrounding space.
+     *
+     * Idempotent, and `bare` of any old spelling -- `#X`, `&X`, `{X}` -- is `X`, which is
+     * what lets one function name the rooms a Welcome brings in, the rooms already on a
+     * device, and the names old certificates carry.
+     *
+     * Idempotence matters for one more reason. A subgroup's name is made bare twice from
+     * the same subject by two unrelated callers -- once into the birth certificate the
+     * parent's quorum signs, once onto the room itself -- and those two have to be the
+     * same string, or the room is not called what its parent certified.
+     *
+     * Only a *leading* mark is a mark: `Arts & crafts` keeps its `&`. A blank name, or one
+     * that is only marks, is handed back trimmed rather than made up.
+     */
+    fun bare(name: String): String = NameMarks.strip(name, LEGACY_MARKS).ifEmpty { name.trim() }
+
+    /**
+     * [name] as it is drawn: `{` + [bare] + `}`. Takes a stored name in any spelling, so it
+     * draws a room minted under `&` the same as one minted since, and drawing a drawn name
+     * again changes nothing. A blank name is not given braces.
+     */
+    fun display(name: String): String {
+        val bare = NameMarks.strip(name, LEGACY_MARKS)
+        return if (bare.isEmpty()) name.trim() else PREFIX + bare + SUFFIX
     }
 }
