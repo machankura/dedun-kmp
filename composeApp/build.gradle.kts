@@ -537,6 +537,14 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.machankura.dedun.desktop"
             packageVersion = "1.0.0"
+            // The packaged app runs on a jlinked runtime holding only the modules named here
+            // and the plugin's defaults, and nothing fails at build time when one is missing.
+            // Without jdk.unsupported, protobuf-lite (under DataStore) cannot reach
+            // sun.misc.Unsafe and every preference write throws, so creating a profile fails.
+            // The rest are what `./gradlew :composeApp:suggestRuntimeModules` reports; rerun it
+            // after adding a JVM dependency, and check a profile can be created in
+            // `createDistributable`'s build, which is the only place a gap shows.
+            modules("java.instrument", "java.management", "java.naming", "java.sql", "jdk.unsupported")
         }
     }
 }
