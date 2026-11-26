@@ -8,17 +8,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import com.machankura.dedun.compose.database.model.ChatMessage
-import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.types.FrostSigningStage
-import com.machankura.dedun.compose.database.repository.DatabaseGroupDmRepository
-import com.machankura.dedun.compose.network.dto.RelayDTO
-import com.machankura.dedun.compose.network.relays.EventPublishTransport
-import com.machankura.dedun.compose.network.relays.NostrPublishResult
-import com.machankura.dedun.compose.network.sockets.NostrIncomingMessage
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.text.ProposedEvent
 
@@ -33,14 +25,6 @@ class GroupDmRelaysJvmTest {
     @AfterTest
     fun tearDown() = net.close()
 
-    private class Transport : EventPublishTransport {
-        val sent = mutableListOf<Pair<NostrEvent, Set<String>>>()
-        override suspend fun publishEvent(nostrEvent: NostrEvent, relays: Set<RelayDTO>): Flow<NostrPublishResult> {
-            sent += nostrEvent to relays.map { it.url }.toSet()
-            return flowOf(*relays.map { NostrPublishResult(result = NostrIncomingMessage.OkMessage(eventId = nostrEvent.id, success = true), relayUrl = it.url) }.toTypedArray())
-        }
-    }
-
     private suspend fun signRelays(relays: List<String>): String {
         val a = net.devices[0]
         val b = net.devices[1]
@@ -53,28 +37,22 @@ class GroupDmRelaysJvmTest {
     }
 
     @Test
-    fun `a signed 10050 is published unchanged by its proposer, and writes no NostrEvent row`(): Unit = runBlocking {
+    fun `a signed 10050 is owed to relays by its proposer alone, unchanged, and writes no NostrEvent row`(): Unit = runBlocking {
         net.install()
         net.all()
         val a = net.devices[0]
         val sessionId = signRelays(listOf("wss://dm.example.com/", "wss://inbox.example.org"))
 
-        val owed = a.db.groupDmDao().getOutbound(sessionId).single()
-        val signed = Event.fromJson(assertNotNull(owed.wrapJson))
+        // One publisher for every group-signed 10050, whichever feature proposed it: the group
+        // inbox's (docs/group-inbox.md, D7).
+        val owed = a.db.groupInboxDao().getPublicationsFor(sessionId).single()
+        val signed = Event.fromJson(owed.eventJson)
         assertEquals(GroupDmRelays.KIND, signed.kind)
         assertEquals(net.roomId, signed.pubKey)
         assertTrue(signed.verify(), "the group's own signature")
         assertEquals(listOf("wss://dm.example.com/", "wss://inbox.example.org/"), GroupDmRelays.relaysIn(signed.tags))
-        // Only the proposer owes it.
-        assertEquals(emptyList(), net.devices[1].db.groupDmDao().getOutbound(sessionId))
-
-        val transport = Transport()
-        assertTrue(GroupDmPublisher(DatabaseGroupDmRepository(a.db), transport).publish(owed))
-        val (sent, to) = transport.sent.single()
-        assertEquals(signed.id, sent.id)
-        assertEquals(signed.sig, sent.sig)
-        assertTrue("wss://dm.example.com/" in to && "wss://inbox.example.org/" in to)
-        assertNotNull(a.db.groupDmDao().getOutbound(sessionId).single().publishedAt)
+        assertTrue("wss://dm.example.com/" in owed.relays && "wss://inbox.example.org/" in owed.relays)
+        assertEquals(emptyList(), net.devices[1].db.groupInboxDao().getPublicationsFor(sessionId), "only the proposer owes it")
 
         net.devices.forEach { device ->
             assertNull(device.db.nostrEventDao().getNostrEventById(signed.id), "no NostrEvent row on $device")
@@ -83,7 +61,7 @@ class GroupDmRelaysJvmTest {
     }
 
     @Test
-    fun `the transcript says the group can receive messages, and then that it changed where`(): Unit = runBlocking {
+    fun `the transcript says where the group's mail arrives, each time it is signed`(): Unit = runBlocking {
         net.install()
         net.all()
         signRelays(listOf("wss://dm.example.com"))
@@ -93,10 +71,8 @@ class GroupDmRelaysJvmTest {
         net.devices.forEach { device ->
             val lines = device.db.chatMessageDao().getChatMessagesByChatRoomId(net.roomId)
                 .map { it.chatMessage }
-                .filter { it.messageType == ChatMessage.TYPE_GROUP_DM_RELAYS_SIGNED }
-                .sortedBy { it.createdAt }
-                .map { it.content }
-            assertEquals(listOf("The group can now receive messages", "The group changed where it receives messages"), lines, "$device")
+                .filter { it.messageType == ChatMessage.TYPE_INBOX_RELAYS_ANNOUNCED }
+            assertEquals(2, lines.size, "$device")
             assertEquals(listOf("wss://other.example.com/"), GroupDmRelays.relaysOf(device.db, net.roomId))
         }
     }
@@ -123,11 +99,12 @@ class GroupDmRelaysJvmTest {
         harness.deliver(sent, harness.members[1])
         val session = assertNotNull(harness.db.frostSigningSessionDao().getSessionById(sent.session.id))
         assertNotNull(session.signDeclinedAt)
-        assertEquals(listOf(GroupDmRelayRefusal.REASON), harness.queued(FrostSigningEvents.DECLINE).map { it.content })
+        // The group inbox's refusal, which reads every 10050 the group is asked to sign.
+        assertEquals(listOf(InboxRefusal.RELAYS_SHAPE), harness.queued(FrostSigningEvents.DECLINE).map { it.content })
 
         val localhost = proposeRelayList(listOf("wss://localhost:7777"))
         harness.deliver(localhost, harness.members[1])
-        assertEquals(listOf(GroupDmRelayRefusal.REASON), harness.queued(FrostSigningEvents.DECLINE).map { it.content })
+        assertEquals(listOf(InboxRefusal.RELAYS_SHAPE), harness.queued(FrostSigningEvents.DECLINE).map { it.content })
     }
 
     @Test
@@ -139,7 +116,7 @@ class GroupDmRelaysJvmTest {
         val items = harness.db.frostSigningSessionDao().getItems(session.id)
         assertTrue(FrostSigningManager.isAwaitingApproval(session, items))
         val summary = ProposedEvent.summarize(Event.fromJson(items.single().unsignedEventJson))
-        assertEquals("Where the group receives messages", summary.label)
-        assertEquals("wss://fine.example.com/", summary.detail)
+        assertEquals("Where the group receives private messages", summary.label)
+        assertEquals("fine.example.com", summary.detail)
     }
 }

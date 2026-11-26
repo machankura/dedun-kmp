@@ -65,6 +65,13 @@ object GroupDmReceiver {
         return ShareGenerations.active(database, key).signerIds.containsKey(userPublicKey)
     }
 
+    /** Whether one of the group inbox's keys this device holds opens [wrap] (docs/group-inbox.md). */
+    private suspend fun opensWithInboxKey(database: DedunDatabase, roomId: HexKey, userPublicKey: HexKey, wrap: Event): Boolean {
+        if (!ExperimentalFeatures.groupInbox) return false
+        val secrets = database.inboxKeyDao().getKeys(roomId, userPublicKey).mapNotNull { it.secretKey?.hexToByteArray() }
+        return secrets.isNotEmpty() && com.machankura.dedun.compose.nostr.inbox.InboxWrap.open(wrap, secrets) != null
+    }
+
     /** The room a wrap is addressed to, among those this device reads for. */
     suspend fun roomFor(database: DedunDatabase, wrap: Event, userPublicKey: HexKey): HexKey? {
         if (wrap.kind != GiftWrapEvent.KIND) return null
@@ -78,6 +85,13 @@ object GroupDmReceiver {
      */
     suspend fun receive(database: DedunDatabase, wrap: Event, userPublicKey: HexKey, nostrPrivateKey: ByteArray): Boolean {
         val roomId = roomFor(database, wrap, userPublicKey) ?: return false
+        // The group's NIP-4E inbox key opens what a decoupled sender wrote, at once and with no
+        // round: it is tried first, and a round is opened only for what it cannot open
+        // (docs/group-threshold-ecdh.md, *Against the NIP-4E plan*).
+        if (opensWithInboxKey(database, roomId, userPublicKey, wrap)) {
+            GroupInboxManager.receive(database, wrap, userPublicKey)
+            return true
+        }
         // The wrap is its own evidence (D5): signed by its pubkey and addressed to the group.
         if (!Evidence.allows(EcdhPurpose.WRAP, wrap.pubKey, wrap, roomId)) return true
         database.groupDmDao().insertWrap(

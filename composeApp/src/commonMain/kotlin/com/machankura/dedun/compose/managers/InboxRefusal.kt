@@ -49,9 +49,15 @@ object InboxRefusal {
     private const val TWO_DAYS = 2 * 24 * 60 * 60L
     private const val CLOCK_SLACK = 10 * 60L
 
-    /** Whether any of [events] is one this refusal is about. */
+    /**
+     * Whether any of [events] is one this refusal is about. A seal only when it names an inbox
+     * key in its `n` tag, as every reply does: a seal without one is the group writing by
+     * threshold ECDH, which `GroupDmRefusal` reads (docs/group-threshold-ecdh.md, D13).
+     */
     fun involves(events: List<Event>): Boolean =
-        events.any { it.kind == InboxAnnouncement.KEY_KIND || it.kind == InboxAnnouncement.RELAYS_KIND || it.kind == InboxSeal.KIND }
+        events.any { it.kind == InboxAnnouncement.KEY_KIND || it.kind == InboxAnnouncement.RELAYS_KIND || isReplySeal(it) }
+
+    private fun isReplySeal(event: Event): Boolean = event.kind == InboxSeal.KIND && InboxSeal.encryptionKeyOf(event.tags) != null
 
     /**
      * Why this device declines to sign [events] in [localChatRoom] as [userPublicKey] sees it, or
@@ -66,7 +72,7 @@ object InboxRefusal {
         manifest: String? = null,
         now: Long = Clock.System.now().epochSeconds,
     ): String? {
-        if (events.any { it.kind == InboxSeal.KIND }) {
+        if (events.any(::isReplySeal)) {
             return replyRefusal(database, localChatRoom.chatRoom.id, userPublicKey, events, manifest, now)
         }
         for (event in events) {
@@ -174,7 +180,7 @@ object InboxRefusal {
      * open a message from a group (D13).
      */
     suspend fun notes(database: DedunDatabase, chatRoomId: String, userPublicKey: HexKey, sessionId: String, events: List<Event>): List<String> {
-        if (events.none { it.kind == InboxSeal.KIND }) return emptyList()
+        if (events.none(::isReplySeal)) return emptyList()
         val manifest = database.groupInboxDao().getSigning(sessionId)?.manifest
         val reply = (readReply(database, chatRoomId, userPublicKey, events, manifest) as? Read.Ok)?.reply
             ?: return listOf("A private reply from the group's inbox, which this device cannot read")

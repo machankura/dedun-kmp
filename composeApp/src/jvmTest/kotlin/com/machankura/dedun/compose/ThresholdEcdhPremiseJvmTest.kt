@@ -198,8 +198,12 @@ class ThresholdEcdhPremiseJvmTest {
 
     @Test
     fun `check 5 - kinds 30400 and 30401 are free here`() {
-        val retired = com.machankura.dedun.compose.nostr.RetiredKinds.WALLET + com.machankura.dedun.compose.nostr.RetiredKinds.GROUP_LIGHTNING
-        assertFalse(30400 in retired)
-        assertFalse(30401 in retired)
+        // Dedun's own block is 30420-30442 since the second batch's Phase 4, and neither number
+        // is the legacy one of a kind it moved, so nothing of Dedun's reads them.
+        for (kind in listOf(30400, 30401)) {
+            assertFalse(kind in 30420..30442)
+            assertFalse(com.machankura.dedun.compose.nostr.MovedKinds.current(kind) != kind)
+            assertFalse(kind in com.machankura.dedun.compose.nostr.wavelength.GroupWavelengthEvents.ALL)
+        }
     }
 }

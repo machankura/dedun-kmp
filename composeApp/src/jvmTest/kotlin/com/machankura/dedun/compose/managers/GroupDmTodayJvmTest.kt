@@ -114,7 +114,7 @@ class GroupDmTodayJvmTest {
         val sent = proposeKind(10050, "", arrayOf(arrayOf("relay", "wss://relay.example")))
         harness.deliver(sent, bob)
         val items = harness.db.frostSigningSessionDao().getItems(sent.session.id)
-        assertEquals("Where the group receives messages", ProposedEvent.summarize(Event.fromJson(items.single().unsignedEventJson)).label)
+        assertEquals("Where the group receives private messages", ProposedEvent.summarize(Event.fromJson(items.single().unsignedEventJson)).label)
     }
 
     /** Flipped by Phase 7: the group's mail has its own subscription. */

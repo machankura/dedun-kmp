@@ -129,7 +129,11 @@ object InboxReplies {
      * an outgoing message at once. Every other admin's device files the copy when it arrives.
      */
     suspend fun onSigned(database: DedunDatabase, session: FrostSigningSession, signedEvents: List<Event>) {
-        val seals = signedEvents.filter { it.kind == InboxSeal.KIND && it.pubKey.equals(session.chatRoomId, ignoreCase = true) }
+        // A reply's seals name the inbox key in an `n` tag; a seal without one is the group
+        // writing by threshold ECDH, which `GroupDmSender` wraps (docs/group-threshold-ecdh.md).
+        val seals = signedEvents.filter {
+            it.kind == InboxSeal.KIND && it.pubKey.equals(session.chatRoomId, ignoreCase = true) && InboxSeal.encryptionKeyOf(it.tags) != null
+        }
         if (seals.isEmpty() || !session.isCoordinator()) return
         wrapAndOwe(database, session, seals)
     }

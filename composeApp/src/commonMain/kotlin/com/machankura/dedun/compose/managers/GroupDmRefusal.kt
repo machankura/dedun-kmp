@@ -53,10 +53,20 @@ object GroupDmRefusal {
         data object Waiting : Verdict
     }
 
-    fun involves(events: List<Event>): Boolean = events.any { it.kind == SealEvent.KIND }
+    /**
+     * A seal this refusal is about: every one that does not name an inbox key. The group
+     * inbox's replies (docs/group-inbox.md, D10) are seals too, and name the inbox key they
+     * come from in one well-formed `n` tag; those are `InboxRefusal`'s. Split on the inbox's own
+     * reading of the tag, so no seal falls to neither -- a malformed `n` lands here, and check 2
+     * declines it.
+     */
+    fun isOurs(event: Event): Boolean =
+        event.kind == SealEvent.KIND && com.machankura.dedun.compose.nostr.inbox.InboxSeal.encryptionKeyOf(event.tags) == null
+
+    fun involves(events: List<Event>): Boolean = events.any(::isOurs)
 
     fun involvesItems(items: List<FrostSigningItem>): Boolean =
-        items.any { Event.fromJsonOrNull(it.unsignedEventJson)?.kind == SealEvent.KIND }
+        items.any { Event.fromJsonOrNull(it.unsignedEventJson)?.let(::isOurs) == true }
 
     suspend fun check(
         database: DedunDatabase,

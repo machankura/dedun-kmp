@@ -132,7 +132,10 @@ class ProposedEventTest {
         val relays = ProposedEvent.summarize(event(10050, tags = arrayOf(arrayOf("relay", "wss://inbox.example.com/"))))
         assertEquals("Where the group receives private messages", relays.label)
         assertEquals("inbox.example.com", relays.detail)
-        assertEquals("A private reply from the group's inbox", ProposedEvent.summarize(event(13)).label)
+        // A reply names the inbox key it is sealed from; a seal without that `n` tag is the
+        // group writing by threshold ECDH instead (docs/group-threshold-ecdh.md, D12).
+        assertEquals("A private reply from the group's inbox", ProposedEvent.summarize(event(13, tags = arrayOf(arrayOf("n", "c".repeat(64))))).label)
+        assertEquals("A private message from the group", ProposedEvent.summarize(event(13)).label)
     }
 
     private fun event(

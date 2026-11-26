@@ -25,7 +25,14 @@ interface GroupInboxDao {
     @Query("SELECT * FROM GroupInboxWrap WHERE chatRoomId = :chatRoomId AND openedGeneration IS NULL ORDER BY receivedAt")
     suspend fun getUnopenedWraps(chatRoomId: String): List<GroupInboxWrap>
 
-    @Query("SELECT COUNT(*) FROM GroupInboxWrap WHERE chatRoomId = :chatRoomId AND openedGeneration IS NULL")
+    /**
+     * Wraps no inbox key opened, less those the admins opened by threshold ECDH instead
+     * (docs/group-threshold-ecdh.md): those are in the group's messages, not unread mail.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM GroupInboxWrap WHERE chatRoomId = :chatRoomId AND openedGeneration IS NULL " +
+            "AND id NOT IN (SELECT id FROM GroupDmWrap WHERE state = 'OPENED')"
+    )
     fun observeUnopenedCount(chatRoomId: String): Flow<Int>
 
     /** The newest wrap's own time in a room: where a catch-up starts, less NIP-59's two days. */

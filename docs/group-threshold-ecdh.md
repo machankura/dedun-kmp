@@ -615,7 +615,7 @@ Tests (`GroupDmWireTest`, pure):
 - evidence: a wrap not `p`-tagged to the group, an unsigned seal, the group's own npub as a
   recipient, and an event signed by someone else are each refused.
 
-### Phase 4: storage, schema 44 → 45
+### Phase 4: storage, schema 44 → 45 (shipped as 46 → 47, below)
 
 Additive: an `AutoMigration(44, 45)` with its comment, the exported
 `composeApp/schemas/…/45.json`, and `ShippedProfileUpgradeJvmTest`'s `current` moved to 45.
@@ -797,6 +797,18 @@ phase exist and pass; `ThresholdEcdhPremiseJvmTest` keeps Phase 0's six checks.
 | Phase 8: outgoing states and Send again | built in Phase 9, with the data they read: being signed, signed and not yet sent, sent, signed but not sent, declined. Send again is offered on any admin's device for the two unsent states | only the proposer's device wraps on its own, so another admin's cannot tell sent from not |
 | Phase 9: the signing screen shows the text, what it answers and the recipients | as notes under the seals, beside the confederation's (`DatabaseFrostSigningRepository.confederationNotes`) | the screen already had the slot |
 | Phase 10: the wipe on seeing oneself removed | on every sweep, and whenever partials still reach the device: keys, messages, wraps and rounds, the freed pages scrubbed, and one line in the room | |
+
+### Merged beside the group inbox
+
+The NIP-4E plan (`group-inbox.md`) was built on `giza` at the same time and merged first. The
+two now share the wire where they meet, as *Against the NIP-4E plan* said they would:
+
+| where they meet | what the merge settled |
+|---|---|
+| the schema | the inbox took versions 45 and 46 (with the confederation's signing); this plan's tables are **v47**, `AutoMigration(46, 47)` |
+| the group's 10050 | one event, whichever feature proposes it. `InboxRefusal` declines a relay list a stranger could not reach (`RELAYS_SHAPE`), `InboxAnnouncements.onSigned` publishes it from the proposer's device, and the transcript line and the signing screen's label are the inbox's. `GroupDmRelayRefusal` and this plan's own 10050 publishing were removed rather than run twice |
+| a batch of kind 13s | split on the seal's `n` tag, by the inbox's own reading of it: a seal naming one inbox key is a reply, for `InboxRefusal` and `InboxReplies`; every other seal is this plan's, for `GroupDmRefusal` and `GroupDmSender`. None is read by both and none is asked blind (`GroupSealRoutingJvmTest`) |
+| a wrap to the group's npub | both subscriptions hear it. `GroupDmReceiver` tries the inbox keys this device holds first and hands what they open to `GroupInboxManager`; a round is opened only for what they cannot. The inbox's count of mail it cannot open leaves out what the admins opened by threshold ECDH |
 
 ### Known gaps
 
