@@ -40,6 +40,9 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 [giza-second-batch.md](./giza-second-batch.md), measured against Giza `a5a802c5`, fetched as
 `refs/remotes/giza/giza`. Its rows are the last table below.
 
+**High-water mark: `a5a802c5`** (2026-11-26). Every Giza commit up to it has a row here. The
+next batch is measured from it: `git log --no-merges a5a802c5..giza/giza`.
+
 - **What has shipped.** `versionCode 9` (0.1.5) was set in `dddfa68b` on 2026-10-20. That is
   before K1 (`e12565be`, 2026-11-21) and before contacts (`2fdbc2bf`, 2026-11-26), and the
   repository has no tags. An Android update needs a higher `versionCode`, so no installed
@@ -60,8 +63,15 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
 | before Phase 4, on `87ebf456` | pass | pass | pass | pass (3) |
 | after Phase 4, on `a8331b90` | pass | pass | pass | pass (3) |
 | AGP 9.5.1, Kotlin 2.4.21 and `lightning-kmp-app` at `d87af507`, on `27957e12` | pass | pass | pass | pass (3) |
+| second batch done, `lightning-kmp-app` at Dedun's `d4933708`, on `ffebce46` | pass | pass | pass | pass (3) |
+| the same, `lightning-kmp-app` at Giza's `3ca351af` (not taken; see below) | pass | **fail** in both runs of all four together, pass run alone | pass | pass (3) |
 
-Each suite ran on a fresh `dedun-regtest` network.
+Each suite ran on a fresh `dedun-regtest` network, apart from the last two rows, which shared one
+network across their runs. In both runs of all four on Giza's pin, `LiquidityPurchaseRegtestJvmTest`
+timed out waiting for the on-the-fly channel. Run alone on that pin, it passed. Run with the
+other three on Dedun's pin, straight after, it passed too. The two pins differ only in
+`lightning-kmp`'s confederation bumps, which bring bitcoin-kmp's Confederation API and a newer
+libsecp256k1-zkp. Phase 10 of the second batch keeps Dedun's pin until that is understood.
 
 | giza | bennu port | group | phase | Bennu | Dedun | subject |
 |---|---|---|---|---|---|---|

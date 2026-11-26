@@ -499,8 +499,8 @@ transcript shows none of them. `GizaKindsRefusedJvmTest` gains four tests:
 `docs/kinds.md` is the new map, and the two plans that name the old numbers say so at the top.
 jvmTest: 3,144 run, 0 failed.
 
-**Not done:** the register in Giza's and Bennu's trees. That is a change in two other
-repositories, and the owner's to make.
+**Not done here:** the register in Giza's and Bennu's trees. Phase 10 wrote it on a branch in
+each, not pushed.
 
 ## Phase 5: a second group from the same people, and the group's profile
 
@@ -897,6 +897,19 @@ If that changes, it is a plan of its own. It would need the wallet question this
 a confederation signs with a FROST key made from its groups' admins, and Dedun's groups also
 sign for money with theirs.
 
+**As built.**
+
+- **Refusing the kinds.** Inside rooms, 30379–30399 are refused out loud, as Phase 4 built it
+  (`GizaProtocolEvents`, `GizaKindsRefusedJvmTest`).
+- **Not asking for them.** `NoConfederationSubscriptionJvmTest` pins that no relay is asked for
+  9430–9438. Every filter the live subscriptions build leaves them out: the personal inbox, the
+  groups, the group inbox and the group's direct messages. It also checks that no Kotlin source
+  in the app names one of those kinds or `ConfederationKinds`.
+- **The confederation halves of the commits Dedun took.** They are out: `{{name}}` and
+  `ConfederationName` in Phase 8, the confederation ceremony's stamp and retention in Phase 7,
+  and its expiry classes.
+- **`lightning-kmp-app`'s confederation API** is not even in Dedun's pin. Phase 10 says why.
+
 ## Phase 10: keeping up
 
 - **The register in all three trees** (Phase 4). This is the change that stops a third
@@ -906,6 +919,33 @@ sign for money with theirs.
   adaptations against Phases 2 and 3 here, and offer Dedun's Phase 2 wallet work (the node-id
   vector, the restore test) back by the mirror run in reverse.
 - **`lightning-kmp-app`.** After Phase 2, Dedun pins the same commit as Giza.
+
+**As built.**
+
+- **The register in all three trees.** Each register is a commit on a branch of its own, not
+  pushed:
+  - Bennu: `claude/kinds-register` (`1252fd88`) in the bennu-kmp checkout, from `bennu` at
+    `2db6dde5`.
+  - Giza: `claude/giza-kinds-register` (`f21c1397`) in this repository, one commit on top of
+    `giza/giza` at `a5a802c5`. There is no Giza checkout here; push the branch to Giza's remote.
+  
+  The two are the same file. It maps every kind in 30300–30449 with a column for each app,
+  names Dedun's legacy numbers (a pre-K3 Dedun device still writes 30370–30382), and lists the
+  numbers free in all three. Dedun's own `kinds.md` now says 30400–30401 and 30410–30416 are in
+  use since Phase 6. Pushing the branches, and merging them, is the owner's call.
+- **The ledger's high-water mark** is `a5a802c5`, recorded at the top of the ledger's second
+  batch.
+- **Bennu.** None of this batch is in Bennu, so there is nothing to check against yet.
+- **`lightning-kmp-app`: Dedun does not pin Giza's commit yet.** Giza's `3ca351af` and Dedun's
+  `d4933708` carry the same recovery-code change, on the same toolchain. They differ only in the
+  nested `lightning-kmp`. Giza's moves it to `47a0f585`, which adds the bitcoin-kmp
+  Confederation API and a newer libsecp256k1-zkp under it. On that pin, the FROST, Iceberg,
+  Lightning, share-refresh and ECDH JVM suites pass. But `LiquidityPurchaseRegtestJvmTest` timed
+  out waiting for the on-the-fly channel in both runs of the four regtest suites together. It
+  passed on its own, and the same four together passed on Dedun's pin straight after.
+  
+  So Dedun keeps `d4933708`, which is still to be pushed, until that is understood. The ledger's
+  regtest table has the runs.
 
 ## Checking each phase
 
