@@ -193,6 +193,24 @@ Small, and can ship on their own.
 **Done when** a packaged desktop build creates a profile and opens its wallet, and
 `RouteNavTypesJvmTest` passes.
 
+**As built.**
+
+- `b7e5dd19` came in as written. `RouteNavTypesJvmTest` builds every route Dedun has into one
+  graph, and no other route needed an entry.
+- `9a1abc61` came in without Giza's icon lines. Dedun's `suggestRuntimeModules` reports the same
+  five modules as Giza's.
+
+**The lock-order audit found nothing to change:**
+
+- `MlsGroupCache`'s per-group lock is taken only from `NostrDao`, inside `storeNostrEvent`'s
+  transaction, so it is always taken after the writer.
+- `GroupArkCoSigner` already takes the writer first, then its lock.
+- `CeremonyFollowThrough` and `GroupArkTransport` hold their mutexes on paths that start from
+  database flows and from the Wavelength daemon, never from inside `storeNostrEvent`.
+- `MarmotEngine`'s restore lock covers reads only.
+
+**Not done:** a packaged desktop build making a profile and opening its wallet.
+
 ## Phase 2: recovery codes
 
 **Starts first (D9).** Of Phase 0 this needs only step 5 (the submodule), step 7 (the
