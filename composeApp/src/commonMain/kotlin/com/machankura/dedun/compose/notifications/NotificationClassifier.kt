@@ -55,6 +55,8 @@ object NotificationClassifier {
     /** The end of something, or a change in who is in the group. Not the steps in between. */
     val GROUP_ACTIVITY: Set<String> = setOf(
         // Governed rooms and promotion (giza-into-dedun, Phases 8 and 9), as Giza files them.
+        // The group's inbox has a key: it can now be written to (docs/group-inbox.md).
+        Line.TYPE_INBOX_KEY_COMPLETE,
         Line.TYPE_ADMIN_ADDED,
         Line.TYPE_ADMIN_REMOVED,
         Line.TYPE_DKG_COMPLETE,
@@ -103,6 +105,13 @@ object NotificationClassifier {
         // This device's own account of an offer it made or answered, a refusal every device
         // writes alike, a rotation it took part in, and the founding-admins line no build writes
         // any more: Giza files each of them silent.
+        Line.TYPE_INBOX_KEY_STARTED,
+        Line.TYPE_INBOX_KEY_FAILED,
+        Line.TYPE_INBOX_ANNOUNCED,
+        Line.TYPE_INBOX_RELAYS_ANNOUNCED,
+        Line.TYPE_INBOX_FORGOTTEN,
+        // The same housekeeping for the group's direct messages (docs/group-threshold-ecdh.md, D14).
+        Line.TYPE_GROUP_DM_FORGOTTEN,
         Line.TYPE_ADMIN_OFFERED,
         Line.TYPE_CHANGE_NOT_APPLIED,
         Line.TYPE_SHARE_REFRESH_TOOK_PART,
