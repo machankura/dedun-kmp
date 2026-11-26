@@ -360,26 +360,26 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `9c2f55aa` | second group | 5 | pending | feat: the same people can open a second group's ceremony (nip17-multiple-ceremonies, Phase 1) |
 | `1d6f77cf` | second group | 5 | pending | feat: making a group names its ceremony, and says what these people already have (nip17-multiple-ceremonies, Phase 2) |
 | `4baf5d8f` | second group | 5 | pending | feat: nothing asks a NIP-17 room for its one ceremony (nip17-multiple-ceremonies, Phase 3) |
-| `d1a9b995` | disappearing | 7 | pending | docs: a plan for disappearing NIP-17 messages (disappearing-messages, Phase 0) |
+| `d1a9b995` | disappearing | 7 | `685464be` | docs: a plan for disappearing NIP-17 messages (disappearing-messages, Phase 0) |
 | `4e16592a` | second group | 5 | pending | feat: a ceremony's lines, notice and join screen name the group it makes (nip17-multiple-ceremonies, Phase 4) |
-| `c5618a70` | disappearing | 7 | pending | docs: disappearing messages, the Phase 0 checks answered (disappearing-messages, Phase 0) |
-| `962bdbf6` | disappearing | 7 | pending | feat: when a NIP-17 rumor expires, as pure rules (disappearing-messages, Phase 1) |
+| `c5618a70` | disappearing | 7 | `b949c954` | docs: disappearing messages, the Phase 0 checks answered (disappearing-messages, Phase 0) |
+| `962bdbf6` | disappearing | 7 | `f85bf81a` | feat: when a NIP-17 rumor expires, as pure rules (disappearing-messages, Phase 1) |
 | `088e86ac` | second group | 5 | pending | feat: a NIP-17 room lists the groups made in it (nip17-multiple-ceremonies, Phase 5) |
 | `729efdac` | second group | 5 | pending | test: the same people make two groups, end to end (nip17-multiple-ceremonies, Phase 6) |
 | `50f73e17` | confederations | — | skip (D12) | feat: a member who has not joined finds the key ceremony from its room |
 | `03e2d10d` | second group | 5 | pending | docs: the record of more than one group from the same people (nip17-multiple-ceremonies, Phase 7) |
-| `b7f6df0c` | disappearing | 7 | pending | feat: storage for disappearing messages, v50 (disappearing-messages, Phase 2) |
-| `ae0468bb` | disappearing | 7 | pending | feat: every NIP-17 payload is stamped with its expiry (disappearing-messages, Phase 3) |
-| `a4c12eee` | disappearing | 7 | pending | feat: what has disappeared is deleted from the device (disappearing-messages, Phase 4) |
+| `b7f6df0c` | disappearing | 7 | `5d8f55f2` | feat: storage for disappearing messages, v50 (disappearing-messages, Phase 2) |
+| `ae0468bb` | disappearing | 7 | `9b7784ab` | feat: every NIP-17 payload is stamped with its expiry (disappearing-messages, Phase 3) |
+| `a4c12eee` | disappearing | 7 | `55a62e11` | feat: what has disappeared is deleted from the device (disappearing-messages, Phase 4) |
 | `3e05a28b` | confederations | — | skip (D12) | docs: a confederation's profile, decided by its groups (confederation-profile, Phase 0) |
-| `c50288a9` | disappearing | 7 | pending | feat: a ceremony's rounds leave the device when its session is done (disappearing-messages, Phase 5) |
+| `c50288a9` | disappearing | 7 | `324bce29` | feat: a ceremony's rounds leave the device when its session is done (disappearing-messages, Phase 5) |
 | `4994248d` | confederations | — | skip (D12) | feat: the wire and storage of a confederation's profile changes (confederation-profile, Phase 1) |
-| `2e747f90` | disappearing | 7 | pending | feat: the disappearing-messages setting, and the conversation showing it (disappearing-messages, Phase 6) |
+| `2e747f90` | disappearing | 7 | `39013eee` | feat: the disappearing-messages setting, and the conversation showing it (disappearing-messages, Phase 6) |
 | `fff891a4` | second group | 5 | pending | feat: a finished ceremony's screen names the group it made (nip17-multiple-ceremonies) |
 | `c293514d` | confederations | — | skip (D12) | feat: a group proposes, endorses or objects to its confederation's profile (confederation-profile, Phase 2) |
 | `44cbe596` | confederations | — | skip (D12) | feat: each group's room hears of a change to its confederation's profile (confederation-profile, Phase 3) |
-| `ada95867` | disappearing | 7 | pending | feat: what a group sends disappears too (disappearing-messages, Phase 7) |
-| `d30cea78` | disappearing | 7 | pending | docs: the record of disappearing messages (disappearing-messages, Phase 8) |
+| `ada95867` | disappearing | 7 | `fd00e9a4` | feat: what a group sends disappears too (disappearing-messages, Phase 7) |
+| `d30cea78` | disappearing | 7 | `ff5da69d` | docs: the record of disappearing messages (disappearing-messages, Phase 8) |
 | `5d6bbcd5` | confederations | — | skip (D12) | feat: the confederation's own screen, its profile form and its changes (confederation-profile, Phase 4) |
 | `8d494ddb` | confederations | — | skip (D12) | feat: a confederation signs the profile its groups endorsed, with nobody asked (confederation-profile, Phase 5) |
 | `19cd1aae` | confederations | — | skip (D12) | feat: the confederation's new profile reaches relays and every member group (confederation-profile, Phase 6) |

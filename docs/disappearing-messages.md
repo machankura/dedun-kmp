@@ -1,5 +1,17 @@
 # Disappearing NIP-17 messages, one day by default
 
+> **In Dedun, what a person writes does not disappear unless they turn it on.** This is Giza's
+> record, taken as written. Dedun changes four things
+> ([giza-second-batch.md](./giza-second-batch.md), Phase 7):
+>
+> - The default is Off (D11), not one day, because members settle disagreements about money by
+>   pointing at what was said.
+> - Protocol messages still always expire after their floor.
+> - No confederation kinds are classified (D12).
+> - The group's records live in its Marmot room, which this never reaches.
+>
+> Where the text below says "a day by default" or "Giza", read Dedun's Off.
+
 A plan to give every NIP-17 event Giza sends a NIP-40 `expiration`, with no exceptions. That
 includes what a person writes, what a group sends, and every ceremony round, signing round,
 confederation statement and Welcome that travels the same way. What a person writes expires one

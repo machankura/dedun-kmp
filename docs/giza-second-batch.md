@@ -110,7 +110,7 @@ describe a database with no wallets in it.
 | — | first plan's promotion | — | first plan, 9 | 52 |
 | 45→46 | the group's inbox | — | 6 | 53 (as built) |
 | 46→47 | the group's direct messages | — | 6 | 54 (as built) |
-| 49→50 | disappearing messages: the policy columns, `ChatMessage.expiresAt`, `GiftWrapPayload.expiresAt`, `DisappearingSetting`, `ExpiredGiftWrap` | — (Giza needs no data step; see Phase 7 for Dedun's default) | 7 | 55 |
+| 49→50 | disappearing messages: the policy columns, `ChatMessage.expiresAt`, `GiftWrapPayload.expiresAt`, `DisappearingSetting`, `ExpiredGiftWrap` | — (Giza needs no data step; see Phase 7 for Dedun's default) | 7 | 55 (as built) |
 | 52→53, 54→55 | group names stored bare | `MarmotGroupBareNameMigrationSpec`: Dedun goes from `#name` straight to the bare name, in one migration and one spec | 8 | 56 |
 | 42→45, 48→49, 50→52, 53→54 | confederations | three specs, two of which assume Giza's earlier versions | never (D12) | — |
 
@@ -739,6 +739,62 @@ do not wait for Phase 6.
   its floor.
 
 **Done when** those pass, and the inventory and the reader list are in the PR.
+
+**As built.** All ten commits are in. The storage is schema 55, generated against 54. Giza's
+`ada95867` adds expiry columns to the inbox and direct-message rows; those columns fold into 55,
+which has not shipped.
+
+- **Off by default (step 4).** `DisappearingMessages.DEFAULT_SECONDS` is `OFF`.
+  - An identity with no setting row, which is every identity on upgrade, reads as Off. So the
+    migration needs no data step.
+  - `PRESETS` already put Off first. On the profile's own setting, Off is now marked as the
+    default.
+  - The one-time notice in a conversation already shows only under a policy other than Off.
+  - Giza's tests that assumed a day are rewritten. The upgrade test checks that an existing
+    conversation and a new identity both read as Off.
+- **The copy (step 5).** The setting says it does not reach a group's own room, where payouts,
+  deposits, transfers and contacts are kept and never disappear. The profile row mentions direct
+  messages and the conversations where groups are made, not confederations.
+- **No confederation classes (D12).** The expiry classes lose their confederation kinds, and
+  `ProtocolRetention` loses its confederation ceremony case.
+
+**Step 1: the inventory.** Every place Dedun writes a `GiftWrapPayload`, and the class of what it
+writes:
+
+| writer | kinds | class |
+|---|---|---|
+| `DatabaseChatRepository.sendChatMessage` | 14, and 15, 7 and 5 where sent | written: the person's policy, Off by default |
+| `MarmotOutboundDao` (a Welcome) | 444 | ceremony floor, 7 days |
+| `ChillDkgRitualManager.broadcast` (a key ceremony, a subgroup's included) | `DkgRitualEvents.ALL` | ceremony floor, 7 days |
+| `FrostSigningManager.broadcast` in a NIP-17 room (a wallet's spend and sweep proposals included) | `FrostSigningEvents.ALL` | signing floor, 1 day |
+| (Marmot rooms today, classified anyway) | inbox key ceremony, share refresh and repair, threshold ECDH | ceremony or signing floor, as Giza |
+
+`NostrDao` also writes a row: the incoming copy of a message, which carries its sender's expiry.
+Nothing of these goes over NIP-17: the Iceberg ceremonies, Lightning and Wavelength co-signing,
+guardians, member wallets, contacts, governance, or the kinds moved to 30420-30442. All of them
+travel in Marmot rooms with `giftWrapPayloadId = null`. `DisappearingMessagesTest` checks that
+every kind in the table has a class chosen on purpose.
+
+**Step 2: what reads a round after its session.**
+
+- Only two places read stored NIP-17 rounds back: the replays in `ChillDkgRitualManager` and
+  `FrostSigningManager`. Both rebuild an open session. `ProtocolRetention` keeps a round while its
+  session is open.
+- The recovery walk reads `DkgSession` rows, not messages.
+- Re-enrolment (share repair) and the resend run in Marmot rooms.
+- A finished session keeps what it produced on its own row: the shares, the key, the signature.
+
+**Step 3: long waits.** No Lightning or Wavelength co-signing waits on a NIP-17 round; it runs in
+the group's Marmot room. So no floor has to outlast a wallet's timings.
+
+**Tests.** Giza's suites pass, adapted as above. `DisappearingLeavesGroupRecordsJvmTest` is new: a
+Marmot room's deposit attribution, coin assignment and their line survive a sweep two years on,
+under the shortest policy, with every payload released. jvmTest: 3,585 run, 0 failed, 7 skipped.
+`compileDebugKotlinAndroid`, `m3Audit`, `marmotAudit`, `magpieLockAudit` and `phraseAudit` pass.
+
+**Not run:** the three-device debug run. In it, a group would be made from a NIP-17 room with a
+Lightning wallet, the clock moved past every floor, and then the group would still pay out over
+Lightning and re-enrol a stale member.
 
 ## Phase 8: group names in braces (D13)
 
