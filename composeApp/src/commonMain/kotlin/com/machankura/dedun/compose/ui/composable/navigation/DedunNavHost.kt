@@ -171,7 +171,9 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrEventDe
 import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrSecretRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilePreviewRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ProfilesRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.RecoveryCodeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.RecoveryPhraseRoute
+import com.machankura.dedun.compose.ui.composable.RecoveryCodeScreen
 import com.machankura.dedun.compose.ui.composable.ProfilePreviewScreen
 import com.machankura.dedun.compose.ui.composable.ProfilesScreen
 import com.machankura.dedun.compose.ui.view.model.ProfilesViewModel
@@ -1615,6 +1617,20 @@ fun DedunNavHost(
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            composable<RecoveryCodeRoute> {
+                RecoveryCodeScreen(
+                    phoenixGlobal = phoenixGlobal,
+                    activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    },
+                    // Every code profile is also its 24 words, which the phrase screen reads
+                    // from seed.dat when the codes file cannot be.
+                    onShowRecoveryPhrase = {
+                        navController.navigate(RecoveryPhraseRoute)
+                    },
                 )
             }
             composable<NostrSecretRoute> {

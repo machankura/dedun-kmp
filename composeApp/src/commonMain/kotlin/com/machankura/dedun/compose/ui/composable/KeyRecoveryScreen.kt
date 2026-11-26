@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AddToDrive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.Warning
@@ -53,7 +54,9 @@ import dedun.composeapp.generated.resources.encrypt_and_back_your_recovery_infor
 import dedun.composeapp.generated.resources.key_recovery
 import dedun.composeapp.generated.resources.not_backed_up_yet
 import dedun.composeapp.generated.resources.nostr_secret_key
+import dedun.composeapp.generated.resources.recovery_code
 import dedun.composeapp.generated.resources.recovery_phrase
+import dedun.composeapp.generated.resources.write_down_and_secure_the_nine_block_code
 import dedun.composeapp.generated.resources.store_the_nsec_that_signs_as_this_profile
 import dedun.composeapp.generated.resources.these_are_your_keys_keep_them_safe_no_wallet
 import dedun.composeapp.generated.resources.you_said_you_stored_it
@@ -66,6 +69,7 @@ import org.jetbrains.compose.resources.stringResource
 import com.machankura.dedun.compose.extensions.hexToNpubHrp
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ImplementationPendingRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrSecretRoute
+import com.machankura.dedun.compose.ui.composable.navigation.routes.RecoveryCodeRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.RecoveryPhraseRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.Route
 import com.machankura.dedun.compose.ui.composable.widgets.Decorative
@@ -188,8 +192,31 @@ fun KeyRecoveryScreen(
                     // identity the phrase option through an `else`.
                     IdentityKind.NostrPublic -> Unit
 
+                    // Nine blocks for a profile made from a code. Its 24 words are on the
+                    // code's own screen, for other apps; the code is the backup.
+                    IdentityKind.RecoveryCode -> KeyRecoveryOption(
+                        icon = Icons.Default.Password,
+                        title = stringResource(Res.string.recovery_code),
+                        description = stringResource(Res.string.write_down_and_secure_the_nine_block_code),
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        status = if (showBackupNotice) {
+                            KeyRecoveryStatus(
+                                icon = Icons.Default.Warning,
+                                text = stringResource(Res.string.not_backed_up_yet)
+                            )
+                        } else {
+                            KeyRecoveryStatus(
+                                icon = Icons.Default.CheckCircle,
+                                text = stringResource(Res.string.you_said_you_wrote_it_down)
+                            )
+                        },
+                        onClick = {
+                            onNavigateToRoute.invoke(RecoveryCodeRoute)
+                        }
+                    )
+
                     IdentityKind.Mnemonic,
-                    IdentityKind.RecoveryCode,
                     null -> KeyRecoveryOption(
                         icon = Icons.Default.Spellcheck,
                         title = stringResource(Res.string.recovery_phrase),
