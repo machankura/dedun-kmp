@@ -23,7 +23,7 @@ Checked against Bennu at `2db6dde5`, Giza at `a5a802c5` and quartz 2.20.1, by
 | 30339 | depositor statement | **Dedun** | in use |
 | 30340–30349 | share refresh (30340–30345) and repair (30346–30349) | Giza | in use, at Giza's meaning |
 | 30350–30366 | group Lightning wallet (`GroupLightningEvents`) | shared | in use |
-| 30370–30377 | governed rooms | Giza | read only (`GizaProtocolEvents`) |
+| 30370–30377 | governed rooms: statement, own commit, support, carrier, promotion offer, acceptance and handover, step-down (`GovernanceEvents`, `PromotionEvents`) | Giza | in use, at Giza's meaning; until K3 told from the legacy Wavelength numbers by shape (`GovernanceEvents.isGovernance`) |
 | 30379–30388 | confederation key ceremony (30380 and 30383 retired, 30386 and 30388 reserved) | Giza | refused (`GizaProtocolEvents`); Dedun takes no confederations |
 | 30390–30399 | confederation signing (30397 free) | Giza | refused (`GizaProtocolEvents`) |
 | 30400–30401 | a group's direct messages, threshold ECDH | Giza | refused until [giza-second-batch.md](./giza-second-batch.md), Phase 6 |

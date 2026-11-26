@@ -574,6 +574,12 @@ jvmTest: 3,246 run, 0 failed.
 - Phase 8 (names in braces) runs through 26 confederation files. They have to be read out of it
   by hand.
 
+**Since then:** the first plan's Phases 8 and 9 are built ([giza-into-dedun.md](./giza-into-dedun.md),
+their "As built" notes), on this branch and before K3. That lifts the first two blocks: step 3
+of the second group, and Phase 6, now have the member-row-action, governed-room and
+`GovernanceFollowThrough` code they edit. Their migrations take 53 and up, since the first
+plan's took 51 and 52.
+
 ## Phase 6: the group's inbox and its direct messages
 
 `group-inbox` (`ccc439b2`..`31bcb3a3`) and `group-threshold-ecdh` (`dae0a345`..`082d0971`):

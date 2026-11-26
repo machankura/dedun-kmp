@@ -132,89 +132,89 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `98567629` | `49728f45` | rotation waits for key state | 7 | taken | `6f60f483` | feat: the Shares section follows the group while it is open (Phase 3) |
 | `95131248` | `0cf21a24` | rotation waits for key state | 7 | taken | `ebd72d89` | feat: the proposer is not asked about their own rotation (Phase 4) |
 | `5820be9b` | `4217f056` | rotate shares, single approval | 7 | taken | `867ddaf9` | docs: taking part is the only approval a share rotation needs, as a plan |
-| `f2b0aa91` | `94ddaa86` | robust-group-admins | 8 | taken | pending | docs: every founding member of a robust group is its admin, phased |
+| `f2b0aa91` | `94ddaa86` | robust-group-admins | 8 | taken | `6606e803` | docs: every founding member of a robust group is its admin, phased |
 | `2664f6ca` | `8abff8be` | rotation waits for key state | 7 | taken | `d4b038a1` | docs: a rotation waits for the last one to be signed, built (Phase 5) |
 | `18f426ca` | `9317fad9` | rotate shares, single approval | 7 | taken | `344fa455` | test: a rotation's approvals, counted as they are today (rotate-shares-single-approval, Phase 1) |
 | `b4103bcb` | `3ecc7bd2` | rotate shares, single approval | 7 | taken | `fc484e48` | feat: taking part is a rotation's only approval (rotate-shares-single-approval, Phase 2) |
 | `959c120d` | `a7e329e6` | rotate shares, single approval | 7 | taken | `d467f6f7` | feat: running rotations resume without a message (rotate-shares-single-approval, Phase 3) |
-| `3efa1af5` | `f13a2478` | robust-group-admins | 8 | taken | pending | test: every founding member of a robust group is its admin (robust-group-admins, Phase 0) |
+| `3efa1af5` | `f13a2478` | robust-group-admins | 8 | taken | `89ab373a` | test: every founding member of a robust group is its admin (robust-group-admins, Phase 0) |
 | `69871c68` | `e6b26e0d` | rotate shares, single approval | 7 | adapted | `81032e9e` | feat: proposing a rotation is the proposer's approval (rotate-shares-single-approval, Phase 4) |
-| `d7fb7103` | `51fe16f9` | robust-group-admins | 8 | taken | pending | feat: a robust group's admin room takes its admins from the ceremony (robust-group-admins, Phase 1) |
-| `8088efd7` | `c63026c4` | member-admin-promotion | 8 | taken | pending | docs: making a member an admin and back, a phased plan |
-| `83711419` | `93235e3f` | robust-group-admins | 8 | taken | pending | fix: a member welcomed into a room sees its admins at once (robust-group-admins, Phase 2) |
+| `d7fb7103` | `51fe16f9` | robust-group-admins | 8 | taken | `84bf20be` | feat: a robust group's admin room takes its admins from the ceremony (robust-group-admins, Phase 1) |
+| `8088efd7` | `c63026c4` | member-admin-promotion | 8 | taken | `c8148d5e` | docs: making a member an admin and back, a phased plan |
+| `83711419` | `93235e3f` | robust-group-admins | 8 | taken | `0491c12c` | fix: a member welcomed into a room sees its admins at once (robust-group-admins, Phase 2) |
 | `46eb23b7` | `554ddfdd` | rotate shares, single approval | 7 | adapted | `58c58a1f` | feat: a rotation's key state signs itself (rotate-shares-single-approval, Phase 5) |
 | `2ed83c55` | `8ba35258` | member-admin-promotion | 1 | taken | `f1954991` | fix: an admin's refused leave is shown, not thrown out of the view model (member-admin-promotion, Phase 10a) |
-| `53acae68` | `cccb2c12` | member-admin-promotion | 8 | adapted | pending | feat: a member's admin flag is true from the room's first moment (member-admin-promotion, Phase 1) |
-| `4671a86a` | `f4c03ad0` | robust-group-admins | 8 | taken | pending | feat: a device checks its admin room against the ceremony it took part in (robust-group-admins, Phase 3) |
+| `53acae68` | `cccb2c12` | member-admin-promotion | 8 | adapted | `5e87c0af` | feat: a member's admin flag is true from the room's first moment (member-admin-promotion, Phase 1) |
+| `4671a86a` | `f4c03ad0` | robust-group-admins | 8 | taken | `7ebb153a` | feat: a device checks its admin room against the ceremony it took part in (robust-group-admins, Phase 3) |
 | `11f2cb2b` | `baedb44d` | rotate shares, single approval | 7 | adapted | `0edaccc2` | feat: the Shares section, with one approval (rotate-shares-single-approval, Phase 6) |
-| `19f0fc0f` | `8bc893c2` | member-admin-promotion | 8 | adapted | pending | feat: the room says who became an admin, and who stopped (member-admin-promotion, Phase 2) |
+| `19f0fc0f` | `8bc893c2` | member-admin-promotion | 8 | adapted | `14950509` | feat: the room says who became an admin, and who stopped (member-admin-promotion, Phase 2) |
 | `99261876` | `f1b4a0f9` | rotate shares, single approval | 7 | taken | `817a6e00` | docs: taking part is the only approval, as built (rotate-shares-single-approval, Phase 7) |
-| `1dc94ad4` | `004be0ff` | robust-group-admins | 8 | taken | pending | feat: a founding invite that never went out is finished (robust-group-admins, Phase 4) |
-| `baf63b8d` | `f627c8e3` | robust-group-admins | 8 | adapted | pending | feat: the room's details say who administers it, and whether the founders do (robust-group-admins, Phase 5) |
-| `d95412ff` | `c0be080e` | member-admin-promotion | 8 | adapted | pending | feat: an admin makes a member an admin, or not, in a convenient room (member-admin-promotion, Phase 6) |
-| `01e33f5a` | `7defde35` | robust-group-admins | 8 | adapted | pending | fix: rooms joined before the Welcome wrote flags are caught up at start (robust-group-admins, Phase 6) |
-| `a95d6db1` | `67252e9e` | robust-group-admins | 8 | taken | pending | docs: every founding member of a robust group is its admin, built (robust-group-admins, Phase 7) |
-| `ef33349e` | `551a74bc` | member-admin-promotion | 8 | adapted | pending | feat: the member row's menu, and leaving as an admin (member-admin-promotion, Phases 10 and 11, convenient rooms) |
-| `6e3ed2bb` | `5980e86d` | member-admin-promotion | 8 | taken | pending | feat: a robust group keeps at least three admins, and never fewer than its quorum (member-admin-promotion, Phase 7, app side) |
-| `d5fbc568` | `9b8eb8da` | member-admin-promotion | 8 | adapted | pending | feat: the statement a keyed room's quorum signs before it changes (member-admin-promotion, Phase 3) |
-| `32360994` | `2a28604b` | member-admin-promotion | 8 | taken | pending | docs: admin promotion is built for convenient rooms, and what waits on Phase 0 |
-| `b1d62d9e` | `9574b2e3` | member-admin-promotion | 8 | taken | pending | docs: the commit travels inside the group's signature; no upstream work |
-| `1deff002` | `7ad607f5` | member-admin-promotion | 8 | adapted | pending | feat: a governed room applies a commit only from inside the group's signature (member-admin-promotion, Phase 4a) |
-| `dd00d0f7` | `aca3e169` | member-admin-promotion | 8 | adapted | pending | feat: a keyed room's changes can be made to need the group's signature (member-admin-promotion, Phase 4b) |
+| `1dc94ad4` | `004be0ff` | robust-group-admins | 8 | taken | `e6a9d20c` | feat: a founding invite that never went out is finished (robust-group-admins, Phase 4) |
+| `baf63b8d` | `f627c8e3` | robust-group-admins | 8 | adapted | `3ac7ee6c` | feat: the room's details say who administers it, and whether the founders do (robust-group-admins, Phase 5) |
+| `d95412ff` | `c0be080e` | member-admin-promotion | 8 | adapted | `172ed1b1` | feat: an admin makes a member an admin, or not, in a convenient room (member-admin-promotion, Phase 6) |
+| `01e33f5a` | `7defde35` | robust-group-admins | 8 | adapted | `b7082db0` | fix: rooms joined before the Welcome wrote flags are caught up at start (robust-group-admins, Phase 6) |
+| `a95d6db1` | `67252e9e` | robust-group-admins | 8 | taken | `65231568` | docs: every founding member of a robust group is its admin, built (robust-group-admins, Phase 7) |
+| `ef33349e` | `551a74bc` | member-admin-promotion | 8 | adapted | `e56ae59f` | feat: the member row's menu, and leaving as an admin (member-admin-promotion, Phases 10 and 11, convenient rooms) |
+| `6e3ed2bb` | `5980e86d` | member-admin-promotion | 8 | taken | `ce370136` | feat: a robust group keeps at least three admins, and never fewer than its quorum (member-admin-promotion, Phase 7, app side) |
+| `d5fbc568` | `9b8eb8da` | member-admin-promotion | 8 | adapted | `8aa702bb` | feat: the statement a keyed room's quorum signs before it changes (member-admin-promotion, Phase 3) |
+| `32360994` | `2a28604b` | member-admin-promotion | 8 | taken | `d3f1a7a7` | docs: admin promotion is built for convenient rooms, and what waits on Phase 0 |
+| `b1d62d9e` | `9574b2e3` | member-admin-promotion | 8 | taken | `9916919d` | docs: the commit travels inside the group's signature; no upstream work |
+| `1deff002` | `7ad607f5` | member-admin-promotion | 8 | adapted | `2a054f88` | feat: a governed room applies a commit only from inside the group's signature (member-admin-promotion, Phase 4a) |
+| `dd00d0f7` | `aca3e169` | member-admin-promotion | 8 | adapted | `f7faa82f` | feat: a keyed room's changes can be made to need the group's signature (member-admin-promotion, Phase 4b) |
 | `9008d4fe` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | docs: plan to make every group a member creates robust (remove-convenient-groups) |
 | `b9396643` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | test: pin every new group as robust, ignored until it is (remove-convenient-groups, Phase 0) |
-| `0a4453da` | `362b708d` | remove-convenient-groups | 8 | adapted | pending | refactor: Quorum takes the threshold rules from ChatRoomType (remove-convenient-groups, Phase 1) |
+| `0a4453da` | `362b708d` | remove-convenient-groups | 8 | adapted | `347b6626` | refactor: Quorum takes the threshold rules from ChatRoomType (remove-convenient-groups, Phase 1) |
 | `eb2c8aa0` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | feat: every group a member creates is robust (remove-convenient-groups, Phase 2) |
-| `59509e42` | `54567e99` | member-admin-promotion | 8 | adapted | pending | feat: a change to a governed room is proposed, signed by the group, then published (member-admin-promotion, Phase 5) |
+| `59509e42` | `54567e99` | member-admin-promotion | 8 | adapted | `fd6a48c0` | feat: a change to a governed room is proposed, signed by the group, then published (member-admin-promotion, Phase 5) |
 | `c2010abe` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | feat: a room with no key behind it takes no new members (remove-convenient-groups, Phase 2b) |
 | `7fc1233b` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | feat: the member picker holds the three-person floor (remove-convenient-groups, Phase 3) |
 | `03704db3` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | refactor: ChatRoomType goes, and the screen is named for the quorum (remove-convenient-groups, Phase 4) |
-| `76fbca3e` | `7c1d79e6` | member-admin-promotion | 8 | adapted | pending | feat: a governed room's ordinary changes go through the group's signature (member-admin-promotion, Phase 5b) |
-| `7de80452` | `58d138b8` | member-admin-promotion | 8 | taken | pending | fix: the statement's KDoc names the retired wallet range by its constant |
-| `9d2a13b8` | `43069679` | member-admin-promotion | 8 | taken | pending | docs: admin promotion is built but for its share work, and where the build chose differently |
+| `76fbca3e` | `7c1d79e6` | member-admin-promotion | 8 | adapted | `9f00093e` | feat: a governed room's ordinary changes go through the group's signature (member-admin-promotion, Phase 5b) |
+| `7de80452` | `58d138b8` | member-admin-promotion | 8 | taken | `19bf8924` | fix: the statement's KDoc names the retired wallet range by its constant |
+| `9d2a13b8` | `43069679` | member-admin-promotion | 8 | taken | `a15ac22d` | docs: admin promotion is built but for its share work, and where the build chose differently |
 | `41409434` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | feat: a group run by one person says so, and is still joined (remove-convenient-groups, Phase 5) |
 | `9b7b1a5f` | — | remove-convenient-groups | 10 | held (D3) | held (D3) | docs: every group a member makes is robust, built (remove-convenient-groups, Phase 6) |
-| `546b2a2b` | `bac8b963` | robust-group-admins | 8 | taken | pending | docs: Phase 1's flag writer is robust-group-admins' AdminFlags |
-| `51eda2d2` | `f27c1153` | member-admin-promotion | 9 | adapted | pending | feat: a keyed room demotes an admin with the group's signature, then rotates them out (member-admin-promotion, Phase 9) |
-| `638d1d29` | `f3d16fc2` | member-admin-promotion | 9 | adapted | pending | feat: a member is made an admin of a keyed room, and enrolled into its key (member-admin-promotion, Phase 8) |
-| `c64ba8aa` | `6928eeb0` | member-admin-promotion | 9 | taken | pending | docs: Phases 8 and 9 are built under the experimental enrollment, and where the build chose differently |
+| `546b2a2b` | `bac8b963` | robust-group-admins | 8 | taken | `b3e289a4` | docs: Phase 1's flag writer is robust-group-admins' AdminFlags |
+| `51eda2d2` | `f27c1153` | member-admin-promotion | 9 | adapted | `5f1e0c50` | feat: a keyed room demotes an admin with the group's signature, then rotates them out (member-admin-promotion, Phase 9) |
+| `638d1d29` | `f3d16fc2` | member-admin-promotion | 9 | adapted | `7c2d5b9a` | feat: a member is made an admin of a keyed room, and enrolled into its key (member-admin-promotion, Phase 8) |
+| `c64ba8aa` | `6928eeb0` | member-admin-promotion | 9 | taken | `64b71e9c` | docs: Phases 8 and 9 are built under the experimental enrollment, and where the build chose differently |
 | `b17a2b1a` | — | marmot-v2 Phase 9 | 10 | pending (D6) | pending (D6) | feat: new rooms are made on the Marmot current profile (marmot-v2, Phase 9, the flip) |
 | `01da88ce` | — | marmot-v2 Phase 9 | 10 | pending (D6) | pending (D6) | feat: the legacy KeyPackage slot is retired (marmot-v2, Phase 9, the retirement) |
 | `f90506aa` | — | marmot-v2 Phase 9 | 10 | pending (D6) | pending (D6) | docs: the Marmot v2 rollout is done -- new rooms on the current profile, the legacy slot retired (v2 Phase 9) |
-| `6aae5652` | `63953322` | member-admin-promotion | 8 | taken | pending | fix: a member invited into a keyed room says it follows signed commits on joining |
-| `950ed247` | `4b549646` | member-admin-promotion | 8 | taken | pending | feat: a keyed room switches on the group's signature by itself |
-| `35d0b1b0` | `cfa35073` | member-row-actions | 9 | taken | pending | docs: a plan for member rows that offer every action and explain the ones not open |
-| `76f8e053` | `9ab9f6aa` | member-row-actions | 9 | taken | pending | feat: member actions carry the reasons they are not open (member-row-actions, Phase 1) |
-| `b09fd320` | `513c866d` | member-row-actions | 9 | adapted | pending | feat: every viewer gets the member rows' options, with their reasons (member-row-actions, Phase 2) |
+| `6aae5652` | `63953322` | member-admin-promotion | 8 | taken | `45e96f50` | fix: a member invited into a keyed room says it follows signed commits on joining |
+| `950ed247` | `4b549646` | member-admin-promotion | 8 | taken | `d9e59b27` | feat: a keyed room switches on the group's signature by itself |
+| `35d0b1b0` | `cfa35073` | member-row-actions | 9 | taken | `c80dcec7` | docs: a plan for member rows that offer every action and explain the ones not open |
+| `76f8e053` | `9ab9f6aa` | member-row-actions | 9 | taken | `eda7ac05` | feat: member actions carry the reasons they are not open (member-row-actions, Phase 1) |
+| `b09fd320` | `513c866d` | member-row-actions | 9 | adapted | `f561520e` | feat: every viewer gets the member rows' options, with their reasons (member-row-actions, Phase 2) |
 | `1ccd8c7f` | — | member-admin-promotion | 10 | skipped (D2) | skip | feat: a keyed room is born needing the group's signature; the switch is gone |
-| `7c39c7b9` | `2ac712f1` | member-row-actions | 9 | adapted | pending | feat: a screen that says why a member action is not open (member-row-actions, Phase 4) |
-| `3447fa11` | `5f0745cd` | member-row-actions | 9 | adapted | pending | feat: every other member's row offers every action (member-row-actions, Phase 3) |
-| `709adb57` | `9079efc0` | member-row-actions | 9 | taken | pending | feat: the member rows say what is still on its way (member-row-actions, Phase 5) |
-| `599cef7d` | `ec1bf0b1` | member-row-actions | 9 | taken | pending | docs: the member rows are built, and where the build chose differently (member-row-actions, Phase 6) |
-| `bb35d73c` | `3c2d7d6b` | member-admin-promotion | 9 | adapted | pending | feat: an admin of a keyed room steps down by asking another admin |
-| `aaabc519` | `4b39341b` | remove-founding-admins-card | 9 | taken | pending | docs: a plan to remove the "Founding members aren't admins" card |
-| `47eb4852` | `2408b20c` | remove-founding-admins-card | 9 | adapted | pending | test: pin what outlives the founding-admins check (remove-founding-admins-card, Phase 0) |
-| `1efe486e` | `ab32600d` | remove-founding-admins-card | 9 | adapted | pending | feat: the "Founding members aren't admins" card goes (remove-founding-admins-card, Phase 1) |
-| `4550201d` | `373c6e7f` | admin-change-rotation | 9 | taken | pending | docs: a plan for admin changes that carry their rotation, and take turns with it |
-| `b04f3047` | `2019dce4` | remove-founding-admins-card | 9 | adapted | pending | refactor: the detail screen stops checking founding admins (remove-founding-admins-card, Phase 2) |
-| `b5c1d9eb` | `8729cc04` | remove-founding-admins-card | 9 | taken | pending | feat: the Welcome stops announcing missing founding admins (remove-founding-admins-card, Phase 3) |
-| `d21483ef` | `947605db` | remove-founding-admins-card | 9 | adapted | pending | refactor: the founding-admins check and its repair go (remove-founding-admins-card, Phase 4) |
-| `e682b06f` | `b0092b91` | remove-founding-admins-card | 9 | taken | pending | docs: the founding-admins card is gone, and where the notes say so (remove-founding-admins-card, Phase 5) |
-| `926f79da` | `f32aa019` | admin-change-rotation | 9 | taken | pending | test: pin what admin changes and rotations do to each other today (admin-change-rotation, Phase 1) |
-| `521135c8` | `af8d4bee` | admin-change-rotation | 9 | adapted | pending | feat: one rule for what a rotation and an admin change wait on (admin-change-rotation, Phase 2) |
-| `c7d46258` | `bc9ff6a0` | admin-change-rotation | 9 | adapted | pending | feat: admin changes and rotations take turns (admin-change-rotation, Phases 3 and 4) |
-| `8bf0a240` | `ce21e236` | admin-change-rotation | 9 | adapted | pending | feat: the rotation an admin change owes asks nobody (admin-change-rotation, Phase 5) |
+| `7c39c7b9` | `2ac712f1` | member-row-actions | 9 | adapted | `506c026c` | feat: a screen that says why a member action is not open (member-row-actions, Phase 4) |
+| `3447fa11` | `5f0745cd` | member-row-actions | 9 | adapted | `334fd393` | feat: every other member's row offers every action (member-row-actions, Phase 3) |
+| `709adb57` | `9079efc0` | member-row-actions | 9 | taken | `919958e2` | feat: the member rows say what is still on its way (member-row-actions, Phase 5) |
+| `599cef7d` | `ec1bf0b1` | member-row-actions | 9 | taken | `1ef60d91` | docs: the member rows are built, and where the build chose differently (member-row-actions, Phase 6) |
+| `bb35d73c` | `3c2d7d6b` | member-admin-promotion | 9 | adapted | `0007e13d` | feat: an admin of a keyed room steps down by asking another admin |
+| `aaabc519` | `4b39341b` | remove-founding-admins-card | 9 | taken | `80095354` | docs: a plan to remove the "Founding members aren't admins" card |
+| `47eb4852` | `2408b20c` | remove-founding-admins-card | 9 | adapted | `0745f802` | test: pin what outlives the founding-admins check (remove-founding-admins-card, Phase 0) |
+| `1efe486e` | `ab32600d` | remove-founding-admins-card | 9 | adapted | `608f973b` | feat: the "Founding members aren't admins" card goes (remove-founding-admins-card, Phase 1) |
+| `4550201d` | `373c6e7f` | admin-change-rotation | 9 | taken | `9dc4f324` | docs: a plan for admin changes that carry their rotation, and take turns with it |
+| `b04f3047` | `2019dce4` | remove-founding-admins-card | 9 | adapted | `016a12ed` | refactor: the detail screen stops checking founding admins (remove-founding-admins-card, Phase 2) |
+| `b5c1d9eb` | `8729cc04` | remove-founding-admins-card | 9 | taken | `c9eba184` | feat: the Welcome stops announcing missing founding admins (remove-founding-admins-card, Phase 3) |
+| `d21483ef` | `947605db` | remove-founding-admins-card | 9 | adapted | `5703a2e4` | refactor: the founding-admins check and its repair go (remove-founding-admins-card, Phase 4) |
+| `e682b06f` | `b0092b91` | remove-founding-admins-card | 9 | taken | `80fdba42` | docs: the founding-admins card is gone, and where the notes say so (remove-founding-admins-card, Phase 5) |
+| `926f79da` | `f32aa019` | admin-change-rotation | 9 | taken | `437a5f97` | test: pin what admin changes and rotations do to each other today (admin-change-rotation, Phase 1) |
+| `521135c8` | `af8d4bee` | admin-change-rotation | 9 | adapted | `f43a9d8c` | feat: one rule for what a rotation and an admin change wait on (admin-change-rotation, Phase 2) |
+| `c7d46258` | `bc9ff6a0` | admin-change-rotation | 9 | adapted | `1c4fb484` | feat: admin changes and rotations take turns (admin-change-rotation, Phases 3 and 4) |
+| `8bf0a240` | `ce21e236` | admin-change-rotation | 9 | adapted | `1a271004` | feat: the rotation an admin change owes asks nobody (admin-change-rotation, Phase 5) |
 | `d51fdde0` | `41466e33` | quartz/mls/marmot update | 3 | taken | `e3ad4380` | docs: plan the move to quartz 2.20.1, mls-kmp 1.4.0, marmot-kmp 2.3.0 and crypto-kmp 2.1.1 |
-| `9fddb0c3` | `dc04d41d` | admin-change-rotation | 9 | taken | pending | feat: the first promotion rotates the shares itself (admin-change-rotation, Phase 6) |
+| `9fddb0c3` | `dc04d41d` | admin-change-rotation | 9 | taken | `e41e239c` | feat: the first promotion rotates the shares itself (admin-change-rotation, Phase 6) |
 | `3a1dbf87` | `bbcf8e7a` | quartz/mls/marmot update | 3 | taken | `e9ebfcde` | docs: Magpie adopted, and mls-kmp 1.4.0 is a tag not a release (quartz-mls-marmot-update, Phase 0) |
 | `971dd459` | `1ace8417` | quartz/mls/marmot update | 3 | adapted | `b2bd1390` | build: the Gradle daemon runs on Java 21 whatever java is on the path (quartz-mls-marmot-update, Phase 1) |
-| `cc21d683` | `cd67377f` | admin-change-rotation | 9 | adapted | pending | feat: the Shares section says whose share a rotation takes away; the record (admin-change-rotation, Phases 7 and 8) |
+| `cc21d683` | `cd67377f` | admin-change-rotation | 9 | adapted | `bc6a15de` | feat: the Shares section says whose share a rotation takes away; the record (admin-change-rotation, Phases 7 and 8) |
 | `f56be2b3` | `eb4c120e` | quartz/mls/marmot update | 3 | taken | `d66b1330` | build: quartz 2.20.0, marmot-kmp 2.3.0, mls-kmp 1.3.1 and crypto-kmp 2.1.1, through Magpie (quartz-mls-marmot-update, Phase 2) |
 | `c81e4a2d` | `6db5af5c` | quartz/mls/marmot update | 3 | taken | `2dbf74c0` | test: an old epoch-0 room moves forward on mls-kmp 1.3.1 (quartz-mls-marmot-update, Phase 3) |
 | `a08a8789` | `822b924b` | quartz/mls/marmot update | 3 | taken | `027fd301` | docs(tools): the shipped engine against the old one, both ways, three epochs (quartz-mls-marmot-update, Phase 3) |
 | `0b43295a` | `4e63c4f1` | quartz/mls/marmot update | 3 | taken | `5acf9a70` | test: pin the state version a save is written at (quartz-mls-marmot-update, Phase 4) |
 | `0ecc179d` | `269410be` | quartz/mls/marmot update | 3 | taken | `e3cb2816` | build: quartz 2.20.1, one past marmot's pin (quartz-mls-marmot-update, Phase 5a) |
-| `d6c34a77` | `1ff82201` | admin-change-rotation | 9 | taken | pending | fix: a rotation reads the admin policy alone, now the founding-admins check is gone |
+| `d6c34a77` | `1ff82201` | admin-change-rotation | 9 | taken | `fe1d76bb` | fix: a rotation reads the admin policy alone, now the founding-admins check is gone |
 | `7222df01` | `5f38e389` | quartz/mls/marmot update | 3 | taken | `83c00bc8` | build: the lock holds only what resolves (quartz-mls-marmot-update, Phase 6, Linux half) |
 | `7fe64930` | `bea28974` | quartz/mls/marmot update | 3 | taken | `29e345dc` | build: check fails when the catalogue and the Magpie lock disagree (quartz-mls-marmot-update, Phase 7) |
 | `a6d04ec5` | `1775b3ff` | quartz/mls/marmot update | 3 | taken | `0aaad433` | docs: the notes that still said quartz 2.7.3 (quartz-mls-marmot-update, Phase 7) |
@@ -256,11 +256,11 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `5ce77c08` | skip: Bennu's own notes | docs: rotation is in, and D5 stays open (giza-into-bennu, Phase 7) |
 | `b86b3a0d` | skip: Bennu's own notes | docs: governed rooms are in, receiving and sending (giza-into-bennu, Phase 8) |
 | `1785a284` | skip: Bennu's own notes | docs: Bennu keeps convenient groups, said where Giza's plan to remove them landed |
-| `8a91b664` | pending | feat: no admin change in a keyed room that keeps a Lightning wallet (giza-into-bennu, Phase 9, D4) |
-| `f96d2f47` | pending | test: an admin's row is labelled from its admin flag, as the screen now reads it |
+| `8a91b664` | `7e2c82ec` | feat: no admin change in a keyed room that keeps a Lightning wallet (giza-into-bennu, Phase 9, D4) |
+| `f96d2f47` | `c08e8d42` | test: an admin's row is labelled from its admin flag, as the screen now reads it |
 | `0ba1c5bd` | skip: Bennu's own notes | docs: promotion, demotion and their rotations are in (giza-into-bennu, Phase 9) |
 | `a2528010` | skip: Bennu's own notes | docs: Phases 0 to 9 are built, and what is left (giza-into-bennu) |
-| `2db6dde5` | pending | test: a Giza-shaped device and two Bennu devices share one governed room (giza-into-bennu, Phase 8) |
+| `2db6dde5` | `e47478cf` | test: a Giza-shaped device and two Bennu devices share one governed room (giza-into-bennu, Phase 8) |
 
 ## The second batch
 
