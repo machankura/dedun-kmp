@@ -23,6 +23,7 @@ import com.machankura.dedun.compose.nostr.wallet.MemberWalletRequestEvent
 import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -62,7 +63,11 @@ object ProposedEvent {
      * person: a caller with profiles to hand passes them, and one without gets
      * the summary without a name rather than a wrong one.
      */
-    fun summarize(event: Event, nameOf: (HexKey) -> String? = { null }): Summary = when (MovedKinds.current(event.kind)) {
+    fun summarize(event: Event, nameOf: (HexKey) -> String? = { null }): Summary = when (
+        // A governed room's statement shares 30370 with the Wavelength wallet statement's
+        // legacy number until K3, and is told by its shape (`GovernanceEvents.isGovernance`).
+        if (GovernanceEvents.isGovernance(event)) event.kind else MovedKinds.current(event.kind)
+    ) {
         // The one thing a group signs that is about the group rather than about
         // its work, and the only one a member sees before the room has done
         // anything. Shown as the path and the ceremony rather than as the key:

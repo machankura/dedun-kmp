@@ -2228,14 +2228,15 @@ data class ChatMessage(
                 // which is the only trace an unrecognised payload leaves.
                 MarmotAppEvent.KIND_SYSTEM, MarmotAppEvent.KIND_EDIT -> null
 
-                // Giza's share refresh and governed-room traffic, in a room a Giza or Bennu
-                // member shares. This build does not act on them yet, and a raw bubble per
-                // envelope is no account of anything. Last, after every arm of Dedun's own:
-                // until Dedun's kinds move (docs/giza-into-dedun.md, Phase K), 30340-30343
-                // and 30370-30377 are still Dedun's deposit, transfer and Wavelength kinds,
-                // and their arms above read them first -- and return null for an event of
-                // Giza's that does not parse as theirs.
+                // Giza's traffic this build does not act on, in a room a Giza or Bennu member
+                // shares: a raw bubble per envelope is no account of anything. And a governed
+                // room's envelopes and promotion steps, which NostrDao acts on and which say
+                // what they did in lines of their own. Last, after every arm of Dedun's own:
+                // until Dedun's kinds move (docs/giza-into-dedun.md, Phase K), 30370-30382
+                // are still Dedun's Wavelength kinds, and their arms above read them first --
+                // and return null for an event that does not parse as theirs.
                 in GizaProtocolEvents.ALL -> null
+                in GovernanceEvents.ALL -> null
 
                 else -> unsupported()
             }

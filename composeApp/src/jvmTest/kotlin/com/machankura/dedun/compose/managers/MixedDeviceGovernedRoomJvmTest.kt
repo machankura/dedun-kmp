@@ -46,6 +46,14 @@ import fr.acinq.bitcoin.ByteVector
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Chain
 import fr.acinq.bitcoin.OutPoint
+import com.machankura.dedun.compose.database.model.GroupSignedEvent
+import com.machankura.dedun.compose.nostr.wallet.DepositAttributionEvent
+import com.machankura.dedun.compose.nostr.wallet.CoinAssignmentEvent
+import com.machankura.dedun.compose.text.LightningAddress
+import com.machankura.dedun.compose.nostr.wallet.GroupPayoutDestinationEvent
+import com.machankura.dedun.compose.database.model.MarmotInnerEvent
+import com.machankura.dedun.compose.text.ProposedSpend
+import com.vitorpamplona.quartz.nip01Core.crypto.EventHasher
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.bitcoin.Script
@@ -403,6 +411,14 @@ class MixedDeviceGovernedRoomJvmTest {
         leaves(erin)
         pump()
         assertOneGroup(ann.hex, ben.hex, dana.hex, frank.hex)
+        // Dedun's: what reacts to a departure -- a group wallet's list of signers who have
+        // left, which only a new wallet leaves out -- reads who is still among the room's
+        // participants. A leave that came inside an envelope takes her out as a bare one does.
+        listOf(ann, ben).forEach { device ->
+            val inRoom = device.db.participantDao().findParticipantsByChatRoomId(roomId).filter { it.deletedAt == null }.map { it.participantPublicKey.lowercase() }
+            assertTrue(erin.hex.lowercase() !in inRoom, "$device still counts Erin in the room")
+            assertTrue(frank.hex.lowercase() in inRoom, "$device lost Frank with her")
+        }
 
         // 4. Ann removes Frank from the app, again inside the group's signature.
         val beforeRemoval = ann.group().epoch
@@ -423,7 +439,6 @@ class MixedDeviceGovernedRoomJvmTest {
 
     private val account = GroupWalletDerivation.account(thresholdPublicKey, chain)
     private val first = GroupWalletDerivation.derive(account, GroupWalletDerivation.RECEIVE, 0)
-    private val change = GroupWalletDerivation.derive(account, GroupWalletDerivation.CHANGE, 0)
     private val funding = Transaction(
         version = 2,
         txIn = listOf(TxIn(OutPoint(TxId(ByteVector32(ByteArray(32) { 0x42 })), 0), ByteVector.empty, 0xffffffffL)),
@@ -431,12 +446,45 @@ class MixedDeviceGovernedRoomJvmTest {
         lockTime = 0,
     )
     private val elsewhere = Script.write(Script.pay2wpkh(PrivateKey(ByteVector32(ByteArray(32) { 9 })).publicKey())).let(::ByteVector)
+    /**
+     * A payout, the only spend Dedun's group wallet signs (docs/payouts-only.md): the coin is
+     * all Ben's, and all of it, less the fee, goes to his payout address. Bennu's version of this
+     * test spends with change, which Dedun refuses before it is proposed.
+     */
     private val spend = Transaction(
         version = 2,
         txIn = listOf(TxIn(OutPoint(funding, 0), ByteVector.empty, 0xfffffffdL)),
-        txOut = listOf(TxOut(Satoshi(70_000), elsewhere), TxOut(Satoshi(29_000), change.pubkeyScript)),
+        txOut = listOf(TxOut(Satoshi(99_000), elsewhere)),
         lockTime = 0,
     )
+
+    /**
+     * On Ann's and Ben's devices: Ben's payout address is [elsewhere], and the funding coin is
+     * his by a coin assignment the room signed -- what a payout of it needs.
+     */
+    private suspend fun bensCoin() {
+        val destination = GroupPayoutDestinationEvent.build(
+            PrivateKey(ben.keys.privKey!!), roomId, chain, LightningAddress("ben", "example.com"),
+            onchainAddress = ProposedSpend.addressOf(elsewhere, chain), createdAt = 1_700_000_000,
+        )
+        val template = CoinAssignmentEvent.template(
+            chain,
+            listOf(CoinAssignmentEvent.Coin(DepositAttributionEvent.DepositKey.Onchain(funding.txid.toString(), 0), 100_000, mapOf(ben.hex to 100_000L))),
+            createdAt = 1_700_000_100,
+        )
+        val assignment = GroupFixtures.signedAsRoom(material, template.kind, template.tags, template.content, createdAt = 1_700_000_100)
+        listOf(ann, ben).forEach { device ->
+            val tags = arrayOf(arrayOf("h", roomId))
+            device.db.marmotInnerEventDao().upsert(
+                MarmotInnerEvent(
+                    id = EventHasher.hashId(ben.hex, destination.createdAt, GroupPayoutDestinationEvent.KIND, tags, destination.toJson()),
+                    publicKey = ben.hex, kind = GroupPayoutDestinationEvent.KIND, createdAt = Instant.fromEpochSeconds(destination.createdAt),
+                    tags = tags, content = destination.toJson(), chatRoomId = roomId,
+                )
+            )
+            device.db.groupSignedEventDao().upsert(GroupSignedEvent.fromEvent(assignment, chatRoomId = roomId))
+        }
+    }
 
     @Test
     fun `a spend from the group's wallet is signed inside the governed room, and moves no epoch`() = runBlocking {
@@ -450,7 +498,8 @@ class MixedDeviceGovernedRoomJvmTest {
         benApproves(opening.id)
         listOf(ann, ben).forEach { assertNotNull(GroupWalletManager.walletFor(it.db, roomId, chain), "$it has no wallet") }
 
-        val psbt = GroupSpend.psbtOf(spend, listOf(funding.txOut[0] to first), mapOf(1 to change), account)
+        bensCoin()
+        val psbt = GroupSpend.psbtOf(spend, listOf(funding.txOut[0] to first), emptyMap(), account)
         val session = FrostSigningManager.proposeSpend(ann.db, ann.room(), ann.hex, psbt, chain)
         pump()
         benApproves(session.id)

@@ -70,6 +70,7 @@ import com.machankura.dedun.compose.extensions.toHex
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.subgroup.SubgroupBirthCertificateEvent
+import com.machankura.dedun.compose.nostr.frost.GovernanceEvents
 import com.machankura.dedun.compose.nostr.frost.GovernanceStatementEvent
 
 /**
@@ -893,7 +894,9 @@ object FrostSigningManager {
         // says -- or that the group's door would refuse anyway -- is declined before
         // anybody is asked, for the wallet's reason: a device that signs what it
         // cannot stand behind is a rubber stamp. docs/member-admin-promotion.md, Phase 5.
-        unsignedEvents.firstOrNull { it.kind == GovernanceStatementEvent.KIND }?.let { statement ->
+        // By its shape, not its number alone: until K3 a Wavelength wallet statement is
+        // proposed at 30370 too, and is no change to the room.
+        unsignedEvents.firstOrNull { it.kind == GovernanceStatementEvent.KIND && GovernanceEvents.isGovernance(it) }?.let { statement ->
             GovernanceManager.refusalOf(database, localChatRoom, statement)?.let { why ->
                 logger.w("Signing proposal $sessionId carries a change that is refused: $why; declining")
                 val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0, participantCount = n)
