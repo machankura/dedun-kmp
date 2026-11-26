@@ -607,8 +607,19 @@ object FrostSigningManager {
     )
 
     /**
-     * One of Dedun's money statements still being signed with [dkgSessionId]: what a rotation
-     * also waits for (`RotationHold.StatementOpen`). Failing it would lose nothing -- nothing is
+     * What else the group may be part-way through saying, which a rotation waits for in the same
+     * way: its nostr profile and its posts (docs/giza-second-batch.md, Phase 5). A rotation under
+     * them would leave the signers holding shares of a generation the session no longer signs
+     * with, and the member who proposed the post would have to propose it again.
+     */
+    private val GROUP_STATEMENTS: Set<Int> = setOf(
+        com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent.KIND,
+        com.vitorpamplona.quartz.nip10Notes.TextNoteEvent.KIND,
+    )
+
+    /**
+     * One of Dedun's money statements, or the group's profile or a post, still being signed with
+     * [dkgSessionId]: what a rotation also waits for (`RotationHold.StatementOpen`). Failing it would lose nothing -- nothing is
      * paid until the statement is signed -- but a member's payout or transfer would quietly need
      * proposing again. docs/giza-into-dedun.md, Phase 7.
      */
@@ -618,7 +629,7 @@ object FrostSigningManager {
             .firstOrNull { session ->
                 database.frostSigningSessionDao().getItems(session.id)
                     .mapNotNull { Event.fromJsonOrNull(it.unsignedEventJson) }
-                    .any { MovedKinds.current(it.kind) in MONEY_STATEMENTS }
+                    .any { MovedKinds.current(it.kind) in MONEY_STATEMENTS || it.kind in GROUP_STATEMENTS }
             }
 
     /** A session for [innerEvent]'s proposal at [generation] of [key]'s shares. */

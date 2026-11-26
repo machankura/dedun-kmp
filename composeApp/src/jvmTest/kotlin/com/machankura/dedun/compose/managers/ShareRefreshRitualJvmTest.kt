@@ -929,7 +929,9 @@ class ShareRefreshRitualJvmTest {
     fun `a session left at the old generation fails out loud when its shares go`() = runBlocking<Unit> {
         val group = Group(3, 2)
         val all = devicesFor(group)
-        val old = FrostSigningManager.proposeSigning(all[0].db, all[0].room, all[0].publicKey, kind = 1, tags = arrayOf(), content = "Before the rotation")
+        // Not a post: in Dedun a profile or post being signed holds the rotation back
+        // (RotationHold.StatementOpen), so the session left behind is of a kind nothing holds.
+        val old = FrostSigningManager.proposeSigning(all[0].db, all[0].room, all[0].publicKey, kind = 30078, tags = arrayOf(arrayOf("d", "note")), content = "Before the rotation")
         assertEquals(0, old.generation)
         pump(all)
 

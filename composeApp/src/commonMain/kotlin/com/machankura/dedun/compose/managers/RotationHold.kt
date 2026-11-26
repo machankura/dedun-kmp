@@ -36,11 +36,12 @@ sealed interface RotationHold {
 
     /**
      * Dedun's: one of its money statements -- a deposit attribution, a coin assignment, a
-     * transfer, or a payout from the Wavelength or the Lightning wallet -- is still being
-     * signed with this key. docs/giza-into-dedun.md, Phase 7.
+     * transfer, or a payout from the Wavelength or the Lightning wallet -- or the group's nostr
+     * profile or a post is still being signed with this key. docs/giza-into-dedun.md, Phase 7,
+     * and docs/giza-second-batch.md, Phase 5.
      */
     data class StatementOpen(val signingSessionId: String) : RotationHold {
-        override val reason get() = "a payout, transfer or attribution is still being signed"
+        override val reason get() = "a payout, transfer, attribution or something the group says on nostr is still being signed"
     }
 
     /** The group signs at a generation this device has not reached: it missed a certificate. */
