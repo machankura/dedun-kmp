@@ -313,6 +313,40 @@ Android emulator have each made a code profile, received a payment, been wiped, 
 restored from the code with the payment there. iOS needs a Mac, as in the first plan, and is
 recorded as not run.
 
+**As built.** One commit for each step, 2a–2f, plus Giza's Landing caption fix. Giza's own note
+is in [recovery-code-v3.md](./recovery-code-v3.md), with a Dedun preface.
+
+- **2a.** The codec, the 77 vectors and `RecoveryCodeKeys` came in unchanged. Dedun has no
+  `PhraseKeys`: an npub, a profile id and a node all come from `LocalKeyManager` on the build's
+  chain. So `RecoveryCodeKeysTest` pins Giza's three codes through `LocalKeyManager` on mainnet,
+  and adds each code's node id. The node id's hash160 is the profile id that
+  `recovery-code-keys.py` derives independently, so the script vouches for the node id too.
+- **2b.** Giza's `lightning-kmp-app` `3ca351a` also moves `lightning-kmp` across "Merge the
+  threshold line into master, reconciling the two Iceberg ports". That touches the FundingSigner
+  seam under the group Lightning wallet, which Giza never runs. So the one library commit was
+  cherry-picked onto Dedun's `d87af507` instead, as `d493370` on
+  `claude/recovery-codes-on-d87af507`. **It is local to the submodule until it is pushed.** The
+  `lightning-kmp` move is left for a phase of its own, with the regtest suites.
+- **2c.** `StoredIdentity.Seeded` covers both `Mnemonic` and `RecoveryCode`. Startup starts the
+  node for either kind, and `setActiveWallet` takes either and keeps its kind. `writeRecoveryCode`
+  derives the profile through `LocalKeyManager`, as `writeMnemonic` does, so a code and the same
+  words typed are one profile on every chain. Giza's `DefaultIdentity` belongs to its background
+  sync, so it waits for Phase 3.
+- **2d, 2e.** Giza's screens, with Dedun's copy (D10). The "recognised" line says the code brings
+  back a profile and its wallet, and to use only a code Dedun gave out. The backup screen says
+  that anyone holding the code can spend the money, and that losing both phone and code loses
+  the money. The export says not to run the wallet in two apps at once.
+- **2f.** Landing makes a code profile. `withWallet` stays. The guard is
+  `docs/scripts/phrase-audit.sh` (`phraseAudit` in `check`), with the Wavelength wallet's own seed
+  exempted by a `phrase-audit-exempt:` line.
+
+jvmTest for the identity, sign-in and recovery suites: 113 run, 0 failed. `m3Audit`: all budgets
+met. **Not done:**
+- the regtest restore of a code-made wallet, which is the gate before 2f reaches `dedun`;
+- the downgrade test;
+- the Android emulator and packaged desktop runs;
+- iOS.
+
 ## Phase 3: notifications and background sync
 
 Giza's `docs/notifications-and-background-sync.md`, Phases 1–14. Of all the Giza work besides recovery codes, a member feels this most: today a
