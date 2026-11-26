@@ -35,6 +35,23 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
   `FrostSigningManager` merges without a conflict, which says nothing about whether it is
   right: Phases 6 and 7 read it.
 
+## The second batch, Phase 0
+
+[giza-second-batch.md](./giza-second-batch.md), measured against Giza `a5a802c5`, fetched as
+`refs/remotes/giza/giza`. Its rows are the last table below.
+
+- **What has shipped.** `versionCode 9` (0.1.5) was set in `dddfa68b` on 2026-10-20. That is
+  before K1 (`e12565be`, 2026-11-21) and before contacts (`2fdbc2bf`, 2026-11-26), and the
+  repository has no tags. An Android update needs a higher `versionCode`, so no installed
+  build reads 30390-30393 or 30400-30412, or writes 30394-30399. Phase 4 retargets in place,
+  with no K1' release.
+- **A free block.** 30420-30442 is used by neither Giza at `a5a802c5`, Bennu at `2db6dde5`,
+  Dedun at `a5ab9c10`, nor quartz 2.20.1. In 30410-30449 those trees use only Giza's inbox
+  ceremony (30410-30416), Dedun's moved Wavelength kinds (30410-30412), and Marmot's
+  KeyPackage, 30443.
+- **The trial merge** is not done separately. Each phase cherry-picks its mirrored commits
+  and records its conflicts in the phase's commit, which is the same information.
+
 ## Regtest
 
 | when | GroupLightning | LiquidityPurchase | MemberBranches | PayoutAddress |
@@ -243,3 +260,176 @@ Each suite ran on a fresh `dedun-regtest` network.
 | `0ba1c5bd` | skip: Bennu's own notes | docs: promotion, demotion and their rotations are in (giza-into-bennu, Phase 9) |
 | `a2528010` | skip: Bennu's own notes | docs: Phases 0 to 9 are built, and what is left (giza-into-bennu) |
 | `2db6dde5` | pending | test: a Giza-shaped device and two Bennu devices share one governed room (giza-into-bennu, Phase 8) |
+
+## The second batch
+
+Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md). Bennu has ported none of it, so each commit comes through `giza-mirror.sh` and then `bennu-mirror.sh`. The phase column is the phase there.
+
+| giza | group | phase | Dedun | subject |
+|---|---|---|---|---|
+| `baf603ac` | confederations | — | skip (D12) | docs: plan for carrying bitcoin-kmp's confederation API up to Giza |
+| `1b3b5f86` | confederations | — | skip (D12) | docs: confederation update, Phase 0 verified |
+| `4555f5d1` | confederations | — | skip (D12) | build: lightning-kmp-app with bitcoin-kmp's confederation down the chain |
+| `37079ee4` | confederations | — | skip (D12) | test: Giza reaches bitcoin-kmp's confederation API (confederation update, Phase 4) |
+| `bdb0b3f0` | group profile | 5 | pending | docs: the group's nostr profile and posts, planned as a port from Curare (group-nostr-profile, Phase 0) |
+| `b4d0e483` | group profile | 5 | pending | test: pin what a group-signed profile and post do today (group-nostr-profile, Phase 1) |
+| `b944a411` | group profile | 5 | pending | feat: the group's profile and posts read off what it signed (group-nostr-profile, Phase 2) |
+| `5b75c2c2` | group profile | 5 | pending | feat: the transcript says when the group signs its profile or a post (group-nostr-profile, Phase 3) |
+| `09649d9a` | group profile | 5 | pending | feat: decline a profile or a post nothing could show, out loud (group-nostr-profile, Phase 4) |
+| `add309f7` | group profile | 5 | pending | feat: the group's nostr profile, seen and proposed (group-nostr-profile, Phase 5) |
+| `ffde0553` | group profile | 5 | pending | feat: the group's posts, seen and proposed (group-nostr-profile, Phase 6) |
+| `f98378ca` | group profile | 5 | pending | feat: a group-signed profile or post sent to relays (group-nostr-profile, Phase 7) |
+| `aa820c20` | group profile | 5 | pending | feat: an unsigned profile or post, pasted for the group to sign (group-nostr-profile, Phase 8) |
+| `34c8faa4` | group profile | 5 | pending | fix: the broadcast screen sends only the group's profile and posts (group-nostr-profile, Phase 7) |
+| `d039daf6` | group profile | 5 | pending | docs: the group's nostr profile and posts are built, and the notes they touched say so (group-nostr-profile, Phase 9) |
+| `6cb9dd7d` | confederations | — | skip (D12) | docs: a group made of groups, planned (confederation, Phase 0) |
+| `e84fc9b5` | confederations | — | skip (D12) | docs: the three checks before any code (confederation, Phase 0) |
+| `abe555e5` | confederations | — | skip (D12) | test: a confederation signs as its room's id, and today's answer to its kinds (confederation, Phase 1) |
+| `f1ad108b` | confederations | — | skip (D12) | feat: the confederation's events, its sealed admin list and its state (confederation, Phase 2) |
+| `8b38dc87` | confederations | — | skip (D12) | feat: where a device keeps what it has heard of a confederation (confederation, Phase 4) |
+| `24e4eec3` | confederations | — | skip (D12) | test: a shipped profile upgrades to schema 43 (confederation, Phase 4) |
+| `f7b361c9` | confederations | — | skip (D12) | feat: a device declines a confederation event it finds wrong, out loud (confederation, Phase 3) |
+| `bd1b5d56` | confederations | — | skip (D12) | feat: confederation events reach relays, and come back from them (confederation, Phase 5) |
+| `0f68cc53` | confederations | — | skip (D12) | feat: proposing a confederation, and the lines a group's room gets about one (confederation, Phase 6) |
+| `8408cd46` | confederations | — | skip (D12) | feat: a group answers a confederation, and three groups agree end to end (confederation, Phase 7) |
+| `190cb9e9` | confederations | — | skip (D12) | feat: the coordinator's device says what forming a confederation would take (confederation, Phase 8) |
+| `ea7cf819` | confederations | — | skip (D12) | docs: the confederation's rounds made public upstream, planned |
+| `9be5a635` | confederations | — | skip (D12) | feat: the confederation's rounds reach Giza, one role per device (confederation, Phase 9) |
+| `e1a18f83` | confederations | — | skip (D12) | feat: the confederation's roster, the same bytes on every device (confederation, Phase 10) |
+| `02f04143` | confederations | — | skip (D12) | feat: the confederation's key ceremony, one person per device (confederation, Phase 11) |
+| `615afc30` | confederations | — | skip (D12) | feat: what a finished ceremony leaves: the confederation, certified (confederation, Phase 12) |
+| `c9f7d08b` | confederations | — | skip (D12) | feat: the confederation's room, the key's own (confederation, Phase 13) |
+| `8bb34e6c` | confederations | — | skip (D12) | docs: Part B is built, and what it chose differently (confederation, Phases 10-13) |
+| `e723e70a` | confederations | — | skip (D12) | feat: a confederation signs as itself, one person per device (confederation, Phase 14) |
+| `bacd53a1` | confederations | — | skip (D12) | feat: what a confederation signs: its profile, its posts and its charter (confederation, Phase 15) |
+| `e909313c` | confederations | — | skip (D12) | docs: Part C is built, and what it chose differently (confederation, Phase 16) |
+| `ccc439b2` | group inbox | 6 | pending | docs: the group's inbox, planned as NIP-4E on a group's npub (group-inbox, Phase 0) |
+| `877f5bbe` | group inbox | 6 | pending | test: a threshold-1 ceremony leaves every admin one secret, and a group-signed seal verifies (group-inbox, Phase 0) |
+| `dd16df9c` | group inbox | 6 | pending | test: pin what a group's inbox events do today (group-inbox, Phase 1) |
+| `e215cff8` | group inbox | 6 | pending | feat: the group inbox's wire, in one package (group-inbox, Phase 2) |
+| `1f66c39f` | group inbox | 6 | pending | feat: where a group's inbox is kept, schema 44 to 45 (group-inbox, Phase 3) |
+| `057d0b79` | group inbox | 6 | pending | feat: the group's inbox key, made by its admins at threshold 1 (group-inbox, Phase 4) |
+| `1c29df61` | group inbox | 6 | pending | feat: the group announces its inbox, and declines a wrong announcement out loud (group-inbox, Phase 5) |
+| `5370527a` | group inbox | 6 | pending | feat: the group's inbox, read on its admins' devices (group-inbox, Phase 6) |
+| `12a93bd4` | group inbox | 6 | pending | feat: the group's inbox, seen (group-inbox, Phase 7) |
+| `d21d6ecd` | group inbox | 6 | pending | feat: the group answers from its inbox, once its quorum has read and signed the reply (group-inbox, Phase 8) |
+| `6b59282e` | group inbox | 6 | pending | test: two pins Phase 8 moved, moved with it (group-inbox, Phase 8) |
+| `8bc7ab3e` | group inbox | 6 | pending | feat: the inbox key changes with the group's admins (group-inbox, Phase 9) |
+| `31bcb3a3` | group inbox | 6 | pending | docs: the group's inbox is built, and what it chose differently (group-inbox, Phase 10) |
+| `dae0a345` | group messages | 6 | pending | docs: the group's direct messages, by threshold ECDH (group-threshold-ecdh, Phase 0) |
+| `0d339238` | group messages | 6 | pending | test: threshold ECDH's six premises, against the real libraries (group-threshold-ecdh, Phase 0) |
+| `c8df3633` | group messages | 6 | pending | test: what Giza does with a group's direct messages today (group-threshold-ecdh, Phase 1) |
+| `77e154d4` | group messages | 6 | pending | feat: threshold ECDH's arithmetic, alone (group-threshold-ecdh, Phase 2) |
+| `fcdc2db7` | group messages | 6 | pending | feat: the wire for a group's direct messages (group-threshold-ecdh, Phase 3) |
+| `42ebfc45` | group messages | 6 | pending | feat: storage for a group's direct messages, schema 45 (group-threshold-ecdh, Phase 4) |
+| `311f61ab` | group messages | 6 | pending | feat: the admins answer and combine rounds (group-threshold-ecdh, Phase 5) |
+| `b2cb0aaa` | group messages | 6 | pending | feat: where the group receives direct messages (group-threshold-ecdh, Phase 6) |
+| `ffb254da` | group messages | 6 | pending | feat: receiving the group's direct messages (group-threshold-ecdh, Phase 7) |
+| `0e952f99` | group messages | 6 | pending | feat: the group's messages, seen (group-threshold-ecdh, Phase 8) |
+| `5683199c` | notifications | 3 | pending | docs: notifications, and the background sync they need, planned (notifications, Phase 0) |
+| `be6e29b2` | notifications | 3 | pending | test: pin what notifications change, before they change it (notifications, Phase 1) |
+| `7ddc3f3b` | group messages | 6 | pending | feat: the group writes, and every signer reads it first (group-threshold-ecdh, Phase 9) |
+| `1ac51905` | notifications | 3 | pending | refactor: one runtime per process, owned by the process (notifications, Phase 2) |
+| `6f33f6f1` | group messages | 6 | pending | feat: admin changes for the group's direct messages (group-threshold-ecdh, Phase 10) |
+| `49fb8a92` | group messages | 6 | pending | test: a non-admin device now forgets the wraps it held (group-threshold-ecdh, Phase 10) |
+| `082d0971` | group messages | 6 | pending | docs: the group's direct messages, built (group-threshold-ecdh, Phase 11) |
+| `c248ab52` | notifications | 3 | pending | feat: read marks, mute and the notification ledger, schema 46 to 47 (notifications, Phase 3) |
+| `b6db6d04` | notifications | 3 | pending | feat: a room on screen is read, and what is not is counted (notifications, Phase 4) |
+| `f2e57edc` | notifications | 3 | pending | feat: which lines notify, and when not, decided in one pure place (notifications, Phase 5) |
+| `467d14c1` | notifications | 3 | pending | feat: new lines become notifications while the app runs (notifications, Phase 6) |
+| `53d1beb9` | notifications | 3 | pending | feat: the switches, on the profile, and mute on the room (notifications, Phase 7) |
+| `74c7a0dd` | notifications | 3 | pending | fix: a minimised desktop stays connected, and iOS gets its grace (notifications, Phase 8) |
+| `4a6f45aa` | notifications | 3 | pending | feat: one bounded sync while off screen, on the app's own engines (notifications, Phase 9) |
+| `c9faf62f` | notifications | 3 | pending | feat: Android syncs every fifteen minutes while closed (notifications, Phase 10) |
+| `a60f6b93` | notifications | 3 | pending | feat: Stay connected, an opt-in service that holds the relays open (notifications, Phase 10) |
+| `51c2423a` | notifications | 3 | pending | feat: iOS syncs when BGTaskScheduler lets it (notifications, Phase 11) |
+| `206a44e2` | notifications | 3 | pending | feat: the desktop closes to the tray and notifies from it (notifications, Phase 12) |
+| `ac8d6488` | notifications | 3 | pending | feat: mark as read and reply, from the notification (notifications, Phase 13) |
+| `900dfd8c` | notifications | 3 | pending | docs: notifications are built, and what they chose differently (notifications, Phase 14) |
+| `f78bd16b` | confederations | — | skip (D12) | docs: a confederation with no coordinator (confederation-without-coordinator, Phase 0) |
+| `b2f22f2c` | confederations | — | skip (D12) | test: the premises of a confederation with no coordinator (confederation-without-coordinator, Phase 0) |
+| `e2de3fa8` | confederations | — | skip (D12) | test: pin the coordinator's part in a confederation (confederation-without-coordinator, Phase 1) |
+| `c3d70776` | confederations | — | skip (D12) | feat: the confederation's statements as rumors (confederation-without-coordinator, Phase 2) |
+| `f64f1619` | confederations | — | skip (D12) | feat: the confederation's statements between inboxes, and a ceremony nobody opens (confederation-without-coordinator, Phases 3 to 5 and 7) |
+| `66932a84` | confederations | — | skip (D12) | feat: the confederation's screens look for every group's inbox (confederation-without-coordinator, Phase 6) |
+| `bad5d122` | confederations | — | skip (D12) | feat: who makes the confederation's room, when nobody coordinates (confederation-without-coordinator, Phase 8) |
+| `d1513ef2` | confederations | — | skip (D12) | docs: the record of a confederation with no coordinator (confederation-without-coordinator, Phase 9) |
+| `3b0b3c9a` | icon | — | skip | Update icon |
+| `dd812950` | second group | 5 | pending | test: the premises of a second group from the same people (nip17-multiple-ceremonies, Phase 0) |
+| `9c2f55aa` | second group | 5 | pending | feat: the same people can open a second group's ceremony (nip17-multiple-ceremonies, Phase 1) |
+| `1d6f77cf` | second group | 5 | pending | feat: making a group names its ceremony, and says what these people already have (nip17-multiple-ceremonies, Phase 2) |
+| `4baf5d8f` | second group | 5 | pending | feat: nothing asks a NIP-17 room for its one ceremony (nip17-multiple-ceremonies, Phase 3) |
+| `d1a9b995` | disappearing | 7 | pending | docs: a plan for disappearing NIP-17 messages (disappearing-messages, Phase 0) |
+| `4e16592a` | second group | 5 | pending | feat: a ceremony's lines, notice and join screen name the group it makes (nip17-multiple-ceremonies, Phase 4) |
+| `c5618a70` | disappearing | 7 | pending | docs: disappearing messages, the Phase 0 checks answered (disappearing-messages, Phase 0) |
+| `962bdbf6` | disappearing | 7 | pending | feat: when a NIP-17 rumor expires, as pure rules (disappearing-messages, Phase 1) |
+| `088e86ac` | second group | 5 | pending | feat: a NIP-17 room lists the groups made in it (nip17-multiple-ceremonies, Phase 5) |
+| `729efdac` | second group | 5 | pending | test: the same people make two groups, end to end (nip17-multiple-ceremonies, Phase 6) |
+| `50f73e17` | confederations | — | skip (D12) | feat: a member who has not joined finds the key ceremony from its room |
+| `03e2d10d` | second group | 5 | pending | docs: the record of more than one group from the same people (nip17-multiple-ceremonies, Phase 7) |
+| `b7f6df0c` | disappearing | 7 | pending | feat: storage for disappearing messages, v50 (disappearing-messages, Phase 2) |
+| `ae0468bb` | disappearing | 7 | pending | feat: every NIP-17 payload is stamped with its expiry (disappearing-messages, Phase 3) |
+| `a4c12eee` | disappearing | 7 | pending | feat: what has disappeared is deleted from the device (disappearing-messages, Phase 4) |
+| `3e05a28b` | confederations | — | skip (D12) | docs: a confederation's profile, decided by its groups (confederation-profile, Phase 0) |
+| `c50288a9` | disappearing | 7 | pending | feat: a ceremony's rounds leave the device when its session is done (disappearing-messages, Phase 5) |
+| `4994248d` | confederations | — | skip (D12) | feat: the wire and storage of a confederation's profile changes (confederation-profile, Phase 1) |
+| `2e747f90` | disappearing | 7 | pending | feat: the disappearing-messages setting, and the conversation showing it (disappearing-messages, Phase 6) |
+| `fff891a4` | second group | 5 | pending | feat: a finished ceremony's screen names the group it made (nip17-multiple-ceremonies) |
+| `c293514d` | confederations | — | skip (D12) | feat: a group proposes, endorses or objects to its confederation's profile (confederation-profile, Phase 2) |
+| `44cbe596` | confederations | — | skip (D12) | feat: each group's room hears of a change to its confederation's profile (confederation-profile, Phase 3) |
+| `ada95867` | disappearing | 7 | pending | feat: what a group sends disappears too (disappearing-messages, Phase 7) |
+| `d30cea78` | disappearing | 7 | pending | docs: the record of disappearing messages (disappearing-messages, Phase 8) |
+| `5d6bbcd5` | confederations | — | skip (D12) | feat: the confederation's own screen, its profile form and its changes (confederation-profile, Phase 4) |
+| `8d494ddb` | confederations | — | skip (D12) | feat: a confederation signs the profile its groups endorsed, with nobody asked (confederation-profile, Phase 5) |
+| `19cd1aae` | confederations | — | skip (D12) | feat: the confederation's new profile reaches relays and every member group (confederation-profile, Phase 6) |
+| `6285033c` | confederations | — | skip (D12) | feat: the confederation's room and its key ceremony's room say what they are (confederation-profile, Phase 7) |
+| `33e88f62` | confederations | — | skip (D12) | test: a confederation's profile decided end to end, and the record (confederation-profile, Phases 8 and 9) |
+| `139f5192` | confederations | — | skip (D12) | fix: a confederation signs when its admins hold seats in several groups |
+| `bcb3c4d4` | confederations | — | skip (D12) | docs: a plan to take away the confederation's own Marmot room (confederation-room-removal, Phase 0) |
+| `27f8387d` | confederations | — | skip (D12) | docs: Phase 0's checks, and what the room leaves behind (confederation-room-removal, Phase 0) |
+| `6f95672a` | confederations | — | skip (D12) | feat: a confederation's storage stands without its room (confederation-room-removal, Phase 1) |
+| `35acce71` | names | 8 | pending | docs: a group's name starts with & rather than # (group-name-prefix, Phase 0) |
+| `036488bc` | confederations | — | skip (D12) | feat: every confederation signing message is signed by its author, and carried (confederation-room-removal, Phases 2 and 5) |
+| `1fc69be6` | names | 8 | pending | feat: a group's name starts with & rather than # (group-name-prefix, Phase 1) |
+| `44a9b242` | confederations | — | skip (D12) | feat: each group's own room carries its role holders' signing messages (confederation-room-removal, Phase 3) |
+| `85e96902` | names | 8 | pending | feat: a room joined from a Welcome is named by the same rule (group-name-prefix, Phase 2) |
+| `3f546402` | names | 8 | pending | feat: the groups already on a device are renamed to &name, v52 (group-name-prefix, Phase 3) |
+| `1c9e1fc5` | confederations | — | skip (D12) | feat: each group's admins carry the confederation's signing between rooms and inboxes, and nothing needs its room (confederation-room-removal, Phase 4) |
+| `342127bc` | names | 8 | pending | feat: a subgroup certified as #name is shown as &name (group-name-prefix, Phase 4) |
+| `cfa5f75f` | names | 8 | pending | test: fixtures and previews name groups &name (group-name-prefix, Phase 5) |
+| `60322537` | names | 8 | pending | docs: the docs say &name, and the record of the build (group-name-prefix, Phase 6) |
+| `b75bbaf5` | confederations | — | skip (D12) | feat: the confederation's screen takes over what its room offered (confederation-room-removal, Phase 6) |
+| `a4b67dc4` | confederations | — | skip (D12) | feat: no confederation has a room, and the ones on devices are dropped (confederation-room-removal, Phase 7) |
+| `6b5fb76c` | confederations | — | skip (D12) | test: a confederation's post end to end with no room anywhere, and the record (confederation-room-removal, Phase 8) |
+| `7e42609a` | confederations | — | skip (D12) | feat: everything a confederation signs goes through its groups, as proposals |
+| `6a6ce006` | confederations | — | skip (D12) | docs: forming a confederation without its NIP-17 room, a report and a plan, and Phase 0's checks (confederation-dkg-inboxes, Phase 0) |
+| `c117995f` | confederations | — | skip (D12) | test: the ceremony's room, its unsigned rumors and the bridge's one envelope, pinned (confederation-dkg-inboxes, Phase 1) |
+| `58442efd` | confederations | — | skip (D12) | feat: a ceremony keeps what it heard by any path, and the bridge has a scope, v54 (confederation-dkg-inboxes, Phase 2) |
+| `2be378cc` | confederations | — | skip (D12) | feat: every ceremony message is signed by its author and travels in an envelope (confederation-dkg-inboxes, Phase 3) |
+| `8bf7145f` | confederations | — | skip (D12) | feat: each group's admins carry the key ceremony between rooms and inboxes, beside the NIP-17 room (confederation-dkg-inboxes, Phase 4) |
+| `266bee2a` | confederations | — | skip (D12) | feat: the key ceremony runs in no NIP-17 room, only the groups' rooms and inboxes (confederation-dkg-inboxes, Phase 5) |
+| `1fd13942` | confederations | — | skip (D12) | feat: the ceremony's lines open it from the group rooms, and the ceremony room's banner goes (confederation-dkg-inboxes, Phase 6) |
+| `1a857e6d` | confederations | — | skip (D12) | feat: the ceremony rooms already on devices go, and a founders' chat that was one stays (confederation-dkg-inboxes, Phase 7) |
+| `8ef02129` | confederations | — | skip (D12) | test: a confederation formed over its groups' rooms and inboxes end to end, and the record (confederation-dkg-inboxes, Phase 8) |
+| `22d36931` | fix | 1 | audited: the bug is in confederation code | fix: the signing lock is taken after the database's writer, never before it |
+| `e7336d8e` | confederations | — | skip (D12) | feat: an admin's device joins the confederation's key ceremony on its own (confederation-auto-join) |
+| `9f91f505` | names | 8 | pending | docs: draw a group's name as {name} and a confederation's as {{name}}, stored bare (group-name-braces, Phase 0) |
+| `916b5c35` | names | 8 | pending | feat: draw a group's name as {name} and a confederation's as {{name}} (group-name-braces, Phase 1) |
+| `cc64856c` | names | 8 | pending | feat: store and send a group's bare name (group-name-braces, Phase 2) |
+| `435590d6` | names | 8 | pending | feat: store the Marmot rooms already on a device under their bare names (group-name-braces, Phase 3) |
+| `0e5fd96f` | names | 8 | pending | feat: write confederation and group names into stored lines in braces (group-name-braces, Phase 4) |
+| `6035a5bf` | names | 8 | pending | test: seed groups under their bare names (group-name-braces, Phase 5) |
+| `1d8e9cb5` | names | 8 | pending | docs: record the braces as built (group-name-braces, Phase 6) |
+| `5017547f` | names | — | skip (D12) | test: a confederation proposed as {Atlas} keeps that name and signs its charter (group-name-braces, D10) |
+| `dffe64c3` | recovery codes | 2 | pending | docs: plan v3 recovery codes as the backup for new profiles (recovery-code-v3) |
+| `ed706d5f` | recovery codes | 2 | pending | feat: a pure-Kotlin codec for v3 recovery codes (recovery-code-v3, Phase 1) |
+| `a14dcc9c` | recovery codes | 2 | pending | feat: a recovery code derives 24 words, and through them a profile (recovery-code-v3, Phase 2) |
+| `b959c70f` | recovery codes | 2 | pending | chore: bump lightning-kmp-app for recovery-codes.dat (recovery-code-v3, Phase 3) |
+| `ee5eb680` | recovery codes | 2 | pending | feat: a recovery code is an identity, attached to the phrase it is (recovery-code-v3, Phase 4) |
+| `37efc106` | recovery codes | 2 | pending | feat: sign in with a recovery code, and a typo is a suggestion (recovery-code-v3, Phase 5) |
+| `5c6082d7` | recovery codes | 2 | pending | feat: show the recovery code, and check a written-down copy (recovery-code-v3, Phase 6) |
+| `f367294c` | recovery codes | 2 | pending | feat: a new profile from Landing is backed by a recovery code (recovery-code-v3, Phase 7) |
+| `028c1a48` | recovery codes | 2 | pending | docs: record recovery codes as built (recovery-code-v3, Phase 8) |
+| `7d479e2b` | recovery codes | 2 | pending | fix: Landing's sign-in caption names recovery codes (recovery-code-v3) |
+| `b7e5dd19` | fix | 1 | pending | fix: give ProposalListRoute's enum filter a NavType off Android |
+| `9a1abc61` | fix | 1 | pending | fix: include jdk.unsupported and the other needed modules in the desktop runtime |
