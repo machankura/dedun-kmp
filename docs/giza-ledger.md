@@ -327,26 +327,26 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `b2cb0aaa` | group messages | 6 | pending | feat: where the group receives direct messages (group-threshold-ecdh, Phase 6) |
 | `ffb254da` | group messages | 6 | pending | feat: receiving the group's direct messages (group-threshold-ecdh, Phase 7) |
 | `0e952f99` | group messages | 6 | pending | feat: the group's messages, seen (group-threshold-ecdh, Phase 8) |
-| `5683199c` | notifications | 3 | pending | docs: notifications, and the background sync they need, planned (notifications, Phase 0) |
-| `be6e29b2` | notifications | 3 | pending | test: pin what notifications change, before they change it (notifications, Phase 1) |
+| `5683199c` | notifications | 3 | `02fad206` | docs: notifications, and the background sync they need, planned (notifications, Phase 0) |
+| `be6e29b2` | notifications | 3 | `a9058e83` | test: pin what notifications change, before they change it (notifications, Phase 1) |
 | `7ddc3f3b` | group messages | 6 | pending | feat: the group writes, and every signer reads it first (group-threshold-ecdh, Phase 9) |
-| `1ac51905` | notifications | 3 | pending | refactor: one runtime per process, owned by the process (notifications, Phase 2) |
+| `1ac51905` | notifications | 3 | `b41c758f` | refactor: one runtime per process, owned by the process (notifications, Phase 2) |
 | `6f33f6f1` | group messages | 6 | pending | feat: admin changes for the group's direct messages (group-threshold-ecdh, Phase 10) |
 | `49fb8a92` | group messages | 6 | pending | test: a non-admin device now forgets the wraps it held (group-threshold-ecdh, Phase 10) |
 | `082d0971` | group messages | 6 | pending | docs: the group's direct messages, built (group-threshold-ecdh, Phase 11) |
-| `c248ab52` | notifications | 3 | pending | feat: read marks, mute and the notification ledger, schema 46 to 47 (notifications, Phase 3) |
-| `b6db6d04` | notifications | 3 | pending | feat: a room on screen is read, and what is not is counted (notifications, Phase 4) |
-| `f2e57edc` | notifications | 3 | pending | feat: which lines notify, and when not, decided in one pure place (notifications, Phase 5) |
-| `467d14c1` | notifications | 3 | pending | feat: new lines become notifications while the app runs (notifications, Phase 6) |
-| `53d1beb9` | notifications | 3 | pending | feat: the switches, on the profile, and mute on the room (notifications, Phase 7) |
-| `74c7a0dd` | notifications | 3 | pending | fix: a minimised desktop stays connected, and iOS gets its grace (notifications, Phase 8) |
-| `4a6f45aa` | notifications | 3 | pending | feat: one bounded sync while off screen, on the app's own engines (notifications, Phase 9) |
-| `c9faf62f` | notifications | 3 | pending | feat: Android syncs every fifteen minutes while closed (notifications, Phase 10) |
-| `a60f6b93` | notifications | 3 | pending | feat: Stay connected, an opt-in service that holds the relays open (notifications, Phase 10) |
-| `51c2423a` | notifications | 3 | pending | feat: iOS syncs when BGTaskScheduler lets it (notifications, Phase 11) |
-| `206a44e2` | notifications | 3 | pending | feat: the desktop closes to the tray and notifies from it (notifications, Phase 12) |
-| `ac8d6488` | notifications | 3 | pending | feat: mark as read and reply, from the notification (notifications, Phase 13) |
-| `900dfd8c` | notifications | 3 | pending | docs: notifications are built, and what they chose differently (notifications, Phase 14) |
+| `c248ab52` | notifications | 3 | `38719f7f` | feat: read marks, mute and the notification ledger, schema 46 to 47 (notifications, Phase 3) |
+| `b6db6d04` | notifications | 3 | `fee7bb05` | feat: a room on screen is read, and what is not is counted (notifications, Phase 4) |
+| `f2e57edc` | notifications | 3 | `fee7bb05` | feat: which lines notify, and when not, decided in one pure place (notifications, Phase 5) |
+| `467d14c1` | notifications | 3 | `1c49aebe` | feat: new lines become notifications while the app runs (notifications, Phase 6) |
+| `53d1beb9` | notifications | 3 | `1c49aebe` | feat: the switches, on the profile, and mute on the room (notifications, Phase 7) |
+| `74c7a0dd` | notifications | 3 | `c61dd126` | fix: a minimised desktop stays connected, and iOS gets its grace (notifications, Phase 8) |
+| `4a6f45aa` | notifications | 3 | `c61dd126` | feat: one bounded sync while off screen, on the app's own engines (notifications, Phase 9) |
+| `c9faf62f` | notifications | 3 | `55b5d859` | feat: Android syncs every fifteen minutes while closed (notifications, Phase 10) |
+| `a60f6b93` | notifications | 3 | `55b5d859` | feat: Stay connected, an opt-in service that holds the relays open (notifications, Phase 10) |
+| `51c2423a` | notifications | 3 | `4bf88358` | feat: iOS syncs when BGTaskScheduler lets it (notifications, Phase 11) |
+| `206a44e2` | notifications | 3 | `4bf88358` | feat: the desktop closes to the tray and notifies from it (notifications, Phase 12) |
+| `ac8d6488` | notifications | 3 | `4bf88358` | feat: mark as read and reply, from the notification (notifications, Phase 13) |
+| `900dfd8c` | notifications | 3 | `02fad206` | docs: notifications are built, and what they chose differently (notifications, Phase 14) |
 | `f78bd16b` | confederations | — | skip (D12) | docs: a confederation with no coordinator (confederation-without-coordinator, Phase 0) |
 | `b2f22f2c` | confederations | — | skip (D12) | test: the premises of a confederation with no coordinator (confederation-without-coordinator, Phase 0) |
 | `e2de3fa8` | confederations | — | skip (D12) | test: pin the coordinator's part in a confederation (confederation-without-coordinator, Phase 1) |
@@ -432,5 +432,5 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `f367294c` | recovery codes | 2 | `cb65a159` | feat: a new profile from Landing is backed by a recovery code (recovery-code-v3, Phase 7) |
 | `028c1a48` | recovery codes | 2 | `c17207bd` | docs: record recovery codes as built (recovery-code-v3, Phase 8) |
 | `7d479e2b` | recovery codes | 2 | `2ff4089b` | fix: Landing's sign-in caption names recovery codes (recovery-code-v3) |
-| `b7e5dd19` | fix | 1 | pending | fix: give ProposalListRoute's enum filter a NavType off Android |
-| `9a1abc61` | fix | 1 | pending | fix: include jdk.unsupported and the other needed modules in the desktop runtime |
+| `b7e5dd19` | fix | 1 | `a45879b7` | fix: give ProposalListRoute's enum filter a NavType off Android |
+| `9a1abc61` | fix | 1 | `5513cad7` | fix: include jdk.unsupported and the other needed modules in the desktop runtime |
