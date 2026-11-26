@@ -1,6 +1,8 @@
 package com.machankura.dedun.compose.database.model
 
 import com.machankura.dedun.compose.nostr.MovedKinds
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
 import com.machankura.dedun.compose.managers.Contacts
 import com.machankura.dedun.compose.managers.GroupLightningWalletManager
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningOperatorStatementEvent
@@ -564,13 +566,22 @@ data class ChatMessage(
         private const val TYPE_LEGACY_GROUP_ENTRY_CURATED = "groupEntryCurated"
 
         /**
-         * Lines the group's nostr profile, relay lists and posts wrote. Those
-         * features are gone too, and these stay for the same reason: rows already
-         * in a transcript carry them and have to stay system lines.
+         * The group signed a new nostr profile for itself: a system line, written only for
+         * a profile the *room* signed. The stored string is the one an older build wrote,
+         * so a row it left reads as this type. docs/giza-second-batch.md, Phase 5, from
+         * Giza's group-nostr-profile.
          */
-        private const val TYPE_LEGACY_GROUP_PROFILE_SIGNED = "groupProfileSigned"
+        const val TYPE_GROUP_PROFILE_SIGNED = "groupProfileSigned"
+
+        /** The group signed something to say publicly, in its own name. */
+        const val TYPE_GROUP_POST_SIGNED = "groupPostSigned"
+
+        /**
+         * The line the group's relay lists wrote. That feature did not come back with the
+         * profile and posts, and this stays for the reason the other legacy types do: rows
+         * already in a transcript carry it and have to stay system lines.
+         */
         private const val TYPE_LEGACY_GROUP_RELAYS_SIGNED = "groupRelaysSigned"
-        private const val TYPE_LEGACY_GROUP_POST_SIGNED = "groupPostSigned"
 
         /**
          * The group opened a wallet.
@@ -677,9 +688,9 @@ data class ChatMessage(
          * silently, looking exactly like somebody having said it.
          */
         val GROUP_IDENTITY_TYPES = setOf(
-            TYPE_LEGACY_GROUP_PROFILE_SIGNED,
+            TYPE_GROUP_PROFILE_SIGNED,
             TYPE_LEGACY_GROUP_RELAYS_SIGNED,
-            TYPE_LEGACY_GROUP_POST_SIGNED,
+            TYPE_GROUP_POST_SIGNED,
             TYPE_LEGACY_GROUP_SCHEMA_SIGNED,
             TYPE_LEGACY_GROUP_ENTRY_CURATED,
             TYPE_GROUP_WALLET_OPENED,
@@ -2088,13 +2099,74 @@ data class ChatMessage(
                     )
                 }
 
-                // A profile or a relay list -- the group's or a member's own --
-                // travelling through the room. The app no longer reads either as
-                // the group's, and both are identity plumbing nobody sends into a
-                // room on purpose, so neither is a line nor a raw-JSON bubble: a
-                // signing session an older build opened for one ends in silence.
-                // A kind:1 is content, and keeps the bubble it always had.
-                MetadataEvent.KIND,
+                // The group's own profile: a kind:0 the room's key signed, filed
+                // as a `GroupSignedEvent` by `FrostSigningManager.complete` before
+                // it applies it, and read off those by `GroupNostrProfile`. A
+                // `Profile` row is not an option: it hangs off `NostrEvent` by
+                // foreign key, and a group-signed event is not one.
+                //
+                // A kind:0 anybody else authored is a member's own profile passing
+                // through the room -- identity plumbing nobody sends on purpose --
+                // and is neither a line nor a raw-JSON bubble.
+                // docs/group-nostr-profile-and-posts.md.
+                MetadataEvent.KIND -> {
+                    if (!event.pubKey.equals(groupId, ignoreCase = true)) return null
+
+                    val profile = GroupNostrProfile.of(
+                        signedEvent = GroupSignedEvent.fromEvent(event, chatRoomId = groupId),
+                        chatRoomId = groupId,
+                    ) ?: return null
+
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_PROFILE_SIGNED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = profile.name()?.let { "The group is now called $it" }
+                            ?: "The group signed a new profile for itself"
+                    )
+                }
+
+                // The group saying something publicly, in its own name -- a
+                // different thing from a member saying something in the room. A
+                // room's messages are `ChatEvent`s; this is a kind:1 authored by
+                // the room's own key, so any reader can check the group said it
+                // and that no single member could have.
+                //
+                // Verified rather than checked by author alone: a rumor carries an
+                // empty signature and any pubkey its sender likes, so an author
+                // check would let one member put words in the group's mouth.
+                //
+                // A kind:1 that fails falls through to `unsupported` rather than
+                // vanishing. It is content, somebody meant it, and it has rendered
+                // as an unsupported event since before any of this existed.
+                TextNoteEvent.KIND -> {
+                    val signed = GroupSignedEvent.fromEvent(event, chatRoomId = groupId)
+                    if (!signed.verifies()) return unsupported()
+
+                    ChatMessage(
+                        giftWrapPayloadId = null,
+                        messageType = TYPE_GROUP_POST_SIGNED,
+                        marmotGroupEventId = marmotGroupEventId,
+                        marmotInnerEventId = marmotInnerEventId,
+                        senderPublicKey = senderPublicKey,
+                        isUserMessage = isUserMessage,
+                        chatRoomId = groupId,
+                        createdAt = createdAt,
+                        content = "The group posted in its own name"
+                    )
+                }
+
+                // A relay list -- the group's or a member's own -- travelling
+                // through the room. The group's relay lists were not brought back
+                // with its profile and posts (docs/group-nostr-profile-and-posts.md,
+                // D1), and a member's is identity plumbing nobody sends into a room
+                // on purpose, so neither is a line nor a raw-JSON bubble: a signing
+                // session a Curare member opened for one ends in silence.
                 AdvertisedRelayListEvent.KIND,
                 DmRelayListEvent.KIND,
                 SearchRelayListEvent.KIND,

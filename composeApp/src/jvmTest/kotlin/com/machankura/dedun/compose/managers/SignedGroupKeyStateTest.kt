@@ -1253,6 +1253,37 @@ class SignedGroupKeyStateTest {
         }
     }
 
+    /**
+     * The premise docs/group-nostr-profile-and-posts.md rests on: what a keyed room
+     * signs passes `GroupSignedEvent.verifies`, the one gate every reader of the
+     * group's profile and posts puts an event through. If this fails, the group has
+     * no nostr identity a reader would accept, whatever screens sit on top.
+     */
+    @Test
+    fun `a post the group signs verifies as the room's own statement`() = runBlocking {
+        val creator = device(members[0], signerIndex = 0)
+        val other = device(members[1], signerIndex = 1)
+
+        val template = TextNoteEvent.build(note = "Sepedi")
+        val session = FrostSigningManager.proposeSigning(
+            database = creator.db,
+            localChatRoom = creator.room,
+            userPublicKey = creator.publicKey,
+            kind = template.kind,
+            tags = template.tags,
+            content = template.content
+        )
+        pump(creator, other)
+        FrostSigningManager.approve(other.db, other.room, session.id)
+        pump(creator, other)
+
+        listOf(creator, other).forEach { device ->
+            val post = assertNotNull(device.db.groupSignedEventDao().getById(device.item(session.id).eventId))
+            assertTrue(post.verifies(), "the room's reader would refuse its own post")
+            assertEquals(device.room.chatRoom.id, post.chatRoomId)
+        }
+    }
+
     @Test
     fun `a proposer cannot choose the key the group signs as`() = runBlocking {
         val other = device(members[1], signerIndex = 1)

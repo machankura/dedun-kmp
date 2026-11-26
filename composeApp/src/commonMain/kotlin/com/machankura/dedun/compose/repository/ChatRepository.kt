@@ -28,6 +28,8 @@ import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
 import com.machankura.dedun.compose.managers.MarmotGroupCreation
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.managers.SubgroupManager
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.machankura.dedun.compose.nostr.GroupPost
 import com.machankura.dedun.compose.nostr.MarmotProfile
 import com.machankura.dedun.compose.ui.view.state.SharesSummary
 import com.machankura.dedun.compose.ui.view.state.RotationPreview
@@ -82,6 +84,38 @@ interface ChatRepository {
      * see or check what the group actually put its key to.
      */
     suspend fun signedGroupKeyStateEvent(chatRoomId: String): GroupSignedEvent?
+
+    /**
+     * The newest profile this group signed for itself, or null when it has signed
+     * none that this device holds.
+     *
+     * The group's identity on nostr is the room's own id, so it has one to
+     * describe whether or not it ever has. Read off the group's signed events and
+     * verified there -- see `GroupNostrProfile` -- so a room shows the profile its
+     * own key signed or shows that it has none. docs/group-nostr-profile-and-posts.md.
+     */
+    suspend fun groupNostrProfile(chatRoomId: String): GroupNostrProfile?
+
+    /**
+     * The kind:1s this group signed, newest first.
+     *
+     * The group speaking as itself, which is a different thing from a member
+     * speaking in the room -- the transcript is the second. Unlike the profile
+     * these accumulate rather than replace, so this is a list and an empty one
+     * means the group has said nothing publicly that this device holds.
+     */
+    suspend fun groupPosts(chatRoomId: String): List<GroupPost>
+
+    /**
+     * One event the group signed, as the group signed it, or null when this
+     * device does not hold it or it was signed in some other room.
+     *
+     * Scoped to the room rather than looked up by id alone, because the id
+     * arrives as a navigation argument and the screen it opens names a room in
+     * its title: an event from one room shown under another room's name would
+     * be a lie the signature check cannot catch, since both rooms' events verify.
+     */
+    suspend fun groupSignedEvent(chatRoomId: String, id: HexKey): GroupSignedEvent?
 
     /**
      * Every subgroup this room has certified, as far as this device knows.
@@ -441,6 +475,12 @@ interface ChatRepository {
             override suspend fun signedGroupKeyStateEvent(
                 chatRoomId: String
             ): GroupSignedEvent? = null
+
+            override suspend fun groupNostrProfile(chatRoomId: String): GroupNostrProfile? = null
+
+            override suspend fun groupPosts(chatRoomId: String): List<GroupPost> = emptyList()
+
+            override suspend fun groupSignedEvent(chatRoomId: String, id: HexKey): GroupSignedEvent? = null
 
             override suspend fun subgroupsOf(chatRoomId: String): List<SubgroupManager.Subgroup> =
                 emptyList()

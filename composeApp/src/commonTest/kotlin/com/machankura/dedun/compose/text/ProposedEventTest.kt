@@ -67,13 +67,35 @@ class ProposedEventTest {
     }
 
     @Test
-    fun `a profile, a post and a relay list are no longer described`() {
-        // The group's nostr profile, posts and relay lists were removed, and with
-        // them the words for what they were; a proposal for one from an older
-        // build is said like any other kind the app does not know.
-        listOf(MetadataEvent.KIND, TextNoteEvent.KIND, AdvertisedRelayListEvent.KIND).forEach { kind ->
-            assertEquals("Event of kind $kind", ProposedEvent.summarize(event(kind)).label)
-        }
+    fun `a profile is said by its name and what it says about itself`() {
+        val summary = ProposedEvent.summarize(
+            event(MetadataEvent.KIND, content = """{"name":"Translation collective","about":"Hard books"}""")
+        )
+
+        assertEquals("Nostr profile", summary.label)
+        assertEquals("Translation collective · Hard books", summary.detail)
+
+        assertEquals("An empty profile", ProposedEvent.summarize(event(MetadataEvent.KIND, content = "{}")).detail)
+        assertEquals("Unreadable profile", ProposedEvent.summarize(event(MetadataEvent.KIND, content = "not json")).detail)
+    }
+
+    @Test
+    fun `a post is said by its words`() {
+        val summary = ProposedEvent.summarize(event(TextNoteEvent.KIND, content = "We meet on Thursday"))
+
+        assertEquals("Post", summary.label)
+        assertEquals("We meet on Thursday", summary.detail)
+    }
+
+    @Test
+    fun `a relay list is still said by its number`() {
+        // The group's relay lists were not brought back with its profile and posts
+        // (docs/group-nostr-profile-and-posts.md, D1), so a proposal for one from a
+        // Curare member is said like any other kind the app does not know.
+        assertEquals(
+            "Event of kind ${AdvertisedRelayListEvent.KIND}",
+            ProposedEvent.summarize(event(AdvertisedRelayListEvent.KIND)).label,
+        )
     }
 
     private fun event(

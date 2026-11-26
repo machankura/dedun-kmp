@@ -743,6 +743,21 @@ object FrostSigningManager {
             }
         }
 
+        // A profile or a post that nothing would show once signed: a kind:0 that is
+        // not a profile, a kind:1 with nothing in it. Declined on arrival for the
+        // wallet's reason -- Dedun signs only what it can check -- and filed the same
+        // way, so the decline goes out through [advance].
+        // docs/group-nostr-profile-and-posts.md, D5.
+        GroupStatementRefusal.of(unsignedEvents)?.let { why ->
+            logger.w("Signing proposal $sessionId $why; declining")
+            val declined = newSession(sessionId, localChatRoom, innerEvent, userPublicKey, key, signerId, path, generation ?: 0)
+                .copy(signDeclinedAt = Clock.System.now())
+            database.frostSigningSessionDao().upsert(declined)
+            database.frostSigningSessionDao().upsertItems(itemsOver(sessionId, unsignedEvents))
+            announceStarted(database, declined)
+            return declined
+        }
+
         // A member wallet's certificate is this group agreeing to guard one
         // member's key, so it has to be exactly what that member asked for, asked
         // by a member, with exactly the guardian keys this group grants -- the
@@ -2124,6 +2139,15 @@ object FrostSigningManager {
         )
     }
 
+    /**
+     * Events [GroupStatementRefusal] says nothing would show once signed: a profile
+     * no reader could parse, a post with nothing in it.
+     * docs/group-nostr-profile-and-posts.md, D5.
+     */
+    private fun isUnshowableSession(session: FrostSigningSession, items: List<FrostSigningItem>): Boolean =
+        session.subject == FrostSigningSubject.EVENTS &&
+            items.any { item -> Event.fromJsonOrNull(item.unsignedEventJson)?.let(GroupStatementRefusal::of) != null }
+
     private fun isFromCoordinator(
         session: FrostSigningSession,
         innerEvent: Event
@@ -3270,6 +3294,15 @@ object FrostSigningManager {
             }
         }
 
+        // The same backstop for a profile or a post nothing would show, for a
+        // session an older build filed before it declined those on arrival.
+        if (isUnshowableSession(session, items)) {
+            logger.w("Session $sessionId signs a profile or a post nothing could show; declining")
+            update(database, session) { it.copy(signDeclinedAt = Clock.System.now()) }
+            advance(database, localChatRoom, sessionId)
+            return
+        }
+
         update(database, session) { it.copy(signApprovedAt = Clock.System.now()) }
 
         logger.i("Session $sessionId: signing approved")
@@ -3771,7 +3804,9 @@ object FrostSigningManager {
         localChatRoom: LocalChatRoom,
         session: FrostSigningSession
     ) {
+        val items = database.frostSigningSessionDao().getItems(session.id)
         val reason = when {
+            isUnshowableSession(session, items) -> GroupStatementRefusal.REASON
             !holdsShareFor(database, session) -> GENERATION_REFUSAL
             else -> "Declined to sign"
         }

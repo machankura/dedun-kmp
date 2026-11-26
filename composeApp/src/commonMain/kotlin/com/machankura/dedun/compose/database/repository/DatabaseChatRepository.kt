@@ -34,6 +34,10 @@ import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatMessage
 import com.machankura.dedun.compose.database.model.intermdiate.LocalChatRoom
 import com.machankura.dedun.compose.database.model.types.MarmotReindexReport
+import com.machankura.dedun.compose.nostr.GroupPost
+import com.machankura.dedun.compose.nostr.GroupNostrProfile
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
+import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.machankura.dedun.compose.database.model.ShareRefreshSession
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.vitorpamplona.quartz.nip01Core.core.Event
@@ -158,6 +162,38 @@ class DatabaseChatRepository(
         // not derive throws rather than answering. The screen wants to draw
         // either way -- what it loses is the copyable event, not the room.
         logger.e("Error reading the signed key state event for $chatRoomId", e)
+        null
+    }
+
+    override suspend fun groupNostrProfile(chatRoomId: String): GroupNostrProfile? = try {
+        GroupNostrProfile.newestAmong(
+            signedEvents = database.groupSignedEventDao()
+                .getByChatRoomIdAndKind(chatRoomId, MetadataEvent.KIND),
+            chatRoomId = chatRoomId,
+        )
+    } catch (e: Throwable) {
+        // Reading one parses content off the wire and checks a signature, and a
+        // room that shows no profile is wrong and survivable where one that will
+        // not open is neither -- the same trade the readings above make.
+        logger.e("Error reading the nostr profile of $chatRoomId", e)
+        null
+    }
+
+    override suspend fun groupPosts(chatRoomId: String): List<GroupPost> = try {
+        GroupPost.newestFirstAmong(
+            signedEvents = database.groupSignedEventDao()
+                .getByChatRoomIdAndKind(chatRoomId, TextNoteEvent.KIND),
+            chatRoomId = chatRoomId,
+        )
+    } catch (e: Throwable) {
+        logger.e("Error reading the posts of $chatRoomId", e)
+        emptyList()
+    }
+
+    override suspend fun groupSignedEvent(chatRoomId: String, id: HexKey): GroupSignedEvent? = try {
+        database.groupSignedEventDao().getById(id)?.takeIf { it.chatRoomId == chatRoomId }
+    } catch (e: Throwable) {
+        logger.e("Error reading the signed event $id of $chatRoomId", e)
         null
     }
 

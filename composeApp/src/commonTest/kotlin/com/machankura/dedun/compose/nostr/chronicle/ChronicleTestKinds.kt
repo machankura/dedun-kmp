@@ -13,12 +13,12 @@ import com.vitorpamplona.quartz.nip65RelayList.AdvertisedRelayListEvent
  *
  * Chosen for three properties:
  *
- *  - **none is a kind the app gives a meaning of its own** -- a profile and a
- *    relay list apply to nothing, and a kind:1 to the "unsupported" line it
- *    has always been -- so applying one neither throws nor writes a
- *    `GroupSignedEvent` of its own, and the `GroupSignedEvent` rows a receiver
- *    holds afterwards are exactly the ones the chronicle recorded: comparing
- *    those is comparing the work;
+ *  - **none writes a `GroupSignedEvent` of its own when applied** -- a relay
+ *    list applies to nothing, and the group's profile and posts
+ *    (docs/group-nostr-profile-and-posts.md) write at most a transcript line --
+ *    so applying one neither throws nor adds a row, and the `GroupSignedEvent`
+ *    rows a receiver holds afterwards are exactly the ones the chronicle
+ *    recorded: comparing those is comparing the work;
  *  - **the order disagrees with the kind numbers** (10002 before 0 before 1),
  *    so a test that the order is the list's cannot pass by sorting on kind.
  *

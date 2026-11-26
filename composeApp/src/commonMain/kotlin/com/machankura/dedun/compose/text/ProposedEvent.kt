@@ -20,6 +20,8 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.core.HexKey
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletCertificateEvent
 import com.machankura.dedun.compose.nostr.wallet.MemberWalletRequestEvent
+import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
+import com.vitorpamplona.quartz.nip10Notes.TextNoteEvent
 import com.machankura.dedun.compose.managers.SharedKeyDerivation
 import com.machankura.dedun.compose.nostr.frost.GroupKeyStateEvent
 import com.machankura.dedun.compose.nostr.lightning.GroupLightningAuthorisationEvent
@@ -128,6 +130,26 @@ object ProposedEvent {
                 "On ${GroupWalletStatementEvent.chainName(statement.chain)}, account ${statement.account}"
             } ?: "A wallet statement this device cannot read"
         )
+
+        // The group's own profile. Named by what the group would be called and
+        // what it would say about itself, which is the whole of what is being
+        // decided; the JSON in the content is the one thing a signer should not
+        // have to read to find that out. docs/group-nostr-profile-and-posts.md.
+        MetadataEvent.KIND -> Summary(
+            label = "Nostr profile",
+            detail = MetadataEvent(
+                event.id, event.pubKey, event.createdAt, event.tags, event.content, event.sig
+            ).contactMetaData()?.let { metadata ->
+                listOfNotNull(
+                    metadata.anyName()?.takeIf { it.isNotBlank() },
+                    metadata.about?.takeIf { it.isNotBlank() }
+                ).joinToString(" · ").ifEmpty { "An empty profile" }
+            } ?: "Unreadable profile"
+        )
+
+        // A post in the group's name. The words are what is being decided, so
+        // they are the detail rather than a count of them.
+        TextNoteEvent.KIND -> Summary(label = "Post", detail = event.content)
 
         // The group keeping a Lightning wallet. What a member agrees to is a key, a node and an LSP
         // holding money under a policy, so the summary names the network, the threshold and the cap
