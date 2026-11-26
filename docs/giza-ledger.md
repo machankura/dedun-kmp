@@ -273,10 +273,10 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `4555f5d1` | confederations | — | skip (D12) | build: lightning-kmp-app with bitcoin-kmp's confederation down the chain |
 | `37079ee4` | confederations | — | skip (D12) | test: Giza reaches bitcoin-kmp's confederation API (confederation update, Phase 4) |
 | `bdb0b3f0` | group profile | 5 | pending | docs: the group's nostr profile and posts, planned as a port from Curare (group-nostr-profile, Phase 0) |
-| `b4d0e483` | group profile | 5 | pending | test: pin what a group-signed profile and post do today (group-nostr-profile, Phase 1) |
-| `b944a411` | group profile | 5 | pending | feat: the group's profile and posts read off what it signed (group-nostr-profile, Phase 2) |
-| `5b75c2c2` | group profile | 5 | pending | feat: the transcript says when the group signs its profile or a post (group-nostr-profile, Phase 3) |
-| `09649d9a` | group profile | 5 | pending | feat: decline a profile or a post nothing could show, out loud (group-nostr-profile, Phase 4) |
+| `b4d0e483` | group profile | 5 | `6562678a` | test: pin what a group-signed profile and post do today (group-nostr-profile, Phase 1) |
+| `b944a411` | group profile | 5 | `6562678a` | feat: the group's profile and posts read off what it signed (group-nostr-profile, Phase 2) |
+| `5b75c2c2` | group profile | 5 | `6562678a` | feat: the transcript says when the group signs its profile or a post (group-nostr-profile, Phase 3) |
+| `09649d9a` | group profile | 5 | `6562678a` | feat: decline a profile or a post nothing could show, out loud (group-nostr-profile, Phase 4) |
 | `add309f7` | group profile | 5 | pending | feat: the group's nostr profile, seen and proposed (group-nostr-profile, Phase 5) |
 | `ffde0553` | group profile | 5 | pending | feat: the group's posts, seen and proposed (group-nostr-profile, Phase 6) |
 | `f98378ca` | group profile | 5 | pending | feat: a group-signed profile or post sent to relays (group-nostr-profile, Phase 7) |

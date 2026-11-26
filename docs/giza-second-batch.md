@@ -536,6 +536,44 @@ Dedun-only checks:
 **Done when** Giza's suites for both features pass, and in a three-device debug run one NIP-17
 room makes two groups, each with its own wallet, and one group publishes a profile.
 
+**As built, in part.**
+
+The group's profile and posts, Giza's Phases 1–4, are in:
+
+- `GroupNostrProfile` and `GroupPost` read a group's kind 0 and kind 1 off what the room's key
+  signed.
+- The transcript has their lines. The two legacy types, `groupProfileSigned` and
+  `groupPostSigned`, are live again under their old strings.
+- `ProposedEvent` names them.
+- The signer declines, out loud, a profile or a post nothing could show. From Giza's side the
+  signer takes only `GroupStatementRefusal`, not Giza's wallet refusal or governance check.
+
+jvmTest: 3,246 run, 0 failed.
+
+**Not taken, and why.** What follows in Phase 5 lands on code Dedun has not built.
+
+- **The profile and post screens** (Giza's Phases 5–9). They rewrite `ChatRoomDetailScreen`,
+  its view model and its state. Those are where Dedun and Giza differ most: the first plan
+  measured 819 lines of change on Giza's side against 477 on Dedun's. Giza's side also carries
+  `ChatRoomDetailWithoutWalletsJvmTest`, which only makes sense for an app with no wallet.
+- **A second group from the same people.** Steps 1 and 2 go across: re-applied by hand to
+  Dedun's `SelectChatRoomTypeViewModel`, since Giza's `SelectQuorumViewModel` comes from
+  remove-convenient-groups, which D3 declined. They were then backed out unmerged. Step 3,
+  "nothing asks a NIP-17 room for its one ceremony", edits the member-row-action and
+  governed-room files. Those come from the first plan's Phases 8–9, which Dedun has not built.
+  Step 1 alone would let the same people open a second ceremony while other code still asks for
+  "the" ceremony of a room, so none of it is taken until step 3 can be.
+
+**What the rest of the batch needs first:**
+
+- Phase 6 (the inbox and the group's direct messages) needs the first plan's Phase 9, as this
+  plan already said. A probe of its commits found Giza's `GovernanceFollowThrough` among the
+  files they change, from the first plan's Phase 8.
+- Phase 7 (disappearing messages) is self-contained apart from `ada95867`. That commit waits
+  for Phase 6.
+- Phase 8 (names in braces) runs through 26 confederation files. They have to be read out of it
+  by hand.
+
 ## Phase 6: the group's inbox and its direct messages
 
 `group-inbox` (`ccc439b2`..`31bcb3a3`) and `group-threshold-ecdh` (`dae0a345`..`082d0971`):
