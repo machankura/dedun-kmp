@@ -272,17 +272,17 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `1b3b5f86` | confederations | — | skip (D12) | docs: confederation update, Phase 0 verified |
 | `4555f5d1` | confederations | — | skip (D12) | build: lightning-kmp-app with bitcoin-kmp's confederation down the chain |
 | `37079ee4` | confederations | — | skip (D12) | test: Giza reaches bitcoin-kmp's confederation API (confederation update, Phase 4) |
-| `bdb0b3f0` | group profile | 5 | pending | docs: the group's nostr profile and posts, planned as a port from Curare (group-nostr-profile, Phase 0) |
+| `bdb0b3f0` | group profile | 5 | `53ea1c1b` | docs: the group's nostr profile and posts, planned as a port from Curare (group-nostr-profile, Phase 0) |
 | `b4d0e483` | group profile | 5 | `6562678a` | test: pin what a group-signed profile and post do today (group-nostr-profile, Phase 1) |
 | `b944a411` | group profile | 5 | `6562678a` | feat: the group's profile and posts read off what it signed (group-nostr-profile, Phase 2) |
 | `5b75c2c2` | group profile | 5 | `6562678a` | feat: the transcript says when the group signs its profile or a post (group-nostr-profile, Phase 3) |
 | `09649d9a` | group profile | 5 | `6562678a` | feat: decline a profile or a post nothing could show, out loud (group-nostr-profile, Phase 4) |
-| `add309f7` | group profile | 5 | pending | feat: the group's nostr profile, seen and proposed (group-nostr-profile, Phase 5) |
-| `ffde0553` | group profile | 5 | pending | feat: the group's posts, seen and proposed (group-nostr-profile, Phase 6) |
-| `f98378ca` | group profile | 5 | pending | feat: a group-signed profile or post sent to relays (group-nostr-profile, Phase 7) |
-| `aa820c20` | group profile | 5 | pending | feat: an unsigned profile or post, pasted for the group to sign (group-nostr-profile, Phase 8) |
-| `34c8faa4` | group profile | 5 | pending | fix: the broadcast screen sends only the group's profile and posts (group-nostr-profile, Phase 7) |
-| `d039daf6` | group profile | 5 | pending | docs: the group's nostr profile and posts are built, and the notes they touched say so (group-nostr-profile, Phase 9) |
+| `add309f7` | group profile | 5 | `c540cb4b` | feat: the group's nostr profile, seen and proposed (group-nostr-profile, Phase 5) |
+| `ffde0553` | group profile | 5 | `a4400f06` | feat: the group's posts, seen and proposed (group-nostr-profile, Phase 6) |
+| `f98378ca` | group profile | 5 | `2f63531c` | feat: a group-signed profile or post sent to relays (group-nostr-profile, Phase 7) |
+| `aa820c20` | group profile | 5 | `6c75161f` | feat: an unsigned profile or post, pasted for the group to sign (group-nostr-profile, Phase 8) |
+| `34c8faa4` | group profile | 5 | `36b86add` | fix: the broadcast screen sends only the group's profile and posts (group-nostr-profile, Phase 7) |
+| `d039daf6` | group profile | 5 | `0fe03bc5` | docs: the group's nostr profile and posts are built, and the notes they touched say so (group-nostr-profile, Phase 9) |
 | `6cb9dd7d` | confederations | — | skip (D12) | docs: a group made of groups, planned (confederation, Phase 0) |
 | `e84fc9b5` | confederations | — | skip (D12) | docs: the three checks before any code (confederation, Phase 0) |
 | `abe555e5` | confederations | — | skip (D12) | test: a confederation signs as its room's id, and today's answer to its kinds (confederation, Phase 1) |
@@ -356,18 +356,18 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `bad5d122` | confederations | — | skip (D12) | feat: who makes the confederation's room, when nobody coordinates (confederation-without-coordinator, Phase 8) |
 | `d1513ef2` | confederations | — | skip (D12) | docs: the record of a confederation with no coordinator (confederation-without-coordinator, Phase 9) |
 | `3b0b3c9a` | icon | — | skip | Update icon |
-| `dd812950` | second group | 5 | pending | test: the premises of a second group from the same people (nip17-multiple-ceremonies, Phase 0) |
-| `9c2f55aa` | second group | 5 | pending | feat: the same people can open a second group's ceremony (nip17-multiple-ceremonies, Phase 1) |
-| `1d6f77cf` | second group | 5 | pending | feat: making a group names its ceremony, and says what these people already have (nip17-multiple-ceremonies, Phase 2) |
-| `4baf5d8f` | second group | 5 | pending | feat: nothing asks a NIP-17 room for its one ceremony (nip17-multiple-ceremonies, Phase 3) |
+| `dd812950` | second group | 5 | `a7dde566` | test: the premises of a second group from the same people (nip17-multiple-ceremonies, Phase 0) |
+| `9c2f55aa` | second group | 5 | `cb33b677` | feat: the same people can open a second group's ceremony (nip17-multiple-ceremonies, Phase 1) |
+| `1d6f77cf` | second group | 5 | `10c03bfe` | feat: making a group names its ceremony, and says what these people already have (nip17-multiple-ceremonies, Phase 2) |
+| `4baf5d8f` | second group | 5 | `f9966a0e` | feat: nothing asks a NIP-17 room for its one ceremony (nip17-multiple-ceremonies, Phase 3) |
 | `d1a9b995` | disappearing | 7 | `685464be` | docs: a plan for disappearing NIP-17 messages (disappearing-messages, Phase 0) |
-| `4e16592a` | second group | 5 | pending | feat: a ceremony's lines, notice and join screen name the group it makes (nip17-multiple-ceremonies, Phase 4) |
+| `4e16592a` | second group | 5 | `7a2e8a01` | feat: a ceremony's lines, notice and join screen name the group it makes (nip17-multiple-ceremonies, Phase 4) |
 | `c5618a70` | disappearing | 7 | `b949c954` | docs: disappearing messages, the Phase 0 checks answered (disappearing-messages, Phase 0) |
 | `962bdbf6` | disappearing | 7 | `f85bf81a` | feat: when a NIP-17 rumor expires, as pure rules (disappearing-messages, Phase 1) |
-| `088e86ac` | second group | 5 | pending | feat: a NIP-17 room lists the groups made in it (nip17-multiple-ceremonies, Phase 5) |
-| `729efdac` | second group | 5 | pending | test: the same people make two groups, end to end (nip17-multiple-ceremonies, Phase 6) |
+| `088e86ac` | second group | 5 | `73a79696` | feat: a NIP-17 room lists the groups made in it (nip17-multiple-ceremonies, Phase 5) |
+| `729efdac` | second group | 5 | `7d305b9f` | test: the same people make two groups, end to end (nip17-multiple-ceremonies, Phase 6) |
 | `50f73e17` | confederations | — | skip (D12) | feat: a member who has not joined finds the key ceremony from its room |
-| `03e2d10d` | second group | 5 | pending | docs: the record of more than one group from the same people (nip17-multiple-ceremonies, Phase 7) |
+| `03e2d10d` | second group | 5 | `5e70fbc9` | docs: the record of more than one group from the same people (nip17-multiple-ceremonies, Phase 7) |
 | `b7f6df0c` | disappearing | 7 | `5d8f55f2` | feat: storage for disappearing messages, v50 (disappearing-messages, Phase 2) |
 | `ae0468bb` | disappearing | 7 | `9b7784ab` | feat: every NIP-17 payload is stamped with its expiry (disappearing-messages, Phase 3) |
 | `a4c12eee` | disappearing | 7 | `55a62e11` | feat: what has disappeared is deleted from the device (disappearing-messages, Phase 4) |
@@ -375,7 +375,7 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `c50288a9` | disappearing | 7 | `324bce29` | feat: a ceremony's rounds leave the device when its session is done (disappearing-messages, Phase 5) |
 | `4994248d` | confederations | — | skip (D12) | feat: the wire and storage of a confederation's profile changes (confederation-profile, Phase 1) |
 | `2e747f90` | disappearing | 7 | `39013eee` | feat: the disappearing-messages setting, and the conversation showing it (disappearing-messages, Phase 6) |
-| `fff891a4` | second group | 5 | pending | feat: a finished ceremony's screen names the group it made (nip17-multiple-ceremonies) |
+| `fff891a4` | second group | 5 | `e5e84cfd` | feat: a finished ceremony's screen names the group it made (nip17-multiple-ceremonies) |
 | `c293514d` | confederations | — | skip (D12) | feat: a group proposes, endorses or objects to its confederation's profile (confederation-profile, Phase 2) |
 | `44cbe596` | confederations | — | skip (D12) | feat: each group's room hears of a change to its confederation's profile (confederation-profile, Phase 3) |
 | `ada95867` | disappearing | 7 | `fd00e9a4` | feat: what a group sends disappears too (disappearing-messages, Phase 7) |

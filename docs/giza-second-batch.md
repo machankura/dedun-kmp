@@ -580,6 +580,39 @@ of the second group, and Phase 6, now have the member-row-action, governed-room 
 `GovernanceFollowThrough` code they edit. Their migrations take 53 and up, since the first
 plan's took 51 and 52.
 
+**The rest, as built.** The profile and post screens (Giza's Phases 5-9) and a second group from
+the same people (`dd812950`..`03e2d10d` and `fff891a4`) are in. The first plan's Phases 8 and 9
+had unblocked them.
+
+- **Screens.** The group's screen gets Giza's rows for the profile, the posts and the paste, in
+  Marmot rooms, beside the wallet rows. Dedun's `GroupSignedWorkRowsJvmTest` had said the rows
+  were gone; it now checks they are there. Giza's wallet-less detail-screen test is not taken.
+  The broadcast screen also sends the inbox's 10044 and 10050, as Giza's has since its inbox.
+- **A second group.** Giza's `SelectQuorumViewModel` comes from remove-convenient-groups, which
+  D3 declined. So naming the ceremony, and listing the groups these people already share, go
+  into Dedun's `SelectChatRoomTypeViewModel` and screen, where a robust group's ceremony is
+  proposed.
+- **Step 3: nothing asks a room for its one ceremony.** Giza's six lookups are fixed by its
+  commit. Dedun's own lookups were read for the same assumption:
+  - the Iceberg keys of the Lightning and Wavelength wallets are found per Marmot room and
+    purpose;
+  - the ceremony follow-through finds ceremonies by session id, and the subgroup path by parent
+    and members;
+  - every `completedKey` caller asks about a Marmot room, whose key state names its ceremony.
+  
+  The fallback now answers only when a room holds a single key of its own.
+- **Subgroups stay out of "groups made here".** Both lists read `getOwnSessionsForChatRoom`,
+  which leaves out any ceremony with a parent.
+- **A profile or post being signed holds a share rotation back** (`RotationHold.StatementOpen`),
+  as Dedun's money statements do (`GroupStatementHoldsRotationJvmTest`). They are `EVENTS`
+  sessions, so they never reach the payouts-only spend checks.
+
+jvmTest after the hold's test was fixed: 3,678 run. One failure in the full run,
+`ShareRefreshRitualJvmTest`, came from that hold: it signed a post across a rotation. It now uses
+a kind the hold does not cover, and it passes. `compileDebugKotlinAndroid` and `m3Audit` pass.
+Not run: the three-device debug run (one NIP-17 room makes two groups, each with its own wallet,
+and one publishes a profile).
+
 ## Phase 6: the group's inbox and its direct messages
 
 `group-inbox` (`ccc439b2`..`31bcb3a3`) and `group-threshold-ecdh` (`dae0a345`..`082d0971`):
