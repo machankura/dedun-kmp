@@ -29,8 +29,9 @@ without a share asks. Read [member-chronicle.md](./member-chronicle.md) for how 
 member added later gets the group's signed record.
 
 **Built**, Phases 0-8, one commit each, written against `1a111849`, schema version 49. No
-schema change was needed. Phase 9's checks ran as the table below Phase 9 says; the
-four-emulator run has not. `Contacts`, `ContactIdentifier`, `Party`, the six `Contact*Event`
+schema change was needed. Phase 9's checks ran as the table below Phase 9 says, the
+four-emulator run included; it found one gap in this feature that blocks D5 in practice (a
+device doesn't announce on joining or updating) and five smaller ones. `Contacts`, `ContactIdentifier`, `Party`, the six `Contact*Event`
 kinds, `ContactScreen` and `AddContactSheet` are the entry points. Where the build chose
 differently from the phases below, this table says so, and the phases are kept as written.
 
@@ -729,7 +730,46 @@ DEDUN_REGTEST=1 ./gradlew :composeApp:jvmTest --tests '*GroupLightningRegtestJvm
 | `./gradlew :composeApp:m3Audit` | every budget met, after each phase from 3 on |
 | `./gradlew :composeApp:compileDebugKotlinAndroid` | compiles, after each phase |
 | the iOS target | not compiled: this was a Linux host. `DeviceRegion.ios.kt` is the one iOS file, and it is unchecked |
-| the four-emulator run, steps 1-9 above | **not run.** It needs the four emulators and a person watching them. It is the one check left before mainnet |
+| the four-emulator run, steps 1-9 above | **run, every step passes, with the gaps below.** On a local regtest build, described below |
+
+### The four-emulator run, 2026-11-26
+
+The app is built for mainnet, so the run used a debug build with three local-only changes,
+reverted afterwards and never committed: `NodeParamsManager.chain` set to regtest, a regtest
+entry in `LSP.from` pointing at the `testing/regtest` LSP, and the payout destination screen
+skipping its Lightning address lookup on regtest, as it already does under Tor, since
+example.com answers no LNURL. Electrum was `testing/regtest`'s electrs, reached at the
+emulators' `10.0.2.2:51002` through a forward to 28001. Each device made a fresh regtest
+profile; the mainnet profiles and their data are untouched.
+
+The group was *Stokvel*, 2 of 3, with Alice, Bob and Charlie holding shares. Medium_Phone was
+Mum. Charlie ran `1a111849` with the same changes until step 1 had him update.
+
+| step | result |
+|---|---|
+| 1 | Alice's *Someone outside the group…* said *Waiting for @bob, @charlie*. **Bob was on this build too**: see the first gap below. Once Bob and Charlie had each opened the sheet, it opened on every device |
+| 2 | Charlie's signing screen read *Count deposits for Mum, +27 82 123 4567*, and he signed. Moving a coin of Alice's to Mum read *This gives away deposits made by @alice. The group can do this without them.*, and Bob and Charlie signed it without her. Every device showed *Mum put in 20,000 sats* and *@alice put in 50,000 sats*. A deposit moves whole, so Alice was sent a second, 20,000-sat coin for this rather than splitting her 50,000 |
+| 3 | *0821234567* with ZA picked read *The group will see +27 82 123 4567* and *The group already counts this as Mum.*, and offered *Attribute to Mum* in place of a new contact |
+| 4 | 15,000 sats to branch 0 showed as unattributed, was attributed to Mum, and the quorum signed |
+| 5 | *Open deposits for them* was signed, the page showed the branch's address and QR code, and 40,000 sats paid there showed as *From Mum · by their address* on every device. The page then showed the branch's next address |
+| 6 | Mum's destination, onchain only, was signed. A payout pays everything a person holds, not a chosen amount, so the group paid Mum 74,572 sats of her 75,000, less 428 sats of fee. It reached her address, and every device showed *Paid to them: 74,572 sats* and a balance of 0 |
+| 7 | Mum was invited; the chronicle carried the contact, its branch, its destination and both attributions. Bob proposed *Mum is @mum*, Charlie signed, and Alice's, Bob's and Charlie's devices showed *@mum put in 75,000 sats · Paid to them: 74,572 sats*. **Mum's own device showed nothing**: see the last gap |
+| 8 | Mum set her own destination. 30,000 sats paid to the contact's branch counted to @mum, and the group paid @mum 29,802 sats at her new address. Payouts offered only her own destination; the contact's old one was gone. A proposal to the old address can't be made from the app, and `ContactPayoutsJvmTest` covers its refusal |
+| 9 | *Gogo*, by email (*Gogo@Example.COM* read *The group will see gogo@example.com*), was added, given a deposit and a destination, and closed. On every signer the attribute dialog no longer offered Gogo, and Gogo's page kept *Gogo put in 10,000 sats*, *The group no longer counts new deposits for them.*, *Pay out* and *Reopen Gogo* |
+
+What it found, in this feature:
+
+1. **A device doesn't announce that it reads contacts when it joins or updates.** `Contacts.announceIfNeeded` runs from `MarmotInboundManager.processGroupMembershipChanges`, on a commit, and from `contactsWaitingFor`, when the member opens the sheet. A member who joined from a Welcome with no commit since, or who just updated, never announces until they open *Someone outside the group…* themselves, so D5 holds every proposal for a member who never does. The fix is to announce after a Welcome is processed and once for each room at start.
+2. The sheet reads who it waits for once, when the Deposits screen loads, and doesn't see an announcement that arrives while it is open.
+3. The group wallet's *Coins* list still said *From @alice* for the coin the group had attributed to Mum, while every Deposits screen counted it as Mum's.
+4. On the Payouts screen a contact with only an onchain destination reads *Hasn't said where to be paid* directly above that address: `GroupPayoutsScreen.kt:415` shows the Lightning address or that line.
+5. A spend's signing screen and its transcript line name a contact by its id, *Pay out @4a6e9c71* and *The group signed a payout of 74572 sats to @4a6e9c71*, where everything else says *Mum*. The *Assign coins* screen for a legacy coin offers members only; the Deposits screen's *Attribute* offers contacts.
+6. With the device's country on US, *0821234567* was accepted as *+1 082 123 4567*. No US area code starts with 0 or 1.
+
+And two that are older than this feature, but shaped what a contact's run looks like:
+
+- A signer drops an attribution of a coin its own wallet hasn't recorded yet, which happens until the member opens the group wallet. Step 2's first proposal was dropped this way by Alice and Charlie, and went through on *Ask again*.
+- A member without a key share drops every signing proposal, so their device stores nothing the group signs after they join: Mum's never saw the claim. And the group wallet's statement (30331) isn't a chronicled kind, so a late joiner without a share is shown no wallet at all, and no deposits or tallies.
 
 ---
 
