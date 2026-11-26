@@ -25,7 +25,6 @@ import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.Profile
 import com.machankura.dedun.compose.nostr.DisappearingMessages.DAY
 import com.machankura.dedun.compose.nostr.DisappearingMessages.HOUR
-import com.machankura.dedun.compose.nostr.confederation.ConfederationKinds
 
 /**
  * docs/disappearing-messages.md, Phase 7: a group's expired messages leave the device with the
@@ -89,10 +88,12 @@ class DisappearingGroupMessagesJvmTest {
     }
 
     @Test
-    fun `an expired inbox reply goes, and a confederation statement stays`(): Unit = runBlocking {
+    fun `an expired inbox reply goes, and one with no expiry stays`(): Unit = runBlocking {
         seed()
         val reply = rumor(14, alice, createdAt + DAY)
-        val statement = rumor(ConfederationKinds.PROPOSAL, alice, createdAt + DAY)
+        // Dedun takes no confederations (D12), so the rumor Giza kept here is a statement; the one
+        // kept here is a message whose sender set no expiry.
+        val statement = rumor(14, alice, null)
         listOf(reply, statement).forEach {
             db.groupInboxDao().insertMessage(
                 GroupInboxMessage(chatRoomId = group, rumorId = it.id, wrapId = null, conversationId = alice, participants = alice,
@@ -103,6 +104,6 @@ class DisappearingGroupMessagesJvmTest {
         DisappearingMessageSweeper.sweep(db, ProtocolRetention, now = Instant.fromEpochSeconds(createdAt + DAY))
 
         assertNull(db.groupInboxDao().getMessage(group, reply.id))
-        assertNotNull(db.groupInboxDao().getMessage(group, statement.id), "a statement went with the conversation's messages")
+        assertNotNull(db.groupInboxDao().getMessage(group, statement.id), "a message with no expiry went with the expired one")
     }
 }

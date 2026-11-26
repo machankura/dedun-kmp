@@ -63,8 +63,21 @@ class DisappearingSendJvmTest {
         db.giftWrapPayloadDao().getByChatRoomAndKinds(room.chatRoom.id, listOf(14)).single()
 
     @Test
-    fun `a message is stamped a day out by default, and its id covers the tag`() = runBlocking {
+    fun `a message carries no expiry by default, which is Off in Dedun`() = runBlocking {
+        // D11: nobody has set anything, as on every profile the upgrade finds.
         val room = room()
+        repository.sendChatMessage(text = "hello", localChatRoom = room)
+
+        val payload = onlyPayload(room)
+        assertNull(DisappearingMessages.expirationOf(payload.tags))
+        assertNull(payload.expiresAt)
+        assertNull(assertNotNull(db.chatMessageDao().getChatMessagesByGiftWrapPayloadId(payload.id)).expiresAt)
+    }
+
+    @Test
+    fun `a message is stamped a day out once a day is chosen, and its id covers the tag`() = runBlocking {
+        val room = room()
+        store.saveDefault(user, DAY)
         repository.sendChatMessage(text = "hello", localChatRoom = room)
 
         val payload = onlyPayload(room)
@@ -105,6 +118,7 @@ class DisappearingSendJvmTest {
     @Test
     fun `every wrap asks relays to drop it after the rumor, and every seal stays untagged`() = runBlocking {
         val room = room()
+        store.saveDefault(user, DAY)
         repository.sendChatMessage(text = "hello", localChatRoom = room)
         val payload = onlyPayload(room)
         val rumorExpiry = assertNotNull(payload.expiresAt).epochSeconds

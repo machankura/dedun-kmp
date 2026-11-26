@@ -124,7 +124,7 @@ class DisappearingMessagesMigrationJvmTest {
     }
 
     @Test
-    fun `an upgraded install keeps its messages, has no expiries, and defaults to a day`(): Unit = runBlocking {
+    fun `an upgraded install keeps its messages, has no expiries, and reads as Off`(): Unit = runBlocking {
         writeV49()
 
         val database = getRoomDatabase(Room.databaseBuilder<DedunDatabase>(name = file.absolutePath))
@@ -139,8 +139,11 @@ class DisappearingMessagesMigrationJvmTest {
 
             val store = DisappearingSettingsStore(database)
             assertNull(database.disappearingDao().getDefault(user), "an upgrade wrote a setting")
-            assertEquals(DisappearingMessages.DEFAULT_SECONDS, store.defaultFor(user))
-            assertEquals(DisappearingMessages.DEFAULT_SECONDS, store.policyFor(nip17Room, user))
+            // Dedun's default is Off (docs/giza-second-batch.md, D11): nothing anyone writes starts
+            // disappearing because they upgraded, in a new conversation or an existing one.
+            assertEquals(DisappearingMessages.OFF, store.defaultFor(user))
+            assertEquals(DisappearingMessages.OFF, store.policyFor(nip17Room, user))
+            assertEquals(DisappearingMessages.OFF, store.defaultFor("9".repeat(64)), "a new identity")
         } finally {
             database.close()
         }

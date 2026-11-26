@@ -6,9 +6,6 @@ import com.machankura.dedun.compose.nostr.DisappearingMessages.DAY
 import com.machankura.dedun.compose.nostr.DisappearingMessages.ExpiryClass
 import com.machankura.dedun.compose.nostr.DisappearingMessages.HOUR
 import com.machankura.dedun.compose.nostr.DisappearingMessages.OFF
-import com.machankura.dedun.compose.nostr.confederation.ConfederationKinds
-import com.machankura.dedun.compose.nostr.confederation.ConfederationRitualEvents
-import com.machankura.dedun.compose.nostr.confederation.ConfederationSigningEvents
 import com.machankura.dedun.compose.nostr.dkg.DkgRitualEvents
 import com.machankura.dedun.compose.nostr.frost.FrostSigningEvents
 import com.machankura.dedun.compose.nostr.frost.ShareRefreshEvents
@@ -32,11 +29,32 @@ class DisappearingMessagesTest {
      * Every kind Dedun is known to put in a NIP-17 wrap, or in a ceremony that could. A kind missing
      * here falls through to the unclassified floor, which still expires but was nobody's decision;
      * classifying it means adding it to `DisappearingMessages` with a reason, and then here.
+     *
+     * Dedun's inventory (docs/giza-second-batch.md, Phase 7, step 1). The six places that write a
+     * `GiftWrapPayload` send: what a person writes (`DatabaseChatRepository`); a Welcome
+     * (`MarmotOutboundDao`); a key ceremony's rounds, a subgroup's included (`ChillDkgRitualManager`);
+     * and signing in a NIP-17 room, a wallet's spend and sweep proposals included
+     * (`FrostSigningManager.broadcast`). The inbox key, share refresh and repair and threshold ECDH
+     * run in Marmot rooms today and are classified anyway, as Giza classifies them. Nothing of the
+     * Lightning or Wavelength wallets, guardians, contacts or the moved kinds goes over NIP-17.
      */
     private val knownProtocolKinds =
-        DkgRitualEvents.ALL + FrostSigningEvents.ALL + ConfederationRitualEvents.ALL + ConfederationSigningEvents.ALL +
+        DkgRitualEvents.ALL + FrostSigningEvents.ALL +
             InboxKeyRitualEvents.ALL + ShareRefreshEvents.ALL + ShareRepairEvents.ALL + GroupEcdhEvents.ALL +
-            ConfederationKinds.ALL + setOf(WelcomeEvent.KIND)
+            setOf(WelcomeEvent.KIND)
+
+    @Test
+    fun `what a person writes is Off by default in Dedun`() {
+        // D11: members settle disagreements about money by pointing at what was said.
+        assertEquals(OFF, DisappearingMessages.DEFAULT_SECONDS)
+        assertEquals(OFF, DisappearingMessages.PRESETS.first())
+        assertNull(DisappearingMessages.expiryFor(chat, createdAt, DisappearingMessages.DEFAULT_SECONDS, emptyArray()))
+        // A ceremony round written then still carries its floor.
+        assertEquals(
+            createdAt + DisappearingMessages.CEREMONY_FLOOR,
+            DisappearingMessages.expiryFor(DkgRitualEvents.ROUND_1, createdAt, DisappearingMessages.DEFAULT_SECONDS, emptyArray()),
+        )
+    }
 
     @Test
     fun `every kind the app sends is classified on purpose`() {
@@ -77,8 +95,8 @@ class DisappearingMessagesTest {
     fun `a rumor that carries an expiry keeps it and gets no second one`() {
         val proposalLapses = createdAt + 3 * DAY
         val tags = arrayOf(arrayOf("p", "a".repeat(64)), arrayOf("expiration", proposalLapses.toString()))
-        assertEquals(proposalLapses, DisappearingMessages.expiryFor(ConfederationKinds.PROPOSAL, createdAt, DAY, tags))
-        val stamped = DisappearingMessages.stamp(ConfederationKinds.PROPOSAL, createdAt, DAY, tags)
+        assertEquals(proposalLapses, DisappearingMessages.expiryFor(FrostSigningEvents.PROPOSAL, createdAt, DAY, tags))
+        val stamped = DisappearingMessages.stamp(FrostSigningEvents.PROPOSAL, createdAt, DAY, tags)
         assertSame(tags, stamped)
         assertEquals(1, stamped.count { it[0] == "expiration" })
     }
@@ -128,7 +146,7 @@ class DisappearingMessagesTest {
         assertFalse(DisappearingMessages.isValidPolicy(DisappearingMessages.MAX_SECONDS + 1))
         assertFalse(DisappearingMessages.isValidPolicy(-1))
         DisappearingMessages.PRESETS.forEach { assertTrue(DisappearingMessages.isValidPolicy(it)) }
-        assertEquals(DAY, DisappearingMessages.DEFAULT_SECONDS)
+        assertEquals(OFF, DisappearingMessages.DEFAULT_SECONDS)
     }
 
     @Test
