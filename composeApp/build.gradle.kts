@@ -498,6 +498,37 @@ val magpieLockAudit = tasks.register("magpieLockAudit") {
 
 tasks.named("check") { dependsOn(magpieLockAudit) }
 
+/**
+ * No profile's phrase is made from random bytes: a new profile is backed by a recovery code,
+ * whose 24 words come from RecoveryCodeKeys alone. docs/giza-second-batch.md, Phase 2f.
+ */
+val phraseAudit = tasks.register("phraseAudit") {
+    group = "verification"
+    description = "Checks that no profile phrase is made from random bytes outside RecoveryCodeKeys."
+
+    val script = rootProject.layout.projectDirectory.file("docs/scripts/phrase-audit.sh").asFile
+    val projectDirectory = rootProject.layout.projectDirectory.asFile
+
+    doLast {
+        val bash = listOf("/bin/bash", "/usr/bin/bash").firstOrNull { File(it).canExecute() }
+        if (bash == null) {
+            logger.warn("phraseAudit: no bash found, skipping. Run docs/scripts/phrase-audit.sh --check by hand.")
+            return@doLast
+        }
+        val result = providers.exec {
+            commandLine(bash, script.absolutePath, "--check")
+            workingDir = projectDirectory
+            isIgnoreExitValue = true
+        }
+        logger.lifecycle(result.standardOutput.asText.get())
+        if (result.result.get().exitValue != 0) {
+            throw GradleException("A profile phrase is made from random bytes. See the report above, and docs/giza-second-batch.md, Phase 2f.")
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(phraseAudit) }
+
 compose.desktop {
     application {
         mainClass = "com.machankura.dedun.desktop.MainKt"

@@ -179,7 +179,7 @@ import com.machankura.dedun.compose.ui.composable.ProfilesScreen
 import com.machankura.dedun.compose.ui.view.model.ProfilesViewModel
 import com.machankura.dedun.compose.ui.view.model.getAvailableWalletsMeta
 import com.machankura.dedun.compose.ui.view.model.bareKeyProfileWriter
-import com.machankura.dedun.compose.ui.view.model.seedProfileWriter
+import com.machankura.dedun.compose.ui.view.model.recoveryCodeProfileWriter
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchMemberToAddToChatRoomRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchResultRoute
 import com.machankura.dedun.compose.ui.composable.navigation.routes.SearchRoute
@@ -836,7 +836,8 @@ fun DedunNavHost(
                             route = SignInRoute
                         )
                     },
-                    // The first profile on a device is the one the wallet will belong to.
+                    // The first profile on a device is the one the wallet will belong to,
+                    // backed by a recovery code.
                     onNavigateToCreateProfile = {
                         navController.navigate(
                             route = CreateProfileRoute(withWallet = true)
@@ -852,9 +853,10 @@ fun DedunNavHost(
                     },
                     nostrRepository = databaseNostrRepository,
                     marmotRepository = databaseMarmotRepository,
-                    // A seed from Landing, a bare key from inside: the screen does not know
-                    // which. See docs/multiple-profiles.md, Phase 5.
-                    newProfile = if (route.withWallet) sovereignWalletViewModel.seedProfileWriter() else sovereignWalletViewModel.bareKeyProfileWriter(),
+                    // A wallet backed by a recovery code from Landing, a bare key from inside: the
+                    // screen does not know which. See docs/multiple-profiles.md, Phase 5, and
+                    // docs/giza-second-batch.md, Phase 2f.
+                    newProfile = if (route.withWallet) sovereignWalletViewModel.recoveryCodeProfileWriter() else sovereignWalletViewModel.bareKeyProfileWriter(),
                     // The sign-in tail, with the popUpTo(0) it always had there: back from the
                     // new profile's startup must not return to a form whose secret is already
                     // on disk. The account rows are in the database before this runs, so the

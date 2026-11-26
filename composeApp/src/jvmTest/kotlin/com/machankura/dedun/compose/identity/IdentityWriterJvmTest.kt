@@ -481,4 +481,37 @@ class IdentityWriterJvmTest {
         val phrase = assertIs<StoredIdentity.Mnemonic>(withoutCodes[coded.walletId])
         assertEquals(coded.nostrPublicKey, phrase.nostrPublicKey)
     }
+
+    /**
+     * The round trip a lost phone is: a code made here, every key file gone, and the code
+     * typed back in -- or its 24 words, from the export -- lands on the same npub and id.
+     */
+    @Test
+    fun `a code, or its words, restores the same profile on an empty device`() = runBlocking<Unit> {
+        val coded = Coded()
+        val made = assertIs<IdentityWriter.WriteRecoveryCodeResult.Written>(writeCode(coded))
+        val npub = credentials()!!.keys.single()
+
+        fun wipe() = listOf("seed.dat", "nostr-credentials.dat", "recovery-codes.dat").forEach {
+            FileSystem.SYSTEM.delete(SeedManager.getDatadir(phoenixGlobal.ctx).resolve(it), mustExist = false)
+        }
+
+        wipe()
+        val restored = assertIs<IdentityWriter.WriteRecoveryCodeResult.Written>(writeCode(coded))
+        assertEquals(made.id, restored.id)
+        assertEquals(setOf(npub), credentials()!!.keys)
+        assertIs<StoredIdentity.RecoveryCode>(StoredIdentity.merge(seeds()!!, credentials()!!, StoredIdentity.parseCodes(codes()!!))[made.id])
+
+        wipe()
+        val outcome = CompletableDeferred<Result<WalletId>>()
+        IdentityWriter.writeMnemonic(
+            log = log, phoenixGlobal = phoenixGlobal, globalPrefs = globalPrefs,
+            writingState = WritingSeedState.Init, viewModelScope = scope, mnemonics = coded.words,
+            onWritingSeedError = { outcome.complete(Result.failure(IllegalStateException(it.toString()))) },
+            onWritingSeedStateWriting = {}, isRestoringWallet = true, isTorEnabled = false, customElectrumServer = null,
+            onSeedWritten = { outcome.complete(Result.success(it)) },
+        )
+        assertEquals(made.id, withTimeout(15_000) { outcome.await() }.getOrThrow())
+        assertEquals(setOf(npub), credentials()!!.keys)
+    }
 }

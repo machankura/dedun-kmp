@@ -44,12 +44,13 @@ class WalletSeedStore(
     fun has(id: WalletId): Boolean = read().containsKey(id.nodeIdHash)
 
     /**
-     * The words for [id], made now if there are none: twelve, as a seed profile's are made
-     * (`NewProfileWriters`). Written before they are returned, so a wallet is never opened
+     * The words for [id], made now if there are none: twelve, as a seed profile's were made
+     * before recovery codes. Written before they are returned, so a wallet is never opened
      * with words that are not on disk.
      */
     fun create(id: WalletId): List<String> {
         words(id)?.let { return it }
+        // phrase-audit-exempt: the Wavelength wallet's own seed, kept apart from the profile's
         val words = MnemonicCode.toMnemonics(Lightning.randomBytes(16))
         write(read() + (id.nodeIdHash to words.joinToString(" ")))
         return words

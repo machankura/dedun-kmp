@@ -50,7 +50,7 @@ import com.machankura.dedun.compose.ui.view.model.SignInToProfileViewModel
 import com.machankura.dedun.compose.ui.view.model.SovereignWalletViewModel
 import com.machankura.dedun.compose.ui.view.model.WritingSeedState
 import com.machankura.dedun.compose.ui.view.model.bareKeyProfileWriter
-import com.machankura.dedun.compose.ui.view.model.seedProfileWriter
+import com.machankura.dedun.compose.ui.view.model.recoveryCodeProfileWriter
 import com.machankura.dedun.compose.ui.view.state.CreateProfileUIState
 import com.machankura.dedun.compose.ui.view.state.NavigationUIState
 import com.machankura.dedun.compose.ui.view.state.StartupChoice
@@ -60,8 +60,9 @@ import com.machankura.dedun.compose.ui.view.state.StartupChoice
  * seams of Phases 1 through 7 in a row, through the real view models on an in-memory
  * database with a real key store.
  *
- * A is made from a phrase, the way Landing makes the first profile: both files written,
- * listed once with a wallet attached. A is opened with a node behind it -- a
+ * A is made from a recovery code, the way Landing makes the first profile since
+ * docs/giza-second-batch.md, Phase 2f: its key, its 24 words and the code written, listed
+ * once with the code attached and a wallet. A is opened with a node behind it -- a
  * PhoenixBusiness that was never started, which is enough to make it one the switch
  * has to stop. B's npub is signed in from inside; the switch stops A's node, B is open
  * and read-only, and the machine routes it from its placeholder. A kind 1 queued for A
@@ -196,9 +197,10 @@ class MultipleProfilesRoundTripJvmTest {
             writeRecoveryCode = { com.machankura.dedun.compose.identity.IdentityWriter.WriteRecoveryCodeResult.CannotLoadKeys },
         )
 
-        // A, from a phrase: both files written, listed once with a wallet attached.
-        val idA = create(sovereign.seedProfileWriter(), "Ada")
-        val storedA = assertIs<StoredIdentity.Mnemonic>(listed(sovereign, 1)[idA], "a profile with a wallet attached, under the wallet's id")
+        // A, from a recovery code, the way Landing makes it: the key, the 24 words and the
+        // code written, listed once with the code attached (docs/recovery-code-v3.md, Phase 7).
+        val idA = create(sovereign.recoveryCodeProfileWriter(), "Ada")
+        val storedA = assertIs<StoredIdentity.RecoveryCode>(listed(sovereign, 1)[idA], "a profile with a code attached, under its words' id")
         val credentials = NostrCredentialManager.loadAndDecryptOrNull(phoenixGlobal)
         assertEquals(mapOf(storedA.nostrPublicKey to NostrCredential.Secret(storedA.privateKey)), credentials, "the seed's key is a credential")
         sovereign.setActiveIdentity(activated(storedA))
@@ -272,7 +274,7 @@ class MultipleProfilesRoundTripJvmTest {
         val booted = SovereignWalletViewModel(phoenixGlobal, stopBusiness = { stopped += it })
         val identities = withTimeout(15_000) { booted.availableIdentities.first { it.isNotEmpty() } }
         assertEquals(setOf(idA), identities.keys)
-        assertEquals(storedA.privateKey, assertIs<StoredIdentity.Mnemonic>(identities[idA]).privateKey, "listed from the credential, not derived")
+        assertEquals(storedA.privateKey, assertIs<StoredIdentity.RecoveryCode>(identities[idA]).privateKey, "listed from the credential, not derived")
         val opens = StartupChoice.resolve(
             force = null,
             desired = null,
