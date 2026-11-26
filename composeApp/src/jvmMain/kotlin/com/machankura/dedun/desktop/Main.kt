@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.machankura.dedun.compose.DedunApp
 import com.machankura.dedun.compose.DedunGlobal
+import com.machankura.dedun.compose.AppLifecycle
 import com.machankura.dedun.compose.DedunRuntime
 import com.machankura.dedun.compose.PlatformContext
 import com.machankura.dedun.compose.defaultDedunDir
@@ -96,6 +97,10 @@ fun main() = application {
                 // After the passphrase, never before: the runtime's database and engines are
                 // the first things that read the key store. docs/notifications-and-background-sync.md, D4.
                 val runtime = remember {
+                    // A minimised window is reported as stopped, which would close every
+                    // subscription; a desktop process is not suspended, so it keeps them for as
+                    // long as it runs. docs/notifications-and-background-sync.md, Phase 8.
+                    AppLifecycle.keepConnected(AppLifecycle.KEEP_DESKTOP)
                     DedunRuntime.getOrCreate {
                         DedunRuntime(
                             dedunGlobal = DedunGlobal(platformContext = PlatformContext(appDir)),

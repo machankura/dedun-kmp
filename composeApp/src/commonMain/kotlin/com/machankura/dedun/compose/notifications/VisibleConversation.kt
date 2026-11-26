@@ -48,7 +48,7 @@ fun MarkReadWhileVisible(
     chatRoomId: String,
     chatRepository: ChatRepository,
 ) {
-    val inFront by AppLifecycle.isForeground.collectAsState()
+    val inFront by AppLifecycle.isVisible.collectAsState()
 
     DisposableEffect(chatRoomId) {
         VisibleConversation.entered(chatRoomId)

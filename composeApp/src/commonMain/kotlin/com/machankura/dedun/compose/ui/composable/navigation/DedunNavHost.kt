@@ -348,7 +348,7 @@ fun DedunNavHost(
         // Here and not with the node's jobs in schedulePlatformLogic, which an nsec profile never
         // reaches. It does nothing for a profile that hasn't turned the wallet on.
         WavelengthPlatform.scheduleRenewal(phoenixGlobal.ctx)
-        AppLifecycle.isForeground.collect { foreground ->
+        AppLifecycle.isVisible.collect { foreground ->
             if (foreground) identityWavelength.enteredForeground() else identityWavelength.enteredBackground()
         }
     }
@@ -537,8 +537,8 @@ fun DedunNavHost(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> AppLifecycle.enteredForeground()
-                Lifecycle.Event.ON_STOP -> AppLifecycle.enteredBackground()
+                Lifecycle.Event.ON_START -> runtime.enteredForeground()
+                Lifecycle.Event.ON_STOP -> runtime.enteredBackground()
                 else -> Unit
             }
         }

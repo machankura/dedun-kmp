@@ -68,7 +68,8 @@ class LiveSubscriptionManager(
     private val relaysSocketManager: LiveSubscriptionTransport,
     private val nostrRepository: NostrRepository,
     private val chatRepository: ChatRepository,
-    private val isForeground: StateFlow<Boolean>,
+    /** `AppLifecycle.holdConnections`: open while true, closed while false. */
+    private val holdConnections: StateFlow<Boolean>,
 ) {
     private val logger = Logger.withTag(TAG)
 
@@ -204,7 +205,7 @@ class LiveSubscriptionManager(
 
         // collectLatest is the whole lifecycle mechanism: going to the background cancels the
         // block below, and every subscription's `finally` sends its CLOSE on the way out.
-        isForeground.collectLatest { foreground ->
+        holdConnections.collectLatest { foreground ->
             if (!foreground) {
                 logger.i("Backgrounded; live subscriptions closed")
                 return@collectLatest

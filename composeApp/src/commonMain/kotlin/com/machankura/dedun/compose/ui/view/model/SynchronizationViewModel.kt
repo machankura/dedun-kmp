@@ -86,7 +86,7 @@ class SynchronizationViewModel(
         relaysSocketManager = relaysSocketManager,
         nostrRepository = nostrRepository,
         chatRepository = chatRepository,
-        isForeground = AppLifecycle.isForeground,
+        holdConnections = AppLifecycle.holdConnections,
     )
 
     companion object {

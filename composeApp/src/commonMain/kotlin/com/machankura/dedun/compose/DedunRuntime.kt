@@ -10,8 +10,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlin.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import com.machankura.dedun.compose.identity.DefaultIdentity
+import com.machankura.dedun.compose.managers.BackgroundSyncPass
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.notifications.NotificationDispatcher
@@ -130,7 +135,7 @@ class DedunRuntime(
             database = auxDatabaseManager.auxDatabase,
             notifier = notifier,
             strings = { NotificationResources.strings() },
-            appVisible = AppLifecycle.isForeground,
+            appVisible = AppLifecycle.isVisible,
             visibleChatRoomId = VisibleConversation.chatRoomId,
             syncPending = { publicKey ->
                 nostrRepository.observePendingNegentropySynchronizeRequests(publicKey).map { it != null }
@@ -151,6 +156,64 @@ class DedunRuntime(
                 notificationDispatcher.run(identity.nostrPublicKey)
             }
         }
+    }
+
+    /**
+     * One bounded sync while off screen, run by the platform's scheduler: WorkManager, a
+     * BGTaskScheduler task. docs/notifications-and-background-sync.md, Phase 9.
+     */
+    val backgroundSync: BackgroundSyncPass by lazy {
+        BackgroundSyncPass(
+            activeIdentity = activeIdentity,
+            loadDefaultIdentity = { DefaultIdentity.load(phoenixGlobal) },
+            startEngines = {
+                synchronization
+                notary
+                notifications
+            },
+            syncPending = { publicKey ->
+                nostrRepository.observePendingNegentropySynchronizeRequests(publicKey).map { it != null }
+            },
+            outboundQueued = { publicKey ->
+                combine(
+                    chatRepository.observeUnsealedGiftWrapPayloads(publicKey).map { it.size },
+                    marmotRepository.observeUnprocessedMarmotInnerEvents(publicKey).map { it.size },
+                    nostrRepository.observeUnsignedNostrEvents(publicKey).map { it.size },
+                    nostrRepository.observePendingBroadcastNostrEventRequests().map { if (it != null) 1 else 0 },
+                ) { seals, inner, unsigned, broadcast -> seals + inner + unsigned + broadcast }
+            },
+            dispatcher = notificationDispatcher,
+            ledger = auxDatabaseManager.auxDatabase.notificationDao(),
+        )
+    }
+
+    private var graceJob: Job? = null
+
+    /**
+     * The app left the screen. Where the platform grants a moment (iOS), the connections are held
+     * for it, inside a background task, so what was queued can still be sent. Phase 8.
+     */
+    fun enteredBackground() {
+        AppLifecycle.enteredBackground()
+        if (platformBackgroundGrace <= Duration.ZERO) return
+        graceJob?.cancel()
+        graceJob = ioScope.launch {
+            inPlatformBackgroundTask("dedun-grace") {
+                AppLifecycle.keepConnected(AppLifecycle.KEEP_GRACE)
+                try {
+                    delay(platformBackgroundGrace)
+                } finally {
+                    AppLifecycle.release(AppLifecycle.KEEP_GRACE)
+                }
+            }
+        }
+    }
+
+    fun enteredForeground() {
+        graceJob?.cancel()
+        graceJob = null
+        AppLifecycle.release(AppLifecycle.KEEP_GRACE)
+        AppLifecycle.enteredForeground()
     }
 
     companion object {

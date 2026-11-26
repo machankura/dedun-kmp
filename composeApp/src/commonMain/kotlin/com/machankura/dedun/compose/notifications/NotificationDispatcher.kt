@@ -80,7 +80,14 @@ class NotificationDispatcher(
      * Decides about every line above the cursor, posts what passes, moves the cursor past all of
      * them, and returns what was posted. Does nothing for an identity that is not armed.
      */
-    suspend fun dispatchPending(userPublicKey: HexKey): List<RoomNotification> {
+    suspend fun dispatchPending(userPublicKey: HexKey): List<RoomNotification> = dispatchMutex.withLock {
+        dispatchPendingLocked(userPublicKey)
+    }
+
+    /** The run loop and a background pass both dispatch; one at a time, or a line posts twice. */
+    private val dispatchMutex = Mutex()
+
+    private suspend fun dispatchPendingLocked(userPublicKey: HexKey): List<RoomNotification> {
         val posted = mutableListOf<RoomNotification>()
         while (true) {
             val ledger = dao.getLedger(userPublicKey) ?: return posted
