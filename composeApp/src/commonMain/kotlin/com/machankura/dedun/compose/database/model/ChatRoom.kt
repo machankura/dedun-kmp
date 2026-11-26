@@ -1,5 +1,6 @@
 package com.machankura.dedun.compose.database.model
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Ignore
@@ -138,6 +139,22 @@ data class ChatRoom(
      */
     val parentChatRoomId: HexKey? = null,
 
+    /**
+     * The newest line the user has been shown in this room, by [ChatMessage.id], or null for
+     * none. A row id rather than a time because a line's time is the sender's claim and lines
+     * are written out of order -- "load older messages" files old lines now. Only ever moves
+     * forward. Local: no NIP says how to share it between devices.
+     * docs/notifications-and-background-sync.md, D8.
+     */
+    val lastReadMessageId: Long? = null,
+
+    /**
+     * Whether this room may notify: [NOTIFICATIONS_ALL] or [NOTIFICATIONS_MUTED]. A muted room
+     * still counts what is unread; it only stays quiet about it.
+     */
+    @ColumnInfo(defaultValue = NOTIFICATIONS_ALL)
+    val notifications: String = NOTIFICATIONS_ALL,
+
     override val createdAt: Instant = Clock.System.now(),
     override val updatedAt: Instant = createdAt,
     override val savedAt: Instant = createdAt,
@@ -148,6 +165,9 @@ data class ChatRoom(
 {
     companion object {
         const val TAG = "ChatRoom"
+
+        const val NOTIFICATIONS_ALL = "all"
+        const val NOTIFICATIONS_MUTED = "muted"
 
         @Ignore
         val logger = Logger.withTag(TAG)

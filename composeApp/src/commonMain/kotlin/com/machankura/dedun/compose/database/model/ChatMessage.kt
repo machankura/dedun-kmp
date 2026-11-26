@@ -214,6 +214,9 @@ data class ChatMessage(
          * who can read it, because naming the recipient is the point of the line the
          * bystanders get. See docs/marmot-direct-messages.md.
          */
+        /** An ordinary line of conversation: the default [messageType]. */
+        const val TYPE_MESSAGE = "message"
+
         const val TYPE_DIRECT_MESSAGE = "directMessage"
 
         /**

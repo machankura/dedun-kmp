@@ -65,6 +65,8 @@ import com.machankura.dedun.compose.database.dao.GiftWrapPayloadDao
 import com.machankura.dedun.compose.database.dao.GiftWrapSealDao
 import com.machankura.dedun.compose.database.dao.GroupKeyStateDao
 import com.machankura.dedun.compose.database.dao.GroupSignedEventDao
+import com.machankura.dedun.compose.database.dao.NotificationDao
+import com.machankura.dedun.compose.database.migrations.ReadMarkMigrationSpec
 import com.machankura.dedun.compose.database.dao.InReplyToRelationDao
 import com.machankura.dedun.compose.database.dao.KeyShareDao
 import com.machankura.dedun.compose.database.dao.ShareRefreshDao
@@ -137,6 +139,7 @@ import com.machankura.dedun.compose.database.model.NegentropySynchronizeRequest
 import com.machankura.dedun.compose.database.model.NegentropySynchronizeResult
 import com.machankura.dedun.compose.database.model.NostrEvent
 import com.machankura.dedun.compose.database.model.NostrEventRelay
+import com.machankura.dedun.compose.database.model.NotificationLedger
 import com.machankura.dedun.compose.database.model.Participant
 import com.machankura.dedun.compose.database.model.Post
 import com.machankura.dedun.compose.database.model.Profile
@@ -236,6 +239,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         NegentropySynchronizeResult::class,
         NostrEvent::class,
         NostrEventRelay::class,
+        NotificationLedger::class,
         Participant::class,
         Post::class,
         Profile::class,
@@ -249,7 +253,7 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         UnsignedNostrEvent::class,
         Zap::class
     ],
-    version = 49,
+    version = 50,
     autoMigrations = [
         // v2 only adds the DkgSession/DkgParticipantMessage tables, so Room can
         // generate the migration itself — nothing existing changes shape.
@@ -545,6 +549,12 @@ val GENESIS_AT = Instant.fromEpochMilliseconds(1231006505000L)
         // ShareRepairSession and ShareRepairMessage tables, and the nullable
         // GroupKeyState.memberBindings. Room generates it. Giza's v40, Bennu's v39.
         AutoMigration(from = 48, to = 49),
+        // v50 adds notifications' storage (docs/giza-second-batch.md, Phase 3, from Giza's
+        // notifications Phase 3, its v47): ChatRoom.lastReadMessageId, ChatRoom.notifications and
+        // the NotificationLedger table. Room generates the shape; ReadMarkMigrationSpec then marks
+        // every existing room read up to its newest line, so an upgrade does not turn the user's
+        // whole history unread.
+        AutoMigration(from = 49, to = 50, spec = ReadMarkMigrationSpec::class),
     ]
 )
 @ConstructedBy(DedunDatabaseConstructor::class)
@@ -586,6 +596,8 @@ abstract class DedunDatabase: RoomDatabase() {
     abstract fun groupSignedEventDao(): GroupSignedEventDao
 
     abstract fun groupTransactionDao(): GroupTransactionDao
+
+    abstract fun notificationDao(): NotificationDao
 
     abstract fun memberWalletDao(): MemberWalletDao
 
