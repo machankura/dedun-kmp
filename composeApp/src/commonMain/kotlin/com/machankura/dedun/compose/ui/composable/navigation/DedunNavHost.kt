@@ -2018,7 +2018,7 @@ fun DedunNavHost(
                     }
                 )
             }
-            composable<ProposalListRoute> { backStackEntry ->
+            composable<ProposalListRoute>(typeMap = routeTypeMap) { backStackEntry ->
                 val route = backStackEntry.toRoute<ProposalListRoute>()
 
                 ProposalListScreen(

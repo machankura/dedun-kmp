@@ -133,11 +133,13 @@ class ProposalDestinationTest {
      * The filter rides on a type-safe navigation route, which means the route's
      * serializer has to describe it.
      *
-     * Navigation derives an argument's `NavType` from the serial descriptor, and
-     * takes an [SerialKind.ENUM] as a string. The round trip below is what that
-     * rests on; it fails if the enum is ever replaced by something navigation
-     * cannot place -- a sealed hierarchy, say -- which is the shape a filter
-     * carrying more than a state would want.
+     * Navigation derives an argument's `NavType` from the serial descriptor. On
+     * Android it finds an [SerialKind.ENUM]'s class by reflection; elsewhere it
+     * cannot, and the route is registered with `routeTypeMap`, which writes the
+     * enum by name (`RouteNavTypesJvmTest` builds it through a real controller).
+     * The round trip below fails if the enum is ever replaced by something else --
+     * a sealed hierarchy, say -- which is the shape a filter carrying more than a
+     * state would want, and which the type map would then have to learn.
      */
     @Test
     fun `the filter survives the route's serializer which is what navigation reads`() {
