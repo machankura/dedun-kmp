@@ -115,6 +115,10 @@ import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
 import com.machankura.dedun.compose.database.repository.DatabaseSearchRepository
 import com.machankura.dedun.compose.DedunRuntime
+import com.machankura.dedun.compose.notifications.NotificationTaps
+import com.machankura.dedun.compose.notifications.NotificationSettingsStore
+import com.machankura.dedun.compose.ui.composable.NotificationSettingsScreen
+import com.machankura.dedun.compose.ui.composable.navigation.routes.NotificationSettingsRoute
 import com.machankura.dedun.compose.ui.composable.ActiveProfileScreen
 import com.machankura.dedun.compose.ui.composable.AddMemberToChatRoomConfirmationScreen
 import com.machankura.dedun.compose.ui.composable.ChatRoomCreationScreen
@@ -523,6 +527,7 @@ fun DedunNavHost(
     // One of each per process, started on first read and never cleared.
     val notaryViewModel: NotaryViewModel = runtime.notary
     val synchronizationViewModel: SynchronizationViewModel = runtime.synchronization
+    remember(runtime) { runtime.notifications }
 
     // TODO: Produce a synchronization UI element...
 
@@ -719,6 +724,19 @@ fun DedunNavHost(
             ?.map { unread -> unread.values.count { !it.isMuted } }
             ?: flowOf(0)
     }.collectAsState(0)
+
+    // A tapped notification's room, opened once the identity it is for is the one running.
+    // One for another profile waits for that profile. docs/notifications-and-background-sync.md, Phase 6.
+    LaunchedEffect(activeUserPublicKey) {
+        val publicKey = activeUserPublicKey ?: return@LaunchedEffect
+        NotificationTaps.pending.collect { tap ->
+            if (tap == null || tap.userPublicKey != publicKey) return@collect
+            NotificationTaps.consumed(tap)
+            navController.navigate(
+                ChatRoomMessagingRoute(activeUserPublicKey = publicKey, chatRoomId = tap.chatRoomId, relayHint = null)
+            )
+        }
+    }
 
     ProvideSigningCapability(sovereignWalletViewModel.activeIdentity) {
     ProvideExchangeRate(primaryFiatRate) {
@@ -1552,6 +1570,14 @@ fun DedunNavHost(
                     onCreateProfile = {
                         navController.navigate(route = CreateProfileRoute(withWallet = false))
                     },
+                )
+            }
+            composable<NotificationSettingsRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<NotificationSettingsRoute>()
+                NotificationSettingsScreen(
+                    activeUserPublicKey = route.activeUserPublicKey,
+                    store = remember(runtime) { NotificationSettingsStore(runtime.auxDatabaseManager.auxDatabase) },
+                    onNavigateBack = { navController.popBackStack() },
                 )
             }
             composable<KeyRecoveryRoute> { backStackEntry ->

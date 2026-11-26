@@ -168,6 +168,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machankura.dedun.compose.database.model.ChatRoom
+import kotlinx.coroutines.launch
 import com.machankura.dedun.compose.database.model.GroupKeyState
 import com.machankura.dedun.compose.database.model.GroupSignedEvent
 import com.machankura.dedun.compose.database.model.Participant
@@ -207,6 +208,8 @@ import com.machankura.dedun.compose.ui.composable.navigation.routes.NostrEventDe
 import com.machankura.dedun.compose.ui.composable.navigation.routes.ChatRoomDetailRoute
 import com.machankura.dedun.compose.managers.SubgroupManager
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.mute_notifications
+import dedun.composeapp.generated.resources.mute_notifications_supporting
 import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.delete_group
 import dedun.composeapp.generated.resources.direct_message_detail
@@ -528,6 +531,33 @@ fun ChatRoomDetailScreen(
                                                     overflow = TextOverflow.MiddleEllipsis
                                                 )
                                             }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Muting is about this device and this person, not about the
+                            // group, so it sits apart from everything the group signed.
+                            // docs/notifications-and-background-sync.md, Phase 7.
+                            item(key = "mute") {
+                                val room = chatRoomDetailUIState.localChatRoom.chatRoom
+                                val muteScope = rememberCoroutineScope()
+                                // Held here as well as stored: this screen reads the room once,
+                                // so the stored value would not come back to the switch.
+                                var isMuted by rememberSaveable(room.id) {
+                                    mutableStateOf(room.notifications == ChatRoom.NOTIFICATIONS_MUTED)
+                                }
+                                SwitchRow(
+                                    headline = stringResource(Res.string.mute_notifications),
+                                    supporting = stringResource(Res.string.mute_notifications_supporting),
+                                    checked = isMuted,
+                                    enabled = true,
+                                ) { muted ->
+                                    isMuted = muted
+                                    muteScope.launch {
+                                        chatRepository.setChatRoomNotifications(
+                                            room.id,
+                                            if (muted) ChatRoom.NOTIFICATIONS_MUTED else ChatRoom.NOTIFICATIONS_ALL,
                                         )
                                     }
                                 }

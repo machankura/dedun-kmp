@@ -86,6 +86,8 @@ object NotificationContent {
         showMessageText: Boolean,
         profileName: String?,
         strings: NotificationStrings,
+        /** Names for senders the room's participant rows do not carry -- a NIP-17 peer's, say. */
+        knownNames: Map<String, String> = emptyMap(),
     ): RoomNotification {
         val ordered = lines.sortedBy { it.id }
         return RoomNotification(
@@ -97,7 +99,7 @@ object NotificationContent {
                 NotificationLine(
                     messageId = line.id,
                     senderPublicKey = line.senderPublicKey,
-                    senderName = senderName(room, line.senderPublicKey) ?: strings.unknownSender.takeIf { category == NotificationCategory.Messages },
+                    senderName = senderName(room, line.senderPublicKey) ?: knownNames[line.senderPublicKey] ?: strings.unknownSender.takeIf { category == NotificationCategory.Messages },
                     text = if (category == NotificationCategory.Messages && !showMessageText) strings.newMessage else line.content,
                     at = line.createdAt,
                 )

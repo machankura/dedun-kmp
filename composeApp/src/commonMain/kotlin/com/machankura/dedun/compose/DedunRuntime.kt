@@ -9,7 +9,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import com.machankura.dedun.compose.notifications.NotificationDispatcher
+import com.machankura.dedun.compose.notifications.NotificationResources
+import com.machankura.dedun.compose.notifications.PlatformNotifier
+import com.machankura.dedun.compose.notifications.VisibleConversation
+import com.machankura.dedun.compose.notifications.platformNotifier
 import com.machankura.dedun.compose.database.repository.DatabaseChatRepository
 import com.machankura.dedun.compose.database.repository.DatabaseDkgRepository
 import com.machankura.dedun.compose.database.repository.DatabaseFrostSigningRepository
@@ -110,6 +119,38 @@ class DedunRuntime(
             relayRepository = nostrRepository,
             scope = ioScope,
         )
+    }
+
+    /** Where notifications are shown, on this platform. */
+    val notifier: PlatformNotifier by lazy { platformNotifier(dedunGlobal.platformContext) }
+
+    /** New lines into notifications, for the identity running. docs/notifications-and-background-sync.md. */
+    val notificationDispatcher: NotificationDispatcher by lazy {
+        NotificationDispatcher(
+            database = auxDatabaseManager.auxDatabase,
+            notifier = notifier,
+            strings = { NotificationResources.strings() },
+            appVisible = AppLifecycle.isForeground,
+            visibleChatRoomId = VisibleConversation.chatRoomId,
+            syncPending = { publicKey ->
+                nostrRepository.observePendingNegentropySynchronizeRequests(publicKey).map { it != null }
+            },
+        )
+    }
+
+    /**
+     * The dispatcher, running for whichever identity is active and holds a key -- a public-key
+     * identity can open nothing, so has nothing to be told about (D6). Started on first read.
+     */
+    val notifications: Job by lazy {
+        ioScope.launch {
+            runCatching { notifier.prepare(NotificationResources.channelNames()) }
+                .onFailure { logger.e("Could not prepare notification channels", it) }
+            activeIdentity.collectLatest { identity ->
+                if (identity?.nostrPrivateKey == null) return@collectLatest
+                notificationDispatcher.run(identity.nostrPublicKey)
+            }
+        }
     }
 
     companion object {

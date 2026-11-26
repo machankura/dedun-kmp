@@ -62,6 +62,9 @@ import com.vitorpamplona.quartz.nip01Core.metadata.MetadataEvent
 import com.machankura.dedun.compose.ui.composable.widgets.LocalCanSign
 import com.machankura.dedun.compose.ui.theme.spacing
 import dedun.composeapp.generated.resources.Res
+import dedun.composeapp.generated.resources.notifications
+import androidx.compose.material.icons.filled.Notifications
+import com.machankura.dedun.compose.ui.composable.navigation.routes.NotificationSettingsRoute
 import org.jetbrains.compose.resources.stringResource
 import dedun.composeapp.generated.resources.edit_profile
 import dedun.composeapp.generated.resources.key_package_management
@@ -409,6 +412,29 @@ fun ActiveProfileScreen(
                                     )
 
                                     Text(stringResource(Res.string.key_recovery))
+                                }
+                            }
+
+                            // A profile that cannot sign can open nothing, so is told about
+                            // nothing. docs/notifications-and-background-sync.md, Phase 7.
+                            if (canSign) item {
+                                TextButton(
+                                    onClick = {
+                                        onNavigateToRoute.invoke(
+                                            NotificationSettingsRoute(activeUserPublicKey = activeUserPublicKey)
+                                        )
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        contentDescription = Decorative
+                                    )
+
+                                    Spacer(
+                                        modifier = Modifier.width(MaterialTheme.spacing.space125)
+                                    )
+
+                                    Text(stringResource(Res.string.notifications))
                                 }
                             }
 

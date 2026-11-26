@@ -1713,4 +1713,27 @@
     <!-- Notifications and read state (docs/notifications-and-background-sync.md) -->
     <string name="unread_count">Unread: %1$d</string>
     <string name="unread_conversations">Conversations with unread messages: %1$d</string>
+    <string name="notification_new_message">New message</string>
+    <string name="notification_note_to_self">Note to self</string>
+    <string name="notification_someone">Someone</string>
+    <string name="notification_you">You</string>
+    <string name="notification_more">%1$d more</string>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_messages_description">What people say to you, in direct messages and groups</string>
+    <string name="notification_channel_needs_you">Needs you</string>
+    <string name="notification_channel_needs_you_description">A key ceremony or a signing session waiting for your approval</string>
+    <string name="notification_channel_group_activity">Group activity</string>
+    <string name="notification_channel_group_activity_description">Members joining and leaving, and ceremonies finishing</string>
+    <string name="notifications">Notifications</string>
+    <string name="notifications_start_after_first_sync">Notifications start once this profile has finished its first sync with the relays.</string>
+    <string name="notifications_not_allowed">This device is not letting Dedun show notifications.</string>
+    <string name="allow_notifications">Allow notifications</string>
+    <string name="notifications_master_supporting">For this profile, on this device</string>
+    <string name="notifications_messages_supporting">What people say to you</string>
+    <string name="notifications_needs_you_supporting">A ceremony or signing session waiting for your approval</string>
+    <string name="notifications_group_activity_supporting">Members joining and leaving, ceremonies finishing</string>
+    <string name="show_message_text">Show message text</string>
+    <string name="show_message_text_supporting">Off, a notification says only that a message arrived</string>
+    <string name="mute_notifications">Mute notifications</string>
+    <string name="mute_notifications_supporting">Unread messages are still counted</string>
 </resources>
