@@ -49,6 +49,7 @@ Measured against `giza/giza` at `d0437d6c` and Bennu's port at `2db6dde5`.
   Dedun at `a5ab9c10`, nor quartz 2.20.1. In 30410-30449 those trees use only Giza's inbox
   ceremony (30410-30416), Dedun's moved Wavelength kinds (30410-30412), and Marmot's
   KeyPackage, 30443.
+- **Baseline** on `a5ab9c10`: jvmTest 3,085 run, 0 failed, 7 skipped.
 - **The trial merge** is not done separately. Each phase cherry-picks its mirrored commits
   and records its conflicts in the phase's commit, which is the same information.
 
@@ -421,15 +422,15 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `6035a5bf` | names | 8 | pending | test: seed groups under their bare names (group-name-braces, Phase 5) |
 | `1d8e9cb5` | names | 8 | pending | docs: record the braces as built (group-name-braces, Phase 6) |
 | `5017547f` | names | — | skip (D12) | test: a confederation proposed as {Atlas} keeps that name and signs its charter (group-name-braces, D10) |
-| `dffe64c3` | recovery codes | 2 | pending | docs: plan v3 recovery codes as the backup for new profiles (recovery-code-v3) |
-| `ed706d5f` | recovery codes | 2 | pending | feat: a pure-Kotlin codec for v3 recovery codes (recovery-code-v3, Phase 1) |
-| `a14dcc9c` | recovery codes | 2 | pending | feat: a recovery code derives 24 words, and through them a profile (recovery-code-v3, Phase 2) |
-| `b959c70f` | recovery codes | 2 | pending | chore: bump lightning-kmp-app for recovery-codes.dat (recovery-code-v3, Phase 3) |
-| `ee5eb680` | recovery codes | 2 | pending | feat: a recovery code is an identity, attached to the phrase it is (recovery-code-v3, Phase 4) |
-| `37efc106` | recovery codes | 2 | pending | feat: sign in with a recovery code, and a typo is a suggestion (recovery-code-v3, Phase 5) |
-| `5c6082d7` | recovery codes | 2 | pending | feat: show the recovery code, and check a written-down copy (recovery-code-v3, Phase 6) |
-| `f367294c` | recovery codes | 2 | pending | feat: a new profile from Landing is backed by a recovery code (recovery-code-v3, Phase 7) |
-| `028c1a48` | recovery codes | 2 | pending | docs: record recovery codes as built (recovery-code-v3, Phase 8) |
-| `7d479e2b` | recovery codes | 2 | pending | fix: Landing's sign-in caption names recovery codes (recovery-code-v3) |
+| `dffe64c3` | recovery codes | 2 | `c17207bd` | docs: plan v3 recovery codes as the backup for new profiles (recovery-code-v3) |
+| `ed706d5f` | recovery codes | 2 | `9ec67238` | feat: a pure-Kotlin codec for v3 recovery codes (recovery-code-v3, Phase 1) |
+| `a14dcc9c` | recovery codes | 2 | `35555bd0` | feat: a recovery code derives 24 words, and through them a profile (recovery-code-v3, Phase 2) |
+| `b959c70f` | recovery codes | 2 | `9f44f649` | chore: bump lightning-kmp-app for recovery-codes.dat (recovery-code-v3, Phase 3) |
+| `ee5eb680` | recovery codes | 2 | `098b6c6e` | feat: a recovery code is an identity, attached to the phrase it is (recovery-code-v3, Phase 4) |
+| `37efc106` | recovery codes | 2 | `7c2773aa` | feat: sign in with a recovery code, and a typo is a suggestion (recovery-code-v3, Phase 5) |
+| `5c6082d7` | recovery codes | 2 | `ba718c5a` | feat: show the recovery code, and check a written-down copy (recovery-code-v3, Phase 6) |
+| `f367294c` | recovery codes | 2 | `cb65a159` | feat: a new profile from Landing is backed by a recovery code (recovery-code-v3, Phase 7) |
+| `028c1a48` | recovery codes | 2 | `c17207bd` | docs: record recovery codes as built (recovery-code-v3, Phase 8) |
+| `7d479e2b` | recovery codes | 2 | `2ff4089b` | fix: Landing's sign-in caption names recovery codes (recovery-code-v3) |
 | `b7e5dd19` | fix | 1 | pending | fix: give ProposalListRoute's enum filter a NavType off Android |
 | `9a1abc61` | fix | 1 | pending | fix: include jdk.unsupported and the other needed modules in the desktop runtime |
