@@ -67,6 +67,7 @@ next batch is measured from it: `git log --no-merges a5a802c5..giza/giza`.
 | the same, `lightning-kmp-app` at Giza's `3ca351af` | pass | pass alone and straight after GroupLightning in a second Gradle run (3 of 3); fails straight after it in the same run (3 of 3) | pass | pass (3) |
 | the same, back on Dedun's `d4933708`, all four in one run with `--rerun` | pass | **fail**, straight after GroupLightning, as on Giza's pin | pass | pass (3) |
 | the same, with the liquidity test waiting for eclair before its first channel open, all four in one run with `--rerun`, twice | pass | pass, once first and once straight after GroupLightning | pass | pass (3) |
+| `lightning-kmp-app` pinned at Giza's `3ca351af`, all four in one run with `--rerun`, twice | pass | pass, straight after GroupLightning both times | pass | pass (3) |
 
 Each suite ran on a fresh `dedun-regtest` network, apart from the last rows, which shared networks
 across runs.

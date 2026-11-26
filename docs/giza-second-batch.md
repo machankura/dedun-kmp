@@ -343,8 +343,10 @@ is in [recovery-code-v3.md](./recovery-code-v3.md), with a Dedun preface.
   threshold line into master, reconciling the two Iceberg ports". That touches the FundingSigner
   seam under the group Lightning wallet, which Giza never runs. So the one library commit was
   cherry-picked onto Dedun's `d87af507` instead, as `d493370` on
-  `claude/recovery-codes-on-d87af507`. **It is local to the submodule until it is pushed.** The
-  `lightning-kmp` move is left for a phase of its own, with the regtest suites.
+  `claude/recovery-codes-on-d87af507`. The `lightning-kmp` move was left for a phase of its own,
+  with the regtest suites. Phase 10 made it: Dedun now pins Giza's `3ca351a`, and `d493370` is
+  no longer needed. The merge turned out to change no FundingSigner code against Dedun's line,
+  because Dedun was already on the threshold line that holds the port.
 - **2c.** `StoredIdentity.Seeded` covers both `Mnemonic` and `RecoveryCode`. Startup starts the
   node for either kind, and `setActiveWallet` takes either and keeps its kind. `writeRecoveryCode`
   derives the profile through `LocalKeyManager`, as `writeMnemonic` does, so a code and the same
@@ -936,18 +938,25 @@ sign for money with theirs.
 - **The ledger's high-water mark** is `a5a802c5`, recorded at the top of the ledger's second
   batch.
 - **Bennu.** None of this batch is in Bennu, so there is nothing to check against yet.
-- **`lightning-kmp-app`: Dedun still pins its own commit.** Giza's `3ca351af` and Dedun's
-  `d4933708` carry the same recovery-code change, on the same toolchain. They differ only in the
-  nested `lightning-kmp`. Giza's moves it to `47a0f585`, which adds the bitcoin-kmp
-  Confederation API and a newer libsecp256k1-zkp under it. On that pin, the FROST, Iceberg,
-  Lightning, share-refresh and ECDH JVM suites pass.
-  
-  The regtest failure first blamed on that pin is not the pin's. `LiquidityPurchaseRegtestJvmTest`
-  races eclair whenever it runs straight after GroupLightning's 145-block burst, and fails that
-  way on Dedun's pin too. The ledger's regtest section has the runs and the timeline. Nothing
-  measured stands in the way of pinning Giza's commit. Doing so is a decision still to make,
-  separate from the test's fix, which now waits for eclair to reach the tip before its first
-  channel open and passes straight after GroupLightning.
+- **`lightning-kmp-app`: Dedun pins Giza's commit, `3ca351af`.** Giza's commit and Dedun's
+  former `d4933708` carry the same recovery-code change, on the same toolchain. They differ only
+  in the nested `lightning-kmp`.
+  - **What the move brings.** Giza's pin moves it from `f8835338` to `47a0f585`. Against
+    `f8835338`, that adds Iceberg notes, a benchmark and a measurement run, plus bitcoin-kmp's
+    Confederation API and a newer libsecp256k1-zkp under it.
+  - **The confederation API stays unused.** Dedun calls none of it (D12, Phase 9).
+  - **Published.** Every pin in the chain is a branch head upstream: `lightning-kmp-app` master,
+    `lightning-kmp` master, bitcoin-kmp and secp256k1-kmp `threshold`, and secp256k1-zkp `frost`.
+    So the unpushed `d4933708` is no longer needed.
+  - **Checked on this pin:**
+    - jvmTest with `--rerun`: 3,695 run, 0 failed, 7 skipped;
+    - `compileDebugKotlinAndroid`, `m3Audit`, `marmotAudit`, `magpieLockAudit` and `phraseAudit`;
+    - all four regtest suites in one Gradle run, twice, each time with the liquidity test straight
+      after GroupLightning.
+  - **The regtest failure first blamed on this pin was not the pin's.**
+    `LiquidityPurchaseRegtestJvmTest` raced eclair after GroupLightning's 145-block burst, on
+    either pin; it now waits for eclair to reach the tip first. The ledger's regtest section has
+    the runs and the timeline.
 
 ## Checking each phase
 
