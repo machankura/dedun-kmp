@@ -111,7 +111,7 @@ describe a database with no wallets in it.
 | 45→46 | the group's inbox | — | 6 | 53 (as built) |
 | 46→47 | the group's direct messages | — | 6 | 54 (as built) |
 | 49→50 | disappearing messages: the policy columns, `ChatMessage.expiresAt`, `GiftWrapPayload.expiresAt`, `DisappearingSetting`, `ExpiredGiftWrap` | — (Giza needs no data step; see Phase 7 for Dedun's default) | 7 | 55 (as built) |
-| 52→53, 54→55 | group names stored bare | `MarmotGroupBareNameMigrationSpec`: Dedun goes from `#name` straight to the bare name, in one migration and one spec | 8 | 56 |
+| 52→53, 54→55 | group names stored bare | `MarmotGroupBareNameMigrationSpec`: Dedun goes from `#name` straight to the bare name, in one migration and one spec | 8 | 56 (as built) |
 | 42→45, 48→49, 50→52, 53→54 | confederations | three specs, two of which assume Giza's earlier versions | never (D12) | — |
 
 `ShippedProfileUpgradeJvmTest` gets a new step for each migration taken. The specs come in
@@ -847,6 +847,35 @@ Lightning and re-enrol a stale member.
 
 **Done when** the name tests pass, a Giza-made room and a Dedun-made room show the same way
 on both apps, and `m3Audit`'s string budget holds.
+
+**As built.** Giza's 14 commits are in, apart from `0e5fd96f`, which touched only confederation
+files and was empty here. Dedun goes from `#name` straight to the bare name:
+
+- **What is stored and sent (D13).** `MarmotGroupName.bare` names a group stored and sent, and
+  `display`, or `ChatRoom.title`, draws it as `{name}`. Dedun keeps the convenient group, which
+  Giza removed; it is named in `SelectChatRoomTypeViewModel`, not `MarmotGroupCreation`, so it is
+  made bare there too. A Welcome from an older build carrying `#name`, or a Giza or Bennu one
+  carrying `&name`, is named bare on the way in.
+- **One migration, schema 56.** `MarmotGroupBareNameMigrationSpec` renames every Marmot room
+  from `#name` to the bare name. Giza's intermediate `&name` spec is not registered: no Dedun
+  device ever stores `&`. NIP-17 rooms keep what their people called them, a `#` included.
+  `MarmotGroupBareNameMigrationJvmTest` has Dedun's cases.
+- **No `{{name}}` (D12).** `ConfederationName`, its test, and the confederation halves of each
+  commit are not taken.
+- **Group names beside money, listed as the plan asked.** Drawn through the new rule:
+  - the onchain wallet's row on the group's screen, and the wallet screen's title;
+  - a member wallet's guarding group: on the wallet pages, the guardian lines and the guarded
+    list, whether the name comes from the birth certificate (under any old mark) or the room;
+  - the member-wallet picker's group choices, and a member wallet's row;
+  - the description a Lightning deposit invoice is filled with, which the payer reads.
+  
+  Left as they were, on purpose: the key ceremony's own lines ("Stokvel has a shared key"),
+  which Giza leaves bare too, and the Wavelength runner's log name.
+
+jvmTest: 3,693 run, 0 failed, 7 skipped. `compileDebugKotlinAndroid`, `m3Audit` (string budget
+held), `marmotAudit`, `magpieLockAudit` and `phraseAudit` pass. Not checked on devices: that a
+Giza-made room and a Dedun-made room look the same on both apps. Both store the bare name and
+draw `{name}`, which the tests cover on Dedun's side.
 
 ## Phase 9: confederations, not taken (D12)
 

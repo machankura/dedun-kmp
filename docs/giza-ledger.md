@@ -389,16 +389,16 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `bcb3c4d4` | confederations | — | skip (D12) | docs: a plan to take away the confederation's own Marmot room (confederation-room-removal, Phase 0) |
 | `27f8387d` | confederations | — | skip (D12) | docs: Phase 0's checks, and what the room leaves behind (confederation-room-removal, Phase 0) |
 | `6f95672a` | confederations | — | skip (D12) | feat: a confederation's storage stands without its room (confederation-room-removal, Phase 1) |
-| `35acce71` | names | 8 | pending | docs: a group's name starts with & rather than # (group-name-prefix, Phase 0) |
+| `35acce71` | names | 8 | `8eb2d58a` | docs: a group's name starts with & rather than # (group-name-prefix, Phase 0) |
 | `036488bc` | confederations | — | skip (D12) | feat: every confederation signing message is signed by its author, and carried (confederation-room-removal, Phases 2 and 5) |
-| `1fc69be6` | names | 8 | pending | feat: a group's name starts with & rather than # (group-name-prefix, Phase 1) |
+| `1fc69be6` | names | 8 | `7cab0e9b` | feat: a group's name starts with & rather than # (group-name-prefix, Phase 1) |
 | `44a9b242` | confederations | — | skip (D12) | feat: each group's own room carries its role holders' signing messages (confederation-room-removal, Phase 3) |
-| `85e96902` | names | 8 | pending | feat: a room joined from a Welcome is named by the same rule (group-name-prefix, Phase 2) |
-| `3f546402` | names | 8 | pending | feat: the groups already on a device are renamed to &name, v52 (group-name-prefix, Phase 3) |
+| `85e96902` | names | 8 | `3a398d0a` | feat: a room joined from a Welcome is named by the same rule (group-name-prefix, Phase 2) |
+| `3f546402` | names | 8 | `842e278d` | feat: the groups already on a device are renamed to &name, v52 (group-name-prefix, Phase 3) |
 | `1c9e1fc5` | confederations | — | skip (D12) | feat: each group's admins carry the confederation's signing between rooms and inboxes, and nothing needs its room (confederation-room-removal, Phase 4) |
-| `342127bc` | names | 8 | pending | feat: a subgroup certified as #name is shown as &name (group-name-prefix, Phase 4) |
-| `cfa5f75f` | names | 8 | pending | test: fixtures and previews name groups &name (group-name-prefix, Phase 5) |
-| `60322537` | names | 8 | pending | docs: the docs say &name, and the record of the build (group-name-prefix, Phase 6) |
+| `342127bc` | names | 8 | `5350cf1d` | feat: a subgroup certified as #name is shown as &name (group-name-prefix, Phase 4) |
+| `cfa5f75f` | names | 8 | `483ff76d` | test: fixtures and previews name groups &name (group-name-prefix, Phase 5) |
+| `60322537` | names | 8 | `e582050a` | docs: the docs say &name, and the record of the build (group-name-prefix, Phase 6) |
 | `b75bbaf5` | confederations | — | skip (D12) | feat: the confederation's screen takes over what its room offered (confederation-room-removal, Phase 6) |
 | `a4b67dc4` | confederations | — | skip (D12) | feat: no confederation has a room, and the ones on devices are dropped (confederation-room-removal, Phase 7) |
 | `6b5fb76c` | confederations | — | skip (D12) | test: a confederation's post end to end with no room anywhere, and the record (confederation-room-removal, Phase 8) |
@@ -414,13 +414,13 @@ Giza after `d0437d6c`, planned in [giza-second-batch.md](./giza-second-batch.md)
 | `8ef02129` | confederations | — | skip (D12) | test: a confederation formed over its groups' rooms and inboxes end to end, and the record (confederation-dkg-inboxes, Phase 8) |
 | `22d36931` | fix | 1 | audited: the bug is in confederation code | fix: the signing lock is taken after the database's writer, never before it |
 | `e7336d8e` | confederations | — | skip (D12) | feat: an admin's device joins the confederation's key ceremony on its own (confederation-auto-join) |
-| `9f91f505` | names | 8 | pending | docs: draw a group's name as {name} and a confederation's as {{name}}, stored bare (group-name-braces, Phase 0) |
-| `916b5c35` | names | 8 | pending | feat: draw a group's name as {name} and a confederation's as {{name}} (group-name-braces, Phase 1) |
-| `cc64856c` | names | 8 | pending | feat: store and send a group's bare name (group-name-braces, Phase 2) |
-| `435590d6` | names | 8 | pending | feat: store the Marmot rooms already on a device under their bare names (group-name-braces, Phase 3) |
+| `9f91f505` | names | 8 | `3ee1223c` | docs: draw a group's name as {name} and a confederation's as {{name}}, stored bare (group-name-braces, Phase 0) |
+| `916b5c35` | names | 8 | `b5c189ac` | feat: draw a group's name as {name} and a confederation's as {{name}} (group-name-braces, Phase 1) |
+| `cc64856c` | names | 8 | `2a5bfe86` | feat: store and send a group's bare name (group-name-braces, Phase 2) |
+| `435590d6` | names | 8 | `ae4a0fba` | feat: store the Marmot rooms already on a device under their bare names (group-name-braces, Phase 3) |
 | `0e5fd96f` | names | 8 | pending | feat: write confederation and group names into stored lines in braces (group-name-braces, Phase 4) |
-| `6035a5bf` | names | 8 | pending | test: seed groups under their bare names (group-name-braces, Phase 5) |
-| `1d8e9cb5` | names | 8 | pending | docs: record the braces as built (group-name-braces, Phase 6) |
+| `6035a5bf` | names | 8 | `db41b5c1` | test: seed groups under their bare names (group-name-braces, Phase 5) |
+| `1d8e9cb5` | names | 8 | `02c983b2` | docs: record the braces as built (group-name-braces, Phase 6) |
 | `5017547f` | names | — | skip (D12) | test: a confederation proposed as {Atlas} keeps that name and signs its charter (group-name-braces, D10) |
 | `dffe64c3` | recovery codes | 2 | `c17207bd` | docs: plan v3 recovery codes as the backup for new profiles (recovery-code-v3) |
 | `ed706d5f` | recovery codes | 2 | `9ec67238` | feat: a pure-Kotlin codec for v3 recovery codes (recovery-code-v3, Phase 1) |
