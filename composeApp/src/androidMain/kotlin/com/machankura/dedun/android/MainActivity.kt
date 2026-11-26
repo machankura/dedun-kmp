@@ -8,10 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.rememberNavController
 import fr.acinq.phoenix.NFCActivity
-import com.machankura.dedun.compose.PlatformContext
 import com.machankura.dedun.compose.DedunApp
-import com.machankura.dedun.compose.DedunGlobal
-import fr.acinq.phoenix.PhoenixGlobal
 import fr.acinq.phoenix.android.services.HceService
 
 class MainActivity : ComponentActivity(), NFCActivity {
@@ -22,22 +19,16 @@ class MainActivity : ComponentActivity(), NFCActivity {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // The application's runtime, not one of our own: an activity recreated over a living
+        // process used to build a second set of repositories and a second PhoenixGlobal here.
+        val runtime = (application as DedunApplication).runtime
+
         setContent {
             val navController = rememberNavController()
 
             DedunApp(
                 navController = navController,
-                dedunGlobal = DedunGlobal(
-                    platformContext = PlatformContext(
-                        applicationContext = applicationContext
-                    )
-                ),
-                phoenixGlobal = PhoenixGlobal(
-                    ctx = fr.acinq.phoenix.utils.PlatformContext(
-                        applicationContext = applicationContext
-                    )
-                )
-
+                runtime = runtime,
             )
         }
     }

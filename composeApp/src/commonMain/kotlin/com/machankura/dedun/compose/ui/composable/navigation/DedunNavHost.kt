@@ -114,7 +114,7 @@ import com.machankura.dedun.compose.database.repository.DatabaseFrostSigningRepo
 import com.machankura.dedun.compose.database.repository.DatabaseMarmotRepository
 import com.machankura.dedun.compose.database.repository.DatabaseNostrRepository
 import com.machankura.dedun.compose.database.repository.DatabaseSearchRepository
-import com.machankura.dedun.compose.managers.AuxDatabaseManager
+import com.machankura.dedun.compose.DedunRuntime
 import com.machankura.dedun.compose.ui.composable.ActiveProfileScreen
 import com.machankura.dedun.compose.ui.composable.AddMemberToChatRoomConfirmationScreen
 import com.machankura.dedun.compose.ui.composable.ChatRoomCreationScreen
@@ -248,57 +248,39 @@ import com.machankura.dedun.compose.ui.composable.ProposalListScreen
 
 @Composable
 fun DedunNavHost(
-    dedunGlobal: DedunGlobal,
-    phoenixGlobal: PhoenixGlobal,
+    runtime: DedunRuntime,
     navController: NavHostController
 ) {
     val logger = Logger.withTag("DedunNavHost")
 
-    val exceptionHandler = remember {
-        CoroutineExceptionHandler { _, throwable ->
-            logger.e("Caught exception: ${throwable.message}", throwable)
-        }
-    }
+    val phoenixGlobal = runtime.phoenixGlobal
 
-    val applicationIOScope = remember { CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler) }
+    // The process's, not this composition's: a screen's coroutine that outlives the screen is
+    // the point of using it. docs/notifications-and-background-sync.md, Phase 2.
+    val applicationIOScope = runtime.ioScope
     val applicationMainScope = remember { CoroutineScope(Dispatchers.Main) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val auxDatabaseManager = remember {
-        AuxDatabaseManager(dedunGlobal)
-    }
-
-    // Before the repositories: the nostr repository stamps every fetch request it queues
-    // with the active identity, and takes the flow at construction.
+    // Before the repositories are read: they all follow the identity this view model writes,
+    // through the flow the runtime owns.
     val sovereignWalletViewModel: SovereignWalletViewModel = viewModel(
         factory = SovereignWalletViewModel.factory(
-            phoenixGlobal = phoenixGlobal
+            phoenixGlobal = phoenixGlobal,
+            activeIdentityState = runtime.activeIdentity,
         )
     )
 
-    val databaseNostrRepository = remember {
-        DatabaseNostrRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope,
-            activeIdentity = sovereignWalletViewModel.activeIdentity,
-        )
-    }
+    val databaseNostrRepository = runtime.nostrRepository
+    val databaseChatRepository = runtime.chatRepository
+    val databaseDkgRepository = runtime.dkgRepository
+    val databaseFrostSigningRepository = runtime.frostSigningRepository
+    val databaseMarmotRepository = runtime.marmotRepository
+    val searchRepository = runtime.searchRepository
 
-    val databaseChatRepository = remember {
-        DatabaseChatRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope,
-            activeIdentity = sovereignWalletViewModel.activeIdentity,
-        )
-    }
-
-    val databaseDkgRepository = remember {
-        DatabaseDkgRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope
-        )
-    }
+    // Dedun's wallet repositories stay here for now, on the runtime's database: nothing that
+    // runs without a screen reads them yet. docs/giza-second-batch.md, Phase 3.
+    val auxDatabaseManager = runtime.auxDatabaseManager
 
     val databaseGroupLightningRepository = remember {
         DatabaseGroupLightningRepository(database = auxDatabaseManager.auxDatabase)
@@ -307,13 +289,6 @@ fun DedunNavHost(
     val currentChainClients = remember { mutableStateOf<GroupChainClients?>(null) }
     val databaseGroupWavelengthRepository = remember {
         DatabaseGroupWavelengthRepository(database = auxDatabaseManager.auxDatabase, clients = { currentChainClients.value })
-    }
-
-    val databaseFrostSigningRepository = remember {
-        DatabaseFrostSigningRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope
-        )
     }
 
     val databaseMemberWalletRepository = remember {
@@ -339,18 +314,6 @@ fun DedunNavHost(
         )
     }
 
-    val databaseMarmotRepository = remember {
-        DatabaseMarmotRepository(
-            database = auxDatabaseManager.auxDatabase,
-            applicationIOScope
-        )
-    }
-
-    val searchRepository = remember {
-        DatabaseSearchRepository(
-            database = auxDatabaseManager.auxDatabase
-        )
-    }
 
     // The Electrum client this identity watches the chain on: its node's, or --
     // for an nsec or npub profile, which has no node -- one of its own. Remade
@@ -521,7 +484,7 @@ fun DedunNavHost(
     // same lifetime: without it, a device never spends a group's Wavelength coin.
     val groupArkWatcher = remember(groupChainClients) {
         groupChainClients?.let {
-            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope, groupWavelengthAlerts(dedunGlobal.platformContext)).also { watcher -> watcher.start() }
+            GroupArkWatcher(auxDatabaseManager.auxDatabase, it, applicationIOScope, groupWavelengthAlerts(runtime.dedunGlobal.platformContext)).also { watcher -> watcher.start() }
         }
     }
     DisposableEffect(groupArkWatcher) {
@@ -555,26 +518,9 @@ fun DedunNavHost(
         )
     )
 
-    val notaryViewModel: NotaryViewModel = viewModel(
-        factory = NotaryViewModel.factory(
-            activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
-            nostrRepository = databaseNostrRepository,
-            chatRepository = databaseChatRepository,
-            marmotRepository = databaseMarmotRepository,
-            scope = applicationIOScope
-        )
-    )
-
-    // TODO: Produce a notary UI Element...
-    val synchronizationViewModel: SynchronizationViewModel = viewModel(
-        factory = SynchronizationViewModel.factory(
-            activeIdentityStateFlow = sovereignWalletViewModel.activeIdentity,
-            nostrRepository = databaseNostrRepository,
-            chatRepository = databaseChatRepository,
-            relayRepository = databaseNostrRepository,
-            scope = applicationIOScope
-        )
-    )
+    // One of each per process, started on first read and never cleared.
+    val notaryViewModel: NotaryViewModel = runtime.notary
+    val synchronizationViewModel: SynchronizationViewModel = runtime.synchronization
 
     // TODO: Produce a synchronization UI element...
 

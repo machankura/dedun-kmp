@@ -66,17 +66,18 @@ class NotificationTodayJvmTest {
         File("src").takeIf { it.resolve("commonMain").isDirectory } ?: File("composeApp/src")
 
     /**
-     * The object graph is built inside a composable, so nothing can run without a UI. Phase 2 moves
-     * it to `GizaRuntime` and flips this to name that file instead.
+     * The object graph used to be built inside a composable, so nothing could run without a UI.
+     * Phase 2 moved it to `DedunRuntime`, one per process, and this names that file instead. A
+     * second construction site is a second database handle and a second relay pool.
      */
     @Test
-    fun `the repositories are constructed in DedunNavHost and nowhere else`() {
+    fun `the repositories are constructed in DedunRuntime and nowhere else`() {
         val builders = source.resolve("commonMain/kotlin").walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filter { "DatabaseNostrRepository(" in it.readText().replace("class DatabaseNostrRepository(", "") }
             .map { it.nameWithoutExtension }
             .toSet()
 
-        assertEquals(setOf("DedunNavHost"), builders)
+        assertEquals(setOf("DedunRuntime"), builders)
     }
 }

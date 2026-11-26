@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.machankura.dedun.compose.DedunApp
 import com.machankura.dedun.compose.DedunGlobal
+import com.machankura.dedun.compose.DedunRuntime
 import com.machankura.dedun.compose.PlatformContext
 import com.machankura.dedun.compose.defaultDedunDir
 import com.machankura.dedun.compose.ui.theme.DedunTheme
@@ -92,12 +93,21 @@ fun main() = application {
         DedunTheme {
             if (unlocked) {
                 val navController = rememberNavController()
+                // After the passphrase, never before: the runtime's database and engines are
+                // the first things that read the key store. docs/notifications-and-background-sync.md, D4.
+                val runtime = remember {
+                    DedunRuntime.getOrCreate {
+                        DedunRuntime(
+                            dedunGlobal = DedunGlobal(platformContext = PlatformContext(appDir)),
+                            phoenixGlobal = PhoenixGlobal(
+                                ctx = fr.acinq.phoenix.utils.PlatformContext(applicationDir = appDir),
+                            ),
+                        )
+                    }
+                }
                 DedunApp(
                     navController = navController,
-                    dedunGlobal = DedunGlobal(platformContext = PlatformContext(appDir)),
-                    phoenixGlobal = PhoenixGlobal(
-                        ctx = fr.acinq.phoenix.utils.PlatformContext(applicationDir = appDir),
-                    ),
+                    runtime = runtime,
                 )
             } else {
                 PassphraseGate(appDir = appDir, onUnlocked = { unlocked = true })

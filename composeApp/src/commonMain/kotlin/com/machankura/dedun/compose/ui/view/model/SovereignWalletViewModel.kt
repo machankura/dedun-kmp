@@ -88,6 +88,11 @@ class SovereignWalletViewModel(
     // We might end up only using the machankuraWalletRepository in the future where we send the walletId in each request.
     /** Injected so that a switch can be pinned in a test without a node to stop. */
     private val stopBusiness: (WalletId) -> Unit = ::stopPlatformBusiness,
+    /**
+     * Where [activeIdentity] is kept. The process's `DedunRuntime` passes its own, so the engines
+     * that outlive this view model follow the identity it sets; a test passes nothing.
+     */
+    activeIdentityState: MutableStateFlow<Identity?> = MutableStateFlow(null),
 ): ViewModel() {
     private val log = Logger.withTag("SovereignWalletViewModel")
 
@@ -122,7 +127,7 @@ class SovereignWalletViewModel(
      * carries the key directly, so a reader no longer needs a node to exist, and an
      * identity that never has one (a bare nsec) reads the same as one that does.
      */
-    private val _activeIdentity = MutableStateFlow<Identity?>(null)
+    private val _activeIdentity = activeIdentityState
     val activeIdentity = _activeIdentity.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -151,6 +156,11 @@ class SovereignWalletViewModel(
 
 
     init {
+        // A new view model is a new start: the selector or the default profile, chosen again.
+        // The flow it writes now outlives it (it is the runtime's), so an activity recreated
+        // over a living process would otherwise begin with the last activity's identity set
+        // and skip the startup that decides it. Null first is what every start did before.
+        _activeIdentity.value = null
         listIdentities(onDone = {})
     }
 
@@ -559,10 +569,12 @@ class SovereignWalletViewModel(
         private const val TAG = "SovereignWalletViewModel"
         fun factory(
             phoenixGlobal: PhoenixGlobal,
+            activeIdentityState: MutableStateFlow<Identity?> = MutableStateFlow(null),
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SovereignWalletViewModel(
                     phoenixGlobal = phoenixGlobal,
+                    activeIdentityState = activeIdentityState,
                 )
             }
         }
